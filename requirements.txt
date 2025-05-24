@@ -1,0 +1,31 @@
+# WitsV3 Core Dependencies
+
+# Pydantic for data validation and settings management
+pydantic>=2.0
+
+# HTTP client for Ollama and other web requests
+httpx>=0.20
+
+# YAML parsing for configuration
+PyYAML>=6.0
+
+# Sentence Transformers for embeddings (if not solely relying on Ollama for this)
+# sentence-transformers>=2.2.0
+
+# FAISS CPU/GPU (Optional - install manually or via separate instructions if used)
+# faiss-cpu>=1.7.4
+# faiss-gpu>=1.7.4
+
+# Langchain (as requested for integration)
+langchain>=0.1.0
+langchain-community>=0.0.20 # For Ollama integration, etc.
+langchain-core>=0.1.0
+
+# Async file operations
+aiofiles>=0.7
+
+# NumPy for numerical operations (often needed with embeddings)
+numpy>=1.20
+
+# For CLI colors/styling (optional but nice)
+# colorama>=0.4.4

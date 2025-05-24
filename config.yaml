@@ -1,0 +1,53 @@
+# WitsV3 Configuration File
+# Streamlined for LLM Wrapper Architecture (CLI First)
+
+# General Settings
+project_name: "WitsV3"
+version: "3.0.0"
+logging_level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
+debug_mode: false
+
+# LLM Configuration (Primarily Ollama)
+llm_interface:
+  default_provider: "ollama" # ollama, openai, etc.
+  timeout_seconds: 120
+  streaming_enabled: true
+
+ollama_settings:
+  url: "http://localhost:11434"
+  default_model: "llama3" # Default model for general tasks
+  control_center_model: "llama3" # Model for WitsControlCenterAgent
+  orchestrator_model: "llama3" # Model for OrchestratorAgent
+  embedding_model: "llama3" # Use llama3 for embeddings until dedicated embedding model available
+  request_timeout: 120
+
+# Agent Configuration
+agents:
+  default_temperature: 0.7
+  max_iterations: 15 # Max iterations for ReAct loop in Orchestrator
+
+# Memory Management
+memory_manager:
+  # For streamlined version, FAISS-GPU is optional.
+  # Default to a simpler backend if FAISS not available or configured.
+  backend: "basic" # 'basic' (json file), 'faiss_cpu', 'faiss_gpu'
+  memory_file_path: "data/wits_memory.json" # For basic backend
+  faiss_index_path: "data/wits_faiss_index.bin" # For FAISS backends
+  vector_dim: 4096 # Adjust based on embedding_model, llama3 typically 4096
+  max_results_per_search: 5
+  pruning_interval_seconds: 3600 # How often to check for pruning
+  max_memory_segments: 10000 # Max segments before pruning oldest
+
+# Tool System
+tool_system:
+  enable_mcp_tools: true
+  mcp_tool_definitions_path: "data/mcp_tools.json"
+  # Langchain integration settings (if applicable later)
+  # langchain_bridge_enabled: false
+
+# CLI Settings
+cli:
+  show_thoughts: true
+  show_tool_calls: true
+
+# Add other necessary configurations as WitsV3 evolves
