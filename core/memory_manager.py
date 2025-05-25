@@ -253,6 +253,9 @@ class MemoryManager:
 
         if config.memory_manager.backend == "basic":
             self.backend = BasicMemoryBackend(config, llm_interface)
+        elif config.memory_manager.backend == "neural":
+            from .neural_memory_backend import NeuralMemoryBackend
+            self.backend = NeuralMemoryBackend(config, llm_interface)
         # elif config.memory_manager.backend == "faiss_cpu":
         #     # self.backend = FaissCPUBackend(config, llm_interface) # To be implemented
         #     raise NotImplementedError("FAISS CPU backend not yet implemented.")

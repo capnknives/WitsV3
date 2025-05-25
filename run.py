@@ -46,14 +46,18 @@ class WitsV3System:
             config: System configuration
         """
         self.config = config
-        self.session_histories = {}
-        
-        # Initialize core components
-        self.llm_interface = None
-        self.memory_manager = None
-        self.tool_registry = None
-        self.control_center = None
+        self.session_histories = {}        # Initialize core components
+        self.llm_interface: Optional[OllamaInterface] = None
+        self.memory_manager: Optional[MemoryManager] = None
+        self.tool_registry: Optional[ToolRegistry] = None
+        self.control_center: Optional[WitsControlCenterAgent] = None
         self.orchestrator = None
+        self.neural_web = None
+        
+        # Specialized agents
+        self.book_writing_agent = None
+        self.coding_agent = None
+        self.self_repair_agent = None
         
         logger.info(f"Initializing WitsV3 system v{config.version}")
     
@@ -66,17 +70,21 @@ class WitsV3System:
             )            
             # Test LLM connection (simple test)
             logger.info("LLM interface initialized")
-              
-            # Initialize memory manager
-            if self.config.memory_manager.backend == "basic":
-                self.memory_manager = MemoryManager(
-                    config=self.config,
-                    llm_interface=self.llm_interface
-                )
-                await self.memory_manager.initialize()
-                logger.info("Memory manager initialized with basic backend")
-            else:
-                logger.warning(f"Memory backend '{self.config.memory_manager.backend}' not implemented, continuing without memory")
+                # Initialize memory manager
+            self.memory_manager = MemoryManager(
+                config=self.config,
+                llm_interface=self.llm_interface
+            )
+            await self.memory_manager.initialize()
+            logger.info(f"Memory manager initialized with {self.config.memory_manager.backend} backend")
+              # Initialize neural web if using neural backend
+            if self.config.memory_manager.backend == "neural":
+                from core.neural_web_core import NeuralWeb
+                from core.neural_memory_backend import NeuralMemoryBackend
+                # Neural web is initialized within the NeuralMemoryBackend
+                if isinstance(self.memory_manager.backend, NeuralMemoryBackend):
+                    self.neural_web = self.memory_manager.backend.neural_web
+                    logger.info("Neural web integration enabled")
             
             # Initialize tool registry
             self.tool_registry = ToolRegistry()
@@ -88,16 +96,27 @@ class WitsV3System:
             self.tool_registry.register_tool(DateTimeTool())
             
             logger.info(f"Tool registry initialized with {len(self.tool_registry.tools)} tools")
-            
-            # Initialize orchestrator
-            self.orchestrator = LLMDrivenOrchestrator(
-                agent_name="LLMOrchestrator",
-                config=self.config,
-                llm_interface=self.llm_interface,
-                memory_manager=self.memory_manager,
-                tool_registry=self.tool_registry
-            )
-            logger.info("LLM-driven orchestrator initialized")
+              # Initialize orchestrator with neural capabilities if available
+            if self.neural_web and self.config.memory_manager.backend == "neural":
+                from agents.neural_orchestrator_agent import NeuralOrchestratorAgent
+                self.orchestrator = NeuralOrchestratorAgent(
+                    agent_name="NeuralOrchestrator",
+                    config=self.config,
+                    llm_interface=self.llm_interface,
+                    memory_manager=self.memory_manager,
+                    tool_registry=self.tool_registry,
+                    neural_web=self.neural_web
+                )
+                logger.info("Neural orchestrator initialized")
+            else:
+                self.orchestrator = LLMDrivenOrchestrator(
+                    agent_name="LLMOrchestrator",
+                    config=self.config,
+                    llm_interface=self.llm_interface,
+                    memory_manager=self.memory_manager,
+                    tool_registry=self.tool_registry
+                )
+                logger.info("LLM-driven orchestrator initialized")
             
             # Initialize control center
             self.control_center = WitsControlCenterAgent(
@@ -108,13 +127,59 @@ class WitsV3System:
                 orchestrator_agent=self.orchestrator
             )
             logger.info("WITS Control Center initialized")
+              # Initialize specialized agents
+            await self._initialize_specialized_agents()
             
-            logger.info("WitsV3 system fully initialized and ready!")
+            logger.info("WitsV3 system fully initialized")
             
         except Exception as e:
             logger.error(f"Failed to initialize WitsV3 system: {e}")
             raise
     
+    async def _initialize_specialized_agents(self):
+        """Initialize specialized agents with neural web integration"""
+        if not self.llm_interface or not self.memory_manager or not self.tool_registry:
+            raise RuntimeError("Core components must be initialized before specialized agents")
+            
+        try:
+            # Book Writing Agent
+            from agents.book_writing_agent import BookWritingAgent
+            self.book_writing_agent = BookWritingAgent(
+                agent_name="BookWriter",
+                config=self.config,
+                llm_interface=self.llm_interface,
+                memory_manager=self.memory_manager,
+                neural_web=self.neural_web,
+                tool_registry=self.tool_registry
+            )
+            
+            # Advanced Coding Agent  
+            from agents.advanced_coding_agent import AdvancedCodingAgent
+            self.coding_agent = AdvancedCodingAgent(
+                agent_name="CodingExpert",
+                config=self.config,
+                llm_interface=self.llm_interface,
+                memory_manager=self.memory_manager,
+                neural_web=self.neural_web,
+                tool_registry=self.tool_registry
+            )
+            
+            # Self-Repair Agent
+            from agents.self_repair_agent import SelfRepairAgent
+            self.self_repair_agent = SelfRepairAgent(
+                agent_name="SystemDoctor",
+                config=self.config,
+                llm_interface=self.llm_interface,
+                memory_manager=self.memory_manager,
+                neural_web=self.neural_web,
+                tool_registry=self.tool_registry
+            )
+            
+            logger.info("Specialized agents initialized")
+            
+        except Exception as e:
+            logger.error(f"Error initializing specialized agents: {e}")
+
     async def process_user_input(
         self, 
         user_input: str, 
@@ -139,9 +204,11 @@ class WitsV3System:
         
         conversation = self.session_histories[session_id]
         conversation.add_message("user", user_input)
-        
-        # Process through control center
+          # Process through control center
         response_parts = []
+        
+        if not self.control_center:
+            raise RuntimeError("Control center not initialized")
         
         try:
             async for stream_data in self.control_center.run(

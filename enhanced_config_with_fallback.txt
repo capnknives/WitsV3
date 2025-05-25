@@ -1,0 +1,204 @@
+# Enhanced WitsV3 Configuration with Content Fallback
+project_name: "WitsV3-Enhanced"
+version: "3.1.0"
+logging_level: "INFO"
+debug_mode: false
+
+# LLM Configuration with Fallback System
+llm_interface:
+  default_provider: "ollama"
+  timeout_seconds: 120
+  streaming_enabled: true
+  
+  # Content fallback settings
+  content_fallback:
+    enabled: true
+    auto_detect_refusal: true
+    preemptive_uncensored: true  # Skip to uncensored for known sensitive content
+    fallback_timeout: 30
+    track_refusal_patterns: true
+
+ollama_settings:
+  url: "http://localhost:11434"
+  request_timeout: 120
+  
+  # Specialized model assignments
+  default_model: "llama3"
+  control_center_model: "hf.co/google/gemma-3-4b-it-qat-q4_0-gguf"
+  orchestrator_model: "llama3"
+  coding_agent_model: "deepseek-coder-v2:16b-lite-instruct-q4_K_M"
+  book_writing_model: "hf.co/google/gemma-3-4b-it-qat-q4_0-gguf"
+  self_repair_model: "llama3"
+  neural_reasoning_model: "openhermes"
+  
+  # Uncensored fallback hierarchy
+  uncensored_fallback_models:
+    primary: "llama2-uncensored"      # First fallback for refused content
+    secondary: "openhermes"           # Less restrictive alternative
+    tertiary: "llama3"               # Final fallback
+  
+  # Content-aware model routing
+  content_routing:
+    creative_writing:
+      default: "hf.co/google/gemma-3-4b-it-qat-q4_0-gguf"
+      mature_themes: "llama2-uncensored"
+      dark_fiction: "llama2-uncensored" 
+      adult_content: "llama2-uncensored"
+      horror_thriller: "llama2-uncensored"
+    
+    technical_writing:
+      default: "hf.co/google/gemma-3-4b-it-qat-q4_0-gguf"
+      complex: "llama3"
+    
+    coding:
+      simple: "codellama:7b"
+      complex: "deepseek-coder-v2:16b-lite-instruct-q4_K_M"
+      debugging: "deepseek-coder-v2:16b-lite-instruct-q4_K_M"
+  
+  # Model memory management
+  resource_management:
+    max_concurrent_models: 3
+    auto_unload_timeout: 600  # 10 minutes
+    memory_threshold: 0.85    # Unload models at 85% memory usage
+    priority_models: ["llama3", "llama2-uncensored"]
+  
+  # Refusal detection patterns (can be customized)
+  refusal_detection:
+    sensitivity: "medium"  # low, medium, high
+    custom_patterns: []    # Add your own refusal patterns
+    whitelist_phrases: []  # Phrases that should NOT trigger fallback
+    
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+# Agent Configuration with Content Awareness
+agents:
+  default_temperature: 0.7
+  max_iterations: 15
+  
+  # Content fallback settings per agent
+  book_writer:
+    enable_content_fallback: true
+    auto_uncensored_for: ["mature_themes", "dark_fiction", "adult_content", "violence"]
+    creativity_boost: true  # Use higher temperature for creative content
+    temperature_range: [0.7, 0.9]
+    
+  coding_agent:
+    enable_content_fallback: false  # Usually not needed for coding
+    focus_models: ["deepseek-coder-v2:16b-lite-instruct-q4_K_M", "codellama:7b"]
+    
+  control_center:
+    enable_content_fallback: true
+    route_sensitive_to_specialists: true  # Route sensitive content to book writer
+    
+  self_repair:
+    enable_content_fallback: false
+    system_monitoring: true
+
+# Neural Web with Content Categorization
+neural_web:
+  activation_threshold: 0.3
+  decay_rate: 0.1
+  max_concepts: 10000
+  
+  # Content categorization for smart routing
+  content_categories:
+    creative: ["story", "character", "dialogue", "scene", "narrative"]
+    mature: ["violence", "death", "adult", "mature", "explicit"]
+    technical: ["code", "algorithm", "database", "api", "framework"]
+    analytical: ["analyze", "compare", "evaluate", "research"]
+  
+  # Learning from refusals
+  refusal_learning:
+    enabled: true
+    build_refusal_patterns: true
+    suggest_alternative_phrasings: true
+
+# Memory Management
+memory_manager:
+  backend: "basic"
+  memory_file_path: "data/wits_memory.json"
+  vector_dim: 4096
+  max_results_per_search: 10
+  
+  # Store content fallback events
+  track_fallback_events: true
+  fallback_importance_boost: 0.2  # Boost importance of fallback-generated content
+
+# Content Categories and Handling
+content_handling:
+  # Define what gets automatic uncensored treatment
+  auto_uncensored_categories:
+    - "dark_fiction"
+    - "horror"
+    - "thriller" 
+    - "mature_themes"
+    - "adult_content"
+    - "violence_fiction"
+    - "controversial_topics"
+  
+  # Content that should get extra creative freedom
+  high_creativity_categories:
+    - "creative_writing"
+    - "storytelling"
+    - "character_development"
+    - "world_building"
+    - "dialogue_writing"
+  
+  # Logging and monitoring
+  content_monitoring:
+    log_refusals: true
+    log_fallbacks: true
+    generate_content_reports: true
+    report_interval: "daily"
+
+# User Preferences (can be overridden per session)
+user_preferences:
+  # Content generation preferences
+  default_content_style: "balanced"  # conservative, balanced, permissive
+  allow_auto_uncensored: true
+  prefer_uncensored_for_fiction: true
+  show_model_switches: true  # Notify when switching models
+  
+  # Creative writing specific
+  creative_freedom_level: "high"  # low, medium, high
+  mature_content_threshold: "medium"  # low, medium, high
+  violence_threshold: "medium"
+  
+  # Notification preferences
+  notify_on_fallback: true
+  show_refusal_reasons: true
+  suggest_alternatives: true
+
+# CLI Settings
+cli:
+  show_thoughts: true
+  show_tool_calls: true
+  show_model_switches: true  # Show when switching to uncensored models
+  show_content_warnings: true
+  
+# Tool System
+tool_system:
+  enable_mcp_tools: true
+  mcp_tool_definitions_path: "data/mcp_tools.json"
+  
+# Development/Testing Settings
+development:
+  test_refusal_detection: false  # Set to true to test refusal patterns
+  simulate_refusals: false       # Set to true to simulate refusals for testing
+  fallback_testing_mode: false   # Enhanced logging for testing
+  
+# Security and Safety
+security:
+  content_filtering:
+    enabled: true
+    level: "moderate"  # strict, moderate, permissive
+    custom_filters: []
+    
+  model_isolation:
+    enabled: true
+    sandbox_uncensored_models: false  # Set to true for extra security
+    
+  audit_logging:
+    enabled: true
+    log_sensitive_content_generation: true
+    retention_days: 30
