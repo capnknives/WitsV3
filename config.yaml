@@ -25,7 +25,7 @@ ollama_settings:
   self_repair_model: "llama3" # System monitoring and repair
   neural_reasoning_model: "llama3" # Neural web reasoning and analysis
 
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2" # Use dedicated embedding model
+  embedding_model: "nomic-embed-text" # Use dedicated embedding model
   request_timeout: 120
 
 # Agent Configuration
