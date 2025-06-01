@@ -1,0 +1,300 @@
+ÿþimport asyncio
+import logging
+from typing import Dict, List, Optional, Any
+import uuid
+from datetime import datetime
+
+from .agent_connector import BookWritingAgentConnector
+
+logger = logging.getLogger(__name__)
+
+class BookWritingService:
+    """Service for managing book writing operations"""
+    
+    def __init__(self):
+        self.agent_connector = None
+        self.books = {}  # In-memory storage for books
+        self.characters = {}  # In-memory storage for characters
+        self.chapters = {}  # In-memory storage for chapters
+        self.research = {}  # In-memory storage for research
+        self.generation_tasks = {}  # In-memory storage for generation tasks
+    
+    async def initialize(self):
+        """Initialize the book writing service"""
+        try:
+            self.agent_connector = BookWritingAgentConnector()
+            await self.agent_connector.initialize()
+            logger.info("Book writing service initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize book writing service: {e}")
+            raise
+    
+    # Book operations
+    async def create_book(self, book_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new book"""
+        book_id = str(uuid.uuid4())
+        timestamp = datetime.utcnow().isoformat()
+        
+        new_book = {
+            "id": book_id,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "characters": [],
+            "chapters": [],
+            **book_data
+        }
+        
+        self.books[book_id] = new_book
+        return new_book
+    
+    async def get_book(self, book_id: str) -> Optional[Dict[str, Any]]:
+        """Get a book by ID"""
+        return self.books.get(book_id)
+    
+    async def get_all_books(self) -> List[Dict[str, Any]]:
+        """Get all books"""
+        return list(self.books.values())
+    
+    async def update_book(self, book_id: str, book_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update a book"""
+        if book_id not in self.books:
+            return None
+        
+        book = self.books[book_id]
+        update_data = {k: v for k, v in book_data.items() if k not in ["characters", "chapters"]}
+        
+        book.update(update_data)
+        book["updated_at"] = datetime.utcnow().isoformat()
+        
+        return book
+    
+    async def delete_book(self, book_id: str) -> bool:
+        """Delete a book"""
+        if book_id not in self.books:
+            return False
+        
+        del self.books[book_id]
+        
+        # Also delete associated characters and chapters
+        if book_id in self.characters:
+            del self.characters[book_id]
+        
+        if book_id in self.chapters:
+            del self.chapters[book_id]
+        
+        return True
+    
+    # Character operations
+    async def add_character(self, book_id: str, character_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Add a character to a book"""
+        if book_id not in self.books:
+            return None
+        
+        character_id = str(uuid.uuid4())
+        
+        new_character = {
+            "id": character_id,
+            "book_id": book_id,
+            **character_data
+        }
+        
+        if book_id not in self.characters:
+            self.characters[book_id] = []
+        
+        self.characters[book_id].append(new_character)
+        self.books[book_id]["characters"].append(new_character)
+        self.books[book_id]["updated_at"] = datetime.utcnow().isoformat()
+        
+        return new_character
+    
+    async def get_character(self, book_id: str, character_id: str) -> Optional[Dict[str, Any]]:
+        """Get a character by ID"""
+        if book_id not in self.characters:
+            return None
+        
+        for character in self.characters[book_id]:
+            if character["id"] == character_id:
+                return character
+        
+        return None
+    
+    async def get_all_characters(self, book_id: str) -> List[Dict[str, Any]]:
+        """Get all characters for a book"""
+        if book_id not in self.characters:
+            return []
+        
+        return self.characters[book_id]
+    
+    # Chapter operations
+    async def add_chapter(self, book_id: str, chapter_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Add a chapter to a book"""
+        if book_id not in self.books:
+            return None
+        
+        chapter_id = str(uuid.uuid4())
+        
+        new_chapter = {
+            "id": chapter_id,
+            "book_id": book_id,
+            "content": None,
+            "word_count": 0,
+            "status": "draft",
+            **chapter_data
+        }
+        
+        if book_id not in self.chapters:
+            self.chapters[book_id] = []
+        
+        self.chapters[book_id].append(new_chapter)
+        self.books[book_id]["chapters"].append(new_chapter)
+        self.books[book_id]["updated_at"] = datetime.utcnow().isoformat()
+        
+        return new_chapter
+    
+    async def get_chapter(self, book_id: str, chapter_id: str) -> Optional[Dict[str, Any]]:
+        """Get a chapter by ID"""
+        if book_id not in self.chapters:
+            return None
+        
+        for chapter in self.chapters[book_id]:
+            if chapter["id"] == chapter_id:
+                return chapter
+        
+        return None
+    
+    async def get_all_chapters(self, book_id: str) -> List[Dict[str, Any]]:
+        """Get all chapters for a book"""
+        if book_id not in self.chapters:
+            return []
+        
+        return self.chapters[book_id]
+    
+    # Generation operations
+    async def generate_book(self, book_id: str, use_enhanced: bool = True) -> str:
+        """Generate a complete book"""
+        if not self.agent_connector:
+            await self.initialize()
+        
+        book = await self.get_book(book_id)
+        if not book:
+            raise ValueError(f"Book with ID {book_id} not found")
+        
+        # In a real implementation, this would be an async task
+        # For now, we'll just use a placeholder
+        try:
+            book_config = {
+                "title": book["title"],
+                "genre": book["genre"],
+                "characters": await self.get_all_characters(book_id),
+                "chapters": await self.get_all_chapters(book_id)
+            }
+            
+            result = await self.agent_connector.generate_book(book_config, use_enhanced=use_enhanced)
+            return result
+        except Exception as e:
+            logger.error(f"Error generating book: {e}")
+            raise
+    
+    async def generate_chapter(self, book_id: str, chapter_id: str) -> str:
+        """Generate content for a chapter"""
+        if not self.agent_connector:
+            await self.initialize()
+        
+        book = await self.get_book(book_id)
+        if not book:
+            raise ValueError(f"Book with ID {book_id} not found")
+        
+        chapter = await self.get_chapter(book_id, chapter_id)
+        if not chapter:
+            raise ValueError(f"Chapter with ID {chapter_id} not found")
+        
+        # In a real implementation, this would be an async task
+        # For now, we'll just use a placeholder
+        try:
+            chapter_config = {
+                "book_id": book_id,
+                "chapter_id": chapter_id,
+                "title": chapter.get("title"),
+                "outline": chapter.get("outline"),
+                "book_title": book["title"],
+                "book_genre": book["genre"],
+                "characters": await self.get_all_characters(book_id)
+            }
+            
+            result = await self.agent_connector.generate_chapter(book_id, chapter_config)
+            
+            # Update the chapter with the generated content
+            for i, ch in enumerate(self.chapters[book_id]):
+                if ch["id"] == chapter_id:
+                    self.chapters[book_id][i]["content"] = result
+                    self.chapters[book_id][i]["word_count"] = len(result.split())
+                    self.chapters[book_id][i]["status"] = "completed"
+                    break
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error generating chapter: {e}")
+            raise
+    
+    # Research operations
+    async def research_topic(self, topic: str) -> Dict[str, Any]:
+        """Research a topic for book writing"""
+        if not self.agent_connector:
+            await self.initialize()
+
+        try:
+            result = await self.agent_connector.research_topic(topic)
+
+            # Store the research result
+            research_id = len(self.research) + 1
+            self.research[research_id] = result
+
+            return result
+        except Exception as e:
+            logger.error(f"Error researching topic: {e}")
+            raise
+            
+    async def add_research(self, book_id: str, research_data: Dict[str, Any]) -> str:
+        """Add research to a book"""
+        research_id = str(uuid.uuid4())
+        timestamp = datetime.utcnow().isoformat()
+        
+        new_research = {
+            "id": research_id,
+            "book_id": book_id,
+            "created_at": timestamp,
+            **research_data
+        }
+        
+        if book_id not in self.research:
+            self.research[book_id] = []
+            
+        self.research[book_id].append(new_research)
+        
+        return research_id
+        
+    async def get_research(self, research_id: str) -> Optional[Dict[str, Any]]:
+        """Get research by ID"""
+        for book_id, research_list in self.research.items():
+            for research in research_list:
+                if research["id"] == research_id:
+                    return research
+                    
+        return None
+        
+    async def get_all_research(self, book_id: str) -> List[Dict[str, Any]]:
+        """Get all research for a book"""
+        if book_id not in self.research:
+            return []
+            
+        return self.research[book_id]
+        
+    async def delete_research(self, research_id: str) -> bool:
+        """Delete research"""
+        for book_id, research_list in self.research.items():
+            for i, research in enumerate(research_list):
+                if research["id"] == research_id:
+                    del self.research[book_id][i]
+                    return True
+                    
+        return False

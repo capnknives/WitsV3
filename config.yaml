@@ -6,22 +6,52 @@ project_name: "WitsV3"
 version: "3.0.0"
 logging_level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
 debug_mode: false
+auto_restart_on_file_change: true # Automatically restart when Python files are changed
 
 # LLM Configuration (Primarily Ollama) - Enhanced with Model Specialization
 llm_interface:
-  default_provider: "ollama" # ollama, openai, etc.
+  default_provider: "adaptive" # adaptive, ollama, openai, etc.
   timeout_seconds: 120
   streaming_enabled: true
+
+# Adaptive LLM System Settings
+adaptive_llm:
+  # Complexity analyzer settings
+  complexity_analyzer:
+    use_embeddings: true
+    length_weight: 0.2
+    vocab_weight: 0.3
+    structure_weight: 0.2
+    reasoning_weight: 0.3
+    
+  # Dynamic module loader settings
+  module_loader:
+    vram_budget_gb: 7.5  # 7.5GB
+    ram_budget_gb: 30.0  # 30GB
+    preload_modules: ["base"]
+    enable_quantization: true
+    
+  # Semantic cache settings
+  semantic_cache:
+    enable_caching: true
+    cache_size: 1000000
+    similarity_threshold: 0.92
+    cache_dir: "cache"
+    
+  # General adaptive settings
+  enable_performance_tracking: true
+  fallback_to_base_on_error: true
+  max_fallback_attempts: 3
 
 ollama_settings:
   url: "http://localhost:11434"
   default_model: "llama3" # Default model for general tasks
 
   # Specialized model assignments based on agent capabilities
-  control_center_model: "hf.co/google/gemma-3-4b-it-qat-q4_0-gguf" # Better reasoning for routing
+  control_center_model: "llama3" # Better reasoning for routing (switched from crashing Gemma model)
   orchestrator_model: "llama3" # Balanced reasoning and planning
   coding_agent_model: "deepseek-coder-v2:16b-lite-instruct-q4_K_M" # Advanced coding tasks
-  book_writing_model: "hf.co/google/gemma-3-4b-it-qat-q4_0-gguf" # Creative writing and narrative
+  book_writing_model: "llama3" # Creative writing and narrative (switched from crashing Gemma model)
   self_repair_model: "llama3" # System monitoring and repair
   neural_reasoning_model: "llama3" # Neural web reasoning and analysis
 
@@ -32,10 +62,9 @@ ollama_settings:
 agents:
   default_temperature: 0.7
   max_iterations: 15 # Max iterations for ReAct loop in Orchestrator
-
   # Agent-specific configurations
   control_center_agent:
-    model: "hf.co/google/gemma-3-4b-it-qat-q4_0-gguf" # Was openhermes, changed to Gemma
+    model: "llama3" # Switched from crashing Gemma model to stable llama3
     temperature: 0.3
     max_tokens: 2048
     enable_neural_routing: true
@@ -48,7 +77,7 @@ agents:
     reasoning_depth: 3
 
   book_writing_agent:
-    model: "hf.co/google/gemma-3-4b-it-qat-q4_0-gguf"
+    model: "llama3" # Switched from crashing Gemma model
     temperature: 0.8
     max_tokens: 16384
     enable_narrative_intelligence: true

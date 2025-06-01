@@ -6,10 +6,12 @@ CLI-first AI orchestration system with LLM wrapper architecture.
 
 import asyncio
 import logging
+import os
 import sys
 import uuid
+import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from core.config import load_config, WitsV3Config
 from core.llm_interface import OllamaInterface
@@ -18,7 +20,17 @@ from core.tool_registry import ToolRegistry
 from core.schemas import ConversationHistory, StreamData
 from agents.wits_control_center_agent import WitsControlCenterAgent
 from agents.llm_driven_orchestrator import LLMDrivenOrchestrator
-from tools.base_tool import FileReadTool, FileWriteTool, ListDirectoryTool, DateTimeTool
+from tools.mcp_tool_registry import MCPToolRegistry
+# Note: Tool imports removed - tools are auto-discovered by ToolRegistry
+
+# Import file watcher
+try:
+    from core.file_watcher import AsyncFileWatcher
+    HAS_FILE_WATCHER = True
+except ImportError:
+    HAS_FILE_WATCHER = False
+    logger = logging.getLogger("WitsV3.Main")
+    logger.warning("File watcher not available. Install watchdog package for auto-restart functionality.")
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +44,9 @@ logging.basicConfig(
 
 logger = logging.getLogger("WitsV3.Main")
 
+
+# Flag to indicate if this is a restart
+IS_RESTART = "--restart" in sys.argv
 
 class WitsV3System:
     """
@@ -47,12 +62,14 @@ class WitsV3System:
         """
         self.config = config
         self.session_histories = {}        # Initialize core components
+        self.file_watcher = None
         self.llm_interface: Optional[OllamaInterface] = None
         self.memory_manager: Optional[MemoryManager] = None
         self.tool_registry: Optional[ToolRegistry] = None
         self.control_center: Optional[WitsControlCenterAgent] = None
         self.orchestrator = None
         self.neural_web = None
+        self.mcp_registry = None
         
         # Specialized agents
         self.book_writing_agent = None
@@ -85,18 +102,23 @@ class WitsV3System:
                 if isinstance(self.memory_manager.backend, NeuralMemoryBackend):
                     self.neural_web = self.memory_manager.backend.neural_web
                     logger.info("Neural web integration enabled")
-            
-            # Initialize tool registry
+              # Initialize tool registry with auto-discovery
             self.tool_registry = ToolRegistry()
             
-            # Register additional tools
-            self.tool_registry.register_tool(FileReadTool())
-            self.tool_registry.register_tool(FileWriteTool())
-            self.tool_registry.register_tool(ListDirectoryTool())
-            self.tool_registry.register_tool(DateTimeTool())
+            # Initialize MCP tool registry
+            self.mcp_registry = MCPToolRegistry()
+            await self.mcp_registry.initialize(self.tool_registry)
             
-            logger.info(f"Tool registry initialized with {len(self.tool_registry.tools)} tools")
-              # Initialize orchestrator with neural capabilities if available
+            # Note: Tools are automatically discovered from tools/base_tool.py module
+            # No manual registration needed for: FileReadTool, FileWriteTool, ListDirectoryTool, DateTimeTool
+            
+            logger.info(f"Tool registry initialized with {len(self.tool_registry.tools)} tools (auto-discovered)")
+            
+            # Initialize specialized agents first
+            await self._initialize_specialized_agents()
+            logger.info("Specialized agents initialized")
+            
+            # Initialize orchestrator with neural capabilities if available
             if self.neural_web and self.config.memory_manager.backend == "neural":
                 from agents.neural_orchestrator_agent import NeuralOrchestratorAgent
                 self.orchestrator = NeuralOrchestratorAgent(
@@ -124,17 +146,71 @@ class WitsV3System:
                 config=self.config,
                 llm_interface=self.llm_interface,
                 memory_manager=self.memory_manager,
-                orchestrator_agent=self.orchestrator
+                orchestrator_agent=self.orchestrator,
+                specialized_agents={
+                    "book_writing": self.book_writing_agent,
+                    "coding": self.coding_agent,
+                    "self_repair": self.self_repair_agent
+                }
             )
-            logger.info("WITS Control Center initialized")
-              # Initialize specialized agents
-            await self._initialize_specialized_agents()
+            logger.info("WITS Control Center initialized with specialized agents")
             
             logger.info("WitsV3 system fully initialized")
+            
+            # Initialize file watcher if available
+            if HAS_FILE_WATCHER and self.config.auto_restart_on_file_change:
+                await self._initialize_file_watcher()
             
         except Exception as e:
             logger.error(f"Failed to initialize WitsV3 system: {e}")
             raise
+    
+    async def _initialize_file_watcher(self):
+        """Initialize the file watcher for auto-restart functionality."""
+        try:
+            # Create file watcher
+            self.file_watcher = AsyncFileWatcher(
+                restart_callback=self._restart_system,
+                patterns=["*.py"]  # Watch Python files
+            )
+            
+            # Start file watcher
+            watch_paths = [
+                os.path.join(os.getcwd(), "agents"),
+                os.path.join(os.getcwd(), "core"),
+                os.path.join(os.getcwd(), "tools"),
+                os.path.join(os.getcwd(), "gui")
+            ]
+            await self.file_watcher.start(watch_paths)
+            
+            logger.info(f"File watcher initialized and watching for changes in Python files")
+        except Exception as e:
+            logger.error(f"Failed to initialize file watcher: {e}")
+    
+    def _restart_system(self):
+        """Restart the system when a file changes."""
+        logger.info("Restarting WitsV3 system due to file changes...")
+        
+        try:
+            # Get the current script path
+            script_path = sys.argv[0]
+            
+            # Build the restart command
+            cmd = [sys.executable, script_path, "--restart"]
+            
+            # Add any other command line arguments
+            for arg in sys.argv[1:]:
+                if arg != "--restart":  # Avoid duplicate restart flags
+                    cmd.append(arg)
+            
+            # Start the new process
+            subprocess.Popen(cmd)
+            
+            # Exit the current process
+            logger.info("New WitsV3 process started, shutting down current process...")
+            sys.exit(0)
+        except Exception as e:
+            logger.error(f"Failed to restart system: {e}")
     
     async def _initialize_specialized_agents(self):
         """Initialize specialized agents with neural web integration"""
@@ -142,9 +218,9 @@ class WitsV3System:
             raise RuntimeError("Core components must be initialized before specialized agents")
             
         try:
-            # Book Writing Agent
-            from agents.book_writing_agent import BookWritingAgent
-            self.book_writing_agent = BookWritingAgent(
+            # Book Writing Agent with fallback
+            from agents.enhanced_book_agent_with_fallback import EnhancedBookWritingAgent
+            self.book_writing_agent = EnhancedBookWritingAgent(
                 agent_name="BookWriter",
                 config=self.config,
                 llm_interface=self.llm_interface,
@@ -259,9 +335,18 @@ class WitsV3System:
         """Shutdown the system gracefully."""
         logger.info("Shutting down WitsV3 system...")
         
+        # Stop file watcher if running
+        if self.file_watcher:
+            await self.file_watcher.stop()
+            logger.info("File watcher shutdown complete")
+        
         if self.memory_manager:
             # Save any pending memory operations
             pass
+            
+        if self.mcp_registry:
+            await self.mcp_registry.shutdown()
+            logger.info("MCP registry shutdown complete")
         
         logger.info("WitsV3 system shutdown complete")
 

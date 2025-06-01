@@ -56,6 +56,7 @@ class WitsV3Config(BaseModel):
     version: str = Field(default="3.0.0")
     logging_level: str = Field(default="INFO")
     debug_mode: bool = Field(default=False)
+    auto_restart_on_file_change: bool = Field(default=True, description="Automatically restart the system when Python files are changed")
     
     llm_interface: LLMInterfaceSettings = LLMInterfaceSettings()
     ollama_settings: OllamaSettings = OllamaSettings()

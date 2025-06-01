@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Writing GUI</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Book Writing GUI</h1>
+        <p>A FastAPI-based GUI for the WitsV3 Book Writing Agent</p>
+    </header>
+    
+    <nav>
+        <ul>
+            <li><a href="#" id="nav-books">Books</a></li>
+            <li><a href="#" id="nav-chapters">Chapters</a></li>
+            <li><a href="#" id="nav-characters">Characters</a></li>
+            <li><a href="#" id="nav-generation">Generation</a></li>
+            <li><a href="#" id="nav-research">Research</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <div id="notifications"></div>
+        
+        <div class="connection-info">
+            <p>Agent Connection: <span id="connection-status">Disconnected</span></p>
+        </div>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <h2>Navigation</h2>
+                <ul>
+                    <li><a href="#" class="sidebar-link" data-section="books">Manage Books</a></li>
+                    <li><a href="#" class="sidebar-link" data-section="chapters">Manage Chapters</a></li>
+                    <li><a href="#" class="sidebar-link" data-section="characters">Manage Characters</a></li>
+                    <li><a href="#" class="sidebar-link" data-section="generation">Generate Content</a></li>
+                    <li><a href="#" class="sidebar-link" data-section="research">Research Topics</a></li>
+                </ul>
+            </div>
+            
+            <div class="content">
+                <!-- Books Section -->
+                <section id="books-section" class="section-content">
+                    <h2>Books</h2>
+                    
+                    <div class="form-container">
+                        <h3>Create New Book</h3>
+                        <form id="book-form">
+                            <div class="form-group">
+                                <label for="book-title">Title</label>
+                                <input type="text" id="book-title" name="title" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="book-author">Author</label>
+                                <input type="text" id="book-author" name="author" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="book-genre">Genre</label>
+                                <input type="text" id="book-genre" name="genre">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="book-description">Description</label>
+                                <textarea id="book-description" name="description" rows="4"></textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">Create Book</button>
+                        </form>
+                    </div>
+                    
+                    <div class="form-container">
+                        <h3>Import Markdown Manuscript</h3>
+                        <form id="markdown-import-form" enctype="multipart/form-data">
+                            <div class="form-group">
+                                <label for="markdown-title">Book Title</label>
+                                <input type="text" id="markdown-title" name="title" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="markdown-author">Author</label>
+                                <input type="text" id="markdown-author" name="author" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="markdown-genre">Genre</label>
+                                <input type="text" id="markdown-genre" name="genre">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="markdown-file">Markdown File</label>
+                                <input type="file" id="markdown-file" name="markdown_file" accept=".md,.markdown" required>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">Import Manuscript</button>
+                        </form>
+                    </div>
+                    
+                    <div class="books-list">
+                        <h3>Your Books</h3>
+                        <div id="books-container" class="items-container">
+                            <!-- Books will be loaded here dynamically -->
+                            <p class="empty-message">No books found. Create your first book above!</p>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Chapters Section -->
+                <section id="chapters-section" class="section-content hidden">
+                    <h2>Chapters</h2>
+                    
+                    <div class="form-container">
+                        <h3>Create New Chapter</h3>
+                        <form id="chapter-form">
+                            <div class="form-group">
+                                <label for="chapter-book">Book</label>
+                                <select id="chapter-book" name="book_id" required>
+                                    <option value="">Select a book</option>
+                                    <!-- Books will be loaded here dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="chapter-title">Title</label>
+                                <input type="text" id="chapter-title" name="title" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="chapter-number">Chapter Number</label>
+                                <input type="number" id="chapter-number" name="number" min="1" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="chapter-content">Content</label>
+                                <textarea id="chapter-content" name="content" rows="8"></textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">Create Chapter</button>
+                        </form>
+                    </div>
+                    
+                    <div class="chapters-list">
+                        <h3>Book Chapters</h3>
+                        <div class="form-group">
+                            <label for="chapters-book-filter">Filter by Book</label>
+                            <select id="chapters-book-filter">
+                                <option value="">All Books</option>
+                                <!-- Books will be loaded here dynamically -->
+                            </select>
+                        </div>
+                        
+                        <div id="chapters-container" class="items-container">
+                            <!-- Chapters will be loaded here dynamically -->
+                            <p class="empty-message">No chapters found. Create your first chapter above!</p>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Characters Section -->
+                <section id="characters-section" class="section-content hidden">
+                    <h2>Characters</h2>
+                    
+                    <div class="form-container">
+                        <h3>Create New Character</h3>
+                        <form id="character-form">
+                            <div class="form-group">
+                                <label for="character-book">Book</label>
+                                <select id="character-book" name="book_id" required>
+                                    <option value="">Select a book</option>
+                                    <!-- Books will be loaded here dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="character-name">Name</label>
+                                <input type="text" id="character-name" name="name" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="character-role">Role</label>
+                                <select id="character-role" name="role">
+                                    <option value="protagonist">Protagonist</option>
+                                    <option value="antagonist">Antagonist</option>
+                                    <option value="supporting">Supporting</option>
+                                    <option value="minor">Minor</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="character-description">Description</label>
+                                <textarea id="character-description" name="description" rows="4"></textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">Create Character</button>
+                        </form>
+                    </div>
+                    
+                    <div class="characters-list">
+                        <h3>Book Characters</h3>
+                        <div class="form-group">
+                            <label for="characters-book-filter">Filter by Book</label>
+                            <select id="characters-book-filter">
+                                <option value="">All Books</option>
+                                <!-- Books will be loaded here dynamically -->
+                            </select>
+                        </div>
+                        
+                        <div id="characters-container" class="items-container">
+                            <!-- Characters will be loaded here dynamically -->
+                            <p class="empty-message">No characters found. Create your first character above!</p>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- Generation Section -->
+                <section id="generation-section" class="section-content hidden">
+                    <h2>Generate Content</h2>
+                    
+                    <div class="form-container">
+                        <h3>Generate Book Content</h3>
+                        <form id="generation-form">
+                            <div class="form-group">
+                                <label for="generation-book">Book</label>
+                                <select id="generation-book" name="book_id" required>
+                                    <option value="">Select a book</option>
+                                    <!-- Books will be loaded here dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="generation-type">Content Type</label>
+                                <select id="generation-type" name="content_type" required>
+                                    <option value="chapter">Chapter</option>
+                                    <option value="outline">Book Outline</option>
+                                    <option value="character">Character Profile</option>
+                                    <option value="summary">Book Summary</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="generation-prompt">Additional Prompt (Optional)</label>
+                                <textarea id="generation-prompt" name="prompt" rows="4" placeholder="Add specific details or requirements for the generated content"></textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">Generate Content</button>
+                        </form>
+                    </div>
+                    
+                    <div class="generation-result">
+                        <h3>Generated Content</h3>
+                        <div id="generation-output" class="output-container">
+                            <p class="empty-message">Generated content will appear here.</p>
+                        </div>
+                        <button id="save-generation" class="btn btn-secondary hidden">Save to Book</button>
+                    </div>
+                </section>
+                
+                <!-- Research Section -->
+                <section id="research-section" class="section-content hidden">
+                    <h2>Research Topics</h2>
+                    
+                    <div class="form-container">
+                        <h3>Research for Your Book</h3>
+                        <form id="research-form">
+                            <div class="form-group">
+                                <label for="research-book">Book (Optional)</label>
+                                <select id="research-book" name="book_id">
+                                    <option value="">Select a book</option>
+                                    <!-- Books will be loaded here dynamically -->
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="research-topic">Research Topic</label>
+                                <input type="text" id="research-topic" name="topic" required placeholder="e.g., Victorian Era Fashion, Space Travel Physics">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="research-depth">Research Depth</label>
+                                <select id="research-depth" name="depth">
+                                    <option value="basic">Basic Overview</option>
+                                    <option value="detailed" selected>Detailed Information</option>
+                                    <option value="comprehensive">Comprehensive Analysis</option>
+                                </select>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">Research Topic</button>
+                        </form>
+                    </div>
+                    
+                    <div class="research-results">
+                        <div class="tabs">
+                            <button class="tab-button active" data-tab="new-research">New Results</button>
+                            <button class="tab-button" data-tab="book-research">Book Research</button>
+                            <button class="tab-button" data-tab="general-research">General Research</button>
+                        </div>
+                        
+                        <div id="new-research" class="tab-content active">
+                            <h3>Research Results</h3>
+                            <div id="research-output" class="output-container">
+                                <p class="empty-message">Research results will appear here.</p>
+                            </div>
+                            <button id="save-research" class="btn btn-secondary hidden">Save to Book Notes</button>
+                        </div>
+                        
+                        <div id="book-research" class="tab-content">
+                            <h3>Book Research</h3>
+                            <div class="form-group">
+                                <label for="book-research-filter">Filter by Book</label>
+                                <select id="book-research-filter">
+                                    <option value="">Select a book</option>
+                                    <!-- Books will be loaded here dynamically -->
+                                </select>
+                            </div>
+                            <div id="book-research-container" class="items-container">
+                                <p class="empty-message">Select a book to view its research.</p>
+                            </div>
+                        </div>
+                        
+                        <div id="general-research" class="tab-content">
+                            <h3>General Research</h3>
+                            <div id="general-research-container" class="items-container">
+                                <p class="empty-message">No general research found.</p>
+                            </div>
+                            <button id="load-general-research" class="btn btn-secondary">Load General Research</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

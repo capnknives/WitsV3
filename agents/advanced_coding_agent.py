@@ -368,13 +368,15 @@ class AdvancedCodingAgent(BaseAgent):
         
         yield self.stream_thinking("Writing code implementation...")
         
-        # Generate code in streaming fashion
-        generated_code = ""
-        async for chunk in self.generate_streaming_response(code_prompt, temperature=0.7):
-            generated_code += chunk
-            # Show progress
-            if len(generated_code) % 500 < 50:
-                lines = generated_code.count('\n')
+        # Generate code (non-streaming since streaming isn't supported)
+        yield self.stream_thinking("Generating code...")
+        generated_code = await self.generate_response(code_prompt, temperature=0.7)
+        
+        # Simulate progress updates
+        content_length = len(generated_code)
+        for i in range(0, content_length, 500):
+            if i > 0:
+                lines = generated_code[:i].count('\n')
                 yield self.stream_action(f"Generated {lines} lines of code...")
         
         # Analyze the generated code

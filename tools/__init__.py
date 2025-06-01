@@ -9,12 +9,20 @@ from .base_tool import (
     ListDirectoryTool, 
     DateTimeTool
 )
+from .intent_analysis_tool import IntentAnalysisTool
+from .conversation_history_tool import (
+    ReadConversationHistoryTool,
+    AnalyzeConversationTool
+)
 
 __all__ = [
     'FileReadTool',
     'FileWriteTool', 
     'ListDirectoryTool',
     'DateTimeTool',
+    'IntentAnalysisTool',
+    'ReadConversationHistoryTool',
+    'AnalyzeConversationTool',
 ]
 
 __version__ = "1.0.0"

@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 from typing import Dict, Any, List, Optional, Set
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import aiohttp
 import yaml
 
@@ -33,22 +33,12 @@ class ToolCapability:
 
 
 @dataclass
-class ToolRegistry:
-    """Enhanced tool registry with capabilities and metadata"""
-    tools: Dict[str, MCPTool] = None
-    capabilities: Dict[str, List[str]] = None  # capability -> tool names
-    tool_metadata: Dict[str, Dict[str, Any]] = None
-    tool_dependencies: Dict[str, List[str]] = None
-    
-    def __post_init__(self):
-        if self.tools is None:
-            self.tools = {}
-        if self.capabilities is None:
-            self.capabilities = {}
-        if self.tool_metadata is None:
-            self.tool_metadata = {}
-        if self.tool_dependencies is None:
-            self.tool_dependencies = {}
+class MCPToolRegistry:
+    """Enhanced MCP tool registry with capabilities and metadata"""
+    tools: Dict[str, MCPTool] = field(default_factory=dict)
+    capabilities: Dict[str, List[str]] = field(default_factory=dict)  # capability -> tool names
+    tool_metadata: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    tool_dependencies: Dict[str, List[str]] = field(default_factory=dict)
 
 
 class EnhancedMCPAdapter(MCPAdapter):
@@ -59,7 +49,7 @@ class EnhancedMCPAdapter(MCPAdapter):
     def __init__(self, config_path: Optional[str] = None):
         super().__init__()
         self.config_path = config_path or "mcp_ecosystem.yaml"
-        self.tool_registry = ToolRegistry()
+        self.tool_registry = MCPToolRegistry()
         self.available_servers = {}
         self.tool_workflows = {}
         self.ecosystem_config = {}
@@ -430,7 +420,7 @@ class EnhancedMCPAdapter(MCPAdapter):
                 # Execute tool
                 tool_call = ToolCall(
                     call_id=f"workflow_{workflow_name}_step_{i}",
-                    name=tool_name,
+                    tool_name=tool_name,
                     arguments=processed_args
                 )
                 

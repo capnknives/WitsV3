@@ -1,4 +1,4 @@
-# agents/enhanced_book_writing_agent.py
+# agents/enhanced_book_agent_with_fallback.py
 """
 Enhanced Book Writing Agent with Content Fallback System
 Automatically switches to uncensored models when content is refused
@@ -10,7 +10,7 @@ import uuid
 from typing import Dict, List, Optional, Any, AsyncGenerator
 
 from agents.book_writing_agent import BookWritingAgent, BookStructure, Chapter
-from core.content_fallback import ContentFallbackManager, ContentAwareAgent
+from core.content_fallback_system import ContentFallbackManager, ContentAwareAgent
 from core.schemas import StreamData
 
 
@@ -201,18 +201,19 @@ class EnhancedBookWritingAgent(BookWritingAgent, ContentAwareAgent):
         
         yield self.stream_thinking("Generating chapter content...")
         
-        # Use streaming generation with fallback
-        chapter_content = ""
-        async for chunk in self.generate_streaming_response_with_fallback(
+        # Generate content (non-streaming since streaming isn't supported)
+        yield self.stream_thinking("Generating chapter content...")
+        chapter_content = await self.generate_response_with_fallback(
             prompt=enhanced_prompt,
             temperature=writing_prefs['temperature'],
             force_uncensored=writing_prefs.get('force_uncensored', False)
-        ):
-            chapter_content += chunk
-            
-            # Show progress periodically
-            if len(chapter_content) % 500 < 50:
-                word_count = len(chapter_content.split())
+        )
+        
+        # Simulate progress updates
+        content_length = len(chapter_content)
+        for i in range(0, content_length, 500):
+            if i > 0:
+                word_count = len(chapter_content[:i].split())
                 yield self.stream_action(f"Written {word_count} words...")
         
         final_word_count = len(chapter_content.split())

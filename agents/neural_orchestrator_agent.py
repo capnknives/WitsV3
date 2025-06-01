@@ -12,6 +12,7 @@ from datetime import datetime
 from .llm_driven_orchestrator import LLMDrivenOrchestrator
 from core.neural_web_core import NeuralWeb
 from core.memory_manager import MemorySegment, MemorySegmentContent
+from core.schemas import StreamData
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class NeuralOrchestratorAgent(LLMDrivenOrchestrator):
         
         logger.info(f"Neural orchestrator initialized with reasoning depth: {self.reasoning_depth}")
     
-    async def _execute_react_loop(self, state: Dict[str, Any], session_id: str) -> AsyncGenerator[Dict[str, Any], None]:
+    async def _execute_react_loop(self, state: Dict[str, Any], session_id: str) -> AsyncGenerator[StreamData, None]:
         """Enhanced ReAct loop with neural web integration"""
         
         if self.enable_neural_reasoning:
@@ -40,11 +41,12 @@ class NeuralOrchestratorAgent(LLMDrivenOrchestrator):
             # Update context with neural insights
             if neural_insights:
                 state["neural_context"] = neural_insights
-                yield {
-                    "type": "neural_insight", 
-                    "content": f"Neural web analysis: {len(neural_insights.get('active_concepts', []))} relevant concepts activated",
-                    "insights": neural_insights
-                }
+                yield StreamData(
+                    type="thinking", 
+                    content=f"Neural web analysis: {len(neural_insights.get('active_concepts', []))} relevant concepts activated",
+                    source=self.agent_name,
+                    metadata={"insights": neural_insights, "type": "neural_insight"}
+                )
         
         # Execute enhanced ReAct loop
         async for stream_data in super()._execute_react_loop(state, session_id):
@@ -109,10 +111,9 @@ class NeuralOrchestratorAgent(LLMDrivenOrchestrator):
         try:
             # Get relevant concepts for current thought
             thought_concepts = await self.neural_web._find_relevant_concepts(thought)
-            
             if not thought_concepts:
                 return thought
-            
+                
             # Get reasoning chains
             reasoning_result = await self.neural_web.reason(thought, "chain")
             
@@ -129,12 +130,16 @@ class NeuralOrchestratorAgent(LLMDrivenOrchestrator):
                     enhanced_thought += f"\n\nNeural reasoning insights:\n"
                     for i, insight in enumerate(insights, 1):
                         enhanced_thought += f"{i}. {insight}\n"
-              return enhanced_thought
+                
+                return enhanced_thought
+            
+            return enhanced_thought
             
         except Exception as e:
             logger.error(f"Error enhancing reasoning: {e}")
             return thought
-      async def _create_neural_memory(self, content: str, memory_type: str, 
+    
+    async def _create_neural_memory(self, content: str, memory_type: str, 
                                   concept_type: str = "memory") -> str:
         """Create a memory segment and corresponding neural web concept"""
         try:
@@ -146,7 +151,14 @@ class NeuralOrchestratorAgent(LLMDrivenOrchestrator):
                 metadata={"neural_enhanced": True}
             )
             
-            segment_id = await self.memory_manager.add_segment(segment)
+            # Check if memory manager exists before adding segment
+            if self.memory_manager:
+                segment_id = await self.memory_manager.add_segment(segment)
+            else:
+                # Generate a fallback ID if no memory manager
+                import uuid
+                segment_id = f"memory_{uuid.uuid4().hex[:8]}"
+                logger.warning(f"No memory manager available, using generated ID: {segment_id}")
             
             # Add to neural web if it's a neural memory backend (string check to avoid type issues)
             try:

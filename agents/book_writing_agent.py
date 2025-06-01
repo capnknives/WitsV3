@@ -113,7 +113,7 @@ class BookWritingAgent(BaseAgent):
     
     async def run(
         self,
-        request: str,
+        user_input: str,
         conversation_history: Optional[ConversationHistory] = None,
         session_id: Optional[str] = None,
         **kwargs
@@ -127,7 +127,7 @@ class BookWritingAgent(BaseAgent):
         yield self.stream_thinking("Analyzing book writing request...")
         
         # Parse the request to understand what type of book writing task this is
-        task_analysis = await self._analyze_writing_task(request)
+        task_analysis = await self._analyze_writing_task(user_input)
         
         yield self.stream_thinking(f"Identified task type: {task_analysis['task_type']}")
         
@@ -185,13 +185,24 @@ class BookWritingAgent(BaseAgent):
         except Exception as e:
             self.logger.warning(f"Failed to parse task analysis: {e}")
         
-        # Fallback analysis
+        # Fallback analysis with better genre detection
+        genre = "non-fiction"
+        if any(keyword in request.lower() for keyword in ["horror", "scary", "thriller", "suspense"]):
+            genre = "horror"
+        elif any(keyword in request.lower() for keyword in ["fiction", "novel", "story", "fantasy", "sci-fi", "romance"]):
+            genre = "fiction"
+            
+        # Detect if this is a book creation request
+        task_type = "general_writing"
+        if any(phrase in request.lower() for phrase in ["write a book", "create a book", "make a book", "write me a book"]):
+            task_type = "create_book"
+            
         return {
-            "task_type": "general_writing",
-            "genre": "non-fiction",
-            "style": "expository",
+            "task_type": task_type,
+            "genre": genre,
+            "style": "narrative" if genre in ["horror", "fiction"] else "expository",
             "topic": request[:100],
-            "length": 1000,
+            "length": 10000 if task_type == "create_book" else 1000,
             "parameters": {}
         }
     
@@ -278,12 +289,16 @@ class BookWritingAgent(BaseAgent):
         
         yield self.stream_thinking("Crafting chapter content...")
         
-        # Generate chapter content in chunks for better streaming
-        chapter_content = ""
-        async for chunk in self.generate_streaming_response(writing_prompt, temperature=0.8):
-            chapter_content += chunk
-            if len(chapter_content) % 500 < 50:  # Stream progress updates
-                yield self.stream_action(f"Written {len(chapter_content.split())} words...")
+        # Generate chapter content (non-streaming since streaming isn't supported)
+        yield self.stream_thinking("Generating chapter content...")
+        chapter_content = await self.generate_response(writing_prompt, temperature=0.8)
+        
+        # Simulate progress updates
+        content_length = len(chapter_content)
+        for i in range(0, content_length, 500):
+            if i > 0:
+                word_count = len(chapter_content[:i].split())
+                yield self.stream_action(f"Written {word_count} words...")
         
         # Create chapter object
         chapter = Chapter(
@@ -508,13 +523,15 @@ class BookWritingAgent(BaseAgent):
         
         yield self.stream_thinking("Crafting content...")
         
-        # Stream the writing process
-        content = ""
-        async for chunk in self.generate_streaming_response(writing_prompt, temperature=0.7):
-            content += chunk
-            # Periodic updates
-            if len(content) % 200 < 10:
-                word_count = len(content.split())
+        # Generate content (non-streaming since streaming isn't supported)
+        yield self.stream_thinking("Generating content...")
+        content = await self.generate_response(writing_prompt, temperature=0.7)
+        
+        # Simulate progress updates
+        content_length = len(content)
+        for i in range(0, content_length, 500):
+            if i > 0:
+                word_count = len(content[:i].split())
                 yield self.stream_action(f"Written {word_count} words...")
         
         # Store content

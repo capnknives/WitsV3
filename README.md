@@ -16,6 +16,7 @@ WitsV3 has been successfully implemented and tested with the following features 
 - **Agent System**: LLM-driven orchestrator with ReAct pattern implementation
 - **File Operations**: Read, write, and directory listing capabilities
 - **Unicode Support**: Clean text output without character encoding issues
+- **Adaptive LLM System**: Dynamic routing to specialized modules based on query complexity and domain
 
 This version prioritizes:
 
@@ -24,6 +25,7 @@ This version prioritizes:
 - Essential memory management (with optional FAISS-GPU)
 - Extensible tool system, including MCP (Model Context Protocol) tools
 - Langchain integration capabilities
+- Adaptive LLM capabilities for optimized resource usage
 
 ## Getting Started
 
@@ -42,6 +44,24 @@ This version prioritizes:
 ### Running WitsV3
 
 (To be detailed)
+
+## Adaptive LLM System
+
+WitsV3 includes a sophisticated Adaptive LLM System that dynamically routes queries to specialized modules based on complexity and domain, with semantic caching for improved performance.
+
+Key components:
+
+- **ComplexityAnalyzer**: Analyzes query complexity and domain to route to appropriate modules
+- **DynamicModuleLoader**: Manages specialized LLM modules with VRAM/RAM budgeting and quantization
+- **SemanticCache**: Stores and retrieves patterns based on semantic similarity
+- **AdaptiveLLMInterface**: Main interface that integrates all components
+
+Benefits:
+
+- **Resource Efficiency**: Uses appropriate-sized models based on query complexity
+- **Domain Specialization**: Routes to domain-specific modules for better responses
+- **Performance Optimization**: Caches common patterns and responses
+- **Adaptive Quantization**: Uses lower precision for simple queries, full precision for complex ones
 
 ## Project Structure
 
@@ -67,6 +87,7 @@ WitsV3/
 - **MCP Tools:** Dynamically created and managed tools based on LLM descriptions.
 - **Langchain Integration:** Ability to leverage Langchain tools and functionalities.
 - **CLI First:** Robust command-line interface for interaction and development.
+- **Adaptive LLM System:** Dynamic routing to specialized modules based on complexity and domain.
 
 ## Contributing
 

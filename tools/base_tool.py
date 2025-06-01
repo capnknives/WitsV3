@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from core.tool_registry import BaseTool
+from core.base_tool import BaseTool
 
 
 class FileReadTool(BaseTool):

@@ -162,7 +162,16 @@ class OllamaInterface(BaseLLMInterface):
             raise
 
 def get_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
-    if config.llm_interface.default_provider == "ollama":
+    if config.llm_interface.default_provider == "adaptive":
+        # Import here to avoid circular imports
+        from .adaptive_llm_interface import AdaptiveLLMInterface
+        
+        # First create a base LLM interface (Ollama by default)
+        base_llm = OllamaInterface(config)
+        
+        # Then create the adaptive LLM interface with the base LLM
+        return AdaptiveLLMInterface(config, base_llm)
+    elif config.llm_interface.default_provider == "ollama":
         return OllamaInterface(config)
     # Example for future extension:
     # elif config.llm_interface.default_provider == "openai":
