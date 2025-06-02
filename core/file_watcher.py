@@ -86,8 +86,7 @@ class FileWatcher:
                 logger.info(f"Watching path: {path}")
             else:
                 logger.warning(f"Path does not exist: {path}")
-        
-        # Start observer
+          # Start observer
         self.observer.start()
         logger.info(f"FileWatcher started with patterns: {self.patterns}")
     
@@ -101,7 +100,7 @@ class FileWatcher:
             self.watched_paths = set()
             logger.info("FileWatcher stopped")
     
-    def _on_file_changed(self, event: FileSystemEvent):
+    def _on_file_changed(self, event):  # : FileSystemEvent
         """
         Handle file change event.
         
@@ -190,8 +189,7 @@ class AsyncFileWatcher:
                 logger.info(f"Watching path: {path}")
             else:
                 logger.warning(f"Path does not exist: {path}")
-        
-        # Start observer
+          # Start observer
         self.observer.start()
         self._running = True
         logger.info(f"AsyncFileWatcher started with patterns: {self.patterns}")
@@ -207,7 +205,7 @@ class AsyncFileWatcher:
             self._running = False
             logger.info("AsyncFileWatcher stopped")
     
-    def _on_file_changed(self, event: FileSystemEvent):
+    def _on_file_changed(self, event):  # : FileSystemEvent
         """
         Handle file change event.
         
