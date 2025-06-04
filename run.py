@@ -173,15 +173,6 @@ class WitsV3System:
         Returns:
             Formatted string for display
         """
-        prefix_map = {
-            "thinking": "THINKING",
-            "action": "ACTION",
-            "observation": "OBSERVATION",
-            "result": "RESULT",
-            "error": "ERROR",
-            "clarification": "CLARIFICATION",
-        }
-
         prefix = prefix_map.get(stream_data.type, "INFO")
         return f"[{prefix}] {stream_data.content}"
     
