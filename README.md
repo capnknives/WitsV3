@@ -53,7 +53,7 @@ WitsV3/
 ├── logs/                # Application logs
 ├── tools/               # Implementations of various tools
 ├── config.yaml          # Main configuration file
-├── run_v3.py            # Main entry point (to be created)
+├── run.py            # Main entry point script
 ├── requirements.txt     # Python dependencies (to be created)
 └── README.md            # This file
 ```
