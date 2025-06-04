@@ -355,10 +355,7 @@ async def test_wits_control_center():
         config = load_config("config.yaml")
         
         # Create LLM interface (will fail without Ollama, but that's ok for structure test)
-        llm_interface = OllamaInterface(
-            url=config.ollama_settings.url,
-            default_model=config.ollama_settings.default_model
-        )
+        llm_interface = OllamaInterface(config)
         
         # Create agent
         agent = WitsControlCenterAgent(

@@ -13,7 +13,7 @@ from typing import Optional
 
 from core.config import load_config, WitsV3Config
 from core.llm_interface import OllamaInterface
-from core.memory_manager import MemoryManager, BasicMemoryBackend
+from core.memory_manager import MemoryManager
 from core.tool_registry import ToolRegistry
 from core.schemas import ConversationHistory, StreamData
 from agents.wits_control_center_agent import WitsControlCenterAgent
@@ -173,20 +173,17 @@ class WitsV3System:
         Returns:
             Formatted string for display
         """
-        if stream_data.type == "thinking":
-            return f"[THINKING] {stream_data.content}"
-        elif stream_data.type == "action":
-            return f"[ACTION] {stream_data.content}"
-        elif stream_data.type == "observation":
-            return f"[OBSERVATION] {stream_data.content}"
-        elif stream_data.type == "result":
-            return f"[RESULT] {stream_data.content}"
-        elif stream_data.type == "error":
-            return f"[ERROR] {stream_data.content}"
-        elif stream_data.type == "clarification":
-            return f"[CLARIFICATION] {stream_data.content}"
-        else:
-            return f"[INFO] {stream_data.content}"
+        prefix_map = {
+            "thinking": "THINKING",
+            "action": "ACTION",
+            "observation": "OBSERVATION",
+            "result": "RESULT",
+            "error": "ERROR",
+            "clarification": "CLARIFICATION",
+        }
+
+        prefix = prefix_map.get(stream_data.type, "INFO")
+        return f"[{prefix}] {stream_data.content}"
     
     async def shutdown(self):
         """Shutdown the system gracefully."""

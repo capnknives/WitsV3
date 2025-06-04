@@ -124,7 +124,7 @@ class BaseAgent(ABC):
             Text chunks as they are generated
         """
         try:
-            async for chunk in self.llm_interface.generate_streaming_text(
+            async for chunk in self.llm_interface.stream_text(
                 prompt=prompt,
                 model=model_name or self.get_model_name(),
                 temperature=temperature or self.temperature

@@ -193,7 +193,8 @@ if __name__ == "__main__":
             llm_interface = get_llm_interface(app_config)
         except Exception as e:
             print(f"Error initializing LLM interface: {e}")
-            return        print(f"Using Ollama URL: {app_config.ollama_settings.url}")
+            return
+        print(f"Using Ollama URL: {app_config.ollama_settings.url}")
         print(f"Default model for generation: {app_config.ollama_settings.default_model}")
         print(f"Embedding model: {app_config.ollama_settings.embedding_model}")
 
