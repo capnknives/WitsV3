@@ -237,13 +237,13 @@ class SelfRepairAgent(BaseAgent):
                 tool_failures=0
             )
     
-    async def _analyze_maintenance_task(self, request: str) -> Dict[str, Any]:
+    async def _analyze_maintenance_task(self, user_input: str) -> Dict[str, Any]:
         """Analyze the maintenance request to determine task type"""
         
         analysis_prompt = f"""
         Analyze this system maintenance request:
         
-        Request: {request}
+        Request: {user_input}
         
         Respond with JSON containing:
         {{
@@ -274,7 +274,7 @@ class SelfRepairAgent(BaseAgent):
     
     async def run(
         self,
-        request: str,
+        user_input: str,
         conversation_history: Optional[ConversationHistory] = None,
         session_id: Optional[str] = None,
         **kwargs
@@ -288,7 +288,7 @@ class SelfRepairAgent(BaseAgent):
         yield self.stream_thinking("Analyzing system health request...")
         
         # Parse the request to understand what type of maintenance is needed
-        task_analysis = await self._analyze_maintenance_task(request)
+        task_analysis = await self._analyze_maintenance_task(user_input)
         
         yield self.stream_thinking(f"Identified task: {task_analysis['task_type']}")
         

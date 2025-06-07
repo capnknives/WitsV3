@@ -43,8 +43,7 @@ class BaseAgent(ABC):
         self.config = config
         self.llm_interface = llm_interface
         self.memory_manager = memory_manager
-        
-        # Set up logging
+          # Set up logging
         self.logger = logging.getLogger(f"WitsV3.{self.__class__.__name__}")
         
         # Agent configuration from config
@@ -56,7 +55,7 @@ class BaseAgent(ABC):
     @abstractmethod
     async def run(
         self,
-        input_data: str,
+        user_input: str,
         conversation_history: Optional[ConversationHistory] = None,
         session_id: Optional[str] = None,
         **kwargs
@@ -65,7 +64,7 @@ class BaseAgent(ABC):
         Main execution method for the agent.
         
         Args:
-            input_data: The input to process (user message, goal, etc.)
+            user_input: The user input to process (user message, goal, etc.)
             conversation_history: Optional conversation context
             session_id: Optional session identifier
             **kwargs: Additional agent-specific parameters

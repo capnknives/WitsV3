@@ -9,9 +9,11 @@ import os
 import logging
 import time
 from typing import Dict, List, Any
+import sys
 
 import torch
 import numpy as np
+import pytest
 
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface, get_llm_interface
@@ -20,6 +22,9 @@ from core.dynamic_module_loader import DynamicModuleLoader
 from core.semantic_cache import SemanticCache
 from core.adaptive_llm_interface import AdaptiveLLMInterface
 from core.adaptive_llm_config import AdaptiveLLMSettings
+
+# Add the project root to sys.path for test discovery
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Configure logging
 logging.basicConfig(
@@ -37,7 +42,7 @@ TEST_PROMPTS = [
     "Write a short story about a robot who discovers emotions."
 ]
 
-async def test_complexity_analyzer(config: WitsV3Config, llm: BaseLLMInterface) -> None:
+async def run_complexity_analyzer(config: WitsV3Config, llm: BaseLLMInterface) -> None:
     """Test the ComplexityAnalyzer component."""
     logger.info("Testing ComplexityAnalyzer...")
     
@@ -60,7 +65,7 @@ async def test_complexity_analyzer(config: WitsV3Config, llm: BaseLLMInterface) 
     
     logger.info("ComplexityAnalyzer tests completed!")
 
-async def test_dynamic_module_loader(config: WitsV3Config) -> None:
+async def run_dynamic_module_loader(config: WitsV3Config) -> None:
     """Test the DynamicModuleLoader component."""
     logger.info("Testing DynamicModuleLoader...")
     
@@ -92,7 +97,7 @@ async def test_dynamic_module_loader(config: WitsV3Config) -> None:
     
     logger.info("DynamicModuleLoader tests completed!")
 
-async def test_semantic_cache(config: WitsV3Config, llm: BaseLLMInterface) -> None:
+async def run_semantic_cache(config: WitsV3Config, llm: BaseLLMInterface) -> None:
     """Test the SemanticCache component."""
     logger.info("Testing SemanticCache...")
     
@@ -139,7 +144,7 @@ async def test_semantic_cache(config: WitsV3Config, llm: BaseLLMInterface) -> No
     
     logger.info("SemanticCache tests completed!")
 
-async def test_adaptive_llm_interface(config: WitsV3Config) -> None:
+async def run_adaptive_llm_interface(config: WitsV3Config) -> None:
     """Test the AdaptiveLLMInterface component."""
     logger.info("Testing AdaptiveLLMInterface...")
     
@@ -188,26 +193,16 @@ async def test_adaptive_llm_interface(config: WitsV3Config) -> None:
     
     logger.info("AdaptiveLLMInterface tests completed!")
 
-async def main() -> None:
-    """Run all tests."""
+@pytest.mark.asyncio
+async def test_adaptive_llm():
+    """Pytest entrypoint for all adaptive LLM system tests."""
     logger.info("Starting Adaptive LLM System tests...")
-    
-    # Load config
     current_script_dir = os.path.dirname(os.path.abspath(__file__))
     config_file_path = os.path.join(current_script_dir, "config.yaml")
-    
     config = WitsV3Config.from_yaml(config_file_path)
-    
-    # Create base LLM interface
     llm = get_llm_interface(config)
-    
-    # Run tests
-    await test_complexity_analyzer(config, llm)
-    await test_dynamic_module_loader(config)
-    await test_semantic_cache(config, llm)
-    await test_adaptive_llm_interface(config)
-    
+    await run_complexity_analyzer(config, llm)
+    await run_dynamic_module_loader(config)
+    await run_semantic_cache(config, llm)
+    await run_adaptive_llm_interface(config)
     logger.info("All tests completed successfully! 🎉")
-
-if __name__ == "__main__":
-    asyncio.run(main())

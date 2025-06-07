@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  background-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.background
+    container_name: witsv3-background-agent
+    environment:
+      - WITSV3_BACKGROUND_MODE=true
+      - WITSV3_DOCKER_ENV=true
+      - CURSOR_INTEGRATION=true
+      - OLLAMA_HOST=host.docker.internal
+      - OLLAMA_PORT=11434
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - type: bind
+        source: ${PWD}/data
+        target: /app/data
+      - type: bind
+        source: ${PWD}/config.yaml
+        target: /app/config.yaml
+    ports:
+      - "8000:8000" # Port for Cursor communication
+    networks:
+      - witsv3-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+networks:
+  witsv3-network:
+    name: witsv3-network
+    driver: bridge

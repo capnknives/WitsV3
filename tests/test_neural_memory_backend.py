@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timezone
 
 # Add the project root to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from core.config import WitsV3Config
 from core.memory_manager import MemorySegment, MemorySegmentContent

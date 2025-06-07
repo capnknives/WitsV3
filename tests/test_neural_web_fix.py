@@ -3,6 +3,10 @@
 Test the neural web loading to ensure the null ID fix is working
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import asyncio
 import json
 from pathlib import Path

@@ -1,5 +1,11 @@
-import asyncio
 import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Add the project root to sys.path for test discovery
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+import asyncio
 from typing import AsyncGenerator, List, Optional
 from agents.self_repair_agent import SelfRepairAgent
 from core.config import WitsV3Config

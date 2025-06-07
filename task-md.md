@@ -1,6 +1,7 @@
 # WitsV3 Task Management
 
 ## ✅ Completed Tasks
+
 - [x] Core architecture implementation (2025-01-01)
 - [x] BaseAgent and agent hierarchy
 - [x] LLM interface with Ollama support
@@ -12,6 +13,7 @@
 - [x] File operations tools (read, write, list)
 - [x] DateTime tool implementation
 - [x] **Adaptive LLM System implementation** (2025-05-31)
+
   - Implemented ComplexityAnalyzer for query routing
   - Created DynamicModuleLoader for specialized modules
   - Added SemanticCache for improved performance
@@ -25,13 +27,16 @@
   - Added watchdog dependency for file monitoring
 
 ## 🔄 Active Tasks
+
 - [ ] **Add comprehensive test suite** (2025-05-28)
-  - Create /tests directory structure
-  - Add pytest configuration
-  - Write tests for core components
-  - Mock Ollama interactions
+
+  - [x] Create /tests directory structure (Done: Subdirectories agents, core, tools with **init**.py created - 2025-06-01)
+  - [x] Add pytest configuration (Done: Created pytest.ini - 2025-06-01)
+  - [-] Write tests for core components (In Progress: Created tests/core/test_config.py - 2025-06-01)
+  - [ ] Mock Ollama interactions
 
 - [ ] **Implement MCP adapter** (In Progress)
+
   - Complete MCPAdapter implementation
   - Add MCP tool registration
   - Test with filesystem MCP server
@@ -42,12 +47,15 @@
   - Graceful degradation when services unavailable
 
 ## 📋 Backlog
+
 - [ ] **Memory Manager Enhancements**
+
   - Implement FAISS CPU backend
   - Add memory export/import functionality
   - Implement conversation summarization
 
 - [ ] **Adaptive LLM Enhancements**
+
   - Create specialized module training pipeline
   - Implement advanced domain classification
   - Add user pattern learning
@@ -55,23 +63,27 @@
   - Implement quantization for low-complexity queries
 
 - [ ] **Additional Tools**
+
   - Web search tool
   - Python code execution tool
   - JSON manipulation tool
   - Math/statistics tool
 
 - [ ] **Documentation**
+
   - API documentation
   - Tool development guide
   - Agent development guide
   - Deployment guide
 
 - [ ] **Performance Optimizations**
+
   - Implement connection pooling for Ollama
   - Add caching layer for embeddings
   - Optimize memory search algorithms
 
 - [ ] **CLI Enhancements**
+
   - Add rich/colorama for better formatting
   - Implement command history
   - Add session management commands
@@ -83,6 +95,7 @@
   - Document integration patterns
 
 ## 🐛 Known Issues
+
 - [ ] Memory file can grow large without pruning
 - [ ] No validation for tool arguments before execution
 - [ ] Limited error context in streaming responses
@@ -90,6 +103,7 @@
   - Fixed by switching book_writing_agent and control_center_model to use llama3 instead of Gemma
 
 ## 💡 Future Ideas
+
 - Web UI with FastAPI
 - Voice interface integration
 - Plugin system for custom agents
@@ -97,7 +111,8 @@
 - Multi-user support
 
 ## 📝 Discovered During Work
-*Add new tasks discovered while working on other features*
+
+_Add new tasks discovered while working on other features_
 
 - [ ] **Adaptive LLM Testing** (2025-05-31)
   - Create test suite for ComplexityAnalyzer
@@ -106,4 +121,5 @@
   - Validate routing accuracy across domains
 
 ---
+
 Last Updated: 2025-05-31

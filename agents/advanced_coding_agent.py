@@ -149,7 +149,7 @@ class AdvancedCodingAgent(BaseAgent):
     
     async def run(
         self,
-        request: str,
+        user_input: str,
         conversation_history: Optional[ConversationHistory] = None,
         session_id: Optional[str] = None,
         **kwargs
@@ -163,7 +163,7 @@ class AdvancedCodingAgent(BaseAgent):
         yield self.stream_thinking("Analyzing coding request...")
         
         # Parse the request to understand the coding task
-        task_analysis = await self._analyze_coding_task(request)
+        task_analysis = await self._analyze_coding_task(user_input)
         
         yield self.stream_thinking(f"Identified task: {task_analysis['task_type']}")
         
@@ -200,13 +200,13 @@ class AdvancedCodingAgent(BaseAgent):
             async for stream in self._handle_general_coding(task_analysis, session_id):
                 yield stream
     
-    async def _analyze_coding_task(self, request: str) -> Dict[str, Any]:
+    async def _analyze_coding_task(self, user_input: str) -> Dict[str, Any]:
         """Analyze the coding request to determine task type and parameters"""
         
         analysis_prompt = f"""
         Analyze this coding request and determine the task type and parameters:
         
-        Request: {request}
+        Request: {user_input}
         
         Respond with JSON containing:
         {{
@@ -236,7 +236,7 @@ class AdvancedCodingAgent(BaseAgent):
             "language": "python",
             "project_type": "script",
             "complexity": "medium",
-            "requirements": [request[:100]],
+            "requirements": [user_input[:100]],
             "frameworks": [],
             "parameters": {}
         }

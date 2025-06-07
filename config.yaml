@@ -8,6 +8,28 @@ logging_level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
 debug_mode: false
 auto_restart_on_file_change: true # Automatically restart when Python files are changed
 
+# Docker Environment Settings
+docker:
+  enabled: true
+  background_agents:
+    max_instances: 3
+    memory_limit: "2G"
+    cpu_limit: "1.0"
+    network_mode: "bridge"
+    health_check_interval: 30
+    restart_policy: "unless-stopped"
+  volumes:
+    - source: "./data"
+      target: "/app/data"
+    - source: "./config.yaml"
+      target: "/app/config.yaml"
+  environment:
+    WITSV3_BACKGROUND_MODE: "true"
+    WITSV3_DOCKER_ENV: "true"
+    CURSOR_INTEGRATION: "true"
+    OLLAMA_HOST: "host.docker.internal"
+    OLLAMA_PORT: "11434"
+
 # LLM Configuration (Primarily Ollama) - Enhanced with Model Specialization
 llm_interface:
   default_provider: "adaptive" # adaptive, ollama, openai, etc.
@@ -23,21 +45,21 @@ adaptive_llm:
     vocab_weight: 0.3
     structure_weight: 0.2
     reasoning_weight: 0.3
-    
+
   # Dynamic module loader settings
   module_loader:
-    vram_budget_gb: 7.5  # 7.5GB
-    ram_budget_gb: 30.0  # 30GB
+    vram_budget_gb: 7.5 # 7.5GB
+    ram_budget_gb: 30.0 # 30GB
     preload_modules: ["base"]
     enable_quantization: true
-    
+
   # Semantic cache settings
   semantic_cache:
     enable_caching: true
     cache_size: 1000000
     similarity_threshold: 0.92
     cache_dir: "cache"
-    
+
   # General adaptive settings
   enable_performance_tracking: true
   fallback_to_base_on_error: true
