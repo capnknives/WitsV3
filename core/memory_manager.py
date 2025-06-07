@@ -256,12 +256,12 @@ class MemoryManager:
         elif config.memory_manager.backend == "neural":
             from .neural_memory_backend import NeuralMemoryBackend
             self.backend = NeuralMemoryBackend(config, llm_interface)
-        # elif config.memory_manager.backend == "faiss_cpu":
-        #     # self.backend = FaissCPUBackend(config, llm_interface) # To be implemented
-        #     raise NotImplementedError("FAISS CPU backend not yet implemented.")
-        # elif config.memory_manager.backend == "faiss_gpu":
-        #     # self.backend = FaissGPUBackend(config, llm_interface) # To be implemented
-        #     raise NotImplementedError("FAISS GPU backend not yet implemented.")
+        elif config.memory_manager.backend == "supabase":
+            from .supabase_backend import SupabaseMemoryBackend
+            self.backend = SupabaseMemoryBackend(config, llm_interface)
+        elif config.memory_manager.backend == "supabase_neural":
+            from .supabase_backend import SupabaseMemoryBackend
+            self.backend = SupabaseMemoryBackend(config, llm_interface)
         else:
             raise ValueError(f"Unsupported memory backend: {config.memory_manager.backend}")
 

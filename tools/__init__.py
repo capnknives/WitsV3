@@ -3,7 +3,7 @@ WitsV3 Tools Package
 Provides tool implementations for the WITS v3 system
 """
 
-from .base_tool import (
+from .file_tools import (
     FileReadTool, 
     FileWriteTool, 
     ListDirectoryTool, 

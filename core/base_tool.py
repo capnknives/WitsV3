@@ -1,7 +1,7 @@
 # core/base_tool.py
 """
 Base tool class for WitsV3.
-Separated to avoid circular imports.
+This module contains the base class that all tools must inherit from.
 """
 
 import logging

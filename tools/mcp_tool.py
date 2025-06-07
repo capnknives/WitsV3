@@ -7,7 +7,7 @@ import logging
 import json
 from typing import Any, Dict, List, Optional
 
-from core.tool_registry import BaseTool
+from core.base_tool import BaseTool
 from core.mcp_adapter import MCPAdapter, MCPTool as MCPToolInfo
 from core.enhanced_mcp_adapter import EnhancedMCPAdapter
 from core.schemas import ToolCall

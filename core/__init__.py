@@ -7,7 +7,8 @@ from .config import WitsV3Config, LLMConfig, MemoryConfig, AgentConfig, ToolConf
 from .llm_interface import BaseLLMInterface, OllamaInterface
 from .memory_manager import BaseMemoryBackend, BasicMemoryBackend, MemoryManager
 from .schemas import StreamData, AgentResponse, ConversationHistory, ToolCall, ToolResult
-from .tool_registry import BaseTool, ToolRegistry
+from .base_tool import BaseTool
+from .tool_registry import ToolRegistry
 from .response_parser import ResponseParser, ReactParser, ParsedResponse, ResponseType
 from .mcp_adapter import MCPAdapter, MCPServer, MCPTool
 

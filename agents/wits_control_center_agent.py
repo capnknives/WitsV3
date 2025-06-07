@@ -88,6 +88,17 @@ class WitsControlCenterAgent(BaseAgent):
         
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
         
+        if any(kw in user_input.lower() for kw in ["remember", "don't forget", "recall"]):
+            await self.store_memory(
+                content=user_input,
+                segment_type="USER_FACT",
+                importance=1.0,
+                metadata={"source": "user", "session_id": session_id}
+            )
+            yield self.stream_result("I've stored that in my memory for future conversations.")
+            self.logger.info("Handled remember intent, exiting early. No further orchestration will occur.")
+            return
+        
         try:
             # Initial processing
             yield self.stream_thinking("Analyzing your request...")
@@ -203,6 +214,7 @@ Guidelines:
 - Use "goal_defined" for clear, actionable requests that need orchestration
 - Use "clarification_question" for ambiguous requests needing more information
 - Use "direct_response" for simple questions, greetings, or chat
+- For any request to 'remember', 'recall', or 'don't forget', use your semantic memory system (not file storage). Use the memory manager to store and retrieve facts for future conversations.
 
 Respond ONLY with valid JSON."""
         

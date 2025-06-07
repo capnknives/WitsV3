@@ -122,7 +122,7 @@ agents:
 # Memory Management - Enhanced with Neural Web Support
 memory_manager:
   # Enhanced backend options including neural web
-  backend: "neural" # 'basic' (json file), 'faiss_cpu', 'faiss_gpu', 'neural'
+  backend: "supabase_neural" # 'basic', 'neural', 'supabase', 'supabase_neural'
   memory_file_path: "data/wits_memory.json" # For basic backend
   faiss_index_path: "data/wits_faiss_index.bin" # For FAISS backends
   neural_web_path: "data/neural_web.json" # For neural web persistence
@@ -139,6 +139,12 @@ memory_manager:
     reasoning_patterns: ["modus_ponens", "analogy", "chain", "contradiction"]
     max_concept_connections: 50
     connection_strength_threshold: 0.2
+
+# Supabase Settings
+supabase:
+  url: "https://scdzgxvrppxpicinggy.supabase.co"
+  key: "sbp_ee5abfbf912375dea50375d81d3a7e1bee1892d7"
+  enable_realtime: true
 
 # Tool System
 tool_system:

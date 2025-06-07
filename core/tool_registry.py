@@ -8,63 +8,24 @@ import logging
 import importlib.util
 import inspect
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type
-from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Type, Union
 
+from core.base_tool import BaseTool
+from tools.file_tools import (
+    FileReadTool,
+    FileWriteTool,
+    ListDirectoryTool,
+    DateTimeTool
+)
 
-class BaseTool(ABC):
-    """
-    Base class for all tools in WitsV3.
-    """
-    
-    def __init__(self, name: str, description: str):
-        """
-        Initialize the tool.
-        
-        Args:
-            name: Tool name
-            description: Tool description
-        """
-        self.name = name
-        self.description = description
-        self.logger = logging.getLogger(f"WitsV3.Tool.{name}")
-    
-    @abstractmethod
-    async def execute(self, **kwargs) -> Any:
-        """
-        Execute the tool with given arguments.
-        
-        Args:
-            **kwargs: Tool-specific arguments
-            
-        Returns:
-            Tool execution result
-        """
-        pass
-    
-    @abstractmethod
-    def get_schema(self) -> Dict[str, Any]:
-        """
-        Get the tool's schema for LLM consumption.
-        
-        Returns:
-            Tool schema dictionary
-        """
-        pass
-    
-    def get_llm_description(self) -> Dict[str, Any]:
-        """
-        Get tool description for LLM.
-        
-        Returns:
-            Tool description for LLM
-        """
-        return {
-            "name": self.name,
-            "description": self.description,
-            "schema": self.get_schema()
-        }
-
+# Type alias for tool types
+ToolType = Union[
+    BaseTool,
+    FileReadTool,
+    FileWriteTool,
+    ListDirectoryTool,
+    DateTimeTool
+]
 
 class ToolRegistry:
     """
@@ -72,7 +33,7 @@ class ToolRegistry:
     """
     def __init__(self):
         """Initialize the tool registry."""
-        self.tools: Dict[str, BaseTool] = {}
+        self.tools: Dict[str, ToolType] = {}
         self.logger = logging.getLogger("WitsV3.ToolRegistry")
         
         # Register built-in tools
@@ -83,7 +44,7 @@ class ToolRegistry:
         
         self.logger.info("Tool registry initialized")
     
-    def register_tool(self, tool: BaseTool) -> None:
+    def register_tool(self, tool: ToolType) -> None:
         """
         Register a tool.
         
@@ -112,7 +73,7 @@ class ToolRegistry:
             return True
         return False
     
-    def get_tool(self, tool_name: str) -> Optional[BaseTool]:
+    def get_tool(self, tool_name: str) -> Optional[ToolType]:
         """
         Get a tool by name.
         
@@ -124,7 +85,7 @@ class ToolRegistry:
         """
         return self.tools.get(tool_name)
     
-    def get_all_tools(self) -> Dict[str, BaseTool]:
+    def get_all_tools(self) -> Dict[str, ToolType]:
         """
         Get all registered tools.
         
@@ -248,67 +209,61 @@ class ToolRegistry:
                 validation_result["valid"] = True
             
         except Exception as e:
-            validation_result["errors"].append(f"Error validating tool {tool_name}: {e}")
+            validation_result["errors"].append(f"Error validating tool call: {str(e)}")
         
         return validation_result
     
     def _register_builtin_tools(self) -> None:
         """Register built-in tools."""
-        # Register basic built-in tools
-        self.register_tool(ThinkTool())
-        self.register_tool(CalculatorTool())
+        # Register file tools
+        self.register_tool(FileReadTool())
+        self.register_tool(FileWriteTool())
+        self.register_tool(ListDirectoryTool())
+        self.register_tool(DateTimeTool())
         
-        # Auto-discover tools from tools.base_tool module
-        self._discover_tools_from_base_tool_module()
-        self.logger.info("Built-in tools registered")
+        # Register other built-in tools
+        self._discover_tools_from_file_tools_module()
     
-    def _discover_tools_from_base_tool_module(self) -> None:
-        """Auto-discover and register tools from tools.base_tool module."""
+    def _discover_tools_from_file_tools_module(self) -> None:
+        """Discover and register tools from the file_tools module."""
         try:
-            self.logger.info("🔍 Starting dynamic tool discovery from tools.base_tool...")
-            import tools.base_tool as base_tools_module
-            
-            discovered_count = 0
-            
-            # Find all classes in the module that are subclasses of BaseTool
-            for name, obj in inspect.getmembers(base_tools_module):
-                if (inspect.isclass(obj) and 
-                    hasattr(obj, '__bases__') and
-                    any(base.__name__ == 'BaseTool' for base in obj.__bases__) and
-                    obj.__name__ != 'BaseTool' and
-                    not obj.__name__.startswith('_')):
-                    
-                    try:
-                        # Instantiate and register the tool
-                        tool_instance = obj()
-                        self.register_tool(tool_instance)
-                        self.logger.info(f"   ✅ Auto-discovered: {tool_instance.name} (from {obj.__name__})")
-                        discovered_count += 1
-                    except Exception as e:
-                        self.logger.error(f"   ❌ Failed to instantiate {obj.__name__}: {e}")
-            
-            self.logger.info(f"🎯 Discovery complete: {discovered_count} tools auto-discovered from tools.base_tool")
-            
-        except ImportError as e:
-            self.logger.warning(f"Could not import tools.base_tool module: {e}")
-        except Exception as e:
-            self.logger.error(f"Error during tool discovery: {e}")
+            # Get the tools directory
+            tools_dir = Path(__file__).parent.parent / "tools"
+            if not tools_dir.exists():
+                self.logger.warning(f"Tools directory not found: {tools_dir}")
+                return
 
+            # Import all Python files in the tools directory
+            for py_file in tools_dir.glob("*.py"):
+                if py_file.name.startswith("__") or py_file.name == "file_tools.py":
+                    continue
+                
+                # Import the module
+                module_name = f"tools.{py_file.stem}"
+                spec = importlib.util.spec_from_file_location(module_name, py_file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    # Find all BaseTool subclasses in the module
+                    for name, obj in inspect.getmembers(module):
+                        if (inspect.isclass(obj) and 
+                            issubclass(obj, BaseTool) and 
+                            obj != BaseTool):
+                            try:
+                                tool_instance = obj()
+                                self.register_tool(tool_instance)
+                            except Exception as e:
+                                self.logger.error(f"Error registering tool {name}: {e}")
+        
+        except Exception as e:
+            self.logger.error(f"Error discovering tools: {e}")
+    
     def _log_tool_summary(self) -> None:
-        """Log a comprehensive summary of all discovered tools."""
-        self.logger.info("=" * 60)
-        self.logger.info("🔧 WITSV3 TOOL DISCOVERY SUMMARY")
-        self.logger.info("=" * 60)
-        
-        total_tools = len(self.tools)
-        self.logger.info(f"📊 Total tools available: {total_tools}")
-        
-        if total_tools > 0:
-            self.logger.info("📋 Registered tools:")
-            for tool_name, tool in self.tools.items():
-                self.logger.info(f"   ✓ {tool_name}: {tool.description}")
-        
-        self.logger.info("=" * 60)
+        """Log a summary of all registered tools."""
+        tool_count = len(self.tools)
+        tool_names = ", ".join(sorted(self.tools.keys()))
+        self.logger.info(f"Registered {tool_count} tools: {tool_names}")
 
 
 class ThinkTool(BaseTool):

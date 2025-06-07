@@ -109,7 +109,7 @@ class WitsV3System:
             self.mcp_registry = MCPToolRegistry()
             await self.mcp_registry.initialize(self.tool_registry)
             
-            # Note: Tools are automatically discovered from tools/base_tool.py module
+            # Note: Tools are automatically discovered from tools/file_tools.py module
             # No manual registration needed for: FileReadTool, FileWriteTool, ListDirectoryTool, DateTimeTool
             
             logger.info(f"Tool registry initialized with {len(self.tool_registry.tools)} tools (auto-discovered)")

@@ -1,7 +1,6 @@
-# tools/base_tool.py
 """
-Additional base tools for WitsV3.
-This module contains more complex tools that extend the base tool functionality.
+File-related tools for WitsV3.
+This module contains tools for file operations.
 """
 
 import asyncio
@@ -251,57 +250,8 @@ class DateTimeTool(BaseTool):
             "properties": {
                 "format_string": {
                     "type": "string",
-                    "description": "Python datetime format string (default: '%Y-%m-%d %H:%M:%S')",
+                    "description": "Datetime format string (default: '%Y-%m-%d %H:%M:%S')",
                     "default": "%Y-%m-%d %H:%M:%S"
                 }
-            },
-            "required": []
-        }
-
-
-# Test function
-async def test_base_tools():
-    """Test the base tools functionality."""
-    print("Testing base tools...")
-    
-    # Test file tools
-    file_read_tool = FileReadTool()
-    file_write_tool = FileWriteTool()
-    list_dir_tool = ListDirectoryTool()
-    datetime_tool = DateTimeTool()
-    
-    print(f"✓ Created tools: {file_read_tool.name}, {file_write_tool.name}, {list_dir_tool.name}, {datetime_tool.name}")
-    
-    # Test datetime tool
-    try:
-        current_time = await datetime_tool.execute()
-        print(f"✓ DateTime tool result: {current_time}")
-    except Exception as e:
-        print(f"DateTime tool error (expected): {e}")
-    
-    # Test file write and read
-    try:
-        test_file = "test_output.txt"
-        test_content = "Hello from WitsV3 file tools!"
-        
-        # Write file
-        write_result = await file_write_tool.execute(test_file, test_content)
-        print(f"✓ File write result: {write_result}")
-        
-        # Read file back
-        read_result = await file_read_tool.execute(test_file)
-        print(f"✓ File read result: {read_result[:50]}...")
-        
-        # List current directory
-        list_result = await list_dir_tool.execute(".")
-        print(f"✓ Directory listing (partial): {list_result[:100]}...")
-        
-    except Exception as e:
-        print(f"File tools test passed (expected error without proper setup: {e})")
-    
-    print("Base tools tests completed! 🎉")
-
-
-if __name__ == "__main__":
-    import asyncio
-    asyncio.run(test_base_tools())
+            }
+        } 

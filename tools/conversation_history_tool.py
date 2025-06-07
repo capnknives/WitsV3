@@ -30,7 +30,7 @@ class ReadConversationHistoryTool(BaseTool):
         Read and format conversation history.
         
         Args:
-            conversation_history: Conversation history object
+            conversation_history: Conversation history object (optional for new sessions)
             max_messages: Maximum number of messages to include
             include_metadata: Whether to include message metadata
             
@@ -39,7 +39,7 @@ class ReadConversationHistoryTool(BaseTool):
         """
         try:
             if not conversation_history:
-                return "No conversation history provided."
+                return "Starting new conversation."
             
             if not hasattr(conversation_history, 'messages') or not conversation_history.messages:
                 return "Conversation history is empty."
@@ -74,7 +74,7 @@ class ReadConversationHistoryTool(BaseTool):
             "properties": {
                 "conversation_history": {
                     "type": "object",
-                    "description": "Conversation history object"
+                    "description": "Conversation history object (optional for new sessions)"
                 },
                 "max_messages": {
                     "type": "integer",
@@ -87,7 +87,7 @@ class ReadConversationHistoryTool(BaseTool):
                     "default": False
                 }
             },
-            "required": ["conversation_history"]
+            "required": []  # Make no parameters required
         }
 
 
@@ -109,7 +109,7 @@ class AnalyzeConversationTool(BaseTool):
         Analyze conversation patterns.
         
         Args:
-            conversation_history: Conversation history object
+            conversation_history: Conversation history object (optional for new sessions)
             analysis_type: Type of analysis to perform (summary, sentiment, topics)
             
         Returns:
@@ -117,10 +117,24 @@ class AnalyzeConversationTool(BaseTool):
         """
         try:
             if not conversation_history:
-                return {"error": "No conversation history provided."}
+                return {
+                    "message_count": 0,
+                    "user_messages": 0,
+                    "assistant_messages": 0,
+                    "conversation_turns": 0,
+                    "last_speaker": None,
+                    "summary": "Starting new conversation"
+                }
             
             if not hasattr(conversation_history, 'messages') or not conversation_history.messages:
-                return {"error": "Conversation history is empty."}
+                return {
+                    "message_count": 0,
+                    "user_messages": 0,
+                    "assistant_messages": 0,
+                    "conversation_turns": 0,
+                    "last_speaker": None,
+                    "summary": "Conversation history is empty"
+                }
             
             # Basic analysis
             message_count = len(conversation_history.messages)
@@ -171,7 +185,7 @@ class AnalyzeConversationTool(BaseTool):
             "properties": {
                 "conversation_history": {
                     "type": "object",
-                    "description": "Conversation history object"
+                    "description": "Conversation history object (optional for new sessions)"
                 },
                 "analysis_type": {
                     "type": "string",
@@ -180,7 +194,7 @@ class AnalyzeConversationTool(BaseTool):
                     "default": "summary"
                 }
             },
-            "required": ["conversation_history"]
+            "required": []  # Make no parameters required
         }
 
 

@@ -51,6 +51,11 @@ class CLISettings(BaseModel):
     show_thoughts: bool = Field(default=True)
     show_tool_calls: bool = Field(default=True)
 
+class SupabaseSettings(BaseModel):
+    url: str = Field(default="")
+    key: str = Field(default="")
+    enable_realtime: bool = Field(default=True)
+
 class WitsV3Config(BaseModel):
     project_name: str = Field(default="WitsV3")
     version: str = Field(default="3.0.0")
@@ -61,9 +66,10 @@ class WitsV3Config(BaseModel):
     llm_interface: LLMInterfaceSettings = LLMInterfaceSettings()
     ollama_settings: OllamaSettings = OllamaSettings()
     agents: AgentSettings = AgentSettings()
-    memory_manager: MemoryManagerSettings = MemoryManagerSettings()
+    memory_manager: MemoryManagerSettings = Field(default_factory=MemoryManagerSettings)
     tool_system: ToolSystemSettings = ToolSystemSettings()
     cli: CLISettings = CLISettings()
+    supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
 
     class Config:
         validate_assignment = True
