@@ -8,12 +8,7 @@ integrating the complexity analyzer, dynamic module loader, and semantic cache.
 import logging
 import asyncio
 import time
-import json
-import os
-from typing import Dict, List, Optional, Any, Tuple, Union, AsyncGenerator
-
-import torch
-import numpy as np
+from typing import Dict, List, Optional, Any, Union, AsyncGenerator
 
 from .config import WitsV3Config
 from .llm_interface import BaseLLMInterface
@@ -21,6 +16,8 @@ from .complexity_analyzer import ComplexityAnalyzer
 from .dynamic_module_loader import DynamicModuleLoader
 from .semantic_cache import SemanticCache
 from .adaptive_llm_config import AdaptiveLLMSettings
+from .adaptive import PerformanceTracker, AdaptiveTokenizer, ResponseGenerator
+
 
 class AdaptiveLLMInterface(BaseLLMInterface):
     """
@@ -48,8 +45,10 @@ class AdaptiveLLMInterface(BaseLLMInterface):
         self.module_loader = DynamicModuleLoader(config)
         self.semantic_cache = SemanticCache(config, llm_interface)
         
-        # Performance tracking
-        self.performance_log = []
+        # Initialize modular components
+        self.tokenizer = AdaptiveTokenizer()
+        self.response_generator = ResponseGenerator(self.tokenizer)
+        self.performance_tracker = PerformanceTracker(self.settings)
         
         # Fallback counter
         self.fallback_attempts = 0
@@ -127,7 +126,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                 
                 # Track performance
                 if self.settings.enable_performance_tracking:
-                    self._track_performance(
+                    self.performance_tracker.track_performance(
                         prompt=prompt,
                         response=cached_response['response'],
                         module='cache',
@@ -138,7 +137,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                     )
                 
                 if stream:
-                    return self._stream_cached_response(cached_response['response'])
+                    return self.response_generator.stream_cached_response(cached_response['response'])
                 else:
                     return cached_response['response']
         
@@ -157,13 +156,17 @@ class AdaptiveLLMInterface(BaseLLMInterface):
             module = await self.module_loader.load_module(module_name, complexity)
             
             # Tokenize input
-            input_ids = await self._tokenize(prompt)
+            input_ids = await self.tokenizer.tokenize(prompt)
             
             # Generate response
             if stream:
-                return self._stream_response(module, input_ids, max_tokens, temperature, **kwargs)
+                return self.response_generator.stream_response(
+                    module, input_ids, max_tokens, temperature, **kwargs
+                )
             else:
-                response = await self._generate_response(module, input_ids, max_tokens, temperature, **kwargs)
+                response = await self.response_generator.generate_response(
+                    module, input_ids, max_tokens, temperature, **kwargs
+                )
                 
                 # Cache response
                 if self.settings.enable_caching:
@@ -178,7 +181,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                 
                 # Track performance
                 if self.settings.enable_performance_tracking:
-                    self._track_performance(
+                    self.performance_tracker.track_performance(
                         prompt=prompt,
                         response=response,
                         module=module_name,
@@ -197,233 +200,33 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                 self.fallback_attempts += 1
                 self.logger.warning(f"Falling back to base LLM interface (attempt {self.fallback_attempts})")
                 
-                if stream:
-                    # For streaming, return the AsyncGenerator directly
-                    return self.llm_interface.stream_text(prompt, max_tokens=max_tokens, temperature=temperature, **kwargs)
-                else:
-                    # For non-streaming, await the result
-                    response = await self.llm_interface.generate_text(prompt, max_tokens=max_tokens, temperature=temperature, **kwargs)
-                    
-                    # Track performance
-                    if self.settings.enable_performance_tracking:
-                        self._track_performance(
-                            prompt=prompt,
-                            response=response,
-                            module='fallback',
-                            complexity=complexity,
-                            generation_time=time.time() - start_time,
-                            cache_hit=False,
-                            error=str(e)
-                        )
-                    
-                    return response
+                response = await self.response_generator.generate_with_fallback(
+                    self.generate,  # Primary generator
+                    self.llm_interface,  # Fallback generator
+                    prompt,
+                    max_tokens,
+                    temperature,
+                    stream,
+                    **kwargs
+                )
+                
+                # Track performance for non-streaming fallback
+                if not stream and self.settings.enable_performance_tracking:
+                    self.performance_tracker.track_performance(
+                        prompt=prompt,
+                        response=response,
+                        module='fallback',
+                        complexity=complexity,
+                        generation_time=time.time() - start_time,
+                        cache_hit=False,
+                        error=str(e)
+                    )
+                
+                return response
             else:
                 # Reset fallback counter
                 self.fallback_attempts = 0
                 raise
-    
-    async def _tokenize(self, text: str) -> torch.Tensor:
-        """
-        Tokenize the input text.
-        
-        Args:
-            text: The input text
-            
-        Returns:
-            Tensor of token IDs
-        """
-        # This is a placeholder for actual tokenization
-        # In a real implementation, this would use the appropriate tokenizer
-        
-        # Simulate tokenization
-        return torch.tensor([[101] + [ord(c) % 1000 for c in text[:100]] + [102]])
-    
-    async def _generate_response(
-        self,
-        module: Any,
-        input_ids: torch.Tensor,
-        max_tokens: int,
-        temperature: float,
-        **kwargs
-    ) -> str:
-        """
-        Generate a response using the given module.
-        
-        Args:
-            module: The module to use
-            input_ids: The tokenized input
-            max_tokens: Maximum number of tokens to generate
-            temperature: Sampling temperature
-            **kwargs: Additional arguments
-            
-        Returns:
-            The generated response
-        """
-        try:
-            # Generate response
-            output_ids = module.generate(
-                input_ids,
-                max_length=input_ids.shape[1] + max_tokens,
-                temperature=temperature,
-                do_sample=temperature > 0.0,
-                **kwargs
-            )
-            
-            # Decode response
-            response = await self._decode(output_ids[0, input_ids.shape[1]:])
-            
-            return response
-            
-        except Exception as e:
-            self.logger.error(f"Error generating response with module: {e}")
-            raise
-    
-    async def _stream_response(
-        self,
-        module: Any,
-        input_ids: torch.Tensor,
-        max_tokens: int,
-        temperature: float,
-        **kwargs
-    ) -> AsyncGenerator[str, None]:
-        """
-        Stream a response using the given module.
-        
-        Args:
-            module: The module to use
-            input_ids: The tokenized input
-            max_tokens: Maximum number of tokens to generate
-            temperature: Sampling temperature
-            **kwargs: Additional arguments
-            
-        Returns:
-            An async generator that yields chunks of the generated response
-        """
-        try:
-            # This is a placeholder for actual streaming
-            # In a real implementation, this would use the appropriate streaming method
-            
-            # Simulate streaming
-            response = await self._generate_response(module, input_ids, max_tokens, temperature, **kwargs)
-            
-            # Create and return an async generator
-            async def response_generator():
-                # Split response into chunks
-                chunk_size = 10
-                for i in range(0, len(response), chunk_size):
-                    yield response[i:i+chunk_size]
-                    await asyncio.sleep(0.1)  # Simulate delay
-            
-            return response_generator()
-                
-        except Exception as e:
-            self.logger.error(f"Error streaming response with module: {e}")
-            raise
-    
-    async def _stream_cached_response(self, response: str) -> AsyncGenerator[str, None]:
-        """
-        Stream a cached response.
-        
-        Args:
-            response: The cached response
-            
-        Returns:
-            An async generator that yields chunks of the cached response
-        """
-        # Create and return an async generator
-        async def cached_response_generator():
-            # Split response into chunks
-            chunk_size = 10
-            for i in range(0, len(response), chunk_size):
-                yield response[i:i+chunk_size]
-                await asyncio.sleep(0.1)  # Simulate delay
-        
-        return cached_response_generator()
-    
-    async def _decode(self, token_ids: torch.Tensor) -> str:
-        """
-        Decode token IDs to text.
-        
-        Args:
-            token_ids: The token IDs
-            
-        Returns:
-            The decoded text
-        """
-        # This is a placeholder for actual decoding
-        # In a real implementation, this would use the appropriate tokenizer
-        
-        # Simulate decoding
-        return ''.join([chr(t % 128) for t in token_ids.tolist()])
-    
-    def _track_performance(
-        self,
-        prompt: str,
-        response: str,
-        module: str,
-        complexity: float,
-        generation_time: float,
-        cache_hit: bool,
-        similarity: Optional[float] = None,
-        error: Optional[str] = None
-    ) -> None:
-        """
-        Track performance metrics.
-        
-        Args:
-            prompt: The input prompt
-            response: The generated response
-            module: The module used
-            complexity: The complexity score
-            generation_time: The generation time in seconds
-            cache_hit: Whether the response was from cache
-            similarity: The similarity score (for cache hits)
-            error: Error message (if any)
-        """
-        if not self.settings.enable_performance_tracking:
-            return
-            
-        # Create performance entry
-        entry = {
-            'timestamp': time.time(),
-            'prompt_length': len(prompt),
-            'response_length': len(response),
-            'module': module,
-            'complexity': complexity,
-            'generation_time': generation_time,
-            'cache_hit': cache_hit,
-        }
-        
-        if similarity is not None:
-            entry['similarity'] = similarity
-            
-        if error is not None:
-            entry['error'] = error
-            
-        # Add to log
-        self.performance_log.append(entry)
-        
-        # Save periodically
-        if len(self.performance_log) % 10 == 0:
-            asyncio.create_task(self._save_performance_log())
-    
-    async def _save_performance_log(self) -> None:
-        """Save performance log to disk."""
-        if not self.settings.enable_performance_tracking:
-            return
-            
-        try:
-            # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(self.settings.performance_log_path), exist_ok=True)
-            
-            # Save log
-            with open(self.settings.performance_log_path, 'w') as f:
-                json.dump(self.performance_log, f, indent=2)
-                
-            self.logger.debug(f"Performance log saved to {self.settings.performance_log_path}")
-            
-        except Exception as e:
-            self.logger.error(f"Error saving performance log: {e}")
     
     async def get_embedding(self, text: str) -> List[float]:
         """
@@ -466,56 +269,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
         Returns:
             Dictionary with performance statistics
         """
-        if not self.performance_log:
-            return {
-                'count': 0,
-                'avg_generation_time': 0.0,
-                'cache_hit_rate': 0.0,
-                'module_usage': {},
-                'complexity_distribution': {
-                    'low': 0,
-                    'medium': 0,
-                    'high': 0,
-                },
-            }
-            
-        # Calculate statistics
-        count = len(self.performance_log)
-        avg_generation_time = sum(entry['generation_time'] for entry in self.performance_log) / count
-        cache_hits = sum(1 for entry in self.performance_log if entry.get('cache_hit', False))
-        cache_hit_rate = cache_hits / count
-        
-        # Module usage
-        module_usage = {}
-        for entry in self.performance_log:
-            module = entry.get('module', 'unknown')
-            if module not in module_usage:
-                module_usage[module] = 0
-            module_usage[module] += 1
-            
-        # Complexity distribution
-        complexity_distribution = {
-            'low': 0,
-            'medium': 0,
-            'high': 0,
-        }
-        
-        for entry in self.performance_log:
-            complexity = entry.get('complexity', 0.0)
-            if complexity < 0.3:
-                complexity_distribution['low'] += 1
-            elif complexity < 0.7:
-                complexity_distribution['medium'] += 1
-            else:
-                complexity_distribution['high'] += 1
-                
-        return {
-            'count': count,
-            'avg_generation_time': avg_generation_time,
-            'cache_hit_rate': cache_hit_rate,
-            'module_usage': module_usage,
-            'complexity_distribution': complexity_distribution,
-        }
+        return self.performance_tracker.get_performance_stats()
     
     async def shutdown(self) -> None:
         """Shutdown the AdaptiveLLMInterface."""
@@ -523,13 +277,12 @@ class AdaptiveLLMInterface(BaseLLMInterface):
         
         # Save performance log
         if self.settings.enable_performance_tracking:
-            await self._save_performance_log()
+            await self.performance_tracker.save_performance_log()
             
         # Unload all modules
         await self.module_loader.unload_all()
         
         self.logger.info("AdaptiveLLMInterface shutdown complete")
-
 
     def get_system_status(self) -> Dict[str, Any]:
         """
@@ -546,6 +299,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                 for name in self.module_loader.module_registry
             }
         }
+
 
 # Test function
 async def test_adaptive_llm_interface():
