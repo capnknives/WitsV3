@@ -4,6 +4,7 @@ import os
 from unittest.mock import patch, mock_open
 
 from core.config import WitsV3Config, OllamaSettings, LLMInterfaceSettings, AgentSettings, MemoryManagerSettings, ToolSystemSettings, CLISettings, NeuralWebSettings
+from pydantic import ValidationError
 
 # Helper function to get project root
 def get_project_root():
@@ -130,7 +131,7 @@ def test_agent_settings_validation():
     # Invalid max_iterations (zero)
     with pytest.raises(ValueError):
         AgentSettings(default_temperature=0.7, max_iterations=0)
-    
+
     # Invalid max_iterations (negative)
     with pytest.raises(ValueError):
         AgentSettings(default_temperature=0.7, max_iterations=-5)
@@ -161,7 +162,7 @@ def test_neural_web_settings_validation():
         NeuralWebSettings(activation_threshold=1.5)
     with pytest.raises(ValueError):
         NeuralWebSettings(activation_threshold=-0.1)
-    
+
     # Invalid decay_rate
     with pytest.raises(ValueError):
         NeuralWebSettings(decay_rate=1.1)
@@ -173,7 +174,7 @@ def test_neural_web_settings_validation():
         NeuralWebSettings(max_concept_connections=0)
     with pytest.raises(ValueError):
         NeuralWebSettings(max_concept_connections=-10)
-        
+
     # Invalid connection_strength_threshold
     with pytest.raises(ValueError):
         NeuralWebSettings(connection_strength_threshold=1.2)
@@ -183,12 +184,12 @@ def test_neural_web_settings_validation():
 def test_witsv3config_assignment_validation():
     """Test that assignments to WitsV3Config fields are validated."""
     config = WitsV3Config()
-    with pytest.raises(ValueError): # Pydantic raises ValueError with validate_assignment = True
+    with pytest.raises(ValidationError): # Pydantic raises ValidationError with validate_assignment = True
         config.agents.default_temperature = -0.5
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValidationError):
         config.agents.max_iterations = 0
-        
+
     # Test a valid assignment
     config.agents.default_temperature = 1.5
     assert config.agents.default_temperature == 1.5
@@ -196,4 +197,4 @@ def test_witsv3config_assignment_validation():
 
 # Example of how to run tests if this file is executed directly (optional)
 if __name__ == "__main__":
-    pytest.main([__file__]) 
+    pytest.main([__file__])

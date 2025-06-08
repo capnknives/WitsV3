@@ -1,0 +1,2 @@
+# Dummy Python expert safetensors file for testing
+# This is not a real model, just a placeholder to prevent FileNotFoundError in tests

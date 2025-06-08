@@ -23,6 +23,9 @@ class AgentSettings(BaseModel):
     default_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_iterations: int = Field(default=15, gt=0)
 
+    class Config:
+        validate_assignment = True
+
 class NeuralWebSettings(BaseModel):
     activation_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
     decay_rate: float = Field(default=0.1, ge=0.0, le=1.0)
@@ -62,7 +65,7 @@ class WitsV3Config(BaseModel):
     logging_level: str = Field(default="INFO")
     debug_mode: bool = Field(default=False)
     auto_restart_on_file_change: bool = Field(default=True, description="Automatically restart the system when Python files are changed")
-    
+
     llm_interface: LLMInterfaceSettings = LLMInterfaceSettings()
     ollama_settings: OllamaSettings = OllamaSettings()
     agents: AgentSettings = AgentSettings()
@@ -110,16 +113,16 @@ ToolConfig = ToolSystemSettings
 def test_config():
     """Test configuration loading and validation"""
     import os
-    
+
     # Test default config
     default_config = WitsV3Config()
     print(f"Default config: {default_config.project_name}")
-    
+
     # Test loading from file
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(current_dir)
     config_file_path = os.path.join(project_root, "config.yaml")
-    
+
     if os.path.exists(config_file_path):
         config = WitsV3Config.from_yaml(config_file_path)
         print(f"Loaded config: {config.project_name}")
@@ -128,7 +131,7 @@ def test_config():
         print(f"Default Model: {config.ollama_settings.default_model}")
     else:
         print(f"Config file not found at {config_file_path}")
-    
+
     # Test validation
     try:
         config.agents.default_temperature = -0.5

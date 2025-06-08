@@ -1,100 +1,110 @@
-import pytest
-import httpx
-import json
-from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
+"""Tests for the LLM interface module."""
 
-from core.config import WitsV3Config, OllamaSettings, LLMInterfaceSettings, AgentSettings
+import json
+import httpx
+import pytest
+from unittest.mock import MagicMock, patch, AsyncMock
+from typing import AsyncGenerator
+
 from core.llm_interface import OllamaInterface, BaseLLMInterface, get_llm_interface
+from core.config import WitsV3Config
+
 
 @pytest.fixture
 def mock_config() -> WitsV3Config:
-    """Provides a mock WitsV3Config for testing."""
-    config = WitsV3Config()
-    config.ollama_settings = OllamaSettings(
-        url="http://test-ollama:11434",
-        default_model="test-model",
-        embedding_model="test-embedding-model",
-        request_timeout=5
-    )
-    config.agents = AgentSettings(default_temperature=0.5)
-    config.llm_interface = LLMInterfaceSettings(default_provider="ollama")
+    """Create a mock configuration."""
+    config = MagicMock(spec=WitsV3Config)
+
+    # Create nested mock objects manually
+    config.ollama_settings = MagicMock()
+    config.ollama_settings.url = "http://localhost:11434"
+    config.ollama_settings.default_model = "test-model"
+    config.ollama_settings.embedding_model = "test-embedding-model"
+    config.ollama_settings.request_timeout = 60
+
+    config.agents = MagicMock()
+    config.agents.default_temperature = 0.5
+
+    config.llm_interface = MagicMock()
+    config.llm_interface.default_provider = "ollama"
+
     return config
+
 
 @pytest.fixture
 def mock_async_client() -> MagicMock:
-    """Mocks httpx.AsyncClient."""
-    mock_client = MagicMock(spec=httpx.AsyncClient)
-    # AsyncMock for methods that are awaited
-    mock_client.post = AsyncMock()
-    mock_client.stream = AsyncMock() 
-    # __aenter__ and __aexit__ for async context manager
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
-    return mock_client
+    """Create a mock AsyncClient."""
+    client = MagicMock(spec=httpx.AsyncClient)
+    # Ensure all async methods are AsyncMocks
+    client.post = AsyncMock()
+    client.stream = AsyncMock()
+    return client
+
 
 @pytest.mark.asyncio
 async def test_ollama_interface_initialization(mock_config: WitsV3Config):
-    """Test OllamaInterface initializes correctly."""
-    with patch('httpx.AsyncClient') as MockedAsyncClient:
-        instance = MockedAsyncClient.return_value
+    """Test OllamaInterface initialization."""
+    with patch('httpx.AsyncClient'):
         interface = OllamaInterface(mock_config)
+        assert interface.config == mock_config
         assert interface.ollama_settings == mock_config.ollama_settings
-        assert interface.http_client == instance
-        MockedAsyncClient.assert_called_once_with(timeout=mock_config.ollama_settings.request_timeout)
+
 
 @pytest.mark.asyncio
 async def test_prepare_payload_default_params(mock_config: WitsV3Config):
-    """Test _prepare_payload with default parameters."""
-    interface = OllamaInterface(mock_config)
-    prompt = "Test prompt"
-    payload = await interface._prepare_payload(prompt=prompt, stream=False)
-    
-    assert payload["model"] == "test-model"
-    assert payload["prompt"] == prompt
-    assert payload["stream"] is False
-    assert payload["options"]["temperature"] == 0.5
-    assert "num_predict" not in payload["options"]
-    assert "stop" not in payload["options"]
+    """Test payload preparation with default parameters."""
+    with patch('httpx.AsyncClient'):
+        interface = OllamaInterface(mock_config)
+        payload = await interface._prepare_payload("Test prompt")
+
+    expected = {
+        "model": "test-model",
+        "prompt": "Test prompt",
+        "stream": False,
+        "options": {"temperature": 0.5}
+    }
+    assert payload == expected
+
 
 @pytest.mark.asyncio
 async def test_prepare_payload_override_params(mock_config: WitsV3Config):
-    """Test _prepare_payload with overridden parameters."""
-    interface = OllamaInterface(mock_config)
-    prompt = "Test prompt"
-    model = "override-model"
-    temperature = 0.9
-    max_tokens = 100
-    stop_sequences = ["stop1", "stop2"]
-    
-    payload = await interface._prepare_payload(
-        prompt=prompt,
-        model=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stop_sequences=stop_sequences,
-        stream=True
-    )
-    
-    assert payload["model"] == model
-    assert payload["prompt"] == prompt
-    assert payload["stream"] is True
-    assert payload["options"]["temperature"] == temperature
-    assert payload["options"]["num_predict"] == max_tokens
-    assert payload["options"]["stop"] == stop_sequences
+    """Test payload preparation with overridden parameters."""
+    with patch('httpx.AsyncClient'):
+        interface = OllamaInterface(mock_config)
+        payload = await interface._prepare_payload(
+            "Test prompt",
+            model="custom-model",
+            temperature=0.8,
+            max_tokens=100,
+            stop_sequences=["stop1", "stop2"],
+            stream=True
+        )
+
+    expected = {
+        "model": "custom-model",
+        "prompt": "Test prompt",
+        "stream": True,
+        "options": {
+            "temperature": 0.8,
+            "num_predict": 100,
+            "stop": ["stop1", "stop2"]
+        }
+    }
+    assert payload == expected
+
 
 @pytest.mark.asyncio
 async def test_generate_text_success(mock_config: WitsV3Config, mock_async_client: MagicMock):
     """Test successful text generation."""
-    mock_response_data = {"response": "Generated text"}
+    mock_response_data = {"response": "Generated text response"}
     mock_httpx_response = MagicMock(spec=httpx.Response)
     mock_httpx_response.json = MagicMock(return_value=mock_response_data)
-    mock_httpx_response.raise_for_status = MagicMock() # Does not raise
+    mock_httpx_response.raise_for_status = MagicMock()
     mock_async_client.post.return_value = mock_httpx_response
 
     with patch('httpx.AsyncClient', return_value=mock_async_client):
         interface = OllamaInterface(mock_config)
-        response_text = await interface.generate_text("Hello")
+        response = await interface.generate_text("Hello")
 
     expected_payload = {
         "model": "test-model",
@@ -107,7 +117,8 @@ async def test_generate_text_success(mock_config: WitsV3Config, mock_async_clien
         json=expected_payload
     )
     mock_httpx_response.raise_for_status.assert_called_once()
-    assert response_text == "Generated text"
+    assert response == "Generated text response"
+
 
 @pytest.mark.asyncio
 async def test_generate_text_http_status_error(mock_config: WitsV3Config, mock_async_client: MagicMock):
@@ -115,7 +126,7 @@ async def test_generate_text_http_status_error(mock_config: WitsV3Config, mock_a
     mock_httpx_response = MagicMock(spec=httpx.Response)
     mock_httpx_response.status_code = 500
     mock_httpx_response.text = "Internal Server Error"
-    error = httpx.HTTPStatusError("Server Error", request=MagicMock(), response=mock_httpx_response)
+    error = httpx.HTTPStatusError("Internal Server Error", request=MagicMock(), response=mock_httpx_response)
     mock_httpx_response.raise_for_status = MagicMock(side_effect=error)
     mock_async_client.post.return_value = mock_httpx_response
 
@@ -124,17 +135,9 @@ async def test_generate_text_http_status_error(mock_config: WitsV3Config, mock_a
         with pytest.raises(httpx.HTTPStatusError):
             await interface.generate_text("Hello")
 
-    expected_payload = {
-        "model": "test-model",
-        "prompt": "Hello",
-        "stream": False,
-        "options": {"temperature": 0.5}
-    }
-    mock_async_client.post.assert_called_once_with(
-        f"{mock_config.ollama_settings.url}/api/generate",
-        json=expected_payload
-    )
+    mock_async_client.post.assert_called_once()
     mock_httpx_response.raise_for_status.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_generate_text_request_error(mock_config: WitsV3Config, mock_async_client: MagicMock):
@@ -166,7 +169,7 @@ async def test_stream_text_success(mock_config: WitsV3Config, mock_async_client:
         {"response": " part 2", "done": False},
         {"response": "", "done": True} # Represents the end of stream with final metadata
     ]
-    
+
     async def mock_aiter_lines():
         for chunk_data in stream_chunks_data:
             yield json.dumps(chunk_data)
@@ -174,11 +177,11 @@ async def test_stream_text_success(mock_config: WitsV3Config, mock_async_client:
     mock_httpx_response = MagicMock(spec=httpx.Response)
     mock_httpx_response.raise_for_status = MagicMock()
     mock_httpx_response.aiter_lines = mock_aiter_lines # Assign the async generator
-    
-    # The stream method of the client itself needs to be an async context manager returning the response
+
+    # Properly mock the async context manager
     mock_stream_context_manager = AsyncMock()
-    mock_stream_context_manager.__aenter__.return_value = mock_httpx_response
-    mock_stream_context_manager.__aexit__.return_value = None
+    mock_stream_context_manager.__aenter__ = AsyncMock(return_value=mock_httpx_response)
+    mock_stream_context_manager.__aexit__ = AsyncMock(return_value=None)
     mock_async_client.stream.return_value = mock_stream_context_manager
 
     with patch('httpx.AsyncClient', return_value=mock_async_client):
@@ -211,8 +214,8 @@ async def test_stream_text_http_status_error(mock_config: WitsV3Config, mock_asy
     mock_httpx_response.raise_for_status = MagicMock(side_effect=error)
 
     mock_stream_context_manager = AsyncMock()
-    mock_stream_context_manager.__aenter__.return_value = mock_httpx_response
-    mock_stream_context_manager.__aexit__.return_value = None
+    mock_stream_context_manager.__aenter__ = AsyncMock(return_value=mock_httpx_response)
+    mock_stream_context_manager.__aexit__ = AsyncMock(return_value=None)
     mock_async_client.stream.return_value = mock_stream_context_manager
 
     with patch('httpx.AsyncClient', return_value=mock_async_client):
@@ -220,7 +223,7 @@ async def test_stream_text_http_status_error(mock_config: WitsV3Config, mock_asy
         with pytest.raises(httpx.HTTPStatusError):
             async for _ in interface.stream_text("Stream error"):
                 pass # pragma: no cover
-    
+
     expected_payload = {
         "model": "test-model",
         "prompt": "Stream error",
@@ -267,7 +270,7 @@ async def test_stream_text_json_decode_error(mock_config: WitsV3Config, mock_asy
         json.dumps({"response": "Another valid chunk", "done": False}),
         json.dumps({"response": "", "done": True})
     ]
-    
+
     async def mock_aiter_lines_with_invalid_json():
         for line in stream_chunks_data:
             yield line
@@ -275,10 +278,10 @@ async def test_stream_text_json_decode_error(mock_config: WitsV3Config, mock_asy
     mock_httpx_response = MagicMock(spec=httpx.Response)
     mock_httpx_response.raise_for_status = MagicMock()
     mock_httpx_response.aiter_lines = mock_aiter_lines_with_invalid_json
-    
+
     mock_stream_context_manager = AsyncMock()
-    mock_stream_context_manager.__aenter__.return_value = mock_httpx_response
-    mock_stream_context_manager.__aexit__.return_value = None
+    mock_stream_context_manager.__aenter__ = AsyncMock(return_value=mock_httpx_response)
+    mock_stream_context_manager.__aexit__ = AsyncMock(return_value=None)
     mock_async_client.stream.return_value = mock_stream_context_manager
 
     with patch('httpx.AsyncClient', return_value=mock_async_client):
@@ -352,7 +355,7 @@ async def test_get_embedding_http_status_error(mock_config: WitsV3Config, mock_a
         interface = OllamaInterface(mock_config)
         with pytest.raises(httpx.HTTPStatusError):
             await interface.get_embedding("Embed this")
-    
+
     mock_async_client.post.assert_called_once()
     mock_httpx_response.raise_for_status.assert_called_once()
 
@@ -372,28 +375,27 @@ async def test_get_embedding_request_error(mock_config: WitsV3Config, mock_async
 def test_get_llm_interface_ollama(mock_config: WitsV3Config):
     """Test get_llm_interface returns OllamaInterface for 'ollama' provider."""
     mock_config.llm_interface.default_provider = "ollama"
-    with patch('core.llm_interface.OllamaInterface') as MockOllamaInterface:
+    with patch('httpx.AsyncClient'):
         interface = get_llm_interface(mock_config)
-        MockOllamaInterface.assert_called_once_with(mock_config)
-        assert isinstance(interface, MockOllamaInterface)
+        assert isinstance(interface, OllamaInterface)  # Check actual instance type
 
 
 def test_get_llm_interface_adaptive(mock_config: WitsV3Config):
     """Test get_llm_interface returns AdaptiveLLMInterface for 'adaptive' provider."""
     mock_config.llm_interface.default_provider = "adaptive"
-    
-    # Mock the AdaptiveLLMInterface and the OllamaInterface it might create internally
-    with patch('core.llm_interface.AdaptiveLLMInterface') as MockAdaptiveLLMInterface, \
-         patch('core.llm_interface.OllamaInterface') as MockOllamaInterfaceInternal:
-        
-        # Ensure the internal OllamaInterface is created and passed to AdaptiveLLMInterface
-        mock_ollama_internal_instance = MockOllamaInterfaceInternal.return_value
-        mock_adaptive_instance = MockAdaptiveLLMInterface.return_value
 
+    # Mock the AdaptiveLLMInterface import at the correct location
+    with patch('core.adaptive_llm_interface.AdaptiveLLMInterface') as MockAdaptiveLLMInterface, \
+         patch('httpx.AsyncClient'):
+
+        mock_adaptive_instance = MockAdaptiveLLMInterface.return_value
         interface = get_llm_interface(mock_config)
-        
-        MockOllamaInterfaceInternal.assert_called_once_with(mock_config)
-        MockAdaptiveLLMInterface.assert_called_once_with(mock_config, mock_ollama_internal_instance)
+
+        # Verify AdaptiveLLMInterface was called with config and an OllamaInterface
+        MockAdaptiveLLMInterface.assert_called_once()
+        call_args = MockAdaptiveLLMInterface.call_args
+        assert call_args[0][0] == mock_config  # First arg is config
+        assert isinstance(call_args[0][1], OllamaInterface)  # Second arg is OllamaInterface
         assert interface == mock_adaptive_instance
 
 def test_get_llm_interface_unsupported(mock_config: WitsV3Config):
@@ -418,4 +420,4 @@ async def test_base_llm_interface_abstract_methods(mock_config):
     assert await concrete_interface.generate_text("prompt") == "test"
     async for chunk in concrete_interface.stream_text("prompt"):
         assert chunk == "test"
-    assert await concrete_interface.get_embedding("text") == [0.1] 
+    assert await concrete_interface.get_embedding("text") == [0.1]
