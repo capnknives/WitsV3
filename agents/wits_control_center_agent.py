@@ -57,6 +57,21 @@ class WitsControlCenterAgent(BaseAgent):
         # Use control center specific model
         self.model_name = config.ollama_settings.control_center_model
 
+        # Initialize enhanced capabilities if available
+        try:
+            from core.concrete_meta_reasoning import WitsV3MetaReasoningEngine
+            from core.tool_composition import IntelligentToolComposer
+
+            self.meta_reasoning = WitsV3MetaReasoningEngine(config)
+            self.tool_composer = IntelligentToolComposer(config)
+            self.has_enhanced_capabilities = True
+            self.logger.info("Enhanced meta-reasoning and tool composition capabilities initialized")
+        except Exception as e:
+            self.logger.warning(f"Enhanced capabilities not available: {e}")
+            self.meta_reasoning = None
+            self.tool_composer = None
+            self.has_enhanced_capabilities = False
+
         self.logger.info(f"Control Center initialized with model: {self.model_name}")
         self.logger.info(f"Available specialized agents: {list(self.specialized_agents.keys())}")
 
@@ -185,6 +200,44 @@ User input: {user_input}
         Returns:
             Intent analysis with response strategy
         """
+        # Check if this is casual conversation with a simple heuristic
+        is_casual = self._is_casual_conversation(user_input)
+
+        if is_casual:
+            return {
+                "type": "conversation",
+                "complexity": "simple",
+                "requires_tools": False,
+                "suggested_response": "direct",
+                "notes": "This appears to be casual conversation.",
+                "confidence": 0.9
+            }
+
+        # For task-oriented messages, use enhanced capabilities if available
+        if self.has_enhanced_capabilities and self.meta_reasoning and len(user_input.split()) > 8:
+            try:
+                # Use meta-reasoning to analyze complexity
+                context = {"source": "user_input"}
+                if conversation_history:
+                    context["history_length"] = str(len(conversation_history.messages))
+
+                problem_space = await self.meta_reasoning.analyze_problem_space(user_input, context)
+
+                # Convert problem space to intent analysis
+                return {
+                    "type": "task",
+                    "complexity": problem_space.complexity.value,
+                    "requires_tools": len(problem_space.required_capabilities) > 0,
+                    "required_capabilities": problem_space.required_capabilities,
+                    "estimated_steps": problem_space.estimated_steps,
+                    "confidence": problem_space.confidence,
+                    "suggested_response": "orchestrator" if problem_space.complexity.value in ["complex", "research"] else "direct",
+                    "notes": f"Task analyzed with meta-reasoning: {problem_space.complexity.value} complexity."
+                }
+            except Exception as e:
+                self.logger.error(f"Error using enhanced capabilities for intent analysis: {e}")
+                # Fall back to traditional analysis
+
         # Build context from conversation history
         history_context = ""
         if conversation_history and conversation_history.messages:
@@ -198,22 +251,54 @@ User input: {user_input}
 
         try:
             # Get LLM response
-            response = await self.generate_response(prompt, temperature=0.3)
+            response = await self.llm_interface.generate_text(
+                prompt=prompt,
+                max_tokens=1024,
+                temperature=0.3
+            )
 
             # Parse the response
-            parsed_intent = self._parse_intent_response(response)
+            intent_analysis = self._parse_intent_response(response)
 
-            return parsed_intent
-
+            return intent_analysis
         except Exception as e:
-            self.logger.error(f"Error analyzing user intent: {e}")
-            # Fallback to simple task delegation
-            return {
-                "type": "goal_defined",
-                "confidence": 0.5,
-                "goal_statement": user_input,
-                "reasoning": "Failed to analyze intent, defaulting to task delegation"
-            }
+            self.logger.error(f"Error in intent analysis: {e}")
+            # Return a fallback analysis
+            return self._fallback_intent_parsing(user_input)
+
+    def _is_casual_conversation(self, message: str) -> bool:
+        """
+        Determine if a message is casual conversation.
+
+        Args:
+            message: The user's message
+
+        Returns:
+            True if it's casual conversation
+        """
+        # Simple heuristic for casual conversation
+        casual_indicators = [
+            "hello", "hi", "hey", "how are you", "what's up", "how's it going",
+            "thanks", "thank you", "appreciate", "nice", "cool", "great",
+            "bye", "goodbye", "see you", "talk to you"
+        ]
+
+        question_indicators = ["?", "what", "how", "why", "when", "where", "who"]
+
+        # Short messages are usually casual
+        if len(message.split()) < 6:
+            return True
+
+        # Check for casual indicators
+        if any(indicator in message.lower() for indicator in casual_indicators):
+            return True
+
+        # Short questions are usually casual
+        if any(indicator in message.lower() for indicator in question_indicators) and len(message.split()) < 10:
+            return True
+
+        # Longer messages are less likely to be casual
+        return False
 
     def _build_intent_analysis_prompt(self, user_input: str, history_context: str) -> str:
         """
@@ -337,82 +422,145 @@ Respond ONLY with valid JSON."""
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """
-        Handle the response based on intent analysis.
+        Handle the response based on the intent analysis.
 
         Args:
-            intent_analysis: Analyzed intent
-            user_input: Original user input
+            intent_analysis: The analyzed intent
+            user_input: The original user input
             conversation_history: Conversation context
             session_id: Session identifier
 
         Yields:
-            StreamData for the response handling
+            StreamData objects with the response
         """
-        intent_type = intent_analysis.get("type")
+        intent_type = intent_analysis.get("type", "unknown")
+        complexity = intent_analysis.get("complexity", "simple")
+        suggested_response = intent_analysis.get("suggested_response", "direct")
+        requires_tools = intent_analysis.get("requires_tools", False)
 
-        if intent_type == "direct_response":
-            # Provide direct response
-            response = intent_analysis.get("direct_response", "I'm here to help!")
-            yield self.stream_result(response)
+        yield self.stream_thinking(f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}")
 
-        elif intent_type == "clarification_question":
-            # Ask for clarification
-            question = intent_analysis.get(
-                "clarification_question",
-                "Could you please provide more details about what you'd like me to help you with?"
-            )
-            yield StreamData(
-                type="clarification",
-                content=question,
-                source=self.agent_name
-            )
+        # For casual conversation, respond directly
+        if intent_type == "conversation" or complexity == "simple":
+            yield self.stream_thinking("Generating direct response...")
 
-        elif intent_type == "goal_defined":
-            # Delegate to orchestrator
-            goal_statement = intent_analysis.get("goal_statement", user_input)
+            # Use a more conversational approach for casual chat
+            from core.personality_manager import get_personality_manager
+            personality_manager = get_personality_manager()
 
-            # Check if we should use a specialized agent
-            specialized_agent = await self._select_specialized_agent(goal_statement)
+            if conversation_history and conversation_history.messages:
+                # Format conversation history
+                history_text = "\n".join([
+                    f"{msg.role.upper()}: {msg.content}"
+                    for msg in conversation_history.get_recent_messages(5)
+                ])
+            else:
+                history_text = ""
+
+            personality_prompt = personality_manager.get_system_prompt()
+            conversation_prompt = f"""{personality_prompt}
+
+You are having a casual conversation with the user. Respond in a friendly, helpful manner.
+
+CONVERSATION HISTORY:
+{history_text}
+
+USER: {user_input}
+ASSISTANT:"""
+
+            try:
+                response = await self.generate_response(conversation_prompt, temperature=0.7)
+                yield self.stream_result(response)
+            except Exception as e:
+                self.logger.error(f"Error generating direct response: {e}")
+                yield self.stream_error(
+                    "I'm having trouble generating a response right now. Could you try again?",
+                    details=str(e)
+                )
+            return
+
+        # For complex tasks, use enhanced capabilities if available
+        if self.has_enhanced_capabilities and requires_tools and complexity in ["moderate", "complex", "research"]:
+            yield self.stream_thinking("Using enhanced capabilities for complex task...")
+
+            if self.meta_reasoning and self.tool_composer:
+                try:
+                    # Get capabilities from intent analysis
+                    required_capabilities = intent_analysis.get("required_capabilities", ["general_processing"])
+
+                    # Map capabilities to available tools
+                    available_tools = []
+                    capability_to_tool = {
+                        "code_generation": "python_execution",
+                        "math": "math_operations",
+                        "data_analysis": "json_manipulate",
+                        "general_processing": "think"
+                    }
+
+                    for capability in required_capabilities:
+                        if capability in capability_to_tool:
+                            available_tools.append(capability_to_tool[capability])
+
+                    if not available_tools:
+                        available_tools = ["think", "calculator", "json_manipulate"]
+
+                    # Create a workflow for the task
+                    workflow = await self.tool_composer.compose_workflow(
+                        user_input,
+                        available_tools,
+                        constraints={"source": "user_interaction"}
+                    )
+
+                    yield self.stream_thinking(f"Created workflow with {len(workflow.nodes)} steps using {workflow.strategy.value} strategy.")
+
+                    # For now, delegate to orchestrator as we're not fully implementing workflow execution
+                    if self.orchestrator_agent:
+                        yield self.stream_thinking("Delegating to orchestrator for execution...")
+                        async for stream_data in self.orchestrator_agent.run(
+                            user_input=user_input,
+                            conversation_history=conversation_history,
+                            session_id=session_id
+                        ):
+                            yield stream_data
+                        return
+                except Exception as e:
+                    self.logger.error(f"Error using enhanced capabilities: {e}")
+                    # Fall back to specialized agent
+
+        # For more complex queries, try to delegate to a specialized agent
+        if suggested_response == "specialized" or complexity in ["moderate", "complex", "research"]:
+            specialized_agent = await self._select_specialized_agent(user_input)
 
             if specialized_agent:
                 agent_type = next((k for k, v in self.specialized_agents.items() if v == specialized_agent), "specialized")
-                yield self.stream_thinking(f"Using {agent_type} agent for: {goal_statement}")
+                yield self.stream_thinking(f"Using {agent_type} agent for: {user_input}")
 
-                try:
-                    async for stream_data in specialized_agent.run(
-                        user_input=goal_statement,
-                        conversation_history=conversation_history,
-                        session_id=session_id
-                    ):
-                        yield stream_data
-                except Exception as e:
-                    self.logger.error(f"Error in specialized agent: {e}")
-                    yield self.stream_error(
-                        "I encountered an issue while processing your specialized request.",
-                        details=str(e)
-                    )
-            elif self.orchestrator_agent:
-                yield self.stream_thinking(f"Delegating to orchestrator: {goal_statement}")
+                async for stream_data in specialized_agent.run(
+                    user_input=user_input,
+                    conversation_history=conversation_history,
+                    session_id=session_id
+                ):
+                    yield stream_data
+                return
 
-                try:
-                    async for stream_data in self.orchestrator_agent.run(
-                        goal=goal_statement,
-                        conversation_history=conversation_history,
-                        session_id=session_id
-                    ):
-                        yield stream_data
-                except Exception as e:
-                    self.logger.error(f"Error in orchestrator delegation: {e}")
-                    yield self.stream_error(
-                        "I encountered an issue while processing your request.",
-                        details=str(e)
-                    )
-            else:
-                yield self.stream_error("No orchestrators available for task delegation.")
+        # Default: delegate to orchestrator for tool-based execution
+        if self.orchestrator_agent and (requires_tools or suggested_response == "orchestrator"):
+            yield self.stream_thinking("Delegating to orchestrator...")
+            async for stream_data in self.orchestrator_agent.run(
+                user_input=user_input,
+                conversation_history=conversation_history,
+                session_id=session_id
+            ):
+                yield stream_data
+            return
 
-        else:
-            # Unknown intent type
-            yield self.stream_error(f"Unknown intent type: {intent_type}")
+        # Fallback: generate a direct response
+        yield self.stream_thinking("No specialized handling available, generating direct response...")
+        response = await self.generate_response(
+            f"You are a helpful assistant. Respond to this user query: {user_input}",
+            temperature=0.7
+        )
+        yield self.stream_result(response)
 
     async def _select_specialized_agent(self, goal_statement: str) -> Optional[Any]:
         """
