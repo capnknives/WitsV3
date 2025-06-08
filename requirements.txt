@@ -1,5 +1,6 @@
 # WitsV3 Core Dependencies
 
+# ============== Core Framework ==============
 # Pydantic for data validation and settings management
 pydantic>=2.0.0
 
@@ -12,55 +13,89 @@ PyYAML>=6.0
 # File watching for auto-restart functionality
 watchdog>=2.1.0
 
-# Sentence Transformers for embeddings (if not solely relying on Ollama for this)
-# sentence-transformers>=2.2.0
-
-# FAISS GPU (Using conda environment faiss-gpu-env2)
-# faiss-gpu>=1.7.4
-
-# Langchain (as requested for integration)
-langchain>=0.1.0
-langchain-community>=0.0.20 # For Ollama integration, etc.
-langchain-core>=0.1.0
-
 # Async file operations
 aiofiles>=0.7
 
 # NumPy for numerical operations (often needed with embeddings)
 numpy>=1.24.0
 
-# For CLI colors/styling (optional but nice)
-colorama>=0.4.6
+# ============== LLM & AI Components ==============
+# Sentence Transformers for embeddings (if not solely relying on Ollama for this)
+# sentence-transformers>=2.2.0
 
+# FAISS for vector similarity search
+faiss-cpu>=1.7.0
+# faiss-gpu>=1.7.4  # Use conda: conda install -c pytorch faiss-gpu
+
+# Langchain ecosystem
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-core>=0.1.0
+
+# ============== Neural & Graph Components ==============
+# NetworkX for neural web core and graph operations
+networkx>=3.0
+
+# PyTorch (optional - for adaptive LLM and neural features)
+# Uncomment if using neural features:
+# torch>=2.0.0
+# transformers>=4.30.0
+
+# Scikit-learn for ML utilities
+scikit-learn>=1.0.0
+
+# ============== Tools & Utilities ==============
+# Statistical operations
+scipy>=1.10.0
+
+# Data manipulation
+pandas>=2.0.0
+
+# Web requests and scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# CLI enhancements
+colorama>=0.4.6
+rich>=13.0.0
+tqdm>=4.65.0
+typer>=0.9.0
+
+# ============== Background Processing ==============
 # Background agent dependencies
 aiohttp>=3.8.0
 websockets>=10.0
-
-# New tool dependencies
-scipy>=1.10.0  # For statistical operations
-pandas>=2.0.0  # For data manipulation
-requests>=2.31.0  # For web requests
-beautifulsoup4>=4.12.0  # For web scraping
-rich>=13.0.0  # For enhanced CLI output
-tqdm>=4.65.0  # For progress bars
-
-# Additional dependencies
 psutil>=5.9.0
 apscheduler>=3.10.0
+
+# ============== External Services ==============
+# Supabase integration
+supabase>=1.0.0
+
+# Environment variables
 python-dotenv>=1.0.0
 
+# ============== Testing & Development ==============
 # Testing
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
+pytest-mock>=3.14.0
 
-# Development
+# Development tools
 black>=23.0.0
 mypy>=1.0.0
 ruff>=0.1.0
 
-# New dependencies
-faiss-cpu>=1.7.0
-scikit-learn>=1.0.0
-typer>=0.9.0
-supabase>=1.0.0
+# ============== Optional Dependencies ==============
+# Install these groups with: pip install -r requirements-neural.txt
+# 
+# For neural features:
+# torch>=2.0.0
+# transformers>=4.30.0
+# 
+# For GPU acceleration:
+# faiss-gpu>=1.7.4  # via conda
+# 
+# For advanced embeddings:
+# sentence-transformers>=2.2.0

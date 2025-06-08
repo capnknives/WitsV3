@@ -1,0 +1,41 @@
+# WitsV3 Neural & ML Optional Dependencies
+# Install with: pip install -r requirements-neural.txt
+
+# ============== Neural Networks ==============
+# PyTorch for neural network operations
+torch>=2.0.0
+
+# Transformers for language models
+transformers>=4.30.0
+
+# ============== Advanced Embeddings ==============
+# Sentence transformers for semantic embeddings
+sentence-transformers>=2.2.0
+
+# ============== GPU Acceleration ==============
+# Note: For FAISS GPU support, use conda:
+# conda install -c pytorch faiss-gpu
+
+# For PyTorch with CUDA support:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# ============== Additional ML Libraries ==============
+# Tokenizers for fast tokenization
+tokenizers>=0.13.0
+
+# Datasets for easy data loading
+datasets>=2.10.0
+
+# Accelerate for distributed training
+accelerate>=0.20.0
+
+# ============== Visualization ==============
+# For neural network visualization
+torchviz>=0.0.2
+matplotlib>=3.5.0
+seaborn>=0.12.0
+
+# ============== Optimization ==============
+# For model optimization
+onnx>=1.13.0
+onnxruntime>=1.14.0
