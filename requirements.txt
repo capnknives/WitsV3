@@ -15,8 +15,7 @@ watchdog>=2.1.0
 # Sentence Transformers for embeddings (if not solely relying on Ollama for this)
 # sentence-transformers>=2.2.0
 
-# FAISS CPU/GPU (Optional - install manually or via separate instructions if used)
-# faiss-cpu>=1.7.4
+# FAISS GPU (Using conda environment faiss-gpu-env2)
 # faiss-gpu>=1.7.4
 
 # Langchain (as requested for integration)
@@ -31,8 +30,16 @@ aiofiles>=0.7
 numpy>=1.20
 
 # For CLI colors/styling (optional but nice)
-# colorama>=0.4.4
+colorama>=0.4.4
 
 # Background agent dependencies
 aiohttp>=3.8.0
 websockets>=10.0
+
+# New tool dependencies
+scipy>=1.10.0  # For statistical operations
+pandas>=2.0.0  # For data manipulation
+requests>=2.31.0  # For web requests
+beautifulsoup4>=4.12.0  # For web scraping
+rich>=13.0.0  # For enhanced CLI output
+tqdm>=4.65.0  # For progress bars

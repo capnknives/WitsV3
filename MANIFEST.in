@@ -1,0 +1,35 @@
+include LICENSE
+include README.md
+include requirements.txt
+include requirements-dev.txt
+include pytest.ini
+include .coveragerc
+include .flake8
+include .isort.cfg
+include mypy.ini
+include pyproject.toml
+
+recursive-include tests *
+recursive-include docs *
+recursive-include config *.yaml
+recursive-include tools *.py
+recursive-include core *.py
+recursive-include agents *.py
+
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude .git
+global-exclude .gitignore
+global-exclude .env
+global-exclude .venv
+global-exclude venv
+global-exclude env
+global-exclude .idea
+global-exclude .vscode
+global-exclude *.egg-info
+global-exclude dist
+global-exclude build 

@@ -1,0 +1,26 @@
+{
+  "auto_connect": true,
+  "servers": [
+    {
+      "name": "github.com/NightTrek/Ollama-mcp",
+      "command": "node C:\\Users\\capta\\Documents\\Cline\\MCP\\Ollama-mcp\\build\\index.js",
+      "working_directory": "C:\\Users\\capta\\Documents\\Cline\\MCP\\Ollama-mcp"
+    },
+    {
+      "name": "github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
+      "command": "docker run -i --rm -e BRAVE_API_KEY mcp/brave-search"
+    },
+    {
+      "name": "github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
+      "command": "npx -y @modelcontextprotocol/server-sequential-thinking"
+    },
+    {
+      "name": "github.com/supabase-community/supabase-mcp",
+      "command": "cmd /c npx -y @supabase/mcp-server-supabase@latest --access-token sbp_6e4256bed57d26b57e31be7d2d55ec833445d475"
+    },
+    {
+      "name": "github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
+      "command": "docker run -i --rm --mount type=bind,src=C:\\Users\\capta\\Documents\\Cline\\MCP\\filesystem,dst=/projects/filesystem mcp/filesystem /projects"
+    }
+  ]
+}

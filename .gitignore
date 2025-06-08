@@ -19,61 +19,74 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# Virtual environments
+# Virtual Environment
 .env
 .venv
 env/
 venv/
 ENV/
-env.bak/
-venv.bak/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
 *.swp
 *.swo
-*~
+.project
+.pydevproject
+.settings/
 
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Testing
+.coverage
+coverage.xml
+.coverage.*
+coverage_html/
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
 
 # Logs
 *.log
 logs/
+log/
 
-# Data files
-data/
-output/
-temp/
-*.db
-*.sqlite
-*.sqlite3
-
-# Model files
-*.bin
-*.pt
-*.pth
-*.onnx
-*.h5
-
-# Environment variables
-.env
+# Local development
+.DS_Store
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 
-# Backup files
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Documentation
+docs/_build/
+site/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Rope project settings
+.ropeproject/
+
+# mkdocs documentation
+/site
+
+# Temporary files
+*.tmp
 *.bak
-*backup*
-*_backup*
-run_backup.py
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders

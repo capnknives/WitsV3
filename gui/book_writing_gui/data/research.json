@@ -1,0 +1,33 @@
+{
+  "general": [
+    {
+      "id": "54914fbe-335d-460e-8842-4388fdf2cf72",
+      "created_at": "2025-06-01T19:42:07.292776",
+      "topic": "Memory Loss",
+      "depth": "detailed",
+      "results": {
+        "error": "Error connecting to API: Cannot connect to host localhost:8001 ssl:default [Multiple exceptions: [Errno 10061] Connect call failed ('::1', 8001, 0, 0), [Errno 10061] Connect call failed ('127.0.0.1', 8001)]"
+      }
+    },
+    {
+      "id": "0b5b2798-e9eb-4841-9f87-4815e20b29fe",
+      "created_at": "2025-06-01T19:43:47.991177",
+      "topic": "Memory Loss",
+      "depth": "detailed",
+      "results": [
+        "Research could not be completed: Error connecting to API: Cannot connect to host localhost:8001 ssl:default [Multiple exceptions: [Errno 10061] Connect call failed ('::1', 8001, 0, 0), [Errno 10061] Connect call failed ('127.0.0.1', 8001)]",
+        "Please try again later or check if the research service is running."
+      ]
+    },
+    {
+      "id": "04beb4f1-506b-4f45-9c27-5649fc2abbf5",
+      "created_at": "2025-06-01T19:48:09.623552",
+      "topic": "Memory Loss",
+      "depth": "detailed",
+      "results": [
+        "Research could not be completed: Error connecting to API: Cannot connect to host localhost:8001 ssl:default [Multiple exceptions: [Errno 10061] Connect call failed ('::1', 8001, 0, 0), [Errno 10061] Connect call failed ('127.0.0.1', 8001)]",
+        "Please try again later or check if the research service is running."
+      ]
+    }
+  ]
+}

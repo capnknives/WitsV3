@@ -1,0 +1,206 @@
+{
+  "concepts": {
+    "null": {
+      "id": null,
+      "content": "Tool think result: Thinking: No thought provided",
+      "concept_type": "fact",
+      "activation_level": 1.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "timestamp": "2025-05-25T14:11:43.645429+00:00",
+        "source": "NeuralOrchestrator",
+        "memory_type": "OBSERVATION",
+        "original_metadata": {
+          "tool_name": "think",
+          "session_id": "0ebe224a-d8bd-4ec2-b35f-e3c09c0bd09a"
+        }
+      },
+      "created_at": "2025-05-25T09:10:41.714881",
+      "last_accessed": "2025-05-25T09:11:23.759459",
+      "access_count": 6
+    },
+    "pattern_singleton": {
+      "id": "pattern_singleton",
+      "content": "Ensures a class has only one instance",
+      "concept_type": "pattern",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "software_engineering",
+        "type": "design_pattern"
+      },
+      "created_at": "2025-05-25T09:10:41.719422",
+      "last_accessed": "2025-05-25T09:10:41.719422",
+      "access_count": 0
+    },
+    "pattern_factory": {
+      "id": "pattern_factory",
+      "content": "Creates objects without specifying exact classes",
+      "concept_type": "pattern",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "software_engineering",
+        "type": "design_pattern"
+      },
+      "created_at": "2025-05-25T09:10:41.719422",
+      "last_accessed": "2025-05-25T09:10:41.719422",
+      "access_count": 0
+    },
+    "pattern_observer": {
+      "id": "pattern_observer",
+      "content": "Defines one-to-many dependency between objects",
+      "concept_type": "pattern",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "software_engineering",
+        "type": "design_pattern"
+      },
+      "created_at": "2025-05-25T09:10:41.719422",
+      "last_accessed": "2025-05-25T09:10:41.719422",
+      "access_count": 0
+    },
+    "pattern_strategy": {
+      "id": "pattern_strategy",
+      "content": "Encapsulates algorithms and makes them interchangeable",
+      "concept_type": "pattern",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "software_engineering",
+        "type": "design_pattern"
+      },
+      "created_at": "2025-05-25T09:10:41.719422",
+      "last_accessed": "2025-05-25T09:10:41.719422",
+      "access_count": 0
+    },
+    "pattern_mvc": {
+      "id": "pattern_mvc",
+      "content": "Separates application into Model-View-Controller",
+      "concept_type": "pattern",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "software_engineering",
+        "type": "design_pattern"
+      },
+      "created_at": "2025-05-25T09:10:41.719422",
+      "last_accessed": "2025-05-25T09:10:41.719422",
+      "access_count": 0
+    },
+    "system_memory_usage": {
+      "id": "system_memory_usage",
+      "content": "System memory consumption patterns",
+      "concept_type": "system_metric",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "system_monitoring",
+        "type": "health_metric"
+      },
+      "created_at": "2025-05-25T09:10:41.720424",
+      "last_accessed": "2025-05-25T09:10:41.720424",
+      "access_count": 0
+    },
+    "system_cpu_usage": {
+      "id": "system_cpu_usage",
+      "content": "CPU utilization patterns",
+      "concept_type": "system_metric",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "system_monitoring",
+        "type": "health_metric"
+      },
+      "created_at": "2025-05-25T09:10:41.720424",
+      "last_accessed": "2025-05-25T09:10:41.720424",
+      "access_count": 0
+    },
+    "system_error_frequency": {
+      "id": "system_error_frequency",
+      "content": "Error occurrence patterns",
+      "concept_type": "system_health",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "system_monitoring",
+        "type": "health_metric"
+      },
+      "created_at": "2025-05-25T09:10:41.720424",
+      "last_accessed": "2025-05-25T09:10:41.720424",
+      "access_count": 0
+    },
+    "system_response_time": {
+      "id": "system_response_time",
+      "content": "System response time patterns",
+      "concept_type": "performance",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "system_monitoring",
+        "type": "health_metric"
+      },
+      "created_at": "2025-05-25T09:10:41.720424",
+      "last_accessed": "2025-05-25T09:10:41.720424",
+      "access_count": 0
+    },
+    "system_user_satisfaction": {
+      "id": "system_user_satisfaction",
+      "content": "User satisfaction patterns",
+      "concept_type": "quality",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "domain": "system_monitoring",
+        "type": "health_metric"
+      },
+      "created_at": "2025-05-25T09:10:41.720424",
+      "last_accessed": "2025-05-25T09:10:41.720424",
+      "access_count": 0
+    }
+  },
+  "connections": {
+    "pattern_mvc->pattern_observer": {
+      "source_id": "pattern_mvc",
+      "target_id": "pattern_observer",
+      "relationship_type": "enables",
+      "strength": 0.8,
+      "confidence": 1.0,
+      "created_at": "2025-05-25T09:10:41.719422",
+      "reinforcement_count": 0
+    },
+    "pattern_factory->pattern_strategy": {
+      "source_id": "pattern_factory",
+      "target_id": "pattern_strategy",
+      "relationship_type": "similar",
+      "strength": 0.6,
+      "confidence": 1.0,
+      "created_at": "2025-05-25T09:10:41.719422",
+      "reinforcement_count": 0
+    },
+    "system_cpu_usage->system_response_time": {
+      "source_id": "system_cpu_usage",
+      "target_id": "system_response_time",
+      "relationship_type": "causes",
+      "strength": 0.8,
+      "confidence": 1.0,
+      "created_at": "2025-05-25T09:10:41.720424",
+      "reinforcement_count": 0
+    },
+    "system_error_frequency->system_user_satisfaction": {
+      "source_id": "system_error_frequency",
+      "target_id": "system_user_satisfaction",
+      "relationship_type": "contradicts",
+      "strength": 0.9,
+      "confidence": 1.0,
+      "created_at": "2025-05-25T09:10:41.720424",
+      "reinforcement_count": 0
+    }
+  },
+  "metadata": {
+    "activation_threshold": 0.3,
+    "decay_rate": 0.1,
+    "saved_at": "2025-05-25T09:11:43.645429"
+  }
+}
