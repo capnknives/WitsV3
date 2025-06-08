@@ -1,0 +1,9 @@
+{
+  "segments": [],
+  "version": "3.0.0",
+  "created": "2024-01-01T00:00:00Z",
+  "metadata": {
+    "description": "WitsV3 Memory Storage Template",
+    "note": "This file is regenerated automatically. Personal memory data is not tracked in git."
+  }
+}

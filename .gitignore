@@ -51,6 +51,44 @@ htmlcov/
 logs/
 log/
 
+# WitsV3 Data Files (Personal/Runtime Data)
+data/wits_memory.json
+data/neural_web.json
+data/neural_web_backup.json
+data/*_backup.json
+data/faiss_index.*
+data/wits_faiss_index.*
+
+# Authentication & Security (Never commit)
+.env
+auth_token.txt
+*.key
+*.pem
+config/auth_tokens.yaml
+setup_auth_token.txt
+
+# Cache & Temporary Files
+cache/
+.cache/
+tmp/
+temp/
+*.tmp
+*.cache
+
+# Memory & State Files
+memory_storage.txt
+last_test_run.txt
+
+# Personal Configuration
+config/personal_*
+config/user_*
+
+# Development & Debug Files
+debug_*.py
+test_*.py
+fix_*.py
+verify_*.py
+
 # Local development
 .DS_Store
 .env.local
