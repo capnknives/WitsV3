@@ -1,20 +1,34 @@
 """
-WitsV3 Agents Package
-Provides agent implementations for the WITS v3 system
+Agents module for WitsV3
+This module contains all specialized agents that extend the base agent functionality.
 """
 
-from .background_agent import BackgroundAgent
-from .base_agent import BaseAgent
-from .base_orchestrator_agent import BaseOrchestratorAgent
-from .wits_control_center_agent import WitsControlCenterAgent
-from .llm_driven_orchestrator import LLMDrivenOrchestrator
+from .base_agent import BaseAgent, AgentCapability, ConversationHistory
+from .react_agent import ReactAgent
+from .research_agent import ResearchAgent
+from .code_agent import CodeAgent
+from .writing.book_writing_agent import BookWritingAgent
+from .control_center_agent import ControlCenterAgent
+from .orchestrator_agent import OrchestratorAgent
+from .tool_agent import ToolAgent
+from .evaluation_agent import EvaluationAgent
+from .basic_agent import BasicAgent
+from .coding.advanced_coding_agent import AdvancedCodingAgent
 
 __all__ = [
-    'BackgroundAgent',
     'BaseAgent',
-    'BaseOrchestratorAgent',
-    'WitsControlCenterAgent',
-    'LLMDrivenOrchestrator',
+    'AgentCapability', 
+    'ConversationHistory',
+    'ReactAgent',
+    'ResearchAgent',
+    'CodeAgent',
+    'BookWritingAgent',
+    'ControlCenterAgent',
+    'OrchestratorAgent',
+    'ToolAgent',
+    'EvaluationAgent',
+    'BasicAgent',
+    'AdvancedCodingAgent'
 ]
 
 __version__ = "1.0.0"
