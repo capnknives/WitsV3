@@ -213,7 +213,19 @@ _Add new tasks discovered while working on other features_
 - [ ] **File Size Violations** (2025-01-11) - IN PROGRESS
   - [x] Split response_parser.py (605 lines) into parsing/ module ✅
   - [x] Split neural_memory_backend.py (652 lines) into neural/ module ✅
-  - [ ] Refactor advanced_coding_agent.py (1478 lines) into coding/ module - **NEXT PRIORITY**
+  - [x] Refactor advanced_coding_agent.py (1478 lines) into coding/ module ✅ (2025-01-11)
+    - Created agents/coding/ directory with:
+      - models.py (149 lines)
+      - project_manager.py (278 lines) 
+      - code_generator.py (375 lines)
+      - code_analyzer.py (224 lines)
+      - template_generator.py (507 lines - needs further splitting)
+      - language_handlers.py (64 lines)
+      - debugging_assistant.py (325 lines)
+      - test_generator.py (400 lines)
+      - advanced_coding_agent.py (579 lines - needs trimming)
+      - languages/python_handler.py (340 lines)
+      - languages/javascript_handler.py (320 lines)
   - [ ] Split book_writing_agent.py (845 lines)
   - [ ] Modularize self_repair_handlers.py (633 lines)
 
