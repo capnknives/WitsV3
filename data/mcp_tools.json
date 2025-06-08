@@ -3,24 +3,46 @@
   "servers": [
     {
       "name": "github.com/NightTrek/Ollama-mcp",
-      "command": "node C:\\Users\\capta\\Documents\\Cline\\MCP\\Ollama-mcp\\build\\index.js",
-      "working_directory": "C:\\Users\\capta\\Documents\\Cline\\MCP\\Ollama-mcp"
-    },
-    {
-      "name": "github.com/modelcontextprotocol/servers/tree/main/src/brave-search",
-      "command": "docker run -i --rm -e BRAVE_API_KEY mcp/brave-search"
+      "type": "github",
+      "clone_url": "https://github.com/NightTrek/Ollama-mcp.git",
+      "source": "github",
+      "working_directory": "mcp_servers\\Ollama-mcp",
+      "command": "node .\\build\\index.js"
     },
     {
       "name": "github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
-      "command": "npx -y @modelcontextprotocol/server-sequential-thinking"
-    },
-    {
-      "name": "github.com/supabase-community/supabase-mcp",
-      "command": "cmd /c npx -y @supabase/mcp-server-supabase@latest --access-token sbp_6e4256bed57d26b57e31be7d2d55ec833445d475"
+      "type": "github",
+      "clone_url": "https://github.com/modelcontextprotocol/servers.git",
+      "source": "github",
+      "working_directory": "C:\\WITS\\WitsV3\\mcp_servers\\servers\\src\\sequentialthinking",
+      "command": [
+        "npx",
+        "ts-node",
+        "index.ts"
+      ]
     },
     {
       "name": "github.com/modelcontextprotocol/servers/tree/main/src/filesystem",
-      "command": "docker run -i --rm --mount type=bind,src=C:\\Users\\capta\\Documents\\Cline\\MCP\\filesystem,dst=/projects/filesystem mcp/filesystem /projects"
+      "type": "github",
+      "clone_url": "https://github.com/modelcontextprotocol/servers.git",
+      "source": "github",
+      "working_directory": "C:\\WITS\\WitsV3\\mcp_servers\\servers\\src\\filesystem",
+      "command": [
+        "npx",
+        "ts-node",
+        "index.ts"
+      ]
+    },
+    {
+      "name": "github.com/supabase-community/supabase-mcp",
+      "type": "github",
+      "clone_url": "https://github.com/supabase-community/supabase-mcp.git",
+      "source": "github",
+      "working_directory": "mcp_servers\\supabase-mcp",
+      "command": [
+        "node",
+        "index.js"
+      ]
     }
   ]
 }
