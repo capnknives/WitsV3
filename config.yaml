@@ -6,37 +6,145 @@ project_name: "WitsV3"
 version: "3.0.0"
 logging_level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
 debug_mode: false
+auto_restart_on_file_change: true # Automatically restart when Python files are changed
 
-# LLM Configuration (Primarily Ollama)
+# Docker Environment Settings
+docker:
+  enabled: true
+  background_agents:
+    max_instances: 3
+    memory_limit: "2G"
+    cpu_limit: "1.0"
+    network_mode: "bridge"
+    health_check_interval: 30
+    restart_policy: "unless-stopped"
+  volumes:
+    - source: "./data"
+      target: "/app/data"
+    - source: "./config.yaml"
+      target: "/app/config.yaml"
+  environment:
+    WITSV3_BACKGROUND_MODE: "true"
+    WITSV3_DOCKER_ENV: "true"
+    CURSOR_INTEGRATION: "true"
+    OLLAMA_HOST: "host.docker.internal"
+    OLLAMA_PORT: "11434"
+
+# LLM Configuration (Primarily Ollama) - Enhanced with Model Specialization
 llm_interface:
-  default_provider: "ollama" # ollama, openai, etc.
+  default_provider: "adaptive" # adaptive, ollama, openai, etc.
   timeout_seconds: 120
   streaming_enabled: true
+
+# Adaptive LLM System Settings
+adaptive_llm:
+  # Complexity analyzer settings
+  complexity_analyzer:
+    use_embeddings: true
+    length_weight: 0.2
+    vocab_weight: 0.3
+    structure_weight: 0.2
+    reasoning_weight: 0.3
+
+  # Dynamic module loader settings
+  module_loader:
+    vram_budget_gb: 7.5 # 7.5GB
+    ram_budget_gb: 30.0 # 30GB
+    preload_modules: ["base"]
+    enable_quantization: true
+
+  # Semantic cache settings
+  semantic_cache:
+    enable_caching: true
+    cache_size: 1000000
+    similarity_threshold: 0.92
+    cache_dir: "cache"
+
+  # General adaptive settings
+  enable_performance_tracking: true
+  fallback_to_base_on_error: true
+  max_fallback_attempts: 3
 
 ollama_settings:
   url: "http://localhost:11434"
   default_model: "llama3" # Default model for general tasks
-  control_center_model: "llama3" # Model for WitsControlCenterAgent
-  orchestrator_model: "llama3" # Model for OrchestratorAgent
-  embedding_model: "llama3" # Use llama3 for embeddings until dedicated embedding model available
+
+  # Specialized model assignments based on agent capabilities
+  control_center_model: "llama3" # Better reasoning for routing (switched from crashing Gemma model)
+  orchestrator_model: "llama3" # Balanced reasoning and planning
+  coding_agent_model: "deepseek-coder-v2:16b-lite-instruct-q4_K_M" # Advanced coding tasks
+  book_writing_model: "llama3" # Creative writing and narrative (switched from crashing Gemma model)
+  self_repair_model: "llama3" # System monitoring and repair
+  neural_reasoning_model: "llama3" # Neural web reasoning and analysis
+
+  embedding_model: "nomic-embed-text" # Use dedicated embedding model
   request_timeout: 120
 
 # Agent Configuration
 agents:
   default_temperature: 0.7
   max_iterations: 15 # Max iterations for ReAct loop in Orchestrator
+  # Agent-specific configurations
+  control_center_agent:
+    model: "llama3" # Switched from crashing Gemma model to stable llama3
+    temperature: 0.3
+    max_tokens: 2048
+    enable_neural_routing: true
 
-# Memory Management
+  orchestrator_agent:
+    model: "llama3"
+    temperature: 0.7
+    max_tokens: 4096
+    enable_neural_reasoning: true
+    reasoning_depth: 3
+
+  book_writing_agent:
+    model: "llama3" # Switched from crashing Gemma model
+    temperature: 0.8
+    max_tokens: 16384
+    enable_narrative_intelligence: true
+    story_structure_patterns: ["hero_journey", "three_act", "spiral"]
+
+  coding_agent:
+    model: "deepseek-coder-v2:16b-lite-instruct-q4_K_M"
+    temperature: 0.2
+    max_tokens: 8192
+    enable_code_intelligence: true
+    supported_languages: ["python", "javascript", "typescript", "rust", "go"]
+
+  self_repair_agent:
+    model: "llama3"
+    temperature: 0.1
+    max_tokens: 4096
+    enable_system_monitoring: true
+    health_check_interval: 300
+
+# Memory Management - Enhanced with Neural Web Support
 memory_manager:
-  # For streamlined version, FAISS-GPU is optional.
-  # Default to a simpler backend if FAISS not available or configured.
-  backend: "basic" # 'basic' (json file), 'faiss_cpu', 'faiss_gpu'
+  # Enhanced backend options including neural web
+  backend: "supabase_neural" # 'basic', 'neural', 'supabase', 'supabase_neural'
   memory_file_path: "data/wits_memory.json" # For basic backend
   faiss_index_path: "data/wits_faiss_index.bin" # For FAISS backends
-  vector_dim: 4096 # Adjust based on embedding_model, llama3 typically 4096
+  neural_web_path: "data/neural_web.json" # For neural web persistence
+  vector_dim: 384 # Was 4096, changed to match all-MiniLM-L6-v2
   max_results_per_search: 5
   pruning_interval_seconds: 3600 # How often to check for pruning
   max_memory_segments: 10000 # Max segments before pruning oldest
+
+  # Neural Web Configuration
+  neural_web_settings:
+    activation_threshold: 0.3
+    decay_rate: 0.1
+    auto_connect: true
+    reasoning_patterns: ["modus_ponens", "analogy", "chain", "contradiction"]
+    max_concept_connections: 50
+    connection_strength_threshold: 0.2
+
+# Supabase Settings
+supabase:
+  url: "https://scdzgxvrppxpicinggy.supabase.co"
+  key: "sbp_ee5abfbf912375dea50375d81d3a7e1bee1892d7"
+  enable_realtime: true
 
 # Tool System
 tool_system:
@@ -49,5 +157,4 @@ tool_system:
 cli:
   show_thoughts: true
   show_tool_calls: true
-
 # Add other necessary configurations as WitsV3 evolves

@@ -3,11 +3,16 @@ WitsV3 Tools Package
 Provides tool implementations for the WITS v3 system
 """
 
-from .base_tool import (
+from .file_tools import (
     FileReadTool, 
     FileWriteTool, 
     ListDirectoryTool, 
     DateTimeTool
+)
+from .intent_analysis_tool import IntentAnalysisTool
+from .conversation_history_tool import (
+    ReadConversationHistoryTool,
+    AnalyzeConversationTool
 )
 
 __all__ = [
@@ -15,6 +20,9 @@ __all__ = [
     'FileWriteTool', 
     'ListDirectoryTool',
     'DateTimeTool',
+    'IntentAnalysisTool',
+    'ReadConversationHistoryTool',
+    'AnalyzeConversationTool',
 ]
 
 __version__ = "1.0.0"

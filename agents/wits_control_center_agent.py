@@ -88,6 +88,17 @@ class WitsControlCenterAgent(BaseAgent):
         
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
         
+        if any(kw in user_input.lower() for kw in ["remember", "don't forget", "recall"]):
+            await self.store_memory(
+                content=user_input,
+                segment_type="USER_FACT",
+                importance=1.0,
+                metadata={"source": "user", "session_id": session_id}
+            )
+            yield self.stream_result("I've stored that in my memory for future conversations.")
+            self.logger.info("Handled remember intent, exiting early. No further orchestration will occur.")
+            return
+        
         try:
             # Initial processing
             yield self.stream_thinking("Analyzing your request...")
@@ -203,6 +214,7 @@ Guidelines:
 - Use "goal_defined" for clear, actionable requests that need orchestration
 - Use "clarification_question" for ambiguous requests needing more information
 - Use "direct_response" for simple questions, greetings, or chat
+- For any request to 'remember', 'recall', or 'don't forget', use your semantic memory system (not file storage). Use the memory manager to store and retrieve facts for future conversations.
 
 Respond ONLY with valid JSON."""
         
@@ -317,9 +329,29 @@ Respond ONLY with valid JSON."""
             # Delegate to orchestrator
             goal_statement = intent_analysis.get("goal_statement", user_input)
             
-            yield self.stream_thinking(f"Delegating to orchestrator: {goal_statement}")
+            # Check if we should use a specialized agent
+            specialized_agent = await self._select_specialized_agent(goal_statement)
             
-            if self.orchestrator_agent:
+            if specialized_agent:
+                agent_type = next((k for k, v in self.specialized_agents.items() if v == specialized_agent), "specialized")
+                yield self.stream_thinking(f"Using {agent_type} agent for: {goal_statement}")
+                
+                try:
+                    async for stream_data in specialized_agent.run(
+                        user_input=goal_statement,
+                        conversation_history=conversation_history,
+                        session_id=session_id
+                    ):
+                        yield stream_data
+                except Exception as e:
+                    self.logger.error(f"Error in specialized agent: {e}")
+                    yield self.stream_error(
+                        "I encountered an issue while processing your specialized request.",
+                        details=str(e)
+                    )
+            elif self.orchestrator_agent:
+                yield self.stream_thinking(f"Delegating to orchestrator: {goal_statement}")
+                
                 try:
                     async for stream_data in self.orchestrator_agent.run(
                         goal=goal_statement,
@@ -334,11 +366,73 @@ Respond ONLY with valid JSON."""
                         details=str(e)
                     )
             else:
-                yield self.stream_error("No orchestrator available for task delegation.")
+                yield self.stream_error("No orchestrators available for task delegation.")
                 
         else:
             # Unknown intent type
             yield self.stream_error(f"Unknown intent type: {intent_type}")
+    
+    async def _select_specialized_agent(self, goal_statement: str) -> Optional[Any]:
+        """
+        Select the appropriate specialized agent based on the goal statement.
+        
+        Args:
+            goal_statement: The user's goal statement
+            
+        Returns:
+            The specialized agent to use, or None if no specialized agent is appropriate
+        """
+        self.logger.info(f"Selecting specialized agent for: '{goal_statement}'")
+        self.logger.info(f"Available specialized agents: {list(self.specialized_agents.keys())}")
+        
+        if not self.specialized_agents:
+            self.logger.warning("No specialized agents available")
+            return None
+        
+        # Convert goal to lowercase for easier matching
+        goal_lower = goal_statement.lower()
+        
+        # Check for book writing / story related tasks
+        story_keywords = ["write a story", "write a book", "story about", 
+                          "write me a", "create a story", "tell a story",
+                          "novel", "fiction", "narrative", "tale"]
+        
+        if any(keyword in goal_lower for keyword in story_keywords):
+            self.logger.info(f"Story writing task detected with keyword match")
+            if "book_writing" in self.specialized_agents and self.specialized_agents["book_writing"]:
+                self.logger.info("Selected book writing agent for task")
+                return self.specialized_agents["book_writing"]
+            else:
+                self.logger.warning("Book writing agent requested but not available")
+        
+        # Check for coding related tasks
+        coding_keywords = ["code", "program", "develop", "script", 
+                           "function", "class", "module", "api",
+                           "software", "application", "app", "website"]
+        
+        if any(keyword in goal_lower for keyword in coding_keywords):
+            self.logger.info(f"Coding task detected with keyword match")
+            if "coding" in self.specialized_agents and self.specialized_agents["coding"]:
+                self.logger.info("Selected coding agent for task")
+                return self.specialized_agents["coding"]
+            else:
+                self.logger.warning("Coding agent requested but not available")
+        
+        # Check for system repair tasks
+        repair_keywords = ["fix", "repair", "diagnose", "troubleshoot", 
+                           "error", "issue", "problem", "bug", "crash"]
+        
+        if any(keyword in goal_lower for keyword in repair_keywords):
+            self.logger.info(f"System repair task detected with keyword match")
+            if "self_repair" in self.specialized_agents and self.specialized_agents["self_repair"]:
+                self.logger.info("Selected self-repair agent for task")
+                return self.specialized_agents["self_repair"]
+            else:
+                self.logger.warning("Self-repair agent requested but not available")
+        
+        # No specialized agent matched
+        self.logger.info("No specialized agent matched for this task")
+        return None
 
 
 # Test function
@@ -356,8 +450,7 @@ async def test_wits_control_center():
         
         # Create LLM interface (will fail without Ollama, but that's ok for structure test)
         llm_interface = OllamaInterface(
-            url=config.ollama_settings.url,
-            default_model=config.ollama_settings.default_model
+            config=config
         )
         
         # Create agent

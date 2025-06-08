@@ -9,6 +9,9 @@ httpx>=0.20
 # YAML parsing for configuration
 PyYAML>=6.0
 
+# File watching for auto-restart functionality
+watchdog>=2.1.0
+
 # Sentence Transformers for embeddings (if not solely relying on Ollama for this)
 # sentence-transformers>=2.2.0
 
@@ -29,3 +32,7 @@ numpy>=1.20
 
 # For CLI colors/styling (optional but nice)
 # colorama>=0.4.4
+
+# Background agent dependencies
+aiohttp>=3.8.0
+websockets>=10.0

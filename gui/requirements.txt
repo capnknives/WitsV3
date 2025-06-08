@@ -1,0 +1,9 @@
+﻿# Core dependencies
+PyQt6>=6.4.0          # GUI framework
+qasync>=0.23.0        # Async support for PyQt
+
+# Optional dependencies
+markdown>=3.4.1       # Markdown rendering
+pygments>=2.13.0      # Syntax highlighting for code blocks
+pillow>=9.3.0         # Image processing for animations
+numpy>=1.23.0         # Numerical operations for animations

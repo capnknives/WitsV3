@@ -1,0 +1,80 @@
+ÿþfrom fastapi import APIRouter, HTTPException, status
+from typing import Dict, Any, List
+from uuid import UUID
+
+from ..schemas.models import ResearchRequest, ResearchResponse
+from ..services.book_writing_service import BookWritingService
+from ..services.agent_connector import BookWritingAgentConnector
+
+router = APIRouter()
+book_service = BookWritingService()
+
+@router.post("/", response_model=ResearchResponse)
+async def research_topic(request: ResearchRequest):
+    """
+    Research a topic for book writing.
+    """
+    try:
+        # Connect to the agent
+        async with BookWritingAgentConnector() as agent:
+            research_results = await agent.research_topic(request.topic, request.depth)
+
+        # Store the research results
+        research_id = await book_service.add_research(
+            str(request.book_id),
+            {
+                "topic": request.topic,
+                "depth": request.depth,
+                "results": research_results
+            }
+        )
+
+        return {
+            "id": research_id,
+            "book_id": request.book_id,
+            "topic": request.topic,
+            "depth": request.depth,
+            "results": research_results,
+            "created_at": None  # Will be set by Pydantic
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error researching topic: {str(e)}"
+        )
+
+@router.get("/book/{book_id}", response_model=List[ResearchResponse])
+async def get_research_for_book(book_id: UUID):
+    """
+    Get all research for a book.
+    """
+    research = await book_service.get_all_research(str(book_id))
+    return research
+
+@router.get("/{research_id}", response_model=ResearchResponse)
+async def get_research(research_id: UUID):
+    """
+    Get research by ID.
+    """
+    research = await book_service.get_research(str(research_id))
+    if not research:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Research with ID {research_id} not found"
+        )
+    return research
+
+@router.delete("/{research_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_research(research_id: UUID):
+    """
+    Delete research.
+    """
+    research = await book_service.get_research(str(research_id))
+    if not research:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Research with ID {research_id} not found"
+        )
+
+    await book_service.delete_research(str(research_id))
+    return None

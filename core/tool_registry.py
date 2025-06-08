@@ -5,80 +5,46 @@ Manages registration, discovery, and execution of tools.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Type
-from abc import ABC, abstractmethod
+import importlib.util
+import inspect
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Type, Union
 
+from core.base_tool import BaseTool
+from tools.file_tools import (
+    FileReadTool,
+    FileWriteTool,
+    ListDirectoryTool,
+    DateTimeTool
+)
 
-class BaseTool(ABC):
-    """
-    Base class for all tools in WitsV3.
-    """
-    
-    def __init__(self, name: str, description: str):
-        """
-        Initialize the tool.
-        
-        Args:
-            name: Tool name
-            description: Tool description
-        """
-        self.name = name
-        self.description = description
-        self.logger = logging.getLogger(f"WitsV3.Tool.{name}")
-    
-    @abstractmethod
-    async def execute(self, **kwargs) -> Any:
-        """
-        Execute the tool with given arguments.
-        
-        Args:
-            **kwargs: Tool-specific arguments
-            
-        Returns:
-            Tool execution result
-        """
-        pass
-    
-    @abstractmethod
-    def get_schema(self) -> Dict[str, Any]:
-        """
-        Get the tool's schema for LLM consumption.
-        
-        Returns:
-            Tool schema dictionary
-        """
-        pass
-    
-    def get_llm_description(self) -> Dict[str, Any]:
-        """
-        Get tool description for LLM.
-        
-        Returns:
-            Tool description for LLM
-        """
-        return {
-            "name": self.name,
-            "description": self.description,
-            "schema": self.get_schema()
-        }
-
+# Type alias for tool types
+ToolType = Union[
+    BaseTool,
+    FileReadTool,
+    FileWriteTool,
+    ListDirectoryTool,
+    DateTimeTool
+]
 
 class ToolRegistry:
     """
     Registry for managing tools in WitsV3.
     """
-    
     def __init__(self):
         """Initialize the tool registry."""
-        self.tools: Dict[str, BaseTool] = {}
+        self.tools: Dict[str, ToolType] = {}
         self.logger = logging.getLogger("WitsV3.ToolRegistry")
         
         # Register built-in tools
         self._register_builtin_tools()
         
+        # Log summary of all discovered tools
+        self._log_tool_summary()
+        
         self.logger.info("Tool registry initialized")
     
-    def register_tool(self, tool: BaseTool) -> None:
+    def register_tool(self, tool: ToolType) -> None:
         """
         Register a tool.
         
@@ -107,7 +73,7 @@ class ToolRegistry:
             return True
         return False
     
-    def get_tool(self, tool_name: str) -> Optional[BaseTool]:
+    def get_tool(self, tool_name: str) -> Optional[ToolType]:
         """
         Get a tool by name.
         
@@ -119,7 +85,7 @@ class ToolRegistry:
         """
         return self.tools.get(tool_name)
     
-    def get_all_tools(self) -> Dict[str, BaseTool]:
+    def get_all_tools(self) -> Dict[str, ToolType]:
         """
         Get all registered tools.
         
@@ -148,7 +114,7 @@ class ToolRegistry:
     
     async def execute_tool(self, tool_name: str, **kwargs) -> Any:
         """
-        Execute a tool by name.
+        Execute a tool by name with enhanced parameter validation.
         
         Args:
             tool_name: Name of the tool to execute
@@ -158,28 +124,146 @@ class ToolRegistry:
             Tool execution result
             
         Raises:
-            Exception: If tool not found or execution fails
+            Exception: If tool not found, validation fails, or execution fails
         """
-        tool = self.get_tool(tool_name)
-        if not tool:
-            raise Exception(f"Tool '{tool_name}' not found")
+        # First validate the tool call
+        validation = self.validate_tool_call(tool_name, **kwargs)
+        
+        if not validation["valid"]:
+            error_msg = f"Tool '{tool_name}' validation failed: {', '.join(validation['errors'])}"
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+        
+        # Log any warnings
+        if validation["warnings"]:
+            for warning in validation["warnings"]:
+                self.logger.warning(warning)
+        
+        tool = validation["tool"]  # We know it exists from validation
         
         try:
-            self.logger.debug(f"Executing tool {tool_name} with args: {kwargs}")
+            self.logger.debug(f"Executing tool {tool_name} with validated args: {kwargs}")
             result = await tool.execute(**kwargs)
             self.logger.debug(f"Tool {tool_name} completed successfully")
             return result
         except Exception as e:
             self.logger.error(f"Error executing tool {tool_name}: {e}")
             raise
+      
+    def validate_tool_call(self, tool_name: str, **kwargs) -> Dict[str, Any]:
+        """
+        Validate a tool call before execution.
+        
+        Args:
+            tool_name: Name of the tool to validate
+            **kwargs: Arguments for the tool
+            
+        Returns:
+            Validation result with status and details
+        """
+        validation_result = {
+            "valid": False,
+            "errors": [],
+            "warnings": [],
+            "tool": None
+        }
+        
+        # Check if tool exists
+        tool = self.get_tool(tool_name)
+        if not tool:
+            validation_result["errors"].append(f"Tool '{tool_name}' not found")
+            return validation_result
+        
+        validation_result["tool"] = tool
+        
+        try:
+            # Get tool schema to validate parameters
+            schema = tool.get_schema()
+            required_params = schema.get("required", [])
+            properties = schema.get("properties", {})
+            
+            # Check required parameters
+            missing_params = []
+            for param in required_params:
+                if param not in kwargs:
+                    missing_params.append(param)
+            
+            if missing_params:
+                validation_result["errors"].append(
+                    f"Missing required parameters for {tool_name}: {missing_params}"
+                )
+            
+            # Check for unknown parameters
+            unknown_params = []
+            for param in kwargs:
+                if param not in properties:
+                    unknown_params.append(param)
+            
+            if unknown_params:
+                validation_result["warnings"].append(
+                    f"Unknown parameters for {tool_name}: {unknown_params}"
+                )
+            
+            # If no errors, mark as valid
+            if not validation_result["errors"]:
+                validation_result["valid"] = True
+            
+        except Exception as e:
+            validation_result["errors"].append(f"Error validating tool call: {str(e)}")
+        
+        return validation_result
     
     def _register_builtin_tools(self) -> None:
         """Register built-in tools."""
-        # Register basic built-in tools
-        self.register_tool(ThinkTool())
-        self.register_tool(CalculatorTool())
+        # Register file tools
+        self.register_tool(FileReadTool())
+        self.register_tool(FileWriteTool())
+        self.register_tool(ListDirectoryTool())
+        self.register_tool(DateTimeTool())
         
-        self.logger.info("Built-in tools registered")
+        # Register other built-in tools
+        self._discover_tools_from_file_tools_module()
+    
+    def _discover_tools_from_file_tools_module(self) -> None:
+        """Discover and register tools from the file_tools module."""
+        try:
+            # Get the tools directory
+            tools_dir = Path(__file__).parent.parent / "tools"
+            if not tools_dir.exists():
+                self.logger.warning(f"Tools directory not found: {tools_dir}")
+                return
+
+            # Import all Python files in the tools directory
+            for py_file in tools_dir.glob("*.py"):
+                if py_file.name.startswith("__") or py_file.name == "file_tools.py":
+                    continue
+                
+                # Import the module
+                module_name = f"tools.{py_file.stem}"
+                spec = importlib.util.spec_from_file_location(module_name, py_file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    # Find all BaseTool subclasses in the module
+                    for name, obj in inspect.getmembers(module):
+                        if (inspect.isclass(obj) and 
+                            issubclass(obj, BaseTool) and 
+                            obj != BaseTool):
+                            try:
+                                tool_instance = obj()
+                                self.register_tool(tool_instance)
+                            except Exception as e:
+                                self.logger.error(f"Error registering tool {name}: {e}")
+        
+        except Exception as e:
+            self.logger.error(f"Error discovering tools: {e}")
+    
+    def _log_tool_summary(self) -> None:
+        """Log a summary of all registered tools."""
+        tool_count = len(self.tools)
+        tool_names = ", ".join(sorted(self.tools.keys()))
+        self.logger.info(f"Registered {tool_count} tools: {tool_names}")
 
 
 class ThinkTool(BaseTool):

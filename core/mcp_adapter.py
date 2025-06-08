@@ -262,13 +262,12 @@ class MCPAdapter:
         if server_name in self.clients:
             await self.clients[server_name].disconnect()
             del self.clients[server_name]
-            
-            # Remove tools from this server
+              # Remove tools from this server
             tools_to_remove = [name for name, tool in self.tools.items() 
                              if tool.server_name == server_name]
             for tool_name in tools_to_remove:
                 del self.tools[tool_name]
-                
+            
             logger.info(f"Removed MCP server {server_name}")
     
     async def list_available_tools(self) -> List[MCPTool]:
@@ -277,7 +276,7 @@ class MCPAdapter:
     
     async def call_tool(self, tool_call: ToolCall) -> ToolResult:
         """Call an MCP tool and return the result"""
-        tool_name = tool_call.name
+        tool_name = tool_call.tool_name
         
         if tool_name not in self.tools:
             return ToolResult(
@@ -352,12 +351,11 @@ async def test_mcp_adapter():
             # Test listing tools
             tools = await adapter.list_available_tools()
             print(f"Available tools: {[tool.name for tool in tools]}")
-            
-            # Test tool call
+              # Test tool call
             if tools:
                 tool_call = ToolCall(
                     call_id="test_1",
-                    name=tools[0].name,
+                    tool_name=tools[0].name,
                     arguments={}
                 )
                 result = await adapter.call_tool(tool_call)

@@ -6,7 +6,3 @@ A CLI-first system focused on LLM integration with tool support and MCP compatib
 __version__ = "1.0.0"
 __author__ = "WitsV3 Team"
 __description__ = "Streamlined LLM Wrapper Architecture with CLI interface"
-
-from core import *
-from agents import *
-from tools import *
