@@ -52,6 +52,19 @@ This version prioritizes:
 
 ### Installation
 
+#### Option 1: Automated Installation (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/capnknives/WitsV3.git
+cd WitsV3
+
+# Run automated installation
+python install.py
+```
+
+#### Option 2: Manual Installation
+
 ```bash
 # Clone the repository
 git clone https://github.com/capnknives/WitsV3.git
@@ -60,12 +73,48 @@ cd WitsV3
 # Install dependencies
 pip install -r requirements.txt
 
+# Set up local data files (memory, neural web)
+python scripts/setup_local_data.py
+
+# Set up authentication (creates secure tokens)
+python setup_auth.py
+
 # Ensure Ollama is running
 ollama serve
 
 # Run tests to verify installation
 pytest tests/ -v
 ```
+
+### Quick Start with Make
+
+WitsV3 includes a comprehensive Makefile for streamlined development:
+
+```bash
+# Install development dependencies
+make install-dev
+
+# Run the main application
+make dev
+
+# Run tests with coverage
+make test-cov
+
+# Clean and build package
+make build
+```
+
+### First Run Setup
+
+After installation, WitsV3 requires some initial configuration:
+
+1. **Authentication Setup**: Run `python setup_auth.py` to generate your authentication token
+2. **Local Data**: Run `python scripts/setup_local_data.py` to initialize memory files
+3. **Ollama Models**: Ensure you have compatible models installed:
+   ```bash
+   ollama pull llama3
+   ollama pull codellama
+   ```
 
 ### Running WitsV3
 
@@ -79,6 +128,17 @@ python -m agents.background_agent
 # Run specific tests
 pytest tests/tools/test_json_tool.py -v
 ```
+
+### Authentication & Security
+
+WitsV3 includes enterprise-grade security features:
+
+- **Token-based Authentication**: Secure access control with SHA-256 hashed tokens
+- **Network Access Control**: Configurable restrictions with user override capability
+- **Personality Profiles**: Comprehensive user recognition and behavior customization
+- **Ethics System**: Built-in ethical oversight with testing override capabilities
+
+Your authentication token will be displayed during setup - **save it securely** as it's required for secure operations.
 
 ## Adaptive LLM System
 
