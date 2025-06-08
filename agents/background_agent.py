@@ -1,62 +1,54 @@
 """
 Background Agent for WitsV3
-Runs in Docker container for isolated execution
+Handles scheduled tasks and system maintenance
 """
 
 import asyncio
 import logging
 import os
-from typing import Optional, Dict, Any, AsyncGenerator
-from aiohttp import web
+import yaml
+import psutil
+import aiohttp
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, List, AsyncGenerator, cast
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
+from apscheduler.triggers.cron import CronTrigger  # type: ignore
 
 from agents.base_agent import BaseAgent
 from core.config import WitsV3Config
 from core.llm_interface import OllamaInterface
-from core.memory_manager import MemoryManager
+from core.memory_manager import MemoryManager, BasicMemoryBackend
 from core.tool_registry import ToolRegistry
 from core.schemas import StreamData
+from core.metrics import MetricsManager
 
 logger = logging.getLogger("WitsV3.BackgroundAgent")
 
 class BackgroundAgent(BaseAgent):
     """
-    Agent that runs in a Docker container for isolated execution.
-    Handles environment-specific configuration and tool access.
+    Agent that handles scheduled tasks and system maintenance.
+    Runs in Docker container for isolated execution.
     """
-    
+
     def __init__(
         self,
         agent_name: str,
         config: WitsV3Config,
         llm_interface: OllamaInterface,
         memory_manager: Optional[MemoryManager] = None,
-        tool_registry: Optional[ToolRegistry] = None,
-        docker_config: Optional[Dict[str, Any]] = None
+        tool_registry: Optional[ToolRegistry] = None
     ):
         super().__init__(agent_name, config, llm_interface, memory_manager)
-        
+
         self.tool_registry = tool_registry
-        self.docker_config = docker_config or {}
-        
-        # Docker-specific settings
-        self.container_id = os.getenv("HOSTNAME", "unknown")
-        self.is_docker = os.getenv("WITSV3_DOCKER_ENV", "false").lower() == "true"
-        self.cursor_integration = os.getenv("CURSOR_INTEGRATION", "false").lower() == "true"
-        
-        # Initialize Docker-specific tools if available
-        if self.tool_registry and self.is_docker:
-            self._initialize_docker_tools()
-        
-        logger.info(f"Background agent initialized in {'Docker' if self.is_docker else 'local'} environment")
-        if self.cursor_integration:
-            logger.info("Cursor integration enabled")
-    
-    def _initialize_docker_tools(self):
-        """Initialize tools specific to Docker environment"""
-        # Add Docker-specific tools to registry
-        # These tools will be available only in Docker environment
-        pass
-    
+        self.scheduler = AsyncIOScheduler()
+        self.metrics = MetricsManager()
+        self.tasks_config = self._load_tasks_config()
+        self.active_tasks: Dict[str, asyncio.Task] = {}
+        self.running = False
+
+        logger.info("Background agent initialized")
+
     async def run(
         self,
         task: str,
@@ -64,92 +56,210 @@ class BackgroundAgent(BaseAgent):
     ) -> AsyncGenerator[StreamData, None]:
         """
         Execute a task in the background agent.
-        
+
         Args:
             task: The task to execute
             **kwargs: Additional parameters
-            
+
         Yields:
             StreamData objects showing progress
         """
         try:
-            # Log container info
-            yield self.stream_thinking(f"Running in container: {self.container_id}")
-            
-            # Execute task with Docker-specific handling
-            if self.is_docker:
-                yield self.stream_thinking("Executing in Docker environment")
-                # Add Docker-specific execution logic here
-            
-            # Process the task
-            yield self.stream_thinking(f"Processing task: {task}")
-            
-            # Use tools if available
-            if self.tool_registry:
-                yield self.stream_thinking("Using available tools")
-                # Add tool execution logic here
-            
-            # Complete task
-            yield self.stream_result("Task completed successfully")
-            
+            yield self.stream_thinking(f"Starting task: {task}")
+
+            if task in self.tasks_config.get("tasks", {}):
+                task_config = self.tasks_config["tasks"][task]
+                if task_config.get("enabled", False):
+                    await self._execute_task(task, task_config)
+                    yield self.stream_result(f"Task {task} completed successfully")
+                else:
+                    yield self.stream_error(f"Task {task} is disabled")
+            else:
+                yield self.stream_error(f"Unknown task: {task}")
+
         except Exception as e:
-            logger.error(f"Error in background agent: {e}")
+            logger.error(f"Error in task {task}: {e}")
             yield self.stream_error(f"Task failed: {str(e)}")
 
-async def health_check(request):
-    """Health check endpoint for Docker"""
-    return web.Response(text="OK")
+    def _load_tasks_config(self) -> Dict[str, Any]:
+        """Load background agent configuration"""
+        config_path = os.path.join("config", "background_agent.yaml")
+        try:
+            with open(config_path, 'r') as f:
+                return yaml.safe_load(f)
+        except Exception as e:
+            logger.error(f"Failed to load background agent config: {e}")
+            return {"enabled": False}
 
-async def start_web_server():
-    """Start web server for Cursor integration"""
-    app = web.Application()
-    app.router.add_get('/health', health_check)
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 8000)
-    await site.start()
-    
-    logger.info("Web server started on port 8000")
+    async def start(self):
+        """Start the background agent and schedule tasks"""
+        if self.running:
+            return
+
+        self.running = True
+        self.scheduler.start()
+
+        # Schedule all enabled tasks
+        for task_name, task_config in self.tasks_config.get("tasks", {}).items():
+            if task_config.get("enabled", False):
+                self.scheduler.add_job(
+                    self._run_task,
+                    CronTrigger.from_crontab(task_config["schedule"]),
+                    args=[task_name],
+                    id=task_name,
+                    replace_existing=True
+                )
+                logger.info(f"Scheduled task: {task_name}")
+
+        # Start continuous monitoring
+        asyncio.create_task(self._monitor_system_resources())
+
+    async def stop(self):
+        """Stop the background agent and all tasks"""
+        self.running = False
+        self.scheduler.shutdown()
+        for task in self.active_tasks.values():
+            task.cancel()
+        self.active_tasks.clear()
+        logger.info("Background agent stopped")
+
+    async def _run_task(self, task_name: str):
+        """Execute a scheduled task"""
+        if task_name in self.active_tasks and not self.active_tasks[task_name].done():
+            logger.warning(f"Task {task_name} is already running")
+            return
+
+        task_config = self.tasks_config["tasks"][task_name]
+        self.active_tasks[task_name] = asyncio.create_task(
+            self._execute_task(task_name, task_config)
+        )
+
+    async def _execute_task(self, task_name: str, task_config: Dict[str, Any]):
+        """Execute a specific task with its configuration"""
+        try:
+            logger.info(f"Starting task: {task_name}")
+
+            if task_name == "memory_maintenance":
+                await self._maintain_memory(task_config["settings"])
+            elif task_name == "semantic_cache_optimization":
+                await self._optimize_semantic_cache(task_config["settings"])
+            elif task_name == "system_monitoring":
+                await self._monitor_system(task_config["settings"])
+            elif task_name == "knowledge_graph_construction":
+                await self._build_knowledge_graph(task_config["settings"])
+
+            logger.info(f"Completed task: {task_name}")
+
+        except Exception as e:
+            logger.error(f"Error in task {task_name}: {e}")
+            self.metrics.record_error(f"task_{task_name}")
+        finally:
+            if task_name in self.active_tasks:
+                del self.active_tasks[task_name]
+
+    async def _maintain_memory(self, settings: Dict[str, Any]):
+        """Maintain memory by pruning and optimizing"""
+        if not self.memory_manager:
+            return
+
+        # Prune old and low-importance segments
+        cutoff_date = datetime.now() - timedelta(days=settings["max_age_days"])
+        segments = await self.memory_manager.get_recent_memory(
+            limit=settings["batch_size"]
+        )
+
+        for segment in segments:
+            if (segment.timestamp < cutoff_date or
+                segment.importance < settings["min_importance_threshold"]):
+                # Remove segment
+                pass  # Implement segment removal
+
+    async def _optimize_semantic_cache(self, settings: Dict[str, Any]):
+        """Optimize semantic cache by cleaning and reorganizing"""
+        # Implement cache optimization
+        pass
+
+    async def _monitor_system(self, settings: Dict[str, Any]):
+        """Monitor system resources and Ollama health"""
+        try:
+            # Check system resources
+            cpu_percent = psutil.cpu_percent()
+            memory = psutil.virtual_memory()
+            disk = psutil.disk_usage('/')
+
+            # Store metrics
+            self.metrics.record_metric(
+                "system",
+                {
+                    "cpu_percent": cpu_percent,
+                    "memory_percent": memory.percent,
+                    "disk_percent": disk.percent
+                }
+            )
+
+            # Check Ollama health
+            async with aiohttp.ClientSession() as session:
+                ollama_interface = cast(OllamaInterface, self.llm_interface)
+                start_time = datetime.now()
+                async with session.get(f"{ollama_interface.ollama_settings.url}/") as response:
+                    is_healthy = response.status == 200 and "Ollama is running" in await response.text()
+                    response_time = (datetime.now() - start_time).total_seconds()
+
+                    # Store Ollama metrics
+                    self.metrics.record_metric(
+                        "llm",
+                        {
+                            "status": is_healthy,
+                            "response_time": response_time
+                        }
+                    )
+
+                    if not is_healthy:
+                        logger.warning("Ollama health check failed")
+                        # Implement recovery logic here if needed
+
+        except Exception as e:
+            logger.error(f"Error checking Ollama health: {e}")
+            self.metrics.record_error("system_monitoring")
+
+    async def _build_knowledge_graph(self, settings: Dict[str, Any]):
+        """Build semantic knowledge graph from memory segments"""
+        # Implement knowledge graph construction
+        pass
+
+    async def _monitor_system_resources(self):
+        """Continuously monitor system resources"""
+        while self.running:
+            try:
+                settings = self.tasks_config["tasks"]["system_monitoring"]["settings"]
+                await self._monitor_system(settings)
+                await asyncio.sleep(60)  # Check every minute
+            except Exception as e:
+                logger.error(f"Error in system monitoring loop: {e}")
+                await asyncio.sleep(60)  # Wait before retrying
 
 async def main():
-    """Main entry point for background agent"""
+    """Main function to run the background agent"""
     # Load configuration
-    config = WitsV3Config.from_yaml()
-    
+    config_path = os.path.join("config", "background_agent.yaml")
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
     # Initialize components
-    llm_interface = OllamaInterface(config)
-    memory_manager = MemoryManager(config, llm_interface)
-    await memory_manager.initialize()
-    
-    tool_registry = ToolRegistry()
-    
-    # Create background agent
-    agent = BackgroundAgent(
-        agent_name="BackgroundAgent",
-        config=config,
-        llm_interface=llm_interface,
-        memory_manager=memory_manager,
-        tool_registry=tool_registry
-    )
-    
-    # Start web server if Cursor integration is enabled
-    if os.getenv("CURSOR_INTEGRATION", "false").lower() == "true":
-        await start_web_server()
-    
-    # Run the agent
-    async for stream in agent.run("Initialize background processing"):
-        if stream.type == "result":
-            logger.info(stream.content)
-        elif stream.type == "error":
-            logger.error(stream.content)
+    app_config = WitsV3Config.from_yaml("config.yaml")
+    llm_interface = OllamaInterface(app_config)
+    memory_manager = MemoryManager(app_config, llm_interface)
+
+    # Create and start background agent
+    agent = BackgroundAgent("background", app_config, llm_interface, memory_manager)
+    await agent.start()
+
+    try:
+        # Keep the agent running
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        await agent.stop()
 
 if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    
-    # Run the agent
-    asyncio.run(main()) 
+    asyncio.run(main())

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class WebSearchTool(BaseTool):
     """Tool for performing web searches using DuckDuckGo."""
-    
+
     def __init__(self):
         """Initialize the web search tool."""
         super().__init__(
@@ -23,17 +23,17 @@ class WebSearchTool(BaseTool):
             description="Search the web using DuckDuckGo. Returns relevant search results."
         )
         self.base_url = "https://api.duckduckgo.com/"
-        
-    async def execute(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
+
+    async def execute(self, query: str, max_results: int = 5) -> Dict[str, Any]:
         """
         Execute a web search.
-        
+
         Args:
             query: The search query
             max_results: Maximum number of results to return
-            
+
         Returns:
-            List of search results with title, link, and snippet
+            Dictionary with success status and search results
         """
         try:
             encoded_query = quote_plus(query)
@@ -43,15 +43,19 @@ class WebSearchTool(BaseTool):
                 "no_html": 1,
                 "skip_disambig": 1
             }
-            
+
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.base_url, params=params) as response:
                     if response.status != 200:
                         logger.error(f"Web search failed with status {response.status}")
-                        return []
-                        
+                        return {
+                            "success": False,
+                            "error": f"Web search failed with status {response.status}",
+                            "results": []
+                        }
+
                     data = await response.json()
-                    
+
                     results = []
                     if "RelatedTopics" in data:
                         for topic in data["RelatedTopics"]:
@@ -61,16 +65,23 @@ class WebSearchTool(BaseTool):
                                     "link": topic.get("FirstURL", ""),
                                     "snippet": topic.get("Text", "")
                                 })
-                                
+
                                 if len(results) >= max_results:
                                     break
-                    
-                    return results
-                    
+
+                    return {
+                        "success": True,
+                        "results": results
+                    }
+
         except Exception as e:
             logger.error(f"Error performing web search: {e}")
-            return []
-            
+            return {
+                "success": False,
+                "error": str(e),
+                "results": []
+            }
+
     def get_schema(self) -> Dict[str, Any]:
         """Get the tool's schema for LLM consumption."""
         return {
@@ -91,4 +102,4 @@ class WebSearchTool(BaseTool):
                 },
                 "required": ["query"]
             }
-        } 
+        }

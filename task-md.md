@@ -21,10 +21,21 @@
   - Updated configuration with adaptive LLM settings
 
 - [x] **Auto-restart on file change** (2025-05-31)
+
   - Implemented FileWatcher and AsyncFileWatcher classes
   - Added configuration option for auto-restart
   - Integrated with both CLI and GUI interfaces
   - Added watchdog dependency for file monitoring
+
+- [x] **Background Agent Implementation** (2025-06-01)
+  - Created background agent with scheduled tasks
+  - Implemented memory maintenance and pruning
+  - Added system monitoring and metrics collection
+  - Set up semantic cache optimization
+  - Added knowledge graph construction framework
+  - Created comprehensive test suite
+  - Added configuration management
+  - Implemented logging and error handling
 
 ## 🔄 Active Tasks
 
@@ -115,11 +126,18 @@
 _Add new tasks discovered while working on other features_
 
 - [ ] **Adaptive LLM Testing** (2025-05-31)
+
   - Create test suite for ComplexityAnalyzer
   - Test module switching under different loads
   - Benchmark semantic cache performance
   - Validate routing accuracy across domains
 
+- [ ] **Background Agent Monitoring** (2025-06-01)
+  - Add metrics visualization dashboard
+  - Implement alert system for resource thresholds
+  - Create performance reports
+  - Add task execution history tracking
+
 ---
 
-Last Updated: 2025-05-31
+Last Updated: 2025-06-01

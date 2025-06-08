@@ -7868,6 +7868,120 @@
       "created_at": "2025-06-07T16:22:07.123081",
       "last_accessed": "2025-06-07T16:22:07.123081",
       "access_count": 0
+    },
+    "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0": {
+      "id": "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0",
+      "content": "This is a test memory about machine learning",
+      "concept_type": "fact",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "content_preview": "This is a test memory about machine learning",
+        "timestamp": "2025-06-08T15:22:11.034941+00:00",
+        "source": "test",
+        "memory_type": "TEST_MEMORY",
+        "original_metadata": {},
+        "has_embedding": true,
+        "segment_id_ref": "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0"
+      },
+      "created_at": "2025-06-08T10:22:11.347087",
+      "last_accessed": "2025-06-08T10:22:11.347090",
+      "access_count": 0
+    },
+    "63433e3f-db82-4b17-8652-e5a5c7575154": {
+      "id": "63433e3f-db82-4b17-8652-e5a5c7575154",
+      "content": "Another memory about neural networks",
+      "concept_type": "information",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "content_preview": "Another memory about neural networks",
+        "timestamp": "2025-06-08T15:22:11.035502+00:00",
+        "source": "test",
+        "memory_type": "TEST_MEMORY",
+        "original_metadata": {},
+        "has_embedding": true,
+        "segment_id_ref": "63433e3f-db82-4b17-8652-e5a5c7575154"
+      },
+      "created_at": "2025-06-08T10:22:12.581300",
+      "last_accessed": "2025-06-08T10:22:12.581303",
+      "access_count": 0
+    },
+    "dde104a9-4e4a-40a5-90ed-1339731b44f8": {
+      "id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "content": "A third memory about artificial intelligence",
+      "concept_type": "information",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "content_preview": "A third memory about artificial intelligence",
+        "timestamp": "2025-06-08T15:22:11.035521+00:00",
+        "source": "test",
+        "memory_type": "TEST_MEMORY",
+        "original_metadata": {},
+        "has_embedding": true,
+        "segment_id_ref": "dde104a9-4e4a-40a5-90ed-1339731b44f8"
+      },
+      "created_at": "2025-06-08T10:22:13.831114",
+      "last_accessed": "2025-06-08T10:22:13.831116",
+      "access_count": 0
+    },
+    "ef19c1f9-d947-409b-86f5-f0ca926d6702": {
+      "id": "ef19c1f9-d947-409b-86f5-f0ca926d6702",
+      "content": "This is a test memory about machine learning",
+      "concept_type": "fact",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "content_preview": "This is a test memory about machine learning",
+        "timestamp": "2025-06-08T15:32:18.848276+00:00",
+        "source": "test",
+        "memory_type": "TEST_MEMORY",
+        "original_metadata": {},
+        "has_embedding": true,
+        "segment_id_ref": "ef19c1f9-d947-409b-86f5-f0ca926d6702"
+      },
+      "created_at": "2025-06-08T10:32:19.151195",
+      "last_accessed": "2025-06-08T10:32:19.151195",
+      "access_count": 0
+    },
+    "7a0664ab-832e-400d-9902-748c107756ba": {
+      "id": "7a0664ab-832e-400d-9902-748c107756ba",
+      "content": "Another memory about neural networks",
+      "concept_type": "information",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "content_preview": "Another memory about neural networks",
+        "timestamp": "2025-06-08T15:32:18.849273+00:00",
+        "source": "test",
+        "memory_type": "TEST_MEMORY",
+        "original_metadata": {},
+        "has_embedding": true,
+        "segment_id_ref": "7a0664ab-832e-400d-9902-748c107756ba"
+      },
+      "created_at": "2025-06-08T10:32:19.542845",
+      "last_accessed": "2025-06-08T10:32:19.542845",
+      "access_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635": {
+      "id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "content": "A third memory about artificial intelligence",
+      "concept_type": "information",
+      "activation_level": 0.0,
+      "base_strength": 1.0,
+      "metadata": {
+        "content_preview": "A third memory about artificial intelligence",
+        "timestamp": "2025-06-08T15:32:18.849273+00:00",
+        "source": "test",
+        "memory_type": "TEST_MEMORY",
+        "original_metadata": {},
+        "has_embedding": true,
+        "segment_id_ref": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635"
+      },
+      "created_at": "2025-06-08T10:32:19.941149",
+      "last_accessed": "2025-06-08T10:32:19.941149",
+      "access_count": 0
     }
   },
   "connections": {
@@ -79311,6 +79425,231 @@
       "strength": 1.0,
       "confidence": 1.0,
       "created_at": "2025-06-07T16:22:07.126086",
+      "reinforcement_count": 0
+    },
+    "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0->0e27faf3-1b9f-44e2-88ba-3c069e96da8c": {
+      "source_id": "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0",
+      "target_id": "0e27faf3-1b9f-44e2-88ba-3c069e96da8c",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:11.347233",
+      "reinforcement_count": 0
+    },
+    "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0->4a208d08-ae42-40d9-9b35-babd24044cd4": {
+      "source_id": "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0",
+      "target_id": "4a208d08-ae42-40d9-9b35-babd24044cd4",
+      "relationship_type": "semantic",
+      "strength": 0.2727272727272727,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:11.347294",
+      "reinforcement_count": 0
+    },
+    "63433e3f-db82-4b17-8652-e5a5c7575154->32d01b39-9d2a-479f-8372-03ec808214d3": {
+      "source_id": "63433e3f-db82-4b17-8652-e5a5c7575154",
+      "target_id": "32d01b39-9d2a-479f-8372-03ec808214d3",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:12.581429",
+      "reinforcement_count": 0
+    },
+    "63433e3f-db82-4b17-8652-e5a5c7575154->4a208d08-ae42-40d9-9b35-babd24044cd4": {
+      "source_id": "63433e3f-db82-4b17-8652-e5a5c7575154",
+      "target_id": "4a208d08-ae42-40d9-9b35-babd24044cd4",
+      "relationship_type": "semantic",
+      "strength": 0.2222222222222222,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:12.581487",
+      "reinforcement_count": 0
+    },
+    "dde104a9-4e4a-40a5-90ed-1339731b44f8->0e27faf3-1b9f-44e2-88ba-3c069e96da8c": {
+      "source_id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "target_id": "0e27faf3-1b9f-44e2-88ba-3c069e96da8c",
+      "relationship_type": "semantic",
+      "strength": 0.2727272727272727,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:13.831230",
+      "reinforcement_count": 0
+    },
+    "dde104a9-4e4a-40a5-90ed-1339731b44f8->32d01b39-9d2a-479f-8372-03ec808214d3": {
+      "source_id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "target_id": "32d01b39-9d2a-479f-8372-03ec808214d3",
+      "relationship_type": "semantic",
+      "strength": 0.2222222222222222,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:13.831288",
+      "reinforcement_count": 0
+    },
+    "dde104a9-4e4a-40a5-90ed-1339731b44f8->4a208d08-ae42-40d9-9b35-babd24044cd4": {
+      "source_id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "target_id": "4a208d08-ae42-40d9-9b35-babd24044cd4",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:13.831351",
+      "reinforcement_count": 0
+    },
+    "dde104a9-4e4a-40a5-90ed-1339731b44f8->aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0": {
+      "source_id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "target_id": "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0",
+      "relationship_type": "semantic",
+      "strength": 0.2727272727272727,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:13.833723",
+      "reinforcement_count": 0
+    },
+    "dde104a9-4e4a-40a5-90ed-1339731b44f8->63433e3f-db82-4b17-8652-e5a5c7575154": {
+      "source_id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "target_id": "63433e3f-db82-4b17-8652-e5a5c7575154",
+      "relationship_type": "semantic",
+      "strength": 0.2222222222222222,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:22:13.833786",
+      "reinforcement_count": 0
+    },
+    "ef19c1f9-d947-409b-86f5-f0ca926d6702->0e27faf3-1b9f-44e2-88ba-3c069e96da8c": {
+      "source_id": "ef19c1f9-d947-409b-86f5-f0ca926d6702",
+      "target_id": "0e27faf3-1b9f-44e2-88ba-3c069e96da8c",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.151195",
+      "reinforcement_count": 0
+    },
+    "ef19c1f9-d947-409b-86f5-f0ca926d6702->4a208d08-ae42-40d9-9b35-babd24044cd4": {
+      "source_id": "ef19c1f9-d947-409b-86f5-f0ca926d6702",
+      "target_id": "4a208d08-ae42-40d9-9b35-babd24044cd4",
+      "relationship_type": "semantic",
+      "strength": 0.2727272727272727,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.151195",
+      "reinforcement_count": 0
+    },
+    "ef19c1f9-d947-409b-86f5-f0ca926d6702->aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0": {
+      "source_id": "ef19c1f9-d947-409b-86f5-f0ca926d6702",
+      "target_id": "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.153700",
+      "reinforcement_count": 0
+    },
+    "ef19c1f9-d947-409b-86f5-f0ca926d6702->dde104a9-4e4a-40a5-90ed-1339731b44f8": {
+      "source_id": "ef19c1f9-d947-409b-86f5-f0ca926d6702",
+      "target_id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "relationship_type": "semantic",
+      "strength": 0.2727272727272727,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.154700",
+      "reinforcement_count": 0
+    },
+    "7a0664ab-832e-400d-9902-748c107756ba->32d01b39-9d2a-479f-8372-03ec808214d3": {
+      "source_id": "7a0664ab-832e-400d-9902-748c107756ba",
+      "target_id": "32d01b39-9d2a-479f-8372-03ec808214d3",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.543850",
+      "reinforcement_count": 0
+    },
+    "7a0664ab-832e-400d-9902-748c107756ba->4a208d08-ae42-40d9-9b35-babd24044cd4": {
+      "source_id": "7a0664ab-832e-400d-9902-748c107756ba",
+      "target_id": "4a208d08-ae42-40d9-9b35-babd24044cd4",
+      "relationship_type": "semantic",
+      "strength": 0.2222222222222222,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.543850",
+      "reinforcement_count": 0
+    },
+    "7a0664ab-832e-400d-9902-748c107756ba->63433e3f-db82-4b17-8652-e5a5c7575154": {
+      "source_id": "7a0664ab-832e-400d-9902-748c107756ba",
+      "target_id": "63433e3f-db82-4b17-8652-e5a5c7575154",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.545849",
+      "reinforcement_count": 0
+    },
+    "7a0664ab-832e-400d-9902-748c107756ba->dde104a9-4e4a-40a5-90ed-1339731b44f8": {
+      "source_id": "7a0664ab-832e-400d-9902-748c107756ba",
+      "target_id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "relationship_type": "semantic",
+      "strength": 0.2222222222222222,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.545849",
+      "reinforcement_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635->0e27faf3-1b9f-44e2-88ba-3c069e96da8c": {
+      "source_id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "target_id": "0e27faf3-1b9f-44e2-88ba-3c069e96da8c",
+      "relationship_type": "semantic",
+      "strength": 0.2727272727272727,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.941149",
+      "reinforcement_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635->32d01b39-9d2a-479f-8372-03ec808214d3": {
+      "source_id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "target_id": "32d01b39-9d2a-479f-8372-03ec808214d3",
+      "relationship_type": "semantic",
+      "strength": 0.2222222222222222,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.941665",
+      "reinforcement_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635->4a208d08-ae42-40d9-9b35-babd24044cd4": {
+      "source_id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "target_id": "4a208d08-ae42-40d9-9b35-babd24044cd4",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.941665",
+      "reinforcement_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635->aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0": {
+      "source_id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "target_id": "aeb7346f-fc90-4aa3-8e4f-3c2b9cd5b8f0",
+      "relationship_type": "semantic",
+      "strength": 0.2727272727272727,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.944905",
+      "reinforcement_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635->63433e3f-db82-4b17-8652-e5a5c7575154": {
+      "source_id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "target_id": "63433e3f-db82-4b17-8652-e5a5c7575154",
+      "relationship_type": "semantic",
+      "strength": 0.2222222222222222,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.945422",
+      "reinforcement_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635->dde104a9-4e4a-40a5-90ed-1339731b44f8": {
+      "source_id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "target_id": "dde104a9-4e4a-40a5-90ed-1339731b44f8",
+      "relationship_type": "semantic",
+      "strength": 1.0,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.945422",
+      "reinforcement_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635->ef19c1f9-d947-409b-86f5-f0ca926d6702": {
+      "source_id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "target_id": "ef19c1f9-d947-409b-86f5-f0ca926d6702",
+      "relationship_type": "semantic",
+      "strength": 0.2727272727272727,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.945422",
+      "reinforcement_count": 0
+    },
+    "6a3f5958-56a4-4f48-a1ca-9ab59d21a635->7a0664ab-832e-400d-9902-748c107756ba": {
+      "source_id": "6a3f5958-56a4-4f48-a1ca-9ab59d21a635",
+      "target_id": "7a0664ab-832e-400d-9902-748c107756ba",
+      "relationship_type": "semantic",
+      "strength": 0.2222222222222222,
+      "confidence": 1.0,
+      "created_at": "2025-06-08T10:32:19.945422",
       "reinforcement_count": 0
     }
   }

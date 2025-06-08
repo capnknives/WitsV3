@@ -1,0 +1,65 @@
+# Background Agent Configuration
+
+enabled: true
+log_level: INFO
+max_concurrent_tasks: 3
+
+# Memory backend configuration
+memory_backend: "basic"
+memory_file_path: "data/background_agent_memory.json"
+
+tasks:
+  memory_maintenance:
+    enabled: true
+    schedule: "0 0 * * *" # Daily at midnight
+    description: "Prune memory, enhance metadata, optimize embeddings"
+    settings:
+      max_memory_size_mb: 1000
+      min_importance_threshold: 0.3
+      max_age_days: 30
+      batch_size: 100
+
+  semantic_cache_optimization:
+    enabled: true
+    schedule: "0 * * * *" # Hourly
+    description: "Clean and optimize semantic cache"
+    settings:
+      max_cache_size: 1000000
+      similarity_threshold: 0.92
+      cleanup_interval_hours: 1
+
+  system_monitoring:
+    enabled: true
+    schedule: "*/5 * * * *" # Every 5 minutes
+    description: "Monitor Ollama connection, response times, and resource usage"
+    settings:
+      ollama_health_check_interval: 300 # 5 minutes
+      resource_alert_threshold:
+        cpu_percent: 80
+        memory_percent: 85
+        disk_percent: 90
+      metrics_retention_days: 7
+
+  knowledge_graph_construction:
+    enabled: true
+    schedule: "0 0 * * 0" # Weekly on Sunday
+    description: "Build semantic knowledge graph from memory segments"
+    settings:
+      min_connection_strength: 0.7
+      max_graph_size: 10000
+      update_interval_hours: 24
+
+logging:
+  file: "logs/background_agent.log"
+  max_size_mb: 10
+  backup_count: 5
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+notifications:
+  enabled: true
+  channels:
+    - type: "log"
+      level: "ERROR"
+    - type: "file"
+      path: "logs/background_agent_alerts.log"
+      level: "WARNING"

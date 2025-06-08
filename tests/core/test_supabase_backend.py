@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 from core.supabase_backend import SupabaseMemoryBackend
-from core.schemas import MemorySegment
+from core.memory_manager import MemorySegment
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 
@@ -29,4 +29,4 @@ async def test_supabase_add_and_get_segment():
     await backend.add_segment(segment)
     retrieved = await backend.get_segment("test-id-andy")
     assert retrieved is not None
-    assert retrieved.content["text"] == "Andy" 
+    assert retrieved.content["text"] == "Andy"
