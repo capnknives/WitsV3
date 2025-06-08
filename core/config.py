@@ -45,6 +45,16 @@ class MemoryManagerSettings(BaseModel):
     max_memory_segments: int = Field(default=10000)
     neural_web_settings: NeuralWebSettings = Field(default_factory=NeuralWebSettings)
 
+class SecuritySettings(BaseModel):
+    python_execution_network_access: bool = Field(default=False, description="Allow network access in Python execution tool")
+    python_execution_subprocess_access: bool = Field(default=False, description="Allow subprocess execution in Python execution tool")
+    authorized_network_override_user: str = Field(default="richard_elliot", description="Only this user can override network restrictions")
+    ethics_system_enabled: bool = Field(default=True, description="Enable ethics overlay system")
+    ethics_override_authorized_user: str = Field(default="richard_elliot", description="Only this user can disable ethics during testing")
+    auth_token_hash: str = Field(default="", description="SHA256 hash of authorization token for secure operations")
+    require_auth_for_network_control: bool = Field(default=True, description="Require authentication token for network control")
+    require_auth_for_ethics_override: bool = Field(default=True, description="Require authentication token for ethics override")
+
 class ToolSystemSettings(BaseModel):
     enable_mcp_tools: bool = Field(default=True)
     mcp_tool_definitions_path: str = Field(default="data/mcp_tools.json")
@@ -58,6 +68,12 @@ class SupabaseSettings(BaseModel):
     url: str = Field(default="")
     key: str = Field(default="")
     enable_realtime: bool = Field(default=True)
+
+class PersonalitySettings(BaseModel):
+    enabled: bool = Field(default=True, description="Enable personality system")
+    profile_path: str = Field(default="config/wits_personality.yaml", description="Path to personality profile")
+    profile_id: str = Field(default="richard_elliot_wits", description="Active personality profile ID")
+    allow_runtime_switching: bool = Field(default=False, description="Allow personality switching at runtime")
 
 class WitsV3Config(BaseModel):
     project_name: str = Field(default="WitsV3")
@@ -73,6 +89,8 @@ class WitsV3Config(BaseModel):
     tool_system: ToolSystemSettings = ToolSystemSettings()
     cli: CLISettings = CLISettings()
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
+    security: SecuritySettings = Field(default_factory=SecuritySettings)
+    personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
 
     class Config:
         validate_assignment = True

@@ -1,160 +1,145 @@
-# WitsV3 Configuration File
-# Streamlined for LLM Wrapper Architecture (CLI First)
-
-# General Settings
-project_name: "WitsV3"
-version: "3.0.0"
-logging_level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
-debug_mode: false
-auto_restart_on_file_change: true # Automatically restart when Python files are changed
-
-# Docker Environment Settings
-docker:
-  enabled: true
-  background_agents:
-    max_instances: 3
-    memory_limit: "2G"
-    cpu_limit: "1.0"
-    network_mode: "bridge"
-    health_check_interval: 30
-    restart_policy: "unless-stopped"
-  volumes:
-    - source: "./data"
-      target: "/app/data"
-    - source: "./config.yaml"
-      target: "/app/config.yaml"
-  environment:
-    WITSV3_BACKGROUND_MODE: "true"
-    WITSV3_DOCKER_ENV: "true"
-    CURSOR_INTEGRATION: "true"
-    OLLAMA_HOST: "host.docker.internal"
-    OLLAMA_PORT: "11434"
-
-# LLM Configuration (Primarily Ollama) - Enhanced with Model Specialization
-llm_interface:
-  default_provider: "adaptive" # adaptive, ollama, openai, etc.
-  timeout_seconds: 120
-  streaming_enabled: true
-
-# Adaptive LLM System Settings
 adaptive_llm:
-  # Complexity analyzer settings
   complexity_analyzer:
-    use_embeddings: true
     length_weight: 0.2
-    vocab_weight: 0.3
-    structure_weight: 0.2
     reasoning_weight: 0.3
-
-  # Dynamic module loader settings
-  module_loader:
-    vram_budget_gb: 7.5 # 7.5GB
-    ram_budget_gb: 30.0 # 30GB
-    preload_modules: ["base"]
-    enable_quantization: true
-
-  # Semantic cache settings
-  semantic_cache:
-    enable_caching: true
-    cache_size: 1000000
-    similarity_threshold: 0.92
-    cache_dir: "cache"
-
-  # General adaptive settings
+    structure_weight: 0.2
+    use_embeddings: true
+    vocab_weight: 0.3
   enable_performance_tracking: true
   fallback_to_base_on_error: true
   max_fallback_attempts: 3
-
-ollama_settings:
-  url: "http://localhost:11434"
-  default_model: "llama3" # Default model for general tasks
-
-  # Specialized model assignments based on agent capabilities
-  control_center_model: "llama3" # Better reasoning for routing (switched from crashing Gemma model)
-  orchestrator_model: "llama3" # Balanced reasoning and planning
-  coding_agent_model: "deepseek-coder-v2:16b-lite-instruct-q4_K_M" # Advanced coding tasks
-  book_writing_model: "llama3" # Creative writing and narrative (switched from crashing Gemma model)
-  self_repair_model: "llama3" # System monitoring and repair
-  neural_reasoning_model: "llama3" # Neural web reasoning and analysis
-
-  embedding_model: "nomic-embed-text" # Use dedicated embedding model
-  request_timeout: 120
-
-# Agent Configuration
+  module_loader:
+    enable_quantization: true
+    preload_modules:
+    - base
+    ram_budget_gb: 30.0
+    vram_budget_gb: 7.5
+  semantic_cache:
+    cache_dir: cache
+    cache_size: 1000000
+    enable_caching: true
+    similarity_threshold: 0.92
 agents:
-  default_temperature: 0.7
-  max_iterations: 15 # Max iterations for ReAct loop in Orchestrator
-  # Agent-specific configurations
-  control_center_agent:
-    model: "llama3" # Switched from crashing Gemma model to stable llama3
-    temperature: 0.3
-    max_tokens: 2048
-    enable_neural_routing: true
-
-  orchestrator_agent:
-    model: "llama3"
-    temperature: 0.7
-    max_tokens: 4096
-    enable_neural_reasoning: true
-    reasoning_depth: 3
-
   book_writing_agent:
-    model: "llama3" # Switched from crashing Gemma model
-    temperature: 0.8
-    max_tokens: 16384
     enable_narrative_intelligence: true
-    story_structure_patterns: ["hero_journey", "three_act", "spiral"]
-
+    max_tokens: 16384
+    model: llama3
+    story_structure_patterns:
+    - hero_journey
+    - three_act
+    - spiral
+    temperature: 0.8
   coding_agent:
-    model: "deepseek-coder-v2:16b-lite-instruct-q4_K_M"
-    temperature: 0.2
-    max_tokens: 8192
     enable_code_intelligence: true
-    supported_languages: ["python", "javascript", "typescript", "rust", "go"]
-
-  self_repair_agent:
-    model: "llama3"
-    temperature: 0.1
+    max_tokens: 8192
+    model: deepseek-coder-v2:16b-lite-instruct-q4_K_M
+    supported_languages:
+    - python
+    - javascript
+    - typescript
+    - rust
+    - go
+    temperature: 0.2
+  control_center_agent:
+    enable_neural_routing: true
+    max_tokens: 2048
+    model: llama3
+    temperature: 0.3
+  default_temperature: 0.7
+  max_iterations: 15
+  orchestrator_agent:
+    enable_neural_reasoning: true
     max_tokens: 4096
+    model: llama3
+    reasoning_depth: 3
+    temperature: 0.7
+  self_repair_agent:
     enable_system_monitoring: true
     health_check_interval: 300
-
-# Memory Management - Enhanced with Neural Web Support
-memory_manager:
-  # Enhanced backend options including neural web
-  backend: "basic" # 'basic', 'neural', 'supabase', 'supabase_neural'
-  memory_file_path: "data/wits_memory.json" # For basic backend
-  faiss_index_path: "data/wits_faiss_index.bin" # For FAISS backends
-  neural_web_path: "data/neural_web.json" # For neural web persistence
-  vector_dim: 384 # Was 4096, changed to match all-MiniLM-L6-v2
-  max_results_per_search: 5
-  pruning_interval_seconds: 3600 # How often to check for pruning
-  max_memory_segments: 10000 # Max segments before pruning oldest
-
-  # Neural Web Configuration
-  neural_web_settings:
-    activation_threshold: 0.3
-    decay_rate: 0.1
-    auto_connect: true
-    reasoning_patterns: ["modus_ponens", "analogy", "chain", "contradiction"]
-    max_concept_connections: 50
-    connection_strength_threshold: 0.2
-
-# Supabase Settings
-supabase:
-  url: "https://scdzgxvrppxpicinggy.supabase.co"
-  key: "sbp_ee5abfbf912375dea50375d81d3a7e1bee1892d7"
-  enable_realtime: true
-
-# Tool System
-tool_system:
-  enable_mcp_tools: true
-  mcp_tool_definitions_path: "data/mcp_tools.json"
-  # Langchain integration settings (if applicable later)
-  # langchain_bridge_enabled: false
-
-# CLI Settings
+    max_tokens: 4096
+    model: llama3
+    temperature: 0.1
+auto_restart_on_file_change: true
 cli:
   show_thoughts: true
   show_tool_calls: true
-# Add other necessary configurations as WitsV3 evolves
+debug_mode: false
+docker:
+  background_agents:
+    cpu_limit: '1.0'
+    health_check_interval: 30
+    max_instances: 3
+    memory_limit: 2G
+    network_mode: bridge
+    restart_policy: unless-stopped
+  enabled: true
+  environment:
+    CURSOR_INTEGRATION: 'true'
+    OLLAMA_HOST: host.docker.internal
+    OLLAMA_PORT: '11434'
+    WITSV3_BACKGROUND_MODE: 'true'
+    WITSV3_DOCKER_ENV: 'true'
+  volumes:
+  - source: ./data
+    target: /app/data
+  - source: ./config.yaml
+    target: /app/config.yaml
+llm_interface:
+  default_provider: adaptive
+  streaming_enabled: true
+  timeout_seconds: 120
+logging_level: INFO
+memory_manager:
+  backend: basic
+  faiss_index_path: data/wits_faiss_index.bin
+  max_memory_segments: 10000
+  max_results_per_search: 5
+  memory_file_path: data/wits_memory.json
+  neural_web_path: data/neural_web.json
+  neural_web_settings:
+    activation_threshold: 0.3
+    auto_connect: true
+    connection_strength_threshold: 0.2
+    decay_rate: 0.1
+    max_concept_connections: 50
+    reasoning_patterns:
+    - modus_ponens
+    - analogy
+    - chain
+    - contradiction
+  pruning_interval_seconds: 3600
+  vector_dim: 384
+ollama_settings:
+  book_writing_model: llama3
+  coding_agent_model: deepseek-coder-v2:16b-lite-instruct-q4_K_M
+  control_center_model: llama3
+  default_model: llama3
+  embedding_model: nomic-embed-text
+  neural_reasoning_model: llama3
+  orchestrator_model: llama3
+  request_timeout: 120
+  self_repair_model: llama3
+  url: http://localhost:11434
+personality:
+  allow_runtime_switching: false
+  enabled: true
+  profile_id: richard_elliot_wits
+  profile_path: config/wits_personality.yaml
+project_name: WitsV3
+security:
+  auth_token_hash: cedbb64b3b1b044da25b7df31d83e8f72f509382d43567c0591392510e07b9c6
+  authorized_network_override_user: richard_elliot
+  ethics_override_authorized_user: richard_elliot
+  ethics_system_enabled: true
+  python_execution_network_access: false
+  python_execution_subprocess_access: false
+  require_auth_for_ethics_override: true
+  require_auth_for_network_control: true
+supabase:
+  enable_realtime: true
+  key: sbp_ee5abfbf912375dea50375d81d3a7e1bee1892d7
+  url: https://scdzgxvrppxpicinggy.supabase.co
+tool_system:
+  enable_mcp_tools: true
+  mcp_tool_definitions_path: data/mcp_tools.json
+version: 3.0.0

@@ -302,10 +302,11 @@ class ThinkTool(BaseTool):
             "properties": {
                 "thought": {
                     "type": "string",
-                    "description": "The thought or reasoning to process"
+                    "description": "The thought or reasoning to process",
+                    "default": ""
                 }
             },
-            "required": ["thought"]
+            "required": []  # Make thought optional
         }
 
 
