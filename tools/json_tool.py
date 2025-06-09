@@ -303,6 +303,9 @@ class JSONTool(BaseTool):
                 "error": str(e)
             }
 
+    
+    
+    
     async def _write_json_file(self, data: Any, file_path: Optional[str]) -> Dict[str, Any]:
         """Write JSON data to a file."""
         if not file_path:
@@ -313,21 +316,40 @@ class JSONTool(BaseTool):
 
         try:
             path = Path(file_path)
+            abs_path = path.resolve()
+
+            # Security check - only write within project directory
+            if not str(abs_path).startswith(os.path.abspath(".")):
+                return {
+                    "success": False,
+                    "error": f"Security error: Cannot write outside project directory: {file_path}"
+                }
+
+            # Create parent directories if they don't exist
             path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(path, "w") as f:
+            self.logger.info(f"Writing JSON data to {abs_path}")
+
+            with open(abs_path, "w") as f:
                 json.dump(data, f, indent=2)
                 return {
                     "success": True,
                     "message": f"Data written to {file_path}"
                 }
 
+        except PermissionError as e:
+            error_msg = f"Permission error writing to file {file_path}: {e}"
+            self.logger.error(error_msg)
+            return {
+                "success": False,
+                "error": error_msg
+            }
         except Exception as e:
+            self.logger.error(f"Error writing JSON to {file_path}: {e}")
             return {
                 "success": False,
                 "error": str(e)
             }
-
     def get_schema(self) -> Dict[str, Any]:
         """Get the tool's schema for LLM consumption."""
         return {

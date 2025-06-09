@@ -55,7 +55,7 @@ class SelfRepairAgent(BaseAgent):
     - Capability evolution
     - Learning from failures
     """
-    
+
     def __init__(
         self,
         agent_name: str,
@@ -67,7 +67,7 @@ class SelfRepairAgent(BaseAgent):
         system_components: Optional[Dict[str, Any]] = None
     ):
         super().__init__(agent_name, config, llm_interface, memory_manager)
-        
+
         # Neural web integration for system intelligence
         self.neural_web = neural_web
         if self.neural_web:
@@ -76,15 +76,15 @@ class SelfRepairAgent(BaseAgent):
             asyncio.create_task(self._initialize_system_patterns())
         else:
             self.enable_system_monitoring = False
-        
+
         self.tool_registry = tool_registry
         self.system_components = system_components or {}
-        
+
         # Monitoring state
         self.detected_issues: Dict[str, SystemIssue] = {}
         self.system_metrics: List[SystemMetrics] = []
         self.evolution_suggestions: Dict[str, EvolutionSuggestion] = {}
-        
+
         # Configuration
         self.monitoring_interval = 60  # seconds
         if hasattr(config, 'agents'):
@@ -93,11 +93,11 @@ class SelfRepairAgent(BaseAgent):
                 repair_config = getattr(agent_config, 'self_repair_agent')
                 if hasattr(repair_config, 'health_check_interval'):
                     self.monitoring_interval = repair_config.health_check_interval
-        
+
         self.metrics_retention = 1000  # number of metric samples to keep
         self.auto_fix_enabled = True
         self.learning_enabled = True
-        
+
         # Health thresholds
         self.thresholds = {
             'cpu_usage': 80.0,
@@ -107,7 +107,7 @@ class SelfRepairAgent(BaseAgent):
             'error_rate': 0.05,  # 5%
             'tool_failure_rate': 0.1  # 10%
         }
-        
+
         # Map repair strategies to utility functions
         self.repair_strategies = {
             'memory_leak': 'fix_memory_leak',
@@ -117,7 +117,7 @@ class SelfRepairAgent(BaseAgent):
             'tool_failure': 'fix_tool_failure',
             'performance_degradation': 'fix_performance_issue'
         }
-        
+
         # Map evolution patterns to utility functions
         self.evolution_patterns = {
             'capability_gap': suggest_capability_enhancement,
@@ -125,41 +125,41 @@ class SelfRepairAgent(BaseAgent):
             'optimization_opportunity': suggest_optimization,
             'user_pattern': suggest_user_experience_improvement
         }
-        
+
         # Start continuous monitoring if enabled
         self.monitoring_task = None
         if self.enable_system_monitoring:
             self.logger.info(f"Starting continuous system monitoring (interval: {self.monitoring_interval}s)")
             self.monitoring_task = asyncio.create_task(self.start_continuous_monitoring())
-        
+
         # Track tool failures if tool registry is available
         self.tool_failure_counts = {}
         if self.tool_registry:
             self.logger.info("Tool registry monitoring enabled")
             self._setup_tool_monitoring()
-        
+
         self.logger.info("Self-Repair Agent initialized")
-    
+
     def _setup_tool_monitoring(self):
         """Set up monitoring for tool failures"""
         if not self.tool_registry:
             return
-        
+
         # Initialize failure counts for all tools
         for tool_name in self.tool_registry.tools:
             self.tool_failure_counts[tool_name] = 0
-    
+
     def __del__(self):
         """Clean up resources when the agent is destroyed"""
         if self.monitoring_task and not self.monitoring_task.done():
             self.monitoring_task.cancel()
-    
+
     async def _initialize_system_patterns(self):
         """Initialize neural web with system patterns"""
         self.logger.info("Initializing system patterns")
         # Simplified implementation
         await asyncio.sleep(0.1)
-    
+
     async def start_continuous_monitoring(self):
         """Start continuous system monitoring"""
         self.logger.info("Starting continuous monitoring")
@@ -168,11 +168,11 @@ class SelfRepairAgent(BaseAgent):
                 # Collect metrics
                 metrics = await self._collect_system_metrics()
                 self.system_metrics.append(metrics)
-                
+
                 # Keep only recent metrics
                 if len(self.system_metrics) > self.metrics_retention:
                     self.system_metrics = self.system_metrics[-self.metrics_retention:]
-                
+
                 # Wait for next check
                 await asyncio.sleep(self.monitoring_interval)
             except asyncio.CancelledError:
@@ -181,10 +181,10 @@ class SelfRepairAgent(BaseAgent):
             except Exception as e:
                 self.logger.error(f"Error in monitoring task: {e}")
                 await asyncio.sleep(self.monitoring_interval)
-    
+
     async def _collect_system_metrics(self) -> SystemMetrics:
         """Collect current system performance metrics"""
-        
+
         try:
             # Get system metrics
             if PSUTIL_AVAILABLE and psutil:
@@ -195,7 +195,7 @@ class SelfRepairAgent(BaseAgent):
                     disk_usage = disk.percent
                 except:
                     disk_usage = 50.0  # Fallback if path doesn't exist
-                
+
                 cpu_usage = cpu_percent
                 memory_usage = memory.percent
             else:
@@ -203,16 +203,16 @@ class SelfRepairAgent(BaseAgent):
                 cpu_usage = 10.0   # Simulated CPU usage
                 memory_usage = 30.0  # Simulated memory usage
                 disk_usage = 50.0    # Simulated disk usage
-            
+
             # Application metrics
             response_time = 0.5  # Would measure actual response times
             error_rate = 0.01   # Would calculate from error logs
             uptime = 3600       # Would track actual uptime
             active_agents = len(self.system_components.get('agents', []))
-            
+
             # Tool failures
             tool_failures = sum(self.tool_failure_counts.values()) if self.tool_registry else 0
-            
+
             return SystemMetrics(
                 cpu_usage=cpu_usage,
                 memory_usage=memory_usage,
@@ -236,15 +236,15 @@ class SelfRepairAgent(BaseAgent):
                 active_agents=0,
                 tool_failures=0
             )
-    
+
     async def _analyze_maintenance_task(self, user_input: str) -> Dict[str, Any]:
         """Analyze the maintenance request to determine task type"""
-        
+
         analysis_prompt = f"""
         Analyze this system maintenance request:
-        
+
         Request: {user_input}
-        
+
         Respond with JSON containing:
         {{
             "task_type": "health_check" | "diagnose_issues" | "repair_system" | "optimize_performance" | "evolve_capabilities" | "learn_from_failures" | "monitor_tools" | "general_maintenance",
@@ -254,7 +254,7 @@ class SelfRepairAgent(BaseAgent):
             "parameters": {{additional specific parameters}}
         }}
         """
-        
+
         try:
             response = await self.generate_response(analysis_prompt, temperature=0.3)
             import re
@@ -263,7 +263,7 @@ class SelfRepairAgent(BaseAgent):
                 return json.loads(json_match.group(0))
         except Exception as e:
             self.logger.warning(f"Failed to parse maintenance task analysis: {e}")
-        
+
         return {
             "task_type": "health_check",
             "urgency": "medium",
@@ -271,7 +271,7 @@ class SelfRepairAgent(BaseAgent):
             "focus_areas": ["performance", "reliability"],
             "parameters": {}
         }
-    
+
     async def run(
         self,
         user_input: str,
@@ -284,43 +284,43 @@ class SelfRepairAgent(BaseAgent):
         """
         if not session_id:
             session_id = str(uuid.uuid4())
-        
+
         yield self.stream_thinking("Analyzing system health request...")
-        
+
         # Parse the request to understand what type of maintenance is needed
         task_analysis = await self._analyze_maintenance_task(user_input)
-        
+
         yield self.stream_thinking(f"Identified task: {task_analysis['task_type']}")
-        
+
         # Route to appropriate handler
         if task_analysis['task_type'] == 'health_check':
             async for stream in handle_health_check(self, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'diagnose_issues':
             async for stream in handle_issue_diagnosis(self, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'repair_system':
             async for stream in handle_system_repair(self, task_analysis, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'optimize_performance':
             async for stream in handle_performance_optimization(self, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'evolve_capabilities':
             async for stream in handle_capability_evolution(self, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'learn_from_failures':
             async for stream in handle_failure_learning(self, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'monitor_tools':
             async for stream in handle_tool_monitoring(self, session_id):
                 yield stream
-        
+
         else:
             async for stream in handle_general_maintenance(self, task_analysis, session_id):
                 yield stream

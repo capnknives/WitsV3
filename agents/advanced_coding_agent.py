@@ -39,7 +39,7 @@ class CodeProject:
     documentation: str
     status: str = "planning"  # planning, development, testing, complete
     created_at: datetime = field(default_factory=datetime.now)
-    
+
     def __post_init__(self):
         if self.created_at is None:
             self.created_at = datetime.now()
@@ -61,7 +61,7 @@ class AdvancedCodingAgent(BaseAgent):
     """
     Specialized agent for advanced software development with neural web intelligence
     """
-    
+
     def __init__(
         self,
         agent_name: str,
@@ -72,15 +72,15 @@ class AdvancedCodingAgent(BaseAgent):
         tool_registry: Optional[Any] = None
     ):
         super().__init__(agent_name, config, llm_interface, memory_manager)
-        
+
         self.neural_web = neural_web
         self.tool_registry = tool_registry
-        
+
         # Neural web integration for code intelligence
         self.code_patterns: Dict[str, Any] = {}
         self.design_patterns_graph: Dict[str, Any] = {}
         self.dependency_networks: Dict[str, Any] = {}
-        
+
         # Enhanced coding capabilities
         if self.neural_web:
             self.enable_code_intelligence = True
@@ -88,10 +88,10 @@ class AdvancedCodingAgent(BaseAgent):
             asyncio.create_task(self._initialize_coding_patterns())
         else:
             self.enable_code_intelligence = False
-        
+
         # Coding specific state
         self.current_projects: Dict[str, CodeProject] = {}
-        
+
         # Supported languages and frameworks
         self.supported_languages = {
             'python': {
@@ -125,7 +125,7 @@ class AdvancedCodingAgent(BaseAgent):
                 'linting': ['golint', 'gofmt']
             }
         }
-        
+
         self.project_templates = {
             'web_app': {
                 'structure': ['src/', 'tests/', 'docs/', 'config/'],
@@ -144,9 +144,9 @@ class AdvancedCodingAgent(BaseAgent):
                 'files': ['__init__.py', 'setup.py', 'README.md', 'requirements.txt']
             }
         }
-        
+
         self.logger.info("Advanced Coding Agent initialized")
-    
+
     async def run(
         self,
         user_input: str,
@@ -159,55 +159,55 @@ class AdvancedCodingAgent(BaseAgent):
         """
         if not session_id:
             session_id = str(uuid.uuid4())
-        
+
         yield self.stream_thinking("Analyzing coding request...")
-        
+
         # Parse the request to understand the coding task
         task_analysis = await self._analyze_coding_task(user_input)
-        
+
         yield self.stream_thinking(f"Identified task: {task_analysis['task_type']}")
-        
+
         # Route to appropriate handler
         if task_analysis['task_type'] == 'create_project':
             async for stream in self._handle_project_creation(task_analysis, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'write_code':
             async for stream in self._handle_code_generation(task_analysis, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'analyze_code':
             async for stream in self._handle_code_analysis(task_analysis, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'debug_code':
             async for stream in self._handle_debugging(task_analysis, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'optimize_code':
             async for stream in self._handle_optimization(task_analysis, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'write_tests':
             async for stream in self._handle_test_generation(task_analysis, session_id):
                 yield stream
-        
+
         elif task_analysis['task_type'] == 'refactor_code':
             async for stream in self._handle_refactoring(task_analysis, session_id):
                 yield stream
-        
+
         else:
             async for stream in self._handle_general_coding(task_analysis, session_id):
                 yield stream
-    
+
     async def _analyze_coding_task(self, user_input: str) -> Dict[str, Any]:
         """Analyze the coding request to determine task type and parameters"""
-        
+
         analysis_prompt = f"""
         Analyze this coding request and determine the task type and parameters:
-        
+
         Request: {user_input}
-        
+
         Respond with JSON containing:
         {{
             "task_type": "create_project" | "write_code" | "analyze_code" | "debug_code" | "optimize_code" | "write_tests" | "refactor_code" | "general_coding",
@@ -219,7 +219,7 @@ class AdvancedCodingAgent(BaseAgent):
             "parameters": {{additional specific parameters}}
         }}
         """
-        
+
         try:
             response = await self.generate_response(analysis_prompt, temperature=0.3)
             # Extract JSON from response
@@ -229,7 +229,7 @@ class AdvancedCodingAgent(BaseAgent):
                 return json.loads(json_match.group(0))
         except Exception as e:
             self.logger.warning(f"Failed to parse task analysis: {e}")
-        
+
         # Fallback analysis
         return {
             "task_type": "general_coding",
@@ -240,26 +240,26 @@ class AdvancedCodingAgent(BaseAgent):
             "frameworks": [],
             "parameters": {}
         }
-    
+
     async def _handle_project_creation(
         self,
         task_analysis: Dict[str, Any],
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle creation of new coding projects"""
-        
+
         yield self.stream_action("Creating new coding project...")
-        
+
         project_id = str(uuid.uuid4())
         language = task_analysis.get('language', 'python')
         project_type = task_analysis.get('project_type', 'web_app')
         requirements = task_analysis.get('requirements', [])
-        
+
         # Generate project architecture
         architecture_prompt = f"""
         Design a {language} {project_type} project architecture for:
         {' '.join(requirements)}
-        
+
         Provide:
         1. Project structure (directories and key files)
         2. Dependencies and frameworks to use
@@ -268,25 +268,25 @@ class AdvancedCodingAgent(BaseAgent):
         5. Key classes and modules
         6. Testing strategy
         7. Deployment considerations
-        
+
         Language: {language}
         Project Type: {project_type}
         Complexity: {task_analysis.get('complexity', 'medium')}
         """
-        
+
         yield self.stream_thinking("Designing project architecture...")
         architecture_response = await self.generate_response(architecture_prompt, temperature=0.6)
-        
+
         # Create project structure
         project_structure = await self._generate_project_structure(
             project_type, language, requirements
         )
-        
+
         # Generate initial files
         initial_files = await self._generate_initial_files(
             project_structure, language, project_type, requirements
         )
-        
+
         # Create project object
         project = CodeProject(
             id=project_id,
@@ -300,9 +300,9 @@ class AdvancedCodingAgent(BaseAgent):
             tests={},
             documentation=architecture_response
         )
-        
+
         self.current_projects[project_id] = project
-        
+
         # Store project in memory
         await self.store_memory(
             content=f"Created {language} {project_type} project: {project.name}",
@@ -315,7 +315,7 @@ class AdvancedCodingAgent(BaseAgent):
                 "session_id": session_id
             }
         )
-        
+
         # Add project concepts to neural web
         if self.neural_web:
             await self.neural_web.add_concept(
@@ -323,38 +323,38 @@ class AdvancedCodingAgent(BaseAgent):
                 f"{language} {project_type} project",
                 "code_project"
             )
-            
+
             # Connect to language and framework concepts
             await self.neural_web.add_concept(language, f"{language} programming language", "technology")
             await self.neural_web.connect_concepts(f"project_{project_id}", language, "uses")
-        
+
         yield self.stream_result(f"Created project '{project.name}' with {len(initial_files)} initial files")
         yield self.stream_result("Project Architecture:")
         yield self.stream_result(architecture_response)
-        
+
         # Show initial file structure
         yield self.stream_action("Generated project files:")
         for filename in initial_files.keys():
             yield self.stream_action(f"  - {filename}")
-    
+
     async def _handle_code_generation(
         self,
         task_analysis: Dict[str, Any],
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code generation requests"""
-        
+
         yield self.stream_action("Generating code...")
-        
+
         language = task_analysis.get('language', 'python')
         requirements = task_analysis.get('requirements', [])
         complexity = task_analysis.get('complexity', 'medium')
-        
+
         # Generate code based on requirements
         code_prompt = f"""
         Write {complexity} {language} code to implement:
         {' '.join(requirements)}
-        
+
         Requirements:
         - Use best practices and design patterns
         - Include proper error handling
@@ -362,26 +362,26 @@ class AdvancedCodingAgent(BaseAgent):
         - Follow {language} style conventions
         - Make code modular and reusable
         - Include type hints (if applicable)
-        
+
         Provide complete, working code with explanations.
         """
-        
+
         yield self.stream_thinking("Writing code implementation...")
-        
+
         # Generate code (non-streaming since streaming isn't supported)
         yield self.stream_thinking("Generating code...")
         generated_code = await self.generate_response(code_prompt, temperature=0.7)
-        
+
         # Simulate progress updates
         content_length = len(generated_code)
         for i in range(0, content_length, 500):
             if i > 0:
                 lines = generated_code[:i].count('\n')
                 yield self.stream_action(f"Generated {lines} lines of code...")
-        
+
         # Analyze the generated code
         analysis = await self._analyze_code_quality(generated_code, language)
-        
+
         # Store code in memory
         await self.store_memory(
             content=f"Generated {language} code: {generated_code}",
@@ -394,34 +394,34 @@ class AdvancedCodingAgent(BaseAgent):
                 "session_id": session_id
             }
         )
-        
+
         yield self.stream_result("Generated Code:")
         yield self.stream_result(generated_code)
-        
+
         if analysis:
             yield self.stream_observation(f"Code quality score: {analysis.maintainability_index:.2f}/100")
             if analysis.suggestions:
                 yield self.stream_observation("Suggestions for improvement:")
                 for suggestion in analysis.suggestions[:3]:
                     yield self.stream_observation(f"  - {suggestion}")
-    
+
     async def _handle_code_analysis(
         self,
         task_analysis: Dict[str, Any],
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code analysis requests"""
-        
+
         yield self.stream_action("Analyzing code...")
-        
+
         # This would analyze provided code
         # For demonstration, we'll analyze general code patterns
-        
+
         language = task_analysis.get('language', 'python')
-        
+
         analysis_prompt = f"""
         Provide a comprehensive code analysis framework for {language} projects.
-        
+
         Include:
         1. Code quality metrics to check
         2. Common anti-patterns to avoid
@@ -432,13 +432,13 @@ class AdvancedCodingAgent(BaseAgent):
         7. Best practices checklist
         8. Automated tools to use
         """
-        
+
         yield self.stream_thinking("Performing code analysis...")
         analysis_result = await self.generate_response(analysis_prompt, temperature=0.5)
-        
+
         yield self.stream_result("Code Analysis Framework:")
         yield self.stream_result(analysis_result)
-        
+
         # Store analysis framework
         await self.store_memory(
             content=f"{language} code analysis framework: {analysis_result}",
@@ -450,21 +450,21 @@ class AdvancedCodingAgent(BaseAgent):
                 "session_id": session_id
             }
         )
-    
+
     async def _handle_debugging(
         self,
         task_analysis: Dict[str, Any],
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle debugging requests"""
-        
+
         yield self.stream_action("Analyzing debugging approach...")
-        
+
         language = task_analysis.get('language', 'python')
-        
+
         debug_prompt = f"""
         Create a comprehensive debugging guide for {language} applications.
-        
+
         Cover:
         1. Common error types and their solutions
         2. Debugging tools and techniques
@@ -475,13 +475,13 @@ class AdvancedCodingAgent(BaseAgent):
         7. Step-by-step debugging process
         8. Prevention strategies
         """
-        
+
         yield self.stream_thinking("Generating debugging strategies...")
         debug_guide = await self.generate_response(debug_prompt, temperature=0.6)
-        
+
         yield self.stream_result("Debugging Guide:")
         yield self.stream_result(debug_guide)
-        
+
         # Store debugging guide
         await self.store_memory(
             content=f"{language} debugging guide: {debug_guide}",
@@ -492,21 +492,21 @@ class AdvancedCodingAgent(BaseAgent):
                 "session_id": session_id
             }
         )
-    
+
     async def _handle_optimization(
         self,
         task_analysis: Dict[str, Any],
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code optimization requests"""
-        
+
         yield self.stream_action("Generating optimization strategies...")
-        
+
         language = task_analysis.get('language', 'python')
-        
+
         optimization_prompt = f"""
         Provide comprehensive code optimization strategies for {language}.
-        
+
         Include:
         1. Algorithm optimization techniques
         2. Data structure improvements
@@ -518,13 +518,13 @@ class AdvancedCodingAgent(BaseAgent):
         8. Profiling and benchmarking tools
         9. Language-specific optimizations
         """
-        
+
         yield self.stream_thinking("Developing optimization techniques...")
         optimization_guide = await self.generate_response(optimization_prompt, temperature=0.6)
-        
+
         yield self.stream_result("Code Optimization Guide:")
         yield self.stream_result(optimization_guide)
-        
+
         # Store optimization guide
         await self.store_memory(
             content=f"{language} optimization guide: {optimization_guide}",
@@ -535,23 +535,23 @@ class AdvancedCodingAgent(BaseAgent):
                 "session_id": session_id
             }
         )
-    
+
     async def _handle_test_generation(
         self,
         task_analysis: Dict[str, Any],
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle test generation requests"""
-        
+
         yield self.stream_action("Generating test suite...")
-        
+
         language = task_analysis.get('language', 'python')
         requirements = task_analysis.get('requirements', [])
-        
+
         test_prompt = f"""
         Generate comprehensive tests for {language} code that implements:
         {' '.join(requirements)}
-        
+
         Include:
         1. Unit tests for individual functions
         2. Integration tests for component interaction
@@ -561,13 +561,13 @@ class AdvancedCodingAgent(BaseAgent):
         6. Test data and fixtures
         7. Mocking strategies
         8. Test coverage analysis
-        
+
         Use appropriate testing framework for {language}.
         """
-        
+
         yield self.stream_thinking("Creating test cases...")
         test_code = await self.generate_response(test_prompt, temperature=0.7)
-        
+
         # Generate test documentation
         test_doc_prompt = f"""
         Create documentation for the test suite including:
@@ -577,14 +577,14 @@ class AdvancedCodingAgent(BaseAgent):
         4. Test data management
         5. Performance benchmarks
         """
-        
+
         test_documentation = await self.generate_response(test_doc_prompt, temperature=0.6)
-        
+
         yield self.stream_result("Generated Test Suite:")
         yield self.stream_result(test_code)
         yield self.stream_result("Test Documentation:")
         yield self.stream_result(test_documentation)
-        
+
         # Store tests
         await self.store_memory(
             content=f"{language} test suite: {test_code}",
@@ -596,21 +596,21 @@ class AdvancedCodingAgent(BaseAgent):
                 "session_id": session_id
             }
         )
-    
+
     async def _handle_refactoring(
         self,
         task_analysis: Dict[str, Any],
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code refactoring requests"""
-        
+
         yield self.stream_action("Planning refactoring approach...")
-        
+
         language = task_analysis.get('language', 'python')
-        
+
         refactor_prompt = f"""
         Create a comprehensive refactoring guide for {language} code.
-        
+
         Cover:
         1. Code smell identification
         2. Refactoring patterns and techniques
@@ -621,13 +621,13 @@ class AdvancedCodingAgent(BaseAgent):
         7. Performance impact assessment
         8. Documentation updates
         """
-        
+
         yield self.stream_thinking("Developing refactoring strategies...")
         refactor_guide = await self.generate_response(refactor_prompt, temperature=0.6)
-        
+
         yield self.stream_result("Refactoring Guide:")
         yield self.stream_result(refactor_guide)
-        
+
         # Store refactoring guide
         await self.store_memory(
             content=f"{language} refactoring guide: {refactor_guide}",
@@ -638,23 +638,23 @@ class AdvancedCodingAgent(BaseAgent):
                 "session_id": session_id
             }
         )
-    
+
     async def _handle_general_coding(
         self,
         task_analysis: Dict[str, Any],
         session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle general coding requests"""
-        
+
         yield self.stream_action("Processing coding request...")
-        
+
         language = task_analysis.get('language', 'python')
         requirements = task_analysis.get('requirements', [])
-        
+
         general_prompt = f"""
         Provide comprehensive guidance for {language} development addressing:
         {' '.join(requirements)}
-        
+
         Include relevant:
         - Code examples and implementations
         - Best practices and conventions
@@ -662,13 +662,13 @@ class AdvancedCodingAgent(BaseAgent):
         - Learning resources
         - Common pitfalls to avoid
         """
-        
+
         yield self.stream_thinking("Generating coding guidance...")
         guidance = await self.generate_response(general_prompt, temperature=0.7)
-        
+
         yield self.stream_result("Coding Guidance:")
         yield self.stream_result(guidance)
-        
+
         # Store guidance
         await self.store_memory(
             content=f"{language} coding guidance: {guidance}",
@@ -679,7 +679,7 @@ class AdvancedCodingAgent(BaseAgent):
                 "session_id": session_id
             }
         )
-    
+
     async def _generate_project_structure(
         self,
         project_type: str,
@@ -687,15 +687,15 @@ class AdvancedCodingAgent(BaseAgent):
         requirements: List[str]
     ) -> Dict[str, Any]:
         """Generate project directory structure"""
-        
+
         base_structure = self.project_templates.get(project_type, self.project_templates['web_app'])
-        
+
         structure = {
             'directories': base_structure['structure'].copy(),
             'files': base_structure['files'].copy(),
             'config_files': []
         }
-        
+
         # Add language-specific configurations
         if language == 'python':
             structure['config_files'].extend([
@@ -713,19 +713,19 @@ class AdvancedCodingAgent(BaseAgent):
             structure['config_files'].extend([
                 'Cargo.toml', 'rust-toolchain.toml'
             ])
-        
+
         # Add project-type specific additions
         if 'api' in requirements or 'rest' in requirements:
             structure['directories'].extend(['middleware/', 'routes/'])
-        
+
         if 'database' in requirements or 'db' in requirements:
             structure['directories'].extend(['migrations/', 'models/'])
-        
+
         if 'frontend' in requirements or 'ui' in requirements:
             structure['directories'].extend(['static/', 'templates/', 'components/'])
-        
+
         return structure
-    
+
     async def _generate_initial_files(
         self,
         structure: Dict[str, Any],
@@ -734,9 +734,9 @@ class AdvancedCodingAgent(BaseAgent):
         requirements: List[str]
     ) -> Dict[str, str]:
         """Generate initial file content"""
-        
+
         files = {}
-        
+
         # Generate main application file
         if language == 'python':
             if project_type == 'web_app':
@@ -747,10 +747,10 @@ class AdvancedCodingAgent(BaseAgent):
                 files['cli.py'] = await self._generate_python_cli()
             else:
                 files['main.py'] = await self._generate_python_main()
-            
+
             files['requirements.txt'] = await self._generate_python_requirements(requirements)
             files['setup.py'] = await self._generate_python_setup()
-        
+
         elif language == 'javascript':
             files['package.json'] = await self._generate_js_package_json(project_type)
             if project_type == 'web_app':
@@ -759,23 +759,23 @@ class AdvancedCodingAgent(BaseAgent):
                 files['server.js'] = await self._generate_js_api()
             else:
                 files['index.js'] = await self._generate_js_main()
-        
+
         # Generate common files
         files['README.md'] = await self._generate_readme(project_type, language, requirements)
         files['.gitignore'] = await self._generate_gitignore(language)
         files['LICENSE'] = await self._generate_license()
-        
+
         # Generate test files
         if language == 'python':
             files['tests/test_main.py'] = await self._generate_python_tests()
         elif language == 'javascript':
             files['tests/test.js'] = await self._generate_js_tests()
-        
+
         return files
-    
+
     async def _analyze_code_quality(self, code: str, language: str) -> Optional[CodeAnalysis]:
         """Analyze code quality and provide metrics"""
-        
+
         try:
             if language == 'python':
                 return await self._analyze_python_code(code)
@@ -786,27 +786,27 @@ class AdvancedCodingAgent(BaseAgent):
         except Exception as e:
             self.logger.warning(f"Code analysis failed: {e}")
             return None
-    
+
     async def _analyze_python_code(self, code: str) -> CodeAnalysis:
         """Analyze Python code specifically"""
-        
+
         try:
             # Parse AST
             tree = ast.parse(code)
-            
+
             # Count complexity metrics
             complexity = self._calculate_cyclomatic_complexity(tree)
             lines_of_code = len([line for line in code.split('\n') if line.strip()])
-            
+
             # Simple maintainability calculation
             maintainability = max(0, 100 - complexity * 2 - max(0, lines_of_code - 100) * 0.1)
-            
+
             # Basic issue detection
             security_issues = []
             performance_issues = []
             style_violations = []
             suggestions = []
-            
+
             # Check for common issues
             if 'eval(' in code:
                 security_issues.append("Use of eval() detected - security risk")
@@ -814,13 +814,13 @@ class AdvancedCodingAgent(BaseAgent):
                 security_issues.append("Use of exec() detected - security risk")
             if len([line for line in code.split('\n') if len(line) > 100]) > 0:
                 style_violations.append("Lines longer than 100 characters detected")
-            
+
             suggestions.extend([
                 "Add type hints for better code documentation",
                 "Consider adding docstrings to functions",
                 "Use consistent naming conventions"
             ])
-            
+
             return CodeAnalysis(
                 complexity_score=complexity,
                 maintainability_index=maintainability,
@@ -830,16 +830,16 @@ class AdvancedCodingAgent(BaseAgent):
                 style_violations=style_violations,
                 suggestions=suggestions
             )
-            
+
         except Exception as e:
             self.logger.warning(f"Python code analysis failed: {e}")
             return self._create_default_analysis()
-    
+
     def _calculate_cyclomatic_complexity(self, tree: ast.AST) -> float:
         """Calculate cyclomatic complexity of Python AST"""
-        
+
         complexity = 1  # Base complexity
-        
+
         for node in ast.walk(tree):
             if isinstance(node, (ast.If, ast.While, ast.For, ast.AsyncFor)):
                 complexity += 1
@@ -847,17 +847,17 @@ class AdvancedCodingAgent(BaseAgent):
                 complexity += 1
             elif isinstance(node, (ast.And, ast.Or)):
                 complexity += 1
-        
+
         return complexity
-    
+
     async def _analyze_js_code(self, code: str) -> CodeAnalysis:
         """Analyze JavaScript code"""
         return self._create_default_analysis()
-    
+
     async def _analyze_generic_code(self, code: str, language: str) -> CodeAnalysis:
         """Generic code analysis for any language"""
         return self._create_default_analysis()
-    
+
     def _create_default_analysis(self) -> CodeAnalysis:
         """Create default code analysis"""
         return CodeAnalysis(
@@ -869,7 +869,7 @@ class AdvancedCodingAgent(BaseAgent):
             style_violations=[],
             suggestions=["Consider adding comprehensive tests", "Add documentation"]
         )
-    
+
     # File generation methods
     async def _generate_python_web_app(self) -> str:
         return '''from flask import Flask, render_template, request, jsonify
@@ -887,7 +887,7 @@ def health():
 if __name__ == '__main__':
     app.run(debug=True)
 '''
-    
+
     async def _generate_python_api(self) -> str:
         return '''from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -914,7 +914,7 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 '''
-    
+
     async def _generate_python_cli(self) -> str:
         return '''import argparse
 import sys
@@ -924,19 +924,19 @@ def main():
     parser.add_argument('--version', action='version', version='1.0.0')
     parser.add_argument('command', help='Command to execute')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
-    
+
     args = parser.parse_args()
-    
+
     if args.verbose:
         print(f"Executing command: {args.command}")
-    
+
     # Add your command logic here
     print(f"Command '{args.command}' executed successfully")
 
 if __name__ == '__main__':
     main()
 '''
-    
+
     async def _generate_python_main(self) -> str:
         return '''"""
 Main application entry point
@@ -950,10 +950,10 @@ def main():
 if __name__ == "__main__":
     main()
 '''
-    
+
     async def _generate_python_requirements(self, requirements: List[str]) -> str:
         base_reqs = []
-        
+
         if any('web' in req.lower() for req in requirements):
             base_reqs.extend(['flask>=2.0.0', 'requests>=2.25.0'])
         if any('api' in req.lower() for req in requirements):
@@ -962,12 +962,12 @@ if __name__ == "__main__":
             base_reqs.extend(['pytest>=6.0.0', 'pytest-cov>=2.12.0'])
         if any('data' in req.lower() for req in requirements):
             base_reqs.extend(['pandas>=1.3.0', 'numpy>=1.21.0'])
-        
+
         if not base_reqs:
             base_reqs = ['requests>=2.25.0']
-        
+
         return '\n'.join(sorted(set(base_reqs)))
-    
+
     async def _generate_python_setup(self) -> str:
         return '''from setuptools import setup, find_packages
 
@@ -992,10 +992,10 @@ setup(
     python_requires=">=3.8",
 )
 '''
-    
+
     async def _generate_js_package_json(self, project_type: str) -> str:
         dependencies = {}
-        
+
         if project_type == 'web_app':
             dependencies.update({
                 "express": "^4.18.0",
@@ -1007,7 +1007,7 @@ setup(
                 "express": "^4.18.0",
                 "cors": "^2.8.5"
             })
-        
+
         return json.dumps({
             "name": "project",
             "version": "1.0.0",
@@ -1026,7 +1026,7 @@ setup(
             "author": "Your Name",
             "license": "MIT"
         }, indent=2)
-    
+
     async def _generate_js_web_app(self) -> str:
         return '''const express = require('express');
 const path = require('path');
@@ -1081,18 +1081,18 @@ app.get('/api/items', (req, res) => {
 
 app.post('/api/items', (req, res) => {
     const { name, description } = req.body;
-    
+
     if (!name) {
         return res.status(400).json({ error: 'Name is required' });
     }
-    
+
     const item = {
         id: nextId++,
         name,
         description: description || '',
         createdAt: new Date().toISOString()
     };
-    
+
     items.push(item);
     res.status(201).json(item);
 });
@@ -1100,22 +1100,22 @@ app.post('/api/items', (req, res) => {
 app.get('/api/items/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const item = items.find(item => item.id === id);
-    
+
     if (!item) {
         return res.status(404).json({ error: 'Item not found' });
     }
-    
+
     res.json(item);
 });
 
 app.put('/api/items/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const itemIndex = items.findIndex(item => item.id === id);
-    
+
     if (itemIndex === -1) {
         return res.status(404).json({ error: 'Item not found' });
     }
-    
+
     const { name, description } = req.body;
     items[itemIndex] = {
         ...items[itemIndex],
@@ -1123,18 +1123,18 @@ app.put('/api/items/:id', (req, res) => {
         description: description !== undefined ? description : items[itemIndex].description,
         updatedAt: new Date().toISOString()
     };
-    
+
     res.json(items[itemIndex]);
 });
 
 app.delete('/api/items/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const itemIndex = items.findIndex(item => item.id === id);
-    
+
     if (itemIndex === -1) {
         return res.status(404).json({ error: 'Item not found' });
     }
-    
+
     items.splice(itemIndex, 1);
     res.status(204).send();
 });
@@ -1162,20 +1162,20 @@ module.exports = app;
 
 function main() {
     console.log('Application started');
-    
+
     // Parse command line arguments
     const args = process.argv.slice(2);
-    
+
     if (args.includes('--help') || args.includes('-h')) {
         showHelp();
         return;
     }
-    
+
     if (args.includes('--version') || args.includes('-v')) {
         console.log('Version 1.0.0');
         return;
     }
-    
+
     // Add your application logic here
     console.log('Arguments:', args);
     console.log('Application running successfully');
@@ -1188,7 +1188,7 @@ Usage: node index.js [options]
 Options:
   -h, --help     Show this help message
   -v, --version  Show version information
-  
+
 Examples:
   node index.js
   node index.js --help
@@ -1222,7 +1222,7 @@ describe('Application Tests', () => {
     test('should start application', () => {
         expect(app).toBeDefined();
     });
-    
+
     test('should have main function', () => {
         expect(typeof app.main).toBe('function');
     });
@@ -1233,15 +1233,15 @@ describe('API Tests', () => {
         const response = await request(app)
             .get('/')
             .expect(200);
-        
+
         expect(response.body).toHaveProperty('message');
     });
-    
+
     test('GET /api/health should return health status', async () => {
         const response = await request(app)
             .get('/api/health')
             .expect(200);
-        
+
         expect(response.body).toHaveProperty('status', 'healthy');
     });
 });
@@ -1281,7 +1281,7 @@ Please read CONTRIBUTING.md for details on our code of conduct and the process f
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details.
 '''
-    
+
     async def _generate_gitignore(self, language: str) -> str:
         common = '''# General
 .DS_Store
@@ -1295,7 +1295,7 @@ logs/
 temp/
 tmp/
 '''
-        
+
         if language == 'python':
             return common + '''
 # Python
@@ -1336,7 +1336,7 @@ yarn-error.log*
 '''
         else:
             return common
-    
+
     async def _generate_license(self) -> str:
         return '''MIT License
 
@@ -1360,7 +1360,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 '''
-    
+
     async def _generate_python_tests(self) -> str:
         return '''import pytest
 import sys
@@ -1383,10 +1383,10 @@ def test_main_import():
 
 # Add more tests here
 '''
-    
+
     async def get_project_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """Get coding project statistics"""
-        
+
         stats = {
             'total_projects': len(self.current_projects),
             'languages_used': set(),
@@ -1394,27 +1394,27 @@ def test_main_import():
             'total_files': 0,
             'lines_of_code': 0
         }
-        
+
         for project in self.current_projects.values():
             stats['languages_used'].add(project.language)
             stats['project_types'].add(project.project_type)
             stats['total_files'] += len(project.files)
-            
+
             # Count lines of code
             for content in project.files.values():
                 stats['lines_of_code'] += len(content.split('\n'))
-        
+
         # Convert sets to lists for JSON serialization
         stats['languages_used'] = list(stats['languages_used'])
         stats['project_types'] = list(stats['project_types'])
-        
+
         return stats
-    
+
     async def _initialize_coding_patterns(self):
         """Initialize coding patterns in the neural web"""
         if not self.neural_web:
             return
-        
+
         try:
             # Add common design patterns
             patterns = [
@@ -1424,7 +1424,7 @@ def test_main_import():
                 ("strategy", "Encapsulates algorithms and makes them interchangeable", "pattern"),
                 ("mvc", "Separates application into Model-View-Controller", "pattern")
             ]
-            
+
             for pattern_id, description, concept_type in patterns:
                 await self.neural_web.add_concept(
                     concept_id=f"pattern_{pattern_id}",
@@ -1432,13 +1432,13 @@ def test_main_import():
                     concept_type=concept_type,
                     metadata={"domain": "software_engineering", "type": "design_pattern"}
                 )
-            
+
             # Connect related patterns
             await self.neural_web.connect_concepts("pattern_mvc", "pattern_observer", "enables", 0.8)
             await self.neural_web.connect_concepts("pattern_factory", "pattern_strategy", "similar", 0.6)
-            
+
             self.logger.info("Coding patterns initialized in neural web")
-            
+
         except Exception as e:
             self.logger.error(f"Error initializing coding patterns: {e}")
 
@@ -1448,27 +1448,27 @@ async def test_advanced_coding_agent():
     """Test the advanced coding agent functionality"""
     from core.config import load_config
     from core.llm_interface import OllamaInterface
-    
+
     try:
         config = load_config("config.yaml")
         llm_interface = OllamaInterface(config=config)
-        
+
         agent = AdvancedCodingAgent(
             agent_name="AdvancedCoder",
             config=config,
             llm_interface=llm_interface
         )
-        
+
         print("Testing advanced coding agent...")
-        
+
         # Test project creation
         async for stream_data in agent.run("Create a Python web API for user management"):
             print(f"[{stream_data.type.upper()}] {stream_data.content[:100]}...")
-        
+
         # Get statistics
         stats = await agent.get_project_statistics()
         print(f"Project statistics: {stats}")
-        
+
     except Exception as e:
         print(f"Test completed with expected errors: {e}")
 

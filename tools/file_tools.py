@@ -116,6 +116,42 @@ class FileWriteTool(BaseTool):
         except Exception as e:
             self.logger.error(f"Error writing to file {file_path}: {e}")
             return f"Error writing file: {str(e)}"
+        try:
+            file_path = Path(file_path).resolve()
+
+            # Enhanced safety check
+            if str(file_path).startswith(os.path.abspath(".")):
+                # Create directory if it doesn't exist
+                file_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Log the actual path we're writing to
+                self.logger.info(f"Writing to file: {file_path} (mode: {mode})")
+
+                async with aiofiles.open(file_path, mode=mode, encoding=encoding) as f:
+                    await f.write(content)
+
+                action = "appended to" if mode == "a" else "written to"
+                self.logger.info(f"Content {action} file: {file_path} ({len(content)} characters)")
+                return f"Successfully {action} file: {file_path}"
+            else:
+                error_msg = f"Security error: Cannot write outside project directory: {file_path}"
+                self.logger.error(error_msg)
+                return f"Error: {error_msg}"
+
+        except PermissionError as e:
+            error_msg = f"Permission error writing to file {file_path}: {e}"
+            self.logger.error(error_msg)
+            return f"Error: {error_msg}"
+        except FileNotFoundError as e:
+            error_msg = f"File not found error: {e}"
+            self.logger.error(error_msg)
+            return f"Error: {error_msg}"
+        except Exception as e:
+            self.logger.error(f"Error writing to file {file_path}: {e}")
+            return f"Error writing file: {str(e)}"
+            
+            
+            
     
     def get_schema(self) -> Dict[str, Any]:
         """Get tool schema."""
