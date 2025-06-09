@@ -85,7 +85,10 @@ config/user_*
 
 # Development & Debug Files
 debug_*.py
-test_*.py
+# Important test files are NOT ignored (test_witsv3.py, etc.)
+# Only ignore temporary/local test files
+temp_test_*.py
+_test_*.py
 fix_*.py
 verify_*.py
 
@@ -128,3 +131,7 @@ local.properties
 .settings/
 .loadpath
 .recommenders
+
+# Backup files
+*.backup
+*.backup.*
