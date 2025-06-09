@@ -1,0 +1,276 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "WitsV3: Main Entry",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3",
+                "order": 1
+            }
+        },
+        {
+            "name": "WitsV3: Main with Args",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [
+                "--debug",
+                "--config",
+                "config.yaml"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3",
+                "order": 2
+            }
+        },
+        {
+            "name": "WitsV3: Background Agent",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/run_background_agent.py",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3",
+                "order": 3
+            }
+        },
+        {
+            "name": "WitsV3: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3",
+                "order": 4
+            }
+        },
+        {
+            "name": "WitsV3: All Tests",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [
+                "tests/",
+                "-v",
+                "--tb=short",
+                "--asyncio-mode=auto",
+                "--cov=core",
+                "--cov=agents",
+                "--cov=tools",
+                "--cov-report=term-missing",
+                "--cov-report=html"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3 Tests",
+                "order": 1
+            }
+        },
+        {
+            "name": "WitsV3: Debug Tests",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [
+                "tests/",
+                "-v",
+                "--tb=long",
+                "--asyncio-mode=auto",
+                "--pdb",
+                "--capture=no"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3 Tests",
+                "order": 2
+            }
+        },
+        {
+            "name": "WitsV3: Test Current File",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [
+                "${file}",
+                "-v",
+                "--tb=short",
+                "--asyncio-mode=auto",
+                "--capture=no"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3 Tests",
+                "order": 3
+            }
+        },
+        {
+            "name": "WitsV3: Fast Tests (Unit Only)",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [
+                "tests/",
+                "-v",
+                "--tb=short",
+                "--asyncio-mode=auto",
+                "-m",
+                "not slow and not integration"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3 Tests",
+                "order": 4
+            }
+        },
+        {
+            "name": "WitsV3: Core Tests Only",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [
+                "tests/core/",
+                "-v",
+                "--tb=short",
+                "--asyncio-mode=auto"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3 Tests",
+                "order": 5
+            }
+        },
+        {
+            "name": "WitsV3: Tools Tests Only",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [
+                "tests/tools/",
+                "-v",
+                "--tb=short",
+                "--asyncio-mode=auto"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3 Tests",
+                "order": 6
+            }
+        },
+        {
+            "name": "WitsV3: Agent Tests Only",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "python": "C:\\Users\\capta\\miniconda3\\envs\\faiss_gpu_env2\\python.exe",
+            "args": [
+                "tests/agents/",
+                "-v",
+                "--tb=short",
+                "--asyncio-mode=auto"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+                "WITSV3_LOG_LEVEL": "DEBUG"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3 Tests",
+                "order": 7
+            }
+        }
+    ],
+    "compounds": [
+        {
+            "name": "WitsV3: Full Debug Session",
+            "configurations": [
+                "WitsV3: Main Entry",
+                "WitsV3: Debug Tests"
+            ],
+            "presentation": {
+                "hidden": false,
+                "group": "WitsV3",
+                "order": 1
+            }
+        }
+    ]
+}
