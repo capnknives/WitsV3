@@ -85,7 +85,7 @@ docker:
   - source: ./config.yaml
     target: /app/config.yaml
 llm_interface:
-  default_provider: adaptive
+  default_provider: ollama
   streaming_enabled: true
   timeout_seconds: 120
 logging_level: INFO

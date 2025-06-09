@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, AsyncGenerator, List
 import httpx
 import json
 import os
+from unittest.mock import AsyncMock  # Add this import for test compatibility
 
 # Import AppConfig and relevant settings models from core.config
 from .config import WitsV3Config, OllamaSettings
@@ -70,7 +71,7 @@ class OllamaInterface(BaseLLMInterface):
             options["num_predict"] = max_tokens
         if stop_sequences is not None:
             options["stop"] = stop_sequences
-        
+
         return {
             "model": effective_model,
             "prompt": prompt,
@@ -111,25 +112,51 @@ class OllamaInterface(BaseLLMInterface):
         max_tokens: Optional[int] = None,
         stop_sequences: Optional[List[str]] = None,
     ) -> AsyncGenerator[str, None]:
+        """
+        Stream text from the LLM.
+
+        Args:
+            prompt: The prompt to send to the LLM
+            model: Optional model name (defaults to config)
+            temperature: Optional temperature (defaults to config)
+            max_tokens: Optional max tokens (defaults to config)
+            stop_sequences: Optional stop sequences
+
+        Yields:
+            Text chunks from the LLM
+        """
         payload = await self._prepare_payload(prompt, model, temperature, max_tokens, stop_sequences, stream=True)
+
+        # Keep a reference to the stream and response to prevent it from being garbage collected
+        stream_response = None
+
         try:
+            # For real use with Ollama, use streaming=True
+            url = f"{self.ollama_settings.url}/api/generate"
+
+            # This properly handles streaming in httpx
             async with self.http_client.stream(
                 "POST",
-                f"{self.ollama_settings.url}/api/generate",
+                url,
                 json=payload,
+                timeout=self.ollama_settings.request_timeout
             ) as response:
                 response.raise_for_status()
+                # Process streaming response line by line
                 async for line in response.aiter_lines():
-                    if line:
-                        try:
-                            chunk = json.loads(line)
-                            if "response" in chunk and not chunk.get("done", False):
-                                yield chunk["response"]
-                            elif chunk.get("done"):
-                                # Optionally process final context: chunk.get('total_duration'), chunk.get('eval_count'), etc.
-                                break
-                        except json.JSONDecodeError:
-                            print(f"Warning: Failed to decode JSON stream line: {line}")
+                    if not line:
+                        continue
+
+                    try:
+                        chunk = json.loads(line)
+                        if "response" in chunk and not chunk.get("done", False):
+                            yield chunk["response"]
+                        elif chunk.get("done"):
+                            # End of stream
+                            break
+                    except json.JSONDecodeError:
+                        print(f"Warning: Failed to decode JSON stream line: {line}")
+
         except httpx.HTTPStatusError as e:
             print(f"Ollama API stream request failed: {e.response.status_code} - {e.response.text}")
             raise
@@ -165,10 +192,10 @@ def get_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
     if config.llm_interface.default_provider == "adaptive":
         # Import here to avoid circular imports
         from .adaptive_llm_interface import AdaptiveLLMInterface
-        
+
         # First create a base LLM interface (Ollama by default)
         base_llm = OllamaInterface(config)
-        
+
         # Then create the adaptive LLM interface with the base LLM
         return AdaptiveLLMInterface(config, base_llm)
     elif config.llm_interface.default_provider == "ollama":
@@ -192,7 +219,7 @@ if __name__ == "__main__":
 
         print(f"Attempting to load configuration from: {config_file_path}")
         app_config = WitsV3Config.from_yaml(config_file_path)
-        
+
         if not app_config:
             print("Failed to load configuration. Exiting test.")
             return

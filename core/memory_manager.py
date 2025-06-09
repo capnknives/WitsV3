@@ -6,6 +6,7 @@ import json
 import os
 import asyncio
 import time
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, AsyncGenerator
 from abc import ABC, abstractmethod
@@ -36,7 +37,7 @@ class MemorySegment(BaseModel):
     embedding: Optional[List[float]] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
     # For search results, not stored directly in the segment itself usually
-    relevance_score: Optional[float] = None 
+    relevance_score: Optional[float] = None
 
 # --- Base Memory Backend ---
 class BaseMemoryBackend(ABC):
@@ -62,9 +63,9 @@ class BaseMemoryBackend(ABC):
 
     @abstractmethod
     async def search_segments(
-        self, 
-        query_text: str, 
-        limit: int = 5, 
+        self,
+        query_text: str,
+        limit: int = 5,
         min_relevance: float = 0.0,
         filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[MemorySegment]:
@@ -72,8 +73,8 @@ class BaseMemoryBackend(ABC):
 
     @abstractmethod
     async def get_recent_segments(
-        self, 
-        limit: int = 10, 
+        self,
+        limit: int = 10,
         filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[MemorySegment]:
         pass
@@ -108,6 +109,7 @@ class BasicMemoryBackend(BaseMemoryBackend):
         super().__init__(config, llm_interface)
         self.memory_file = self.settings.memory_file_path
         self._lock = asyncio.Lock() # For file operations
+        self.logger = logging.getLogger("WitsV3.MemoryBackend")
 
     async def initialize(self):
         async with self._lock:
@@ -133,7 +135,7 @@ class BasicMemoryBackend(BaseMemoryBackend):
             try:
                 # Ensure directory exists
                 os.makedirs(os.path.dirname(self.memory_file), exist_ok=True)
-                
+
                 # Prepare data for JSON serialization, converting datetime objects to ISO format
                 save_data = []
                 for segment in self.segments:
@@ -142,7 +144,7 @@ class BasicMemoryBackend(BaseMemoryBackend):
                     if 'timestamp' in segment_dict and hasattr(segment_dict['timestamp'], 'isoformat'):
                         segment_dict['timestamp'] = segment_dict['timestamp'].isoformat()
                     save_data.append(segment_dict)
-                
+
                 with open(self.memory_file, 'w') as f:
                     json.dump(save_data, f, indent=2)
             except Exception as e:
@@ -164,9 +166,9 @@ class BasicMemoryBackend(BaseMemoryBackend):
         return None
 
     async def search_segments(
-        self, 
-        query_text: str, 
-        limit: int = 5, 
+        self,
+        query_text: str,
+        limit: int = 5,
         min_relevance: float = 0.0,
         filter_dict: Optional[Dict[str, Any]] = None # Basic filtering for this backend
     ) -> List[MemorySegment]:
@@ -175,12 +177,12 @@ class BasicMemoryBackend(BaseMemoryBackend):
             return []
 
         query_embedding = await self.llm_interface.get_embedding(
-            query_text, 
+            query_text,
             model=self.config.ollama_settings.embedding_model
         )
         if not query_embedding:
             return []
-        
+
         query_np = np.array(query_embedding)
         scored_segments = []
 
@@ -195,8 +197,14 @@ class BasicMemoryBackend(BaseMemoryBackend):
                             break
                     if not match:
                         continue
-                
+
                 segment_np = np.array(segment.embedding)
+
+                # Check for dimension mismatch
+                if query_np.shape[0] != segment_np.shape[0]:
+                    self.logger.warning(f"Embedding dimension mismatch: query {query_np.shape[0]} != segment {segment_np.shape[0]}. Skipping this segment.")
+                    continue
+
                 # Cosine similarity
                 similarity = np.dot(query_np, segment_np) / (np.linalg.norm(query_np) * np.linalg.norm(segment_np))
                 if similarity >= min_relevance:
@@ -204,21 +212,21 @@ class BasicMemoryBackend(BaseMemoryBackend):
                     segment_copy = segment.model_copy(deep=True)
                     segment_copy.relevance_score = float(similarity)
                     scored_segments.append(segment_copy)
-        
+
         # Sort by relevance score, descending
         scored_segments.sort(key=lambda s: s.relevance_score or 0.0, reverse=True)
         return scored_segments[:limit]
 
     async def get_recent_segments(
-        self, 
-        limit: int = 10, 
+        self,
+        limit: int = 10,
         filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[MemorySegment]:
         if not self.is_initialized: await self.initialize()
         # Sort by timestamp, most recent first
         # This is inefficient for large lists, but okay for a basic backend
         sorted_segments = sorted(self.segments, key=lambda s: s.timestamp, reverse=True)
-        
+
         results = []
         for segment in sorted_segments:
             if len(results) >= limit:
@@ -298,17 +306,17 @@ class MemoryManager:
         return await self.backend.get_segment(segment_id)
 
     async def search_memory(
-        self, 
-        query_text: str, 
-        limit: int = 5, 
+        self,
+        query_text: str,
+        limit: int = 5,
         min_relevance: float = 0.0,
         filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[MemorySegment]:
         return await self.backend.search_segments(query_text, limit, min_relevance, filter_dict)
 
     async def get_recent_memory(
-        self, 
-        limit: int = 10, 
+        self,
+        limit: int = 10,
         filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[MemorySegment]:
         return await self.backend.get_recent_segments(limit, filter_dict)
@@ -328,7 +336,7 @@ if __name__ == "__main__":
         current_script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root_dir = os.path.dirname(current_script_dir)
         config_file_path = os.path.join(project_root_dir, "config.yaml")
-        
+
         print(f"Loading config from: {config_file_path}")
         app_config = load_config(config_file_path)
         app_config.memory_manager.memory_file_path = os.path.join(project_root_dir, "data", "test_memory.json")
@@ -389,7 +397,7 @@ if __name__ == "__main__":
                     print(f"- Score: {res.relevance_score:.4f} - Type: {res.type} - Text: {(res.content.text or res.content.tool_output)[:50]}...")
             else:
                 print("No search results found.")
-            
+
             print("\n--- Searching Memories (query: 'User greeting') ---")
             search_results_greeting = await memory_manager.search_memory(query_text="User greeting", limit=1)
             if search_results_greeting:
