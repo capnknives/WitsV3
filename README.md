@@ -140,6 +140,59 @@ WitsV3 includes enterprise-grade security features:
 
 Your authentication token will be displayed during setup - **save it securely** as it's required for secure operations.
 
+## Documentation
+
+### Project Structure
+
+- **[FILE_STRUCTURE.md](FILE_STRUCTURE.md)** - Comprehensive file structure documentation
+- **[PATH_MIGRATION_GUIDE.md](PATH_MIGRATION_GUIDE.md)** - Guide for file path changes from previous versions
+- **[TASK.md](TASK.md)** - Current task tracking and management
+
+### Detailed Documentation
+
+All project documentation is organized in the `/planning` directory:
+
+- **[Architecture](planning/architecture/)** - System design and components
+
+  - [System Architecture](planning/architecture/system-architecture.md) - Core architecture design
+
+- **[Implementation](planning/implementation/)** - Implementation details
+
+  - [Personality & Ethics System](planning/implementation/personality-ethics-network-implementation.md)
+  - [Adaptive LLM Design](planning/implementation/adaptive-llm-design.md)
+  - [Claude Evolution Integration](planning/implementation/claude-evolution-prompt.md)
+
+- **[Roadmap](planning/roadmap/)** - Future plans and enhancements
+
+  - [Neural Web Architecture](planning/roadmap/neural-web-roadmap.md) - Future enhancement roadmap
+
+- **[Tasks](planning/tasks/)** - Task tracking and management
+
+  - [Task Management](planning/tasks/task-management.md) - Current tasks and backlog
+
+- **[Technical Notes](planning/technical-notes/)** - Debug info and fixes
+  - [Consolidated System Fixes](planning/technical-notes/consolidated-system-fixes.md) - All system fixes and improvements
+
+### Documentation Maintenance
+
+Documentation is maintained using dedicated tools:
+
+```bash
+# List all documentation
+python scripts/doc_maintenance.py list
+
+# Create a new document
+python scripts/doc_maintenance.py create planning/path/to/doc.md "Document Title"
+
+# Update document metadata
+python scripts/doc_maintenance.py update planning/path/to/doc.md --status "draft"
+
+# Archive a document
+python scripts/doc_maintenance.py archive planning/path/to/doc.md
+```
+
+See the [Planning Documentation](planning/README.md) for more details.
+
 ## Adaptive LLM System
 
 WitsV3 includes a sophisticated Adaptive LLM System that dynamically routes queries to specialized modules based on complexity and domain, with semantic caching for improved performance.
