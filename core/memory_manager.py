@@ -261,6 +261,12 @@ class MemoryManager:
 
         if config.memory_manager.backend == "basic":
             self.backend = BasicMemoryBackend(config, llm_interface)
+        elif config.memory_manager.backend == "faiss_cpu":
+            from .faiss_memory_backend import FaissCPUMemoryBackend
+            self.backend = FaissCPUMemoryBackend(config, llm_interface)
+        elif config.memory_manager.backend == "faiss_gpu":
+            from .faiss_memory_backend import FaissGPUMemoryBackend
+            self.backend = FaissGPUMemoryBackend(config, llm_interface)
         elif config.memory_manager.backend == "neural":
             from .neural_memory_backend import NeuralMemoryBackend
             self.backend = NeuralMemoryBackend(config, llm_interface)
