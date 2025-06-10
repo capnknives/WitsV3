@@ -13,6 +13,9 @@ class OllamaSettings(BaseModel):
     orchestrator_model: str = Field(default="llama3")
     embedding_model: str = Field(default="llama3")
     request_timeout: int = Field(default=120)
+    retry_attempts: int = Field(default=3, description="Number of retry attempts for failed requests")
+    retry_delay: float = Field(default=1.0, description="Delay between retry attempts in seconds")
+    exponential_backoff: bool = Field(default=True, description="Use exponential backoff for retries")
 
 class LLMInterfaceSettings(BaseModel):
     default_provider: str = Field(default="ollama")
