@@ -136,3 +136,5 @@ local.properties
 # Backup files
 *.backup
 *.backup.*
+commit_additional_files.ps1
+commit_synthetic_brain.ps1
