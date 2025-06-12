@@ -191,7 +191,8 @@ class CognitiveArchitecture:
             )
 
         except Exception as e:
-            self.logger.error(f"Error in cognitive processing: {e}")            yield StreamData(
+            self.logger.error(f"Error in cognitive processing: {e}")
+            yield StreamData(
                 type="error",
                 content=f"Error in cognitive processing: {str(e)}",
                 source="cognitive_architecture",

@@ -12,9 +12,6 @@ import json
 import os
 from typing import Dict, List, Optional, Any, Tuple
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 
 from .config import WitsV3Config

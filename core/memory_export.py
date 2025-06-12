@@ -422,3 +422,9 @@ class MemoryImporter:
         except Exception as e:
             self.logger.error(f"Error importing text as segments: {e}")
             raise
+
+
+async def export_memory(memory_manager: MemoryManager, output_path: str, limit: int = 0) -> int:
+    """Convenience wrapper used by tests to export memory to JSON."""
+    exporter = MemoryExporter(memory_manager)
+    return await exporter.export_to_json(output_path, limit=limit)
