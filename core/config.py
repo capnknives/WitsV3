@@ -36,6 +36,11 @@ class NeuralWebSettings(BaseModel):
     reasoning_patterns: List[str] = Field(default=["modus_ponens", "analogy", "chain", "contradiction"])
     max_concept_connections: int = Field(default=50, gt=0)
     connection_strength_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
+    # Cross-domain learning settings
+    enable_cross_domain_learning: bool = Field(default=True, description="Enable cross-domain learning capabilities")
+    cross_domain_similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0, description="Minimum similarity threshold for cross-domain connections")
+    max_cross_domain_connections: int = Field(default=10, gt=0, description="Maximum number of connections across domains per concept")
+    domain_classification_confidence: float = Field(default=0.6, ge=0.0, le=1.0, description="Confidence threshold for domain classification")
 
 class MemoryManagerSettings(BaseModel):
     backend: str = Field(default="basic") # basic, faiss_cpu, faiss_gpu, neural
