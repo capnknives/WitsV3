@@ -17,6 +17,17 @@ class OllamaSettings(BaseModel):
     retry_delay: float = Field(default=1.0, description="Delay between retry attempts in seconds")
     exponential_backoff: bool = Field(default=True, description="Use exponential backoff for retries")
 
+    # Model fallback configuration
+    fallback_models: List[str] = Field(default=["llama3", "llama3:8b", "codellama:7b"], description="Fallback models in order of preference")
+    enable_model_fallback: bool = Field(default=True, description="Enable automatic fallback to alternative models")
+    model_failure_threshold: int = Field(default=3, description="Number of consecutive failures before switching models")
+    model_timeout: int = Field(default=300, description="Timeout for individual model operations in seconds")
+
+    # Model health monitoring
+    health_check_interval: int = Field(default=60, description="Interval for model health checks in seconds")
+    enable_health_monitoring: bool = Field(default=True, description="Enable continuous model health monitoring")
+    quarantine_duration: int = Field(default=300, description="Time to quarantine failed models in seconds")
+
 class LLMInterfaceSettings(BaseModel):
     default_provider: str = Field(default="ollama")
     timeout_seconds: int = Field(default=120)

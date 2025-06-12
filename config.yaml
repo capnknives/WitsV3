@@ -11,7 +11,7 @@ adaptive_llm:
   module_loader:
     enable_quantization: true
     preload_modules:
-    - base
+      - base
     ram_budget_gb: 30.0
     vram_budget_gb: 7.5
   semantic_cache:
@@ -25,20 +25,20 @@ agents:
     max_tokens: 16384
     model: llama3
     story_structure_patterns:
-    - hero_journey
-    - three_act
-    - spiral
+      - hero_journey
+      - three_act
+      - spiral
     temperature: 0.8
   coding_agent:
     enable_code_intelligence: true
     max_tokens: 8192
     model: deepseek-coder-v2:16b-lite-instruct-q4_K_M
     supported_languages:
-    - python
-    - javascript
-    - typescript
-    - rust
-    - go
+      - python
+      - javascript
+      - typescript
+      - rust
+      - go
     temperature: 0.2
   control_center_agent:
     enable_neural_routing: true
@@ -66,7 +66,7 @@ cli:
 debug_mode: false
 docker:
   background_agents:
-    cpu_limit: '1.0'
+    cpu_limit: "1.0"
     health_check_interval: 30
     max_instances: 3
     memory_limit: 2G
@@ -74,16 +74,16 @@ docker:
     restart_policy: unless-stopped
   enabled: true
   environment:
-    CURSOR_INTEGRATION: 'true'
+    CURSOR_INTEGRATION: "true"
     OLLAMA_HOST: host.docker.internal
-    OLLAMA_PORT: '11434'
-    WITSV3_BACKGROUND_MODE: 'true'
-    WITSV3_DOCKER_ENV: 'true'
+    OLLAMA_PORT: "11434"
+    WITSV3_BACKGROUND_MODE: "true"
+    WITSV3_DOCKER_ENV: "true"
   volumes:
-  - source: ./data
-    target: /app/data
-  - source: ./config.yaml
-    target: /app/config.yaml
+    - source: ./data
+      target: /app/data
+    - source: ./config.yaml
+      target: /app/config.yaml
 llm_interface:
   default_provider: ollama
   streaming_enabled: true
@@ -103,10 +103,10 @@ memory_manager:
     decay_rate: 0.1
     max_concept_connections: 50
     reasoning_patterns:
-    - modus_ponens
-    - analogy
-    - chain
-    - contradiction
+      - modus_ponens
+      - analogy
+      - chain
+      - contradiction
   pruning_interval_seconds: 3600
   vector_dim: 384
 ollama_settings:
@@ -120,6 +120,18 @@ ollama_settings:
   request_timeout: 120
   self_repair_model: llama3
   url: http://localhost:11434
+
+  # Model reliability and fallback settings
+  fallback_models:
+    - llama3
+    - llama3:8b
+    - codellama:7b
+  enable_model_fallback: true
+  model_failure_threshold: 3
+  model_timeout: 300
+  health_check_interval: 60
+  enable_health_monitoring: true
+  quarantine_duration: 300
 personality:
   allow_runtime_switching: false
   enabled: true

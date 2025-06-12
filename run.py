@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from core.config import load_config, WitsV3Config
-from core.llm_interface import OllamaInterface
+from core.llm_interface import OllamaInterface, BaseLLMInterface
 from core.memory_manager import MemoryManager, BasicMemoryBackend
 from core.tool_registry import ToolRegistry
 from core.schemas import ConversationHistory, StreamData
@@ -95,7 +95,7 @@ class WitsV3System:
         self.config = config
         self.session_histories = {}        # Initialize core components
         self.file_watcher = None
-        self.llm_interface: Optional[OllamaInterface] = None
+        self.llm_interface: Optional[BaseLLMInterface] = None
         self.memory_manager: Optional[MemoryManager] = None
         self.tool_registry: Optional[ToolRegistry] = None
         self.control_center: Optional[WitsControlCenterAgent] = None
@@ -112,13 +112,10 @@ class WitsV3System:
 
     async def initialize(self):
         """Initialize all system components."""
-        try:
-            # Initialize LLM interface
-            self.llm_interface = OllamaInterface(
-                config=self.config
-            )
-            # Test LLM connection (simple test)
-            logger.info("LLM interface initialized")
+        try:            # Initialize LLM interface with model reliability
+            from core.enhanced_llm_interface import get_enhanced_llm_interface
+            self.llm_interface = get_enhanced_llm_interface(self.config)
+            logger.info("Enhanced LLM interface with model reliability initialized")
                 # Initialize memory manager
             self.memory_manager = MemoryManager(
                 config=self.config,

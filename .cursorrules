@@ -1,9 +1,11 @@
 ### 🔄 Project Context & Architecture
 
 - **Always read `PLANNING.md`** at the start of new conversations to understand WitsV3's LLM wrapper architecture and goals
-- **Check `TASK.md`** before starting work. Add tasks if not listed with date
-- **WitsV3 is an LLM orchestration system** with CLI-first approach, ReAct pattern, and tool registry
+- **Check `TASK.md`** before starting work. Add tasks if not listed with date. Update completion status with dates.
+- **WitsV3 is an advanced LLM orchestration system** with CLI-first approach, ReAct pattern, tool registry, and model reliability
 - **Core components**: agents/, core/, tools/ - maintain this structure
+- **Recent enhancements**: Enhanced tool validation, streaming error context, model reliability system
+- **Phase-based development**: Follow TASK.md phases (Phase 1: Critical Fixes ✅, Phase 2: Neural Web, etc.)
 
 ### 🐍 Python & Async Best Practices
 

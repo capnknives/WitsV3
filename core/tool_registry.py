@@ -7,6 +7,7 @@ Manages registration, discovery, and execution of tools.
 import logging
 import importlib.util
 import inspect
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
@@ -137,6 +138,127 @@ class ToolRegistry:
         except Exception as e:
             self.logger.error(f"Error executing tool {tool_name}: {e}")
             raise
+
+    async def execute_tool_enhanced(self, tool_name: str, **kwargs) -> Any:
+        """
+        Execute a tool by name with enhanced parameter validation and result handling.
+
+        Args:
+            tool_name: Name of the tool to execute
+            **kwargs: Arguments for the tool
+
+        Returns:
+            EnhancedToolResult with detailed execution information
+
+        Note:
+            This is the enhanced version that returns EnhancedToolResult instead of raw results.
+            Use this for better error handling and validation feedback.
+        """
+        from .schemas import ToolExecutionContext, EnhancedToolResult
+
+        start_time = time.time()
+
+        # Check if tool exists
+        tool = self.get_tool(tool_name)
+        if not tool:
+            error_msg = f"Tool '{tool_name}' not found"
+            self.logger.error(error_msg)
+            return EnhancedToolResult(
+                success=False,
+                error=error_msg,
+                result=None,
+                validation_errors=[error_msg],
+                execution_time=time.time() - start_time
+            )
+
+        # Create execution context
+        execution_context = ToolExecutionContext(
+            tool_name=tool_name,
+            arguments=kwargs
+        )
+
+        try:
+            # Use enhanced validation if available, otherwise fall back to legacy
+            if hasattr(tool, 'validate_arguments'):
+                validation_result = tool.validate_arguments(kwargs)
+                execution_context.validation_result = validation_result
+
+                if not validation_result.valid:
+                    error_msg = f"Tool '{tool_name}' validation failed: {', '.join(validation_result.errors)}"
+                    self.logger.error(error_msg)
+                    return EnhancedToolResult(
+                        success=False,
+                        error=error_msg,
+                        result=None,
+                        validation_errors=validation_result.errors,
+                        warnings=validation_result.warnings,
+                        execution_context=execution_context,
+                        execution_time=time.time() - start_time
+                    )
+
+                # Log any warnings
+                if validation_result.warnings:
+                    for warning in validation_result.warnings:
+                        self.logger.warning(f"Tool {tool_name}: {warning}")
+
+                # Use validated arguments for execution
+                validated_args = validation_result.validated_arguments
+                self.logger.debug(f"Executing tool {tool_name} with validated args: {validated_args}")
+
+                result = await tool.execute(**validated_args)
+
+                return EnhancedToolResult(
+                    success=True,
+                    result=result,
+                    execution_context=execution_context,
+                    execution_time=time.time() - start_time,
+                    warnings=validation_result.warnings
+                )
+            else:
+                # Fall back to legacy validation
+                validation = self.validate_tool_call(tool_name, **kwargs)
+
+                if not validation["valid"]:
+                    error_msg = f"Tool '{tool_name}' validation failed: {', '.join(validation['errors'])}"
+                    self.logger.error(error_msg)
+                    return EnhancedToolResult(
+                        success=False,
+                        error=error_msg,
+                        result=None,
+                        validation_errors=validation['errors'],
+                        warnings=validation.get('warnings', []),
+                        execution_context=execution_context,
+                        execution_time=time.time() - start_time
+                    )
+
+                # Log any warnings
+                if validation["warnings"]:
+                    for warning in validation["warnings"]:
+                        self.logger.warning(f"Tool {tool_name}: {warning}")
+
+                self.logger.debug(f"Executing tool {tool_name} with args: {kwargs}")
+                result = await tool.execute(**kwargs)
+
+                return EnhancedToolResult(
+                    success=True,
+                    result=result,
+                    execution_context=execution_context,
+                    execution_time=time.time() - start_time,
+                    warnings=validation.get('warnings', [])
+                )
+
+        except Exception as e:
+            execution_time = time.time() - start_time
+            error_msg = f"Error executing tool {tool_name}: {e}"
+            self.logger.error(error_msg)
+
+            return EnhancedToolResult(
+                success=False,
+                error=error_msg,
+                result=None,
+                execution_context=execution_context,
+                execution_time=execution_time
+            )
 
     def validate_tool_call(self, tool_name: str, **kwargs) -> Dict[str, Any]:
         """
