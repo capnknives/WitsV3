@@ -34,6 +34,8 @@
 - **Update TASK.md** after completing tasks
 - **Add discovered work** to TASK.md under "Discovered During Work"
 - **Log progress** in task descriptions with dates
+- **When committing, summarize the actual changes** (e.g., "Remove historical scripts and ignore log directory")
+- **Follow repository guidelines for commit style** and include details in the PR description
 
 ### 📚 WitsV3-Specific Conventions
 - **StreamData for agent communication** - use stream_thinking(), stream_action(), etc.
@@ -55,10 +57,10 @@
   async def method_name(self, param: str) -> StreamData:
       """
       Brief description of method.
-      
+
       Args:
           param: Description of parameter
-          
+
       Yields:
           StreamData objects for streaming responses
       """
