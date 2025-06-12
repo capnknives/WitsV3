@@ -278,3 +278,62 @@ See `task-md.md` for current development tasks and `.cursorrules` for detailed g
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Environment Setup
+
+To ensure consistent dependency installation across environments:
+
+1. Install dependencies using the helper script:
+
+`ash
+# Install core dependencies only
+python setup_dependencies.py
+
+# Install both core and development dependencies
+python setup_dependencies.py --dev
+`
+
+2. Alternative manual installation:
+
+`ash
+# Install core dependencies
+pip install -r requirements.txt
+
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Fix numpy version
+pip install "numpy>=1.25.0,<3.0" --force-reinstall
+`
+
+3. For containerized environments, use the provided Dockerfile or the requirements.lock file.
+# WitsV3
+
+## Environment Setup
+
+To ensure consistent dependency installation across environments:
+
+1. Install dependencies using the helper script:
+
+`ash
+# Install core dependencies only
+python setup_dependencies.py
+
+# Install both core and development dependencies
+python setup_dependencies.py --dev
+`
+
+2. Alternative manual installation:
+
+`ash
+# Install core dependencies
+pip install -r requirements.txt
+
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Fix numpy version
+pip install "numpy>=1.25.0,<3.0" --force-reinstall
+`
+
+3. For containerized environments, use the provided Dockerfile or the requirements.lock file.
