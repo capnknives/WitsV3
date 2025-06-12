@@ -62,6 +62,13 @@ class MemoryManagerSettings(BaseModel):
     max_results_per_search: int = Field(default=5)
     pruning_interval_seconds: int = Field(default=3600)
     max_memory_segments: int = Field(default=10000)
+
+    # Enhanced pruning settings
+    enable_auto_pruning: bool = Field(default=True, description="Enable automatic memory pruning")
+    max_memory_size_mb: int = Field(default=50, gt=0, description="Maximum memory size in MB before pruning")
+    pruning_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Size threshold (as fraction) to trigger pruning")
+    pruning_strategy: str = Field(default="hybrid", description="Pruning strategy: oldest_first, least_relevant, or hybrid")
+
     neural_web_settings: NeuralWebSettings = Field(default_factory=NeuralWebSettings)
 
 class SecuritySettings(BaseModel):

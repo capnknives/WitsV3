@@ -31,7 +31,7 @@ class ConversationSummarizer:
         self.llm_interface = llm_interface
         self.logger = logging.getLogger(__name__)
 
-        async def summarize_conversation(
+    async def summarize_conversation(
         self,
         time_window_minutes: Optional[int] = None,
         segment_count: Optional[int] = None,

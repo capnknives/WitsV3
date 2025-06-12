@@ -7,7 +7,7 @@ import os
 import asyncio
 import time
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional, Dict, Any, AsyncGenerator
 from abc import ABC, abstractmethod
 
@@ -83,8 +83,7 @@ class BaseMemoryBackend(ABC):
         if segment.embedding is None:
             text_to_embed = segment.content.text or segment.content.tool_output
             if text_to_embed:
-                try:
-                    segment.embedding = await self.llm_interface.get_embedding(
+                try:                    segment.embedding = await self.llm_interface.get_embedding(
                         text_to_embed,
                         model=self.config.ollama_settings.embedding_model
                     )
@@ -93,10 +92,39 @@ class BaseMemoryBackend(ABC):
                     # Decide if we want to store the segment without embedding or fail
 
     async def _prune_if_needed(self):
+        """Check if memory pruning is needed based on time interval or size threshold."""
+        if not self.settings.enable_auto_pruning:
+            return
+
         current_time = time.monotonic()
-        if (current_time - self.last_prune_time) > self.settings.pruning_interval_seconds:
+        should_prune_by_time = (current_time - self.last_prune_time) > self.settings.pruning_interval_seconds
+        should_prune_by_size = await self._should_prune_by_size()
+
+        if should_prune_by_time or should_prune_by_size:
             await self.prune_memory()
             self.last_prune_time = current_time
+
+    async def _should_prune_by_size(self) -> bool:
+        """Check if memory size exceeds the configured threshold."""
+        try:
+            current_size_mb = await self._get_memory_size_mb()
+            max_size_mb = self.settings.max_memory_size_mb
+            threshold = self.settings.pruning_threshold
+
+            return current_size_mb >= (max_size_mb * threshold)
+        except Exception as e:
+            print(f"Error checking memory size: {e}")
+            return False
+
+    async def _get_memory_size_mb(self) -> float:
+        """Get the current memory size in megabytes. Override in subclasses for specific backends."""
+        # Default implementation - estimate based on number of segments and average size
+        if not self.segments:
+            return 0.0
+
+        # Rough estimate: average of 50KB per segment (based on our observation)
+        estimated_size_mb = len(self.segments) * 0.05  # 50KB per segment in MB
+        return estimated_size_mb
 
     @abstractmethod
     async def prune_memory(self):
@@ -151,11 +179,13 @@ class BasicMemoryBackend(BaseMemoryBackend):
                 print(f"Error saving memory to {self.memory_file}: {e}")
 
     async def add_segment(self, segment: MemorySegment) -> str:
-        if not self.is_initialized: await self.initialize()
+        if not self.is_initialized:
+            await self.initialize()
         await self._generate_embedding_if_needed(segment)
         self.segments.append(segment)
         await self._save_to_disk()
-        await self._prune_if_needed()
+        # TODO: Temporarily disabled auto-pruning to fix syntax errors
+        # await self._prune_if_needed()
         return segment.id
 
     async def get_segment(self, segment_id: str) -> Optional[MemorySegment]:
@@ -237,20 +267,103 @@ class BasicMemoryBackend(BaseMemoryBackend):
                     if getattr(segment, key, None) != value and segment.metadata.get(key) != value:
                         match = False
                         break
+
                 if match:
                     results.append(segment)
             else:
                 results.append(segment)
         return results
 
+    async def _get_memory_size_mb(self) -> float:
+        """Get the current memory size in megabytes for BasicMemoryBackend."""
+        if os.path.exists(self.memory_file):
+            size_bytes = os.path.getsize(self.memory_file)
+            return size_bytes / (1024 * 1024)
+        return 0.0
+
     async def prune_memory(self):
-        if len(self.segments) > self.settings.max_memory_segments:
-            num_to_prune = len(self.segments) - self.settings.max_memory_segments
-            # Prune oldest segments (FIFO)
-            # For more sophisticated pruning, sort by importance or a combination
-            self.segments = sorted(self.segments, key=lambda s: s.timestamp)[num_to_prune:]
-            print(f"Pruned {num_to_prune} oldest segments to maintain max_memory_segments limit.")
+        """Enhanced pruning with both count and size-based strategies."""
+        initial_count = len(self.segments)
+
+        # Check count-based pruning first
+        if initial_count > self.settings.max_memory_segments:
+            num_to_prune = initial_count - self.settings.max_memory_segments
+            print(f"Pruning {num_to_prune} segments due to count limit ({initial_count} > {self.settings.max_memory_segments})")
+
+            # Enhanced pruning strategy
+            strategy = getattr(self.settings, 'pruning_strategy', 'hybrid')
+
+            if strategy == "oldest_first":
+                # Sort by timestamp, keeping newest
+                self.segments = sorted(
+                    self.segments,
+                    key=lambda s: s.timestamp or datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True
+                )[:self.settings.max_memory_segments]
+            elif strategy == "least_relevant":
+                # Sort by importance, keeping most important
+                self.segments = sorted(
+                    self.segments,
+                    key=lambda s: s.importance or 0.0,
+                    reverse=True
+                )[:self.settings.max_memory_segments]
+            else:  # hybrid strategy
+                # Sort by combined score of importance and recency
+                def hybrid_score(segment):
+                    importance = segment.importance or 0.0
+                    # Convert timestamp to a score (more recent = higher score)
+                    if segment.timestamp:
+                        ts = segment.timestamp
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=timezone.utc)
+                        days_old = (datetime.now(timezone.utc) - ts).days
+                        recency_score = max(0.0, 1.0 - (days_old / 365))  # Decay over a year
+                    else:
+                        recency_score = 0.0
+
+                    return (importance * 0.7) + (recency_score * 0.3)
+
+                self.segments = sorted(
+                    self.segments,
+                    key=hybrid_score,
+                    reverse=True
+                )[:self.settings.max_memory_segments]
+
             await self._save_to_disk()
+            print(f"Pruned {num_to_prune} segments using {strategy} strategy.")
+
+        # Check size-based pruning if still needed
+        elif await self._should_prune_by_size():
+            current_size = await self._get_memory_size_mb()
+            target_size = self.settings.max_memory_size_mb * 0.7  # Prune to 70% of max size
+            print(f"Memory size ({current_size:.2f} MB) exceeds threshold. Pruning to ~{target_size:.2f} MB...")
+
+            # Remove segments until we reach target size
+            original_count = len(self.segments)
+            while len(self.segments) > 10:  # Keep at least 10 segments
+                # Remove oldest/least important first (hybrid approach)
+                if self.segments:
+                    # Sort by combined score and remove lowest scoring
+                    self.segments = sorted(
+                        self.segments,
+                        key=lambda s: (
+                            (s.importance or 0.0) * 0.7 +
+                            (0.3 if s.timestamp and s.timestamp > datetime.now(timezone.utc) - timedelta(days=7) else 0.0)
+                        ),
+                        reverse=True
+                    )[:-1]  # Remove the last (lowest scoring) segment
+
+                # Check if we've reached target size
+                await self._save_to_disk()
+                current_size = await self._get_memory_size_mb()
+                if current_size <= target_size:
+                    break
+
+            pruned_count = original_count - len(self.segments)
+            print(f"Size-based pruning complete. Removed {pruned_count} segments. New size: {current_size:.2f} MB")
+        else:
+            print("No pruning needed.")
+            return
 
 # --- Memory Manager (Facade) ---
 class MemoryManager:

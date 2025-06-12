@@ -216,6 +216,16 @@ status: "active"
 
 ### Phase 4: New Features (June 26-July 9)
 
+- [ ] **Dynamic Tool & MCP Server Discovery and Installation**
+  - [ ] Implement dynamic discovery and registration of MCP servers/tools from npm, GitHub, and local directories
+  - [ ] Implement web-based tool installation (auto-install from web, npm, GitHub, etc.)
+  - [ ] Add tool versioning, dependency management, and conflict resolution logic
+  - [ ] Add tool composition and workflow orchestration features
+  - [ ] Implement security sandboxing and resource management for installed tools
+  - [ ] Develop UI/CLI for discovering, installing, and managing tools from the web
+  - [ ] Create documentation and usage examples for new tool discovery/installation features
+  - [ ] Add comprehensive tests for dynamic tool/MCP server discovery and installation scenarios
+
 - [ ] **Web UI Prototype**
   - [ ] Create FastAPI backend
   - [ ] Implement basic React frontend
@@ -232,12 +242,6 @@ status: "active"
   - [ ] Implement alert system for resource thresholds
   - [ ] Create performance reports
   - [ ] Add task execution history tracking
-
-- [ ] **Additional Tools**
-  - [ ] Web search tool
-  - [ ] Python code execution tool
-  - [ ] JSON manipulation tool
-  - [ ] Math/statistics tool
 
 ## 💡 Future Ideas
 
