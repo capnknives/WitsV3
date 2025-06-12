@@ -21,7 +21,7 @@ A base implementation of the memory handler that provides core functionality wit
 #### Memory Manager (`core/memory_manager.py`)
 An extended memory management system that handles vector storage, embedding generation, and memory operations.
 
-### Cognitive Architecture 
+### Cognitive Architecture
 
 #### Cognitive Architecture Updated (`core/cognitive_architecture_updated.py`)
 The enhanced Cognitive Architecture coordinates the operation of all cognitive subsystems:

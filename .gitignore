@@ -137,3 +137,5 @@ local.properties
 *.backup
 *.backup.*
 mcp_logs/
+commit_additional_files.ps1
+commit_synthetic_brain.ps1
