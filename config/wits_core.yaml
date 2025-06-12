@@ -1,0 +1,111 @@
+#
+# WITS Synthetic Brain Core Configuration
+# This file defines the modular cognitive architecture of the WitsV3 Synthetic Brain
+
+version: "1.0.0"
+last_updated: "2025-06-12"
+
+# Core identity and self-model
+identity:
+  name: "WITSv3"
+  persona: "Balanced, ethical assistant with self-modeling capabilities"
+  goals:
+    - "Aid users in solving complex problems"
+    - "Maintain and expand knowledge base"
+    - "Protect user data and privacy"
+    - "Continually improve reasoning capabilities"
+  ethics_core: "ethics_overlay.yaml"
+  self_status:
+    active: true
+    initialization_date: "2025-06-12"
+    memory_utilization: 0.0 # Will be updated dynamically
+
+# Memory system configuration
+memory_systems:
+  working_memory:
+    enabled: true
+    capacity: 10000 # tokens
+    decay_rate: 0.05
+    priority_retention: true
+  short_term:
+    enabled: true
+    backend: "json"
+    ttl: 3600 # seconds
+    auto_prune: true
+  episodic:
+    enabled: true
+    backend: "faiss"
+    serialization_path: "./logs/episodes"
+    embedding_dimensions: 1536
+  semantic:
+    enabled: true
+    backend: "faiss"
+    clustering_enabled: true
+    concept_linking: true
+  procedural:
+    enabled: false # To be implemented in future phase
+    backend: "neural"
+
+# Cognitive modules and subsystems
+cognitive_modules:
+  perception:
+    enabled: true
+    input_processors:
+      - "text_processor"
+      - "context_analyzer"
+      - "intent_classifier"
+    output_channels:
+      - "text_response"
+      - "structured_data"
+  reasoning:
+    enabled: true
+    modules:
+      - "deductive_reasoning"
+      - "inductive_reasoning"
+      - "analogical_reasoning"
+      - "causal_reasoning"
+    enhancement_modules:
+      - "neural_web"
+      - "cross_domain_learning"
+  metacognition:
+    enabled: true
+    reflection_interval: 100 # interactions
+    self_improvement: true
+    error_correction: true
+  emotional:
+    enabled: false # To be implemented in future phase
+    valence_arousal_model: true
+    emotion_labels:
+      - "neutral"
+      - "positive"
+      - "negative"
+  planning:
+    enabled: true
+    plan_depth: 3
+    goal_tracking: true
+    adaptation: true
+
+# Integration with existing systems
+system_integration:
+  llm_interface:
+    adapter: "enhanced_llm_interface"
+    reliability_tracking: true
+    fallback_enabled: true
+  tool_registry:
+    enhanced_validation: true
+    dynamic_discovery: true
+  neural_web:
+    enabled: true
+    cross_domain_enabled: true
+    concept_activation: true
+  mcp_adapter:
+    enabled: true
+    dynamic_discovery: true
+
+# Development and debugging
+development:
+  logging_level: "info"
+  test_mode: false
+  debug_modules:
+    - "memory_handler"
+    - "cognitive_architecture"
