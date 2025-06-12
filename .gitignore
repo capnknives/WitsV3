@@ -136,3 +136,4 @@ local.properties
 # Backup files
 *.backup
 *.backup.*
+mcp_logs/
