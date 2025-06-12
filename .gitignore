@@ -20,6 +20,9 @@ wheels/
 .installed.cfg
 *.egg
 
+# Logs
+mcp_logs/
+
 # Virtual Environment
 .env
 .venv
@@ -139,3 +142,4 @@ local.properties
 mcp_logs/
 commit_additional_files.ps1
 commit_synthetic_brain.ps1
+mcp_logs/
