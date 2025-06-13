@@ -1,5 +1,6 @@
 # c:\\WITS\\WitsV3\\core\\llm_interface.py
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, AsyncGenerator, List, TypeVar, Callable, Awaitable
 import httpx
 import json
@@ -12,6 +13,17 @@ import asyncio
 from .config import WitsV3Config, OllamaSettings
 
 logger = logging.getLogger(__name__)
+
+# Simple message/response structures used in tests
+@dataclass
+class LLMMessage:
+    role: str
+    content: str
+
+
+@dataclass
+class LLMResponse:
+    content: str
 
 # Define a generic type for the retry function
 T = TypeVar('T')
@@ -306,6 +318,15 @@ class OllamaInterface(BaseLLMInterface):
         if self.http_client:
             await self.http_client.aclose()
             self.logger.info("Ollama interface HTTP client closed")
+
+
+class LLMInterface(OllamaInterface):
+    """Backward compatible alias used in some modules."""
+
+    async def generate_response(self, messages: List[LLMMessage]) -> LLMResponse:
+        prompt = "\n".join(m.content for m in messages)
+        text = await self.generate_text(prompt)
+        return LLMResponse(content=text)
 
 def get_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
     if config.llm_interface.default_provider == "adaptive":

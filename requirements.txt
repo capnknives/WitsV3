@@ -29,6 +29,9 @@ aiofiles>=0.7
 # NumPy for numerical operations (often needed with embeddings)
 numpy>=1.24.0
 
+# Graph library needed by knowledge graph module
+networkx>=3.0
+
 # For CLI colors/styling (optional but nice)
 colorama>=0.4.6
 
