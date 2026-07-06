@@ -2,23 +2,31 @@
 Configuration management for WitsV3 system
 """
 
+import os
+
 import yaml
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # Load .env from the working directory, if present
+except ImportError:
+    pass
+
 class OllamaSettings(BaseModel):
     url: str = Field(default="http://localhost:11434")
-    default_model: str = Field(default="llama3")
-    control_center_model: str = Field(default="llama3")
-    orchestrator_model: str = Field(default="llama3")
-    embedding_model: str = Field(default="llama3")
+    default_model: str = Field(default="qwen3:8b")
+    control_center_model: str = Field(default="qwen3:8b")
+    orchestrator_model: str = Field(default="qwen3:8b")
+    embedding_model: str = Field(default="nomic-embed-text")
     request_timeout: int = Field(default=120)
     retry_attempts: int = Field(default=3, description="Number of retry attempts for failed requests")
     retry_delay: float = Field(default=1.0, description="Delay between retry attempts in seconds")
     exponential_backoff: bool = Field(default=True, description="Use exponential backoff for retries")
 
     # Model fallback configuration
-    fallback_models: List[str] = Field(default=["llama3", "llama3:8b", "codellama:7b"], description="Fallback models in order of preference")
+    fallback_models: List[str] = Field(default=["qwen3:8b", "llama3.2:3b", "qwen2.5-coder:7b"], description="Fallback models in order of preference")
     enable_model_fallback: bool = Field(default=True, description="Enable automatic fallback to alternative models")
     model_failure_threshold: int = Field(default=3, description="Number of consecutive failures before switching models")
     model_timeout: int = Field(default=300, description="Timeout for individual model operations in seconds")
@@ -58,7 +66,7 @@ class MemoryManagerSettings(BaseModel):
     memory_file_path: str = Field(default="data/wits_memory.json")
     faiss_index_path: str = Field(default="data/wits_faiss_index.bin")
     neural_web_path: str = Field(default="data/neural_web.json")
-    vector_dim: int = Field(default=4096) # llama3 typically 4096
+    vector_dim: int = Field(default=768) # nomic-embed-text embedding dimension
     max_results_per_search: int = Field(default=5)
     pruning_interval_seconds: int = Field(default=3600)
     max_memory_segments: int = Field(default=10000)
@@ -83,6 +91,7 @@ class SecuritySettings(BaseModel):
 
 class ToolSystemSettings(BaseModel):
     enable_mcp_tools: bool = Field(default=True)
+    mcp_connect_on_startup: bool = Field(default=False, description="Connect to external MCP servers during startup (slows boot when servers are unavailable)")
     mcp_tool_definitions_path: str = Field(default="data/mcp_tools.json")
     # langchain_bridge_enabled: bool = Field(default=False) # Placeholder
 
@@ -141,10 +150,34 @@ class WitsV3Config(BaseModel):
             print(f"An unexpected error occurred while loading config '{config_path}': {e}. Using default values.")
             return cls()
 
+def _apply_env_overrides(config: "WitsV3Config") -> "WitsV3Config":
+    """Apply secret values from environment variables (or .env).
+
+    Secrets are intentionally NOT stored in config.yaml (which is committed
+    to git). Set them in a local .env file or the environment instead:
+      - WITSV3_SUPABASE_URL:      Supabase project URL
+      - WITSV3_SUPABASE_KEY:      Supabase API key
+      - WITSV3_AUTH_TOKEN_HASH:   SHA256 hash of the admin auth token
+    """
+    supabase_url = os.getenv("WITSV3_SUPABASE_URL")
+    if supabase_url:
+        config.supabase.url = supabase_url
+
+    supabase_key = os.getenv("WITSV3_SUPABASE_KEY")
+    if supabase_key:
+        config.supabase.key = supabase_key
+
+    auth_token_hash = os.getenv("WITSV3_AUTH_TOKEN_HASH")
+    if auth_token_hash:
+        config.security.auth_token_hash = auth_token_hash
+
+    return config
+
+
 # Convenience function for loading config
 def load_config(config_path: str = "config.yaml") -> WitsV3Config:
-    """Load configuration from YAML file."""
-    return WitsV3Config.from_yaml(config_path)
+    """Load configuration from YAML file, with env-var overrides for secrets."""
+    return _apply_env_overrides(WitsV3Config.from_yaml(config_path))
 
 # For backwards compatibility
 AppConfig = WitsV3Config

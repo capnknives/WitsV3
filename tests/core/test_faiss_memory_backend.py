@@ -29,15 +29,19 @@ class DummyLLM(BaseLLMInterface):
         yield " stream"
 
     async def get_embedding(self, text, model=None):
-        # Create consistent but unique embeddings based on text
-        # This helps test search functionality
-        text_hash = hash(text) % 10000
-        embedding = np.zeros(384)
-        embedding[0] = text_hash / 10000
-        embedding[1] = 0.5  # Add some consistency
+        # Create deterministic bag-of-words embeddings so that texts sharing
+        # words are close in vector space. Python's built-in hash() is salted
+        # per process, so use md5 for stable word -> dimension mapping.
+        import hashlib
 
-        # Normalize
-        embedding = embedding / np.linalg.norm(embedding)
+        embedding = np.zeros(384)
+        for word in text.lower().split():
+            dim = int(hashlib.md5(word.encode()).hexdigest(), 16) % 384
+            embedding[dim] += 1.0
+
+        norm = np.linalg.norm(embedding)
+        if norm > 0:
+            embedding = embedding / norm
         return embedding.tolist()
 
 @pytest.fixture
@@ -251,8 +255,9 @@ async def test_faiss_gpu_backend_fallback(mock_config):
     """Test that GPU backend falls back to CPU if GPU is not available."""
     llm = DummyLLM()
 
-    # Mock that GPU resources are not available
-    with patch('faiss.StandardGpuResources', side_effect=Exception("GPU not available")):
+    # Mock that GPU resources are not available (create=True because faiss-cpu
+    # doesn't define StandardGpuResources at all)
+    with patch('faiss.StandardGpuResources', create=True, side_effect=Exception("GPU not available")):
         backend = FaissGPUMemoryBackend(mock_config, llm)
         await backend.initialize()
 

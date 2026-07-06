@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 from typing import Dict, Any, List, Optional, Set
@@ -315,8 +316,9 @@ class EnhancedMCPAdapter(MCPAdapter):
                 # Try to install dependencies
                 if (clone_dir / 'package.json').exists():
                     logger.info(f"Installing npm dependencies for {server_info['name']}")
+                    # shutil.which resolves npm.cmd on Windows (bare 'npm' raises WinError 2)
                     npm_process = await asyncio.create_subprocess_exec(
-                        'npm', 'install',
+                        shutil.which('npm') or 'npm', 'install',
                         cwd=str(clone_dir),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE

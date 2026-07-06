@@ -129,24 +129,29 @@ class AuthManager:
             True if setup successful, False otherwise
         """
         try:
-            import yaml
-
             # Hash the token
             token_hash = self.hash_token(token)
 
-            # Update config file
-            with open("config.yaml", 'r') as f:
-                config_data = yaml.safe_load(f)
+            # Write the hash to the gitignored .env file instead of
+            # config.yaml, so the secret never ends up in version control.
+            env_path = ".env"
+            lines = []
+            if os.path.exists(env_path):
+                with open(env_path, 'r') as f:
+                    lines = [
+                        line for line in f.read().splitlines()
+                        if not line.startswith("WITSV3_AUTH_TOKEN_HASH=")
+                    ]
+            lines.append(f"WITSV3_AUTH_TOKEN_HASH={token_hash}")
 
-            if 'security' not in config_data:
-                config_data['security'] = {}
+            with open(env_path, 'w') as f:
+                f.write("\n".join(lines) + "\n")
 
-            config_data['security']['auth_token_hash'] = token_hash
+            # Update the in-memory config and environment for this process
+            os.environ["WITSV3_AUTH_TOKEN_HASH"] = token_hash
+            self.config.security.auth_token_hash = token_hash
 
-            with open("config.yaml", 'w') as f:
-                yaml.safe_dump(config_data, f, default_flow_style=False)
-
-            logger.info("Authentication token configured successfully")
+            logger.info("Authentication token configured successfully (hash stored in .env)")
             return True
 
         except Exception as e:

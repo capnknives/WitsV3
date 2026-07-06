@@ -101,8 +101,10 @@ async def test_recall(memory_handler):
     # Recall memories
     results = await memory_handler.recall("test query")
 
-    # Verify memory manager search was called
-    memory_handler.memory_manager.search.assert_called_once_with("test query", limit=5)
+    # Verify memory manager search was called (once for episodic, once for
+    # semantic, since no memory_type filter was given)
+    assert memory_handler.memory_manager.search.call_count == 2
+    memory_handler.memory_manager.search.assert_called_with("test query", limit=5)
 
     # Verify results
     assert len(results) == 1

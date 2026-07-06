@@ -23,7 +23,7 @@ agents:
   book_writing_agent:
     enable_narrative_intelligence: true
     max_tokens: 16384
-    model: llama3
+    model: qwen3:8b
     story_structure_patterns:
       - hero_journey
       - three_act
@@ -32,7 +32,7 @@ agents:
   coding_agent:
     enable_code_intelligence: true
     max_tokens: 8192
-    model: deepseek-coder-v2:16b-lite-instruct-q4_K_M
+    model: qwen2.5-coder:7b
     supported_languages:
       - python
       - javascript
@@ -43,23 +43,23 @@ agents:
   control_center_agent:
     enable_neural_routing: true
     max_tokens: 2048
-    model: llama3
+    model: qwen3:8b
     temperature: 0.3
   default_temperature: 0.7
   max_iterations: 15
   orchestrator_agent:
     enable_neural_reasoning: true
     max_tokens: 4096
-    model: llama3
+    model: qwen3:8b
     reasoning_depth: 3
     temperature: 0.7
   self_repair_agent:
     enable_system_monitoring: true
     health_check_interval: 300
     max_tokens: 4096
-    model: llama3
+    model: qwen3:8b
     temperature: 0.1
-auto_restart_on_file_change: true
+auto_restart_on_file_change: false
 cli:
   show_thoughts: true
   show_tool_calls: true
@@ -108,24 +108,24 @@ memory_manager:
       - chain
       - contradiction
   pruning_interval_seconds: 3600
-  vector_dim: 384
+  vector_dim: 768  # nomic-embed-text embedding dimension
 ollama_settings:
-  book_writing_model: llama3
-  coding_agent_model: deepseek-coder-v2:16b-lite-instruct-q4_K_M
-  control_center_model: llama3
-  default_model: llama3
+  book_writing_model: qwen3:8b
+  coding_agent_model: qwen2.5-coder:7b
+  control_center_model: qwen3:8b
+  default_model: qwen3:8b
   embedding_model: nomic-embed-text
-  neural_reasoning_model: llama3
-  orchestrator_model: llama3
+  neural_reasoning_model: qwen3:8b
+  orchestrator_model: qwen3:8b
   request_timeout: 120
-  self_repair_model: llama3
+  self_repair_model: qwen3:8b
   url: http://localhost:11434
 
   # Model reliability and fallback settings
   fallback_models:
-    - llama3
-    - llama3:8b
-    - codellama:7b
+    - qwen3:8b
+    - llama3.2:3b
+    - qwen2.5-coder:7b
   enable_model_fallback: true
   model_failure_threshold: 3
   model_timeout: 300
@@ -139,7 +139,8 @@ personality:
   profile_path: config/wits_personality.yaml
 project_name: WitsV3
 security:
-  auth_token_hash: cedbb64b3b1b044da25b7df31d83e8f72f509382d43567c0591392510e07b9c6
+  # Set via WITSV3_AUTH_TOKEN_HASH in .env (never commit secrets here)
+  auth_token_hash: ""
   authorized_network_override_user: richard_elliot
   ethics_override_authorized_user: richard_elliot
   ethics_system_enabled: true
@@ -149,9 +150,11 @@ security:
   require_auth_for_network_control: true
 supabase:
   enable_realtime: true
-  key: sbp_ee5abfbf912375dea50375d81d3a7e1bee1892d7
-  url: https://scdzgxvrppxpicinggy.supabase.co
+  # Set via WITSV3_SUPABASE_URL / WITSV3_SUPABASE_KEY in .env (never commit secrets here)
+  key: ""
+  url: ""
 tool_system:
   enable_mcp_tools: true
+  mcp_connect_on_startup: false  # external MCP node servers aren't built locally; skip slow boot attempts
   mcp_tool_definitions_path: data/mcp_tools.json
 version: 3.0.0

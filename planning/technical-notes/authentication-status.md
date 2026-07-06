@@ -59,7 +59,7 @@ Your requested security features have been **fully implemented and configured**:
 
 ### **Token-Based Authentication**
 
-- **Token Hash Configured**: `cedbb64b3b1b044da25b7df31d83e8f72f509382d43567c0591392510e07b9c6`
+- **Token Hash Configured**: `<redacted — stored in .env as WITSV3_AUTH_TOKEN_HASH>`
 - **Authentication Required For**:
   - Network access control operations
   - Ethics system overrides

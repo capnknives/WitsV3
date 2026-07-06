@@ -187,4 +187,4 @@ async def test_error_handling(cognitive_architecture):
     assert len(error_results) == 1
     assert "Test error" in error_results[0].content
     assert error_results[0].error_code == "COGNITIVE_ERROR"
-    assert error_results[0].error_category == "processing"
+    assert error_results[0].error_category == "execution"

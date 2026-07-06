@@ -68,27 +68,15 @@ async def test_generate_text_retry_success(ollama_interface):
         response=MagicMock(status_code=503, text="Service unavailable")
     )
 
-    # Create a mock for the post method
-    mock_post = AsyncMock()
-    # First call raises the error, second call returns success
-    mock_post.side_effect = [
-        http_error,  # This will be raised directly, not returned
-        MagicMock(
-            raise_for_status=MagicMock(),
-            json=MagicMock(return_value={"response": "Test response after retry"})
-        )
-    ]
+    # Successful response returned on the second attempt
+    mock_success_response = MagicMock(
+        raise_for_status=MagicMock(),
+        json=MagicMock(return_value={"response": "Test response after retry"})
+    )
 
-    # Apply the mock
-    with patch.object(ollama_interface.http_client, 'post', side_effect=[
-        # First call raises error
-        AsyncMock(side_effect=http_error),
-        # Second call succeeds
-        AsyncMock(return_value=MagicMock(
-            raise_for_status=MagicMock(),
-            json=MagicMock(return_value={"response": "Test response after retry"})
-        ))
-    ]):
+    # First call raises the error, second call returns success
+    with patch.object(ollama_interface.http_client, 'post',
+                      new=AsyncMock(side_effect=[http_error, mock_success_response])):
         result = await ollama_interface.generate_text("Test prompt")
 
         assert result == "Test response after retry"
@@ -107,8 +95,8 @@ async def test_generate_text_max_retries(ollama_interface):
 
     # Patch with side_effect that always raises the error
     with patch.object(ollama_interface.http_client, 'post', side_effect=http_error):
-        # Should retry 3 times then raise ValueError
-        with pytest.raises(ValueError):
+        # Should retry 3 times then propagate the original HTTP error
+        with pytest.raises(httpx.HTTPStatusError):
             await ollama_interface.generate_text("Test prompt")
 
         # Check it was called the expected number of times (1 initial + 2 retries)
@@ -152,14 +140,18 @@ async def test_stream_text_success(ollama_interface):
         json.dumps({"response": " response", "done": False}),
         json.dumps({"response": ".", "done": True})
     ]
-    mock_stream.aiter_lines = AsyncMock()
-    mock_stream.aiter_lines.return_value.__aiter__.return_value = AsyncMock()
-    mock_stream.aiter_lines.return_value.__aiter__.return_value.__anext__ = AsyncMock(side_effect=[
-        lines[0], lines[1], lines[2], StopAsyncIteration
-    ])
 
-    # Apply the mock
-    with patch.object(ollama_interface.http_client, 'stream', return_value=mock_stream):
+    async def mock_aiter_lines():
+        for line in lines:
+            yield line
+
+    # aiter_lines must be a sync callable returning an async generator
+    mock_stream.aiter_lines = mock_aiter_lines
+
+    # httpx's .stream() is a sync method returning an async context manager,
+    # so patch it with a MagicMock (new_callable) rather than an AsyncMock.
+    with patch.object(ollama_interface.http_client, 'stream',
+                      new=MagicMock(return_value=mock_stream)):
         chunks = []
         async for chunk in ollama_interface.stream_text("Test prompt"):
             chunks.append(chunk)
@@ -192,14 +184,17 @@ async def test_stream_text_retry_success(ollama_interface):
         json.dumps({"response": " response", "done": False}),
         json.dumps({"response": ".", "done": True})
     ]
-    mock_stream_success.aiter_lines = AsyncMock()
-    mock_stream_success.aiter_lines.return_value.__aiter__.return_value = AsyncMock()
-    mock_stream_success.aiter_lines.return_value.__aiter__.return_value.__anext__ = AsyncMock(side_effect=[
-        lines[0], lines[1], lines[2], StopAsyncIteration
-    ])
 
-    # Apply the mocks
-    with patch.object(ollama_interface.http_client, 'stream', side_effect=[mock_stream_fail, mock_stream_success]):
+    async def mock_aiter_lines():
+        for line in lines:
+            yield line
+
+    # aiter_lines must be a sync callable returning an async generator
+    mock_stream_success.aiter_lines = mock_aiter_lines
+
+    # httpx's .stream() is a sync method returning an async context manager
+    with patch.object(ollama_interface.http_client, 'stream',
+                      new=MagicMock(side_effect=[mock_stream_fail, mock_stream_success])):
         chunks = []
         async for chunk in ollama_interface.stream_text("Test prompt"):
             chunks.append(chunk)
@@ -222,8 +217,9 @@ async def test_stream_text_max_retries(ollama_interface):
     mock_stream_fail = AsyncMock()
     mock_stream_fail.__aenter__.side_effect = http_error
 
-    # Apply the mock to always fail
-    with patch.object(ollama_interface.http_client, 'stream', return_value=mock_stream_fail):
+    # Apply the mock to always fail (sync method, so MagicMock)
+    with patch.object(ollama_interface.http_client, 'stream',
+                      new=MagicMock(return_value=mock_stream_fail)):
         chunks = []
         async for chunk in ollama_interface.stream_text("Test prompt"):
             chunks.append(chunk)
@@ -259,16 +255,15 @@ async def test_get_embedding_retry_success(ollama_interface):
         response=MagicMock(status_code=503, text="Service unavailable")
     )
 
-    # Apply the mocks
-    with patch.object(ollama_interface.http_client, 'post', side_effect=[
-        # First call raises error
-        AsyncMock(side_effect=http_error),
-        # Second call succeeds
-        AsyncMock(return_value=MagicMock(
-            raise_for_status=MagicMock(),
-            json=MagicMock(return_value={"embedding": [0.1, 0.2, 0.3]})
-        ))
-    ]):
+    # Successful response returned on the second attempt
+    mock_success_response = MagicMock(
+        raise_for_status=MagicMock(),
+        json=MagicMock(return_value={"embedding": [0.1, 0.2, 0.3]})
+    )
+
+    # First call raises the error, second call returns success
+    with patch.object(ollama_interface.http_client, 'post',
+                      new=AsyncMock(side_effect=[http_error, mock_success_response])):
         result = await ollama_interface.get_embedding("Test text")
 
         assert result == [0.1, 0.2, 0.3]

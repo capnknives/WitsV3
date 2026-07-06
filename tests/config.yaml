@@ -1,0 +1,26 @@
+# Test configuration for integration tests (tests/test_adaptive_llm.py).
+# Uses the models expected to be available in the local Ollama instance.
+project_name: WitsV3-Test
+version: 3.0.0
+logging_level: INFO
+debug_mode: false
+auto_restart_on_file_change: false
+
+llm_interface:
+  default_provider: ollama
+  streaming_enabled: true
+  timeout_seconds: 120
+
+ollama_settings:
+  url: http://localhost:11434
+  default_model: qwen3:8b
+  control_center_model: qwen3:8b
+  orchestrator_model: qwen3:8b
+  # chat models do not serve /api/embeddings; use a dedicated embedding model
+  embedding_model: nomic-embed-text
+  request_timeout: 120
+
+memory_manager:
+  backend: basic
+  memory_file_path: data/test_wits_memory.json
+  vector_dim: 768

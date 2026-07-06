@@ -123,7 +123,9 @@ async def test_json_format(json_tool):
 @pytest.mark.asyncio
 async def test_json_file_operations(json_tool, sample_json):
     """Test JSON file operations."""
-    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+    # The tool's security check only allows writes inside the project
+    # directory, so create the temp file under the current working directory.
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False, dir=".") as f:
         f.write(json.dumps(sample_json).encode())
         temp_path = f.name
 

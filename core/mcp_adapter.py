@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from typing import Dict, Any, List, Optional, Union
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -87,8 +88,15 @@ class StdioMCPClient(MCPClient):
             if self.server_config.env:
                 env.update(self.server_config.env)
 
+            # Resolve the executable path. On Windows, commands like npm/npx are
+            # .cmd files that create_subprocess_exec cannot resolve by bare name
+            # (raises FileNotFoundError / WinError 2).
+            resolved_cmd = shutil.which(cmd[0])
+            if resolved_cmd:
+                cmd[0] = resolved_cmd
+
             # Check if command is a string instead of a list (for Windows command paths)
-            if isinstance(cmd[0], str) and cmd[0].endswith('.js') or cmd[0].endswith('.ts'):
+            if isinstance(cmd[0], str) and (cmd[0].endswith('.js') or cmd[0].endswith('.ts')):
                 cmd_str = " ".join(cmd)
                 logger.info(f"Running MCP command: {cmd_str} in {self.server_config.working_directory}")
 

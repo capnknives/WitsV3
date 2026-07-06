@@ -7,6 +7,10 @@ class Tensor:
     def __init__(self, data: Iterable[Any]):
         self.data = np.array(data)
 
+    @property
+    def shape(self):
+        return self.data.shape
+
     def size(self, dim: int | None = None):
         return self.data.shape if dim is None else self.data.shape[dim]
 

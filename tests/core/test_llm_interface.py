@@ -21,6 +21,9 @@ def mock_config() -> WitsV3Config:
     config.ollama_settings.default_model = "test-model"
     config.ollama_settings.embedding_model = "test-embedding-model"
     config.ollama_settings.request_timeout = 60
+    config.ollama_settings.retry_attempts = 3
+    config.ollama_settings.retry_delay = 0.01  # Fast for testing
+    config.ollama_settings.exponential_backoff = False
 
     config.agents = MagicMock()
     config.agents.default_temperature = 0.5
@@ -37,7 +40,9 @@ def mock_async_client() -> MagicMock:
     client = MagicMock(spec=httpx.AsyncClient)
     # Ensure all async methods are AsyncMocks
     client.post = AsyncMock()
-    client.stream = AsyncMock()
+    # httpx's .stream() is a *sync* method returning an async context manager,
+    # so it must be a MagicMock (an AsyncMock would return a coroutine).
+    client.stream = MagicMock()
     return client
 
 
@@ -141,13 +146,17 @@ async def test_generate_text_http_status_error(mock_config: WitsV3Config, mock_a
 
 @pytest.mark.asyncio
 async def test_generate_text_request_error(mock_config: WitsV3Config, mock_async_client: MagicMock):
-    """Test handling of RequestError during text generation."""
+    """Test handling of RequestError during text generation.
+
+    Connection errors are retried up to retry_attempts times, then wrapped
+    in a ValueError explaining that Ollama is unreachable.
+    """
     error = httpx.RequestError("Connection failed", request=MagicMock())
     mock_async_client.post.side_effect = error
 
     with patch('httpx.AsyncClient', return_value=mock_async_client):
         interface = OllamaInterface(mock_config)
-        with pytest.raises(httpx.RequestError):
+        with pytest.raises(ValueError, match="Failed to connect to Ollama"):
             await interface.generate_text("Hello")
 
     expected_payload = {
@@ -156,7 +165,8 @@ async def test_generate_text_request_error(mock_config: WitsV3Config, mock_async
         "stream": False,
         "options": {"temperature": 0.5}
     }
-    mock_async_client.post.assert_called_once_with(
+    assert mock_async_client.post.call_count == mock_config.ollama_settings.retry_attempts
+    mock_async_client.post.assert_called_with(
         f"{mock_config.ollama_settings.url}/api/generate",
         json=expected_payload
     )
@@ -199,14 +209,19 @@ async def test_stream_text_success(mock_config: WitsV3Config, mock_async_client:
     mock_async_client.stream.assert_called_once_with(
         "POST",
         f"{mock_config.ollama_settings.url}/api/generate",
-        json=expected_payload
+        json=expected_payload,
+        timeout=mock_config.ollama_settings.request_timeout
     )
     mock_httpx_response.raise_for_status.assert_called_once()
     assert result_chunks == ["Stream part 1", " part 2"]
 
 @pytest.mark.asyncio
 async def test_stream_text_http_status_error(mock_config: WitsV3Config, mock_async_client: MagicMock):
-    """Test handling of HTTPStatusError during text streaming."""
+    """Test handling of HTTPStatusError during text streaming.
+
+    Stream errors are reported gracefully: the generator yields a
+    human-readable error message instead of raising.
+    """
     mock_httpx_response = MagicMock(spec=httpx.Response)
     mock_httpx_response.status_code = 400
     mock_httpx_response.text = "Bad Request"
@@ -220,9 +235,9 @@ async def test_stream_text_http_status_error(mock_config: WitsV3Config, mock_asy
 
     with patch('httpx.AsyncClient', return_value=mock_async_client):
         interface = OllamaInterface(mock_config)
-        with pytest.raises(httpx.HTTPStatusError):
-            async for _ in interface.stream_text("Stream error"):
-                pass # pragma: no cover
+        result_chunks = []
+        async for chunk in interface.stream_text("Stream error"):
+            result_chunks.append(chunk)
 
     expected_payload = {
         "model": "test-model",
@@ -230,24 +245,31 @@ async def test_stream_text_http_status_error(mock_config: WitsV3Config, mock_asy
         "stream": True,
         "options": {"temperature": 0.5}
     }
+    # 400 errors are not retried
     mock_async_client.stream.assert_called_once_with(
         "POST",
         f"{mock_config.ollama_settings.url}/api/generate",
-        json=expected_payload
+        json=expected_payload,
+        timeout=mock_config.ollama_settings.request_timeout
     )
     mock_httpx_response.raise_for_status.assert_called_once()
+    assert any("Error: Invalid request" in chunk for chunk in result_chunks)
 
 @pytest.mark.asyncio
 async def test_stream_text_request_error(mock_config: WitsV3Config, mock_async_client: MagicMock):
-    """Test handling of RequestError during text streaming."""
+    """Test handling of RequestError during text streaming.
+
+    Connection errors are retried up to retry_attempts times; the generator
+    then yields a human-readable error message instead of raising.
+    """
     error = httpx.RequestError("Network issue", request=MagicMock())
     mock_async_client.stream.side_effect = error
 
     with patch('httpx.AsyncClient', return_value=mock_async_client):
         interface = OllamaInterface(mock_config)
-        with pytest.raises(httpx.RequestError):
-            async for _ in interface.stream_text("Stream net error"):
-                pass # pragma: no cover
+        result_chunks = []
+        async for chunk in interface.stream_text("Stream net error"):
+            result_chunks.append(chunk)
 
     expected_payload = {
         "model": "test-model",
@@ -255,14 +277,17 @@ async def test_stream_text_request_error(mock_config: WitsV3Config, mock_async_c
         "stream": True,
         "options": {"temperature": 0.5}
     }
-    mock_async_client.stream.assert_called_once_with(
+    assert mock_async_client.stream.call_count == mock_config.ollama_settings.retry_attempts
+    mock_async_client.stream.assert_called_with(
         "POST",
         f"{mock_config.ollama_settings.url}/api/generate",
-        json=expected_payload
+        json=expected_payload,
+        timeout=mock_config.ollama_settings.request_timeout
     )
+    assert any("Error: Failed to connect" in chunk for chunk in result_chunks)
 
 @pytest.mark.asyncio
-async def test_stream_text_json_decode_error(mock_config: WitsV3Config, mock_async_client: MagicMock, capsys):
+async def test_stream_text_json_decode_error(mock_config: WitsV3Config, mock_async_client: MagicMock, caplog):
     """Test handling of JSONDecodeError during stream parsing."""
     stream_chunks_data = [
         json.dumps({"response": "Valid chunk", "done": False}),
@@ -291,8 +316,7 @@ async def test_stream_text_json_decode_error(mock_config: WitsV3Config, mock_asy
             result_chunks.append(chunk)
 
     assert result_chunks == ["Valid chunk", "Another valid chunk"]
-    captured = capsys.readouterr()
-    assert "Warning: Failed to decode JSON stream line: This is not valid JSON" in captured.out
+    assert "Failed to decode JSON stream line: This is not valid JSON" in caplog.text
 
 @pytest.mark.asyncio
 async def test_get_embedding_success(mock_config: WitsV3Config, mock_async_client: MagicMock):
@@ -356,8 +380,9 @@ async def test_get_embedding_http_status_error(mock_config: WitsV3Config, mock_a
         with pytest.raises(httpx.HTTPStatusError):
             await interface.get_embedding("Embed this")
 
-    mock_async_client.post.assert_called_once()
-    mock_httpx_response.raise_for_status.assert_called_once()
+    # 503 is retried up to retry_attempts times before the error propagates
+    assert mock_async_client.post.call_count == mock_config.ollama_settings.retry_attempts
+    assert mock_httpx_response.raise_for_status.call_count == mock_config.ollama_settings.retry_attempts
 
 @pytest.mark.asyncio
 async def test_get_embedding_request_error(mock_config: WitsV3Config, mock_async_client: MagicMock):
@@ -367,9 +392,10 @@ async def test_get_embedding_request_error(mock_config: WitsV3Config, mock_async
 
     with patch('httpx.AsyncClient', return_value=mock_async_client):
         interface = OllamaInterface(mock_config)
-        with pytest.raises(httpx.RequestError):
+        # Connection errors are retried, then wrapped in a ValueError
+        with pytest.raises(ValueError, match="Failed to connect to Ollama"):
             await interface.get_embedding("Embed this")
-    mock_async_client.post.assert_called_once()
+    assert mock_async_client.post.call_count == mock_config.ollama_settings.retry_attempts
 
 # Tests for get_llm_interface factory function
 def test_get_llm_interface_ollama(mock_config: WitsV3Config):

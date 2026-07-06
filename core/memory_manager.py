@@ -145,6 +145,10 @@ class BasicMemoryBackend(BaseMemoryBackend):
                 try:
                     with open(self.memory_file, 'r') as f:
                         segments_data = json.load(f)
+                    # Support both formats: a plain list of segments (as written by
+                    # _save_to_disk) and a dict with a "segments" key (template format).
+                    if isinstance(segments_data, dict):
+                        segments_data = segments_data.get("segments", [])
                     self.segments = [MemorySegment(**data) for data in segments_data]
                     print(f"Loaded {len(self.segments)} segments from {self.memory_file}")
                 except (json.JSONDecodeError, TypeError) as e:

@@ -6,7 +6,12 @@ Initializes memory and neural web files from templates if they don't exist
 
 import os
 import shutil
+import sys
 from pathlib import Path
+
+# Ensure emoji output works on Windows consoles (cp1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 def setup_local_data():
     """Initialize local data files from templates"""
