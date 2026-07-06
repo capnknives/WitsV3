@@ -168,8 +168,15 @@ Secrets are supplied via `.env` / environment variables (loaded in `core/config.
 
 ## Web UI
 
+**Easiest:** double-click `start_web_ui.bat` (or the "WITS Web UI" desktop shortcut) — it uses the
+project's `.venv` automatically, from any location.
+
+Manual equivalent (note: plain `python` from a random prompt won't work — the web packages live in
+the project venv):
+
 ```bash
-python run_web.py
+cd C:\path\to\WitsV3
+.venv\Scripts\python.exe run_web.py
 ```
 
 Open `http://localhost:8000` on the PC — or from your **Android phone** on the same Wi-Fi,
