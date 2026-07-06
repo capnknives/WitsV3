@@ -130,9 +130,15 @@ class WitsV3System:
               # Initialize tool registry with auto-discovery
             self.tool_registry = ToolRegistry()
 
-            # Initialize MCP tool registry
-            self.mcp_registry = MCPToolRegistry()
-            await self.mcp_registry.initialize(self.tool_registry)
+            # Initialize MCP tool registry (external server connections are
+            # skipped unless mcp_connect_on_startup is enabled — connecting to
+            # unavailable node servers adds ~20s of failed attempts at boot)
+            if self.config.tool_system.enable_mcp_tools and self.config.tool_system.mcp_connect_on_startup:
+                self.mcp_registry = MCPToolRegistry()
+                await self.mcp_registry.initialize(self.tool_registry)
+            else:
+                self.mcp_registry = None
+                logger.info("MCP server connections skipped at startup (tool_system.mcp_connect_on_startup=false)")
 
             # Note: Tools are automatically discovered from tools/file_tools.py module
             # No manual registration needed for: FileReadTool, FileWriteTool, ListDirectoryTool, DateTimeTool

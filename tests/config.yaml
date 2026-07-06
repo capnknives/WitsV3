@@ -13,10 +13,10 @@ llm_interface:
 
 ollama_settings:
   url: http://localhost:11434
-  default_model: llama3
-  control_center_model: llama3
-  orchestrator_model: llama3
-  # llama3 does not serve /api/embeddings; use a dedicated embedding model
+  default_model: qwen3:8b
+  control_center_model: qwen3:8b
+  orchestrator_model: qwen3:8b
+  # chat models do not serve /api/embeddings; use a dedicated embedding model
   embedding_model: nomic-embed-text
   request_timeout: 120
 

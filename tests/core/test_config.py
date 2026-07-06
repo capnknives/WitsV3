@@ -29,10 +29,10 @@ def test_load_default_config():
 
     assert isinstance(config.ollama_settings, OllamaSettings)
     assert config.ollama_settings.url == "http://localhost:11434"
-    assert config.ollama_settings.default_model == "llama3"
-    assert config.ollama_settings.control_center_model == "llama3"
-    assert config.ollama_settings.orchestrator_model == "llama3"
-    assert config.ollama_settings.embedding_model == "llama3" # Added assertion for embedding_model
+    assert config.ollama_settings.default_model == "qwen3:8b"
+    assert config.ollama_settings.control_center_model == "qwen3:8b"
+    assert config.ollama_settings.orchestrator_model == "qwen3:8b"
+    assert config.ollama_settings.embedding_model == "nomic-embed-text"
     assert config.ollama_settings.request_timeout == 120
 
     assert isinstance(config.agents, AgentSettings)
@@ -44,7 +44,7 @@ def test_load_default_config():
     assert config.memory_manager.memory_file_path == "data/wits_memory.json"
     assert config.memory_manager.faiss_index_path == "data/wits_faiss_index.bin"
     assert config.memory_manager.neural_web_path == "data/neural_web.json"
-    assert config.memory_manager.vector_dim == 4096
+    assert config.memory_manager.vector_dim == 768
     assert config.memory_manager.max_results_per_search == 5
     assert config.memory_manager.pruning_interval_seconds == 3600
     assert config.memory_manager.max_memory_segments == 10000
@@ -93,7 +93,7 @@ def test_load_from_empty_yaml_file():
 
     # Assertions are same as test_load_default_config
     assert config.project_name == "WitsV3"
-    assert config.ollama_settings.default_model == "llama3"
+    assert config.ollama_settings.default_model == "qwen3:8b"
     assert config.agents.default_temperature == 0.7
 
 
@@ -109,7 +109,7 @@ def test_load_from_invalid_yaml_file():
 
     # Assertions are same as test_load_default_config
     assert config.project_name == "WitsV3"
-    assert config.ollama_settings.default_model == "llama3"
+    assert config.ollama_settings.default_model == "qwen3:8b"
     assert config.agents.default_temperature == 0.7
 
 
@@ -141,10 +141,10 @@ def test_ollama_settings_defaults():
     """Test OllamaSettings default values."""
     settings = OllamaSettings()
     assert settings.url == "http://localhost:11434"
-    assert settings.default_model == "llama3"
-    assert settings.control_center_model == "llama3"
-    assert settings.orchestrator_model == "llama3"
-    assert settings.embedding_model == "llama3"
+    assert settings.default_model == "qwen3:8b"
+    assert settings.control_center_model == "qwen3:8b"
+    assert settings.orchestrator_model == "qwen3:8b"
+    assert settings.embedding_model == "nomic-embed-text"
     assert settings.request_timeout == 120
 
 
