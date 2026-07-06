@@ -125,6 +125,17 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
             return vector / norm
         return vector
 
+    async def delete_segments(self, filter_dict) -> int:
+        """Delete matching segments and rebuild the FAISS index."""
+        removed = await super().delete_segments(filter_dict)
+        if removed:
+            # FAISS flat indexes don't support removal by id; rebuild from
+            # the remaining segments.
+            self._create_new_index()
+            await self._populate_index()
+            await self._save_to_disk()
+        return removed
+
     async def _populate_index(self):
         """Populate FAISS index with existing segment embeddings."""
         if not self.segments:

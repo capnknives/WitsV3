@@ -17,6 +17,13 @@ WitsV3 is designed for maximum flexibility and LLM-driven decision making. It fo
 
 ### 📋 Changelog
 
+**2026-07-06 — Document RAG**
+
+- New `documents/` drop folder: files are chunked, embedded with `nomic-embed-text`, and stored as searchable memory segments (auto-ingest at startup + `ingest_documents` tool)
+- New `document_search` tool: agents answer questions from your documents via semantic search
+- Changed files are re-ingested, deleted files are cleaned up (new `delete_segments` API on all memory backends)
+- Supports .txt/.md/.py/.json/.csv/.html/.log out of the box; .pdf with `pip install pypdf`
+
 **2026-07-06 — Model upgrade & performance pass** (`c3770fe`)
 
 - Replaced the model lineup: `llama3` → **`qwen3:8b`** (default/orchestrator/control center), `deepseek-coder-v2:16b` (10 GB, spilled to CPU) → **`qwen2.5-coder:7b`** (4.7 GB, fully GPU); added `llama3.2:3b` as fast fallback
@@ -152,10 +159,22 @@ Secrets are supplied via `.env` / environment variables (loaded in `core/config.
 - **Adaptive LLM System** — complexity analyzer + dynamic module loader + semantic cache for routing queries to appropriately-sized models (`llm_interface.default_provider: adaptive` to enable)
 - **MCP integration** — Model Context Protocol adapter for external tool servers (opt-in at startup)
 
+## Document RAG
+
+Drop files into the `documents/` folder and WitsV3 ingests them automatically at startup
+(chunked → embedded → stored in memory). Then just ask about them in the CLI — the
+orchestrator uses the `document_search` tool to find relevant passages.
+
+- Supported out of the box: `.txt`, `.md`, `.py`, `.json`, `.csv`, `.html`, `.log`
+  (`.pdf` too, with `pip install pypdf`)
+- Changed files are re-ingested; deleted files have their chunks cleaned up
+- Manual rescan: ask the agent to "ingest documents", or call the `ingest_documents` tool
+- Tuning in `config.yaml` under `document_rag:` (folder path, chunk size/overlap, startup ingest)
+
 ## Roadmap
 
 1. **Web UI** — FastAPI + SSE streaming chat over the existing engine, with memory browser and goal tracking
-2. **Document RAG** — watched folder → chunk → embed → memory segments, plus a `document_search` tool for agents
+2. ~~**Document RAG**~~ — ✅ shipped 2026-07-06 (see above)
 3. **Smart model routing** — wire the adaptive-LLM stack so trivial queries hit `llama3.2:3b`, code hits `qwen2.5-coder:7b`, and complex reasoning hits `qwen3:8b`
 4. PyQt6 desktop GUI and background-agent revival (in progress on a separate branch)
 

@@ -99,6 +99,17 @@ class CLISettings(BaseModel):
     show_thoughts: bool = Field(default=True)
     show_tool_calls: bool = Field(default=True)
 
+class DocumentRAGSettings(BaseModel):
+    enabled: bool = Field(default=True, description="Enable the document RAG system")
+    documents_path: str = Field(default="documents", description="Folder watched for documents to ingest")
+    chunk_size: int = Field(default=1200, gt=0, description="Target chunk size in characters")
+    chunk_overlap: int = Field(default=150, ge=0, description="Characters of overlap between consecutive chunks")
+    auto_ingest_on_startup: bool = Field(default=True, description="Scan and ingest documents during system startup")
+    file_extensions: List[str] = Field(
+        default=[".txt", ".md", ".markdown", ".py", ".json", ".csv", ".html", ".log", ".pdf"],
+        description="File extensions considered for ingestion (.pdf requires pypdf)"
+    )
+
 class SupabaseSettings(BaseModel):
     url: str = Field(default="")
     key: str = Field(default="")
@@ -123,6 +134,7 @@ class WitsV3Config(BaseModel):
     memory_manager: MemoryManagerSettings = Field(default_factory=MemoryManagerSettings)
     tool_system: ToolSystemSettings = ToolSystemSettings()
     cli: CLISettings = CLISettings()
+    document_rag: DocumentRAGSettings = Field(default_factory=DocumentRAGSettings)
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)

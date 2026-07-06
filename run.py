@@ -145,6 +145,31 @@ class WitsV3System:
 
             logger.info(f"Tool registry initialized with {len(self.tool_registry.tools)} tools (auto-discovered)")
 
+            # Wire shared dependencies into tools that opt in (e.g. document tools
+            # need the live MemoryManager rather than their own instance)
+            for tool in self.tool_registry.tools.values():
+                if hasattr(tool, "set_dependencies"):
+                    tool.set_dependencies(self.config, self.llm_interface, self.memory_manager)
+
+            # Document RAG: ensure the documents folder exists and optionally
+            # ingest new/changed files at startup
+            if self.config.document_rag.enabled:
+                Path(self.config.document_rag.documents_path).mkdir(parents=True, exist_ok=True)
+                if self.config.document_rag.auto_ingest_on_startup:
+                    ingest_tool = self.tool_registry.get_tool("ingest_documents")
+                    if ingest_tool:
+                        try:
+                            result = await ingest_tool.execute()
+                            logger.info(
+                                "Document ingest: %s scanned, %s ingested, %s unchanged, "
+                                "%s removed, %s chunks added",
+                                result.get("files_scanned", 0), result.get("files_ingested", 0),
+                                result.get("files_unchanged", 0), result.get("files_removed", 0),
+                                result.get("chunks_added", 0),
+                            )
+                        except Exception as e:
+                            logger.warning(f"Document ingest at startup failed (non-fatal): {e}")
+
             # Initialize specialized agents first
             await self._initialize_specialized_agents()
             logger.info("Specialized agents initialized")

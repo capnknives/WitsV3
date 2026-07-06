@@ -79,6 +79,28 @@ class BaseMemoryBackend(ABC):
     ) -> List[MemorySegment]:
         pass
 
+    @staticmethod
+    def _segment_matches(segment: MemorySegment, filter_dict: Dict[str, Any]) -> bool:
+        """Same attr-or-metadata match rule used by search/get_recent filtering."""
+        for key, value in filter_dict.items():
+            if getattr(segment, key, None) != value and segment.metadata.get(key) != value:
+                return False
+        return True
+
+    async def delete_segments(self, filter_dict: Dict[str, Any]) -> int:
+        """Delete all segments matching filter_dict. Returns number removed."""
+        if not self.is_initialized:
+            await self.initialize()
+        if not filter_dict:
+            return 0  # refuse to wipe everything on an empty filter
+
+        before = len(self.segments)
+        self.segments = [s for s in self.segments if not self._segment_matches(s, filter_dict)]
+        removed = before - len(self.segments)
+        if removed:
+            await self._save_to_disk()
+        return removed
+
     async def _generate_embedding_if_needed(self, segment: MemorySegment) -> None:
         if segment.embedding is None:
             text_to_embed = segment.content.text or segment.content.tool_output
@@ -443,6 +465,10 @@ class MemoryManager:
         filter_dict: Optional[Dict[str, Any]] = None
     ) -> List[MemorySegment]:
         return await self.backend.get_recent_segments(limit, filter_dict)
+
+    async def delete_segments(self, filter_dict: Dict[str, Any]) -> int:
+        """Delete all segments matching filter_dict. Returns number removed."""
+        return await self.backend.delete_segments(filter_dict)
 
     # Additional convenience method used by agents
     async def add_segment(self, segment: MemorySegment) -> str:
