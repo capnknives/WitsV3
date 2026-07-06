@@ -59,8 +59,8 @@ class MemoryExporter:
                 # Create copies without embeddings
                 segments = [segment.model_copy(update={"embedding": None}) for segment in segments]
 
-            # Convert to dictionaries
-            segments_data = [segment.model_dump() for segment in segments]
+            # Convert to dictionaries (mode="json" serializes datetimes to ISO strings)
+            segments_data = [segment.model_dump(mode="json") for segment in segments]
 
             # Ensure the output directory exists
             output_path = Path(output_path)

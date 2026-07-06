@@ -10,15 +10,11 @@ import os
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 import sys
-import codecs
-# Set UTF-8 encoding for stdout/stderr
-if hasattr(sys.stdout, 'buffer'):
-    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
-    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer)
-
-# Fix Unicode encoding issues
-import sys
-sys.stdout.reconfigure(encoding='utf-8')
+# Set UTF-8 encoding for stdout/stderr (Windows consoles default to cp1252)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 import logging
 import os
@@ -59,7 +55,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('logs/witsv3.log') if Path('logs').exists() else logging.NullHandler()
+        logging.FileHandler('logs/witsv3.log', encoding='utf-8') if Path('logs').exists() else logging.NullHandler()
     ]
 )
 
@@ -295,23 +291,22 @@ class WitsV3System:
             logger.info(f"LLM test: {response}")
 
             # Test a basic tool
-            calculator_tool = None
-            for tool in self.tool_registry.get_all_tools():
-                if tool.name == "calculator":
-                    calculator_tool = tool
-                    break
+            calculator_tool = self.tool_registry.get_tool("calculator")
 
             if calculator_tool:
-                result = await calculator_tool.execute("2+2")
+                result = await calculator_tool.execute(expression="2+2")
                 logger.info(f"Calculator tool test: {result}")
 
             # Test memory system
             test_memory = f"This is a test memory created during system test at {time.time()}"
-            memory_segment = await self.memory_manager.add_memory_segment(
-                content=test_memory,
-                metadata={"source": "system_test", "importance": 0.5}
+            segment_id = await self.memory_manager.add_memory(
+                type="SYSTEM_MESSAGE",
+                source="system_test",
+                content_text=test_memory,
+                importance=0.5,
+                metadata={"source": "system_test"}
             )
-            logger.info(f"Memory test: Created segment {memory_segment.id}")
+            logger.info(f"Memory test: Created segment {segment_id}")
 
             # Test control center with a simple query
             test_query = "What is 2+2?"

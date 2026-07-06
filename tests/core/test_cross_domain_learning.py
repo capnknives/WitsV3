@@ -18,7 +18,7 @@ def config():
 
 
 @pytest.fixture
-def neural_web():
+async def neural_web():
     """Create a test neural web."""
     web = NeuralWeb()
 
@@ -32,20 +32,20 @@ def neural_web():
     ]
 
     for c_id, concept, domain, desc in concepts:
-        node = ConceptNode(
-            id=c_id,
-            concept=concept,
+        await web.add_concept(
+            concept_id=c_id,
+            content=concept,
+            concept_type="fact",
             metadata={
                 "domain": domain,
                 "description": desc
             }
         )
-        web.add_node(node)
 
     # Add some connections
-    web.connect_nodes("c1", "c2", "related_to", 0.5)
-    web.connect_nodes("c3", "c4", "used_in", 0.7)
-    web.connect_nodes("c2", "c5", "inspires", 0.6)
+    await web.connect_concepts("c1", "c2", "related_to", 0.5)
+    await web.connect_concepts("c3", "c4", "used_in", 0.7)
+    await web.connect_concepts("c2", "c5", "inspires", 0.6)
 
     return web
 
@@ -72,7 +72,7 @@ def mock_llm_interface():
                     return MagicMock(content="music")
                 else:
                     return MagicMock(content="general")
-            elif "similarity" in prompt.lower():
+            elif "similar" in prompt.lower():
                 # Return mock similarity scores for domain pairs
                 if "physics" in prompt and "politics" in prompt:
                     return MagicMock(content="0.2")
@@ -197,20 +197,19 @@ async def test_transfer_knowledge(config, neural_web, mock_llm_interface):
     cdl.domain_classifier.llm_interface = mock_llm_interface
 
     # Test transferring knowledge
-    initial_node_count = len(neural_web.nodes)
+    initial_node_count = len(neural_web.concepts)
     mapping = await cdl.transfer_knowledge("physics", "politics", ["c1"])
 
     # Check that a new node was created
-    assert len(neural_web.nodes) == initial_node_count + 1
+    assert len(neural_web.concepts) == initial_node_count + 1
     assert "c1" in mapping
 
     # Check that connections were created
     new_node_id = mapping["c1"]
-    source_node = neural_web.get_node("c1")
-    assert new_node_id in source_node.connections
+    assert ("c1", new_node_id) in neural_web.connections
 
     # Check metadata
-    new_node = neural_web.get_node(new_node_id)
+    new_node = neural_web.concepts[new_node_id]
     assert new_node.metadata["domain"] == "politics"
     assert new_node.metadata["source_concept_id"] == "c1"
     assert new_node.metadata["source_domain"] == "physics"
@@ -224,8 +223,8 @@ async def test_propagate_cross_domain_activation(config, neural_web, mock_llm_in
     cdl.domain_classifier.llm_interface = mock_llm_interface
 
     # Create some cross-domain connections for testing
-    # Connect physics concept to politics concept
-    neural_web.connect_nodes("c1", "c2", "cross_domain", 0.8)
+    # Connect physics concept to politics concept (reinforces existing c1->c2)
+    await neural_web.connect_concepts("c1", "c2", "cross_domain", 0.8)
 
     # Test activation propagation
     activations = await cdl.propagate_cross_domain_activation("c1", 1.0)
@@ -265,7 +264,7 @@ async def test_analyze_domain_relationships(config, neural_web, mock_llm_interfa
 
     # Check a specific relationship
     domains = set()
-    for node in neural_web.nodes.values():
+    for node in neural_web.concepts.values():
         if "domain" in node.metadata:
             domains.add(node.metadata["domain"])
 
@@ -289,7 +288,7 @@ async def test_create_cross_domain_knowledge_graph(config, neural_web, mock_llm_
 
     # Should have nodes for each domain
     domains = set()
-    for node in neural_web.nodes.values():
+    for node in neural_web.concepts.values():
         if "domain" in node.metadata:
             domains.add(node.metadata["domain"])
 

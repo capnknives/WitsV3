@@ -32,7 +32,9 @@ class DomainClassifier:
         self.known_domains = [
             "science", "art", "mathematics", "history",
             "technology", "philosophy", "business", "literature",
-            "psychology", "economics", "politics", "medicine"
+            "psychology", "economics", "politics", "medicine",
+            "physics", "biology", "chemistry", "computer_science",
+            "music", "sociology", "engineering", "law"
         ]
         self.logger = logging.getLogger(__name__)
 
@@ -167,7 +169,7 @@ class CrossDomainLearning:
         Returns:
             The domain classification
         """
-        concept = self.neural_web.get_node(concept_id)
+        concept = self.neural_web.concepts.get(concept_id)
         if not concept:
             self.logger.warning(f"Concept {concept_id} not found in neural web")
             return "unknown"
@@ -177,7 +179,7 @@ class CrossDomainLearning:
             return concept.metadata["domain"]
 
         # Classify domain using the domain classifier
-        domain = await self.domain_classifier.classify_domain(concept.concept)
+        domain = await self.domain_classifier.classify_domain(concept.content)
 
         # Update concept metadata with domain
         concept.metadata["domain"] = domain
@@ -197,14 +199,14 @@ class CrossDomainLearning:
         Returns:
             List of concept IDs that are analogous in the target domain
         """
-        source_concept = self.neural_web.get_node(concept_id=source_concept_id)
+        source_concept = self.neural_web.concepts.get(source_concept_id)
         if not source_concept:
             self.logger.warning(f"Source concept {source_concept_id} not found")
             return []
 
         # Get all concepts in the target domain
         target_domain_concepts = []
-        for node_id, node in self.neural_web.nodes.items():
+        for node_id, node in self.neural_web.concepts.items():
             if node.metadata.get("domain") == target_domain:
                 target_domain_concepts.append(node)
 
@@ -216,13 +218,13 @@ class CrossDomainLearning:
         prompt = f"""
         Find analogies between this concept:
 
-        Concept: {source_concept.concept}
+        Concept: {source_concept.content}
         Description: {source_concept.metadata.get('description', 'No description')}
         Domain: {source_concept.metadata.get('domain', 'unknown')}
 
         And these concepts from the {target_domain} domain:
 
-        {chr(10).join([f"{i+1}. {c.concept}" for i, c in enumerate(target_domain_concepts[:5])])}
+        {chr(10).join([f"{i+1}. {c.content}" for i, c in enumerate(target_domain_concepts[:5])])}
 
         Return the numbers of concepts that are analogous, separated by commas.
         """
@@ -260,7 +262,7 @@ class CrossDomainLearning:
         result_mapping = {}
 
         for concept_id in concept_ids:
-            source_concept = self.neural_web.get_node(concept_id)
+            source_concept = self.neural_web.concepts.get(concept_id)
             if not source_concept:
                 continue
 
@@ -268,7 +270,7 @@ class CrossDomainLearning:
             prompt = f"""
             Translate this concept from {source_domain} to {target_domain} domain:
 
-            Source concept: {source_concept.concept}
+            Source concept: {source_concept.content}
             Source domain: {source_domain}
             Target domain: {target_domain}
 
@@ -283,9 +285,10 @@ class CrossDomainLearning:
             new_concept_id = str(uuid.uuid4())
 
             # Create and add the new concept node
-            new_concept = ConceptNode(
-                id=new_concept_id,
-                concept=new_concept_text,
+            await self.neural_web.add_concept(
+                concept_id=new_concept_id,
+                content=new_concept_text,
+                concept_type=source_concept.concept_type,
                 metadata={
                     "domain": target_domain,
                     "source_concept_id": concept_id,
@@ -294,18 +297,12 @@ class CrossDomainLearning:
                 }
             )
 
-            self.neural_web.add_node(new_concept)
-
-            # Create bidirectional connection between concepts
-            self.neural_web.connect_nodes(
+            # Create connection between the source and transferred concepts
+            await self.neural_web.connect_concepts(
                 source_id=concept_id,
                 target_id=new_concept_id,
-                connection_type="domain_analogy",
-                strength=0.8,
-                metadata={
-                    "source_domain": source_domain,
-                    "target_domain": target_domain
-                }
+                relationship_type="domain_analogy",
+                strength=0.8
             )
 
             result_mapping[concept_id] = new_concept_id
@@ -325,7 +322,7 @@ class CrossDomainLearning:
         Returns:
             Dictionary of concept IDs to activation levels
         """
-        concept = self.neural_web.get_node(concept_id)
+        concept = self.neural_web.concepts.get(concept_id)
         if not concept:
             return {}
 
@@ -334,15 +331,17 @@ class CrossDomainLearning:
         if not source_domain:
             source_domain = await self.classify_concept_domain(concept_id)
 
-        # Get all connections of the concept
-        connected_concepts = {}
-        for conn_id, conn in concept.connections.items():
-            connected_concepts[conn_id] = conn
+        # Get all outgoing connections of the concept
+        connected_concepts = {
+            target_id: conn
+            for (source_id, target_id), conn in self.neural_web.connections.items()
+            if source_id == concept_id
+        }
 
         # Find cross-domain connections
         cross_domain_activations = {}
         for conn_id, conn in connected_concepts.items():
-            target_concept = self.neural_web.get_node(conn_id)
+            target_concept = self.neural_web.concepts.get(conn_id)
             if not target_concept:
                 continue
 
@@ -353,7 +352,7 @@ class CrossDomainLearning:
             # If this is a cross-domain connection
             if target_domain != source_domain:
                 # Calculate propagated activation based on connection strength
-                propagated_activation = activation_level * conn["strength"]
+                propagated_activation = activation_level * conn.strength
 
                 # Get domain similarity to further adjust activation
                 domain_similarity = await self.domain_classifier.get_domain_similarity(
@@ -398,7 +397,7 @@ class CrossDomainLearning:
         """
         domain_concepts = []
 
-        for node_id, node in self.neural_web.nodes.items():
+        for node_id, node in self.neural_web.concepts.items():
             if node.metadata.get("domain") == domain:
                 domain_concepts.append(node_id)
 
@@ -416,7 +415,7 @@ class CrossDomainLearning:
         """
         # Get all domains present in the neural web
         domains = set()
-        for node in self.neural_web.nodes.values():
+        for node in self.neural_web.concepts.values():
             if "domain" in node.metadata:
                 domains.add(node.metadata["domain"])
 
@@ -460,26 +459,24 @@ class CrossDomainLearning:
             graph.add_edge(domain1, domain2, weight=strength, type="domain_relationship")
 
         # Add cross-domain concept relationships
-        for node_id, node in self.neural_web.nodes.items():
-            if "domain" not in node.metadata:
+        for (source_id, target_id), conn in self.neural_web.connections.items():
+            source_node = self.neural_web.concepts.get(source_id)
+            target_node = self.neural_web.concepts.get(target_id)
+            if not source_node or "domain" not in source_node.metadata:
+                continue
+            if not target_node or "domain" not in target_node.metadata:
                 continue
 
-            source_domain = node.metadata["domain"]
+            source_domain = source_node.metadata["domain"]
+            target_domain = target_node.metadata["domain"]
 
-            for conn_id, conn in node.connections.items():
-                target_node = self.neural_web.get_node(conn_id)
-                if not target_node or "domain" not in target_node.metadata:
-                    continue
-
-                target_domain = target_node.metadata["domain"]
-
-                if source_domain != target_domain:
-                    # Add weight to the domain relationship edge
-                    if graph.has_edge(source_domain, target_domain):
-                        current_weight = graph.edges[source_domain, target_domain]["weight"]
-                        graph.edges[source_domain, target_domain]["weight"] = current_weight + conn["strength"] * 0.1
-                    else:
-                        graph.add_edge(source_domain, target_domain, weight=conn["strength"] * 0.1, type="domain_relationship")
+            if source_domain != target_domain:
+                # Add weight to the domain relationship edge
+                if graph.has_edge(source_domain, target_domain):
+                    current_weight = graph.edges[source_domain, target_domain]["weight"]
+                    graph.edges[source_domain, target_domain]["weight"] = current_weight + conn.strength * 0.1
+                else:
+                    graph.add_edge(source_domain, target_domain, weight=conn.strength * 0.1, type="domain_relationship")
 
         return graph
 
@@ -491,11 +488,8 @@ async def test_cross_domain_learning():
     neural_web = NeuralWeb()
 
     # Create test concepts
-    node1 = ConceptNode(id="1", concept="Gravity", metadata={"domain": "physics"})
-    node2 = ConceptNode(id="2", concept="Influence", metadata={"domain": "sociology"})
-
-    neural_web.add_node(node1)
-    neural_web.add_node(node2)
+    await neural_web.add_concept("1", "Gravity", "fact", metadata={"domain": "physics"})
+    await neural_web.add_concept("2", "Influence", "fact", metadata={"domain": "sociology"})
 
     # Create cross-domain learning instance
     cdl = CrossDomainLearning(config, neural_web)

@@ -139,7 +139,8 @@ personality:
   profile_path: config/wits_personality.yaml
 project_name: WitsV3
 security:
-  auth_token_hash: cedbb64b3b1b044da25b7df31d83e8f72f509382d43567c0591392510e07b9c6
+  # Set via WITSV3_AUTH_TOKEN_HASH in .env (never commit secrets here)
+  auth_token_hash: ""
   authorized_network_override_user: richard_elliot
   ethics_override_authorized_user: richard_elliot
   ethics_system_enabled: true
@@ -149,8 +150,9 @@ security:
   require_auth_for_network_control: true
 supabase:
   enable_realtime: true
-  key: sbp_ee5abfbf912375dea50375d81d3a7e1bee1892d7
-  url: https://scdzgxvrppxpicinggy.supabase.co
+  # Set via WITSV3_SUPABASE_URL / WITSV3_SUPABASE_KEY in .env (never commit secrets here)
+  key: ""
+  url: ""
 tool_system:
   enable_mcp_tools: true
   mcp_tool_definitions_path: data/mcp_tools.json

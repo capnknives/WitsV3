@@ -2,9 +2,17 @@
 Configuration management for WitsV3 system
 """
 
+import os
+
 import yaml
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # Load .env from the working directory, if present
+except ImportError:
+    pass
 
 class OllamaSettings(BaseModel):
     url: str = Field(default="http://localhost:11434")
@@ -141,10 +149,34 @@ class WitsV3Config(BaseModel):
             print(f"An unexpected error occurred while loading config '{config_path}': {e}. Using default values.")
             return cls()
 
+def _apply_env_overrides(config: "WitsV3Config") -> "WitsV3Config":
+    """Apply secret values from environment variables (or .env).
+
+    Secrets are intentionally NOT stored in config.yaml (which is committed
+    to git). Set them in a local .env file or the environment instead:
+      - WITSV3_SUPABASE_URL:      Supabase project URL
+      - WITSV3_SUPABASE_KEY:      Supabase API key
+      - WITSV3_AUTH_TOKEN_HASH:   SHA256 hash of the admin auth token
+    """
+    supabase_url = os.getenv("WITSV3_SUPABASE_URL")
+    if supabase_url:
+        config.supabase.url = supabase_url
+
+    supabase_key = os.getenv("WITSV3_SUPABASE_KEY")
+    if supabase_key:
+        config.supabase.key = supabase_key
+
+    auth_token_hash = os.getenv("WITSV3_AUTH_TOKEN_HASH")
+    if auth_token_hash:
+        config.security.auth_token_hash = auth_token_hash
+
+    return config
+
+
 # Convenience function for loading config
 def load_config(config_path: str = "config.yaml") -> WitsV3Config:
-    """Load configuration from YAML file."""
-    return WitsV3Config.from_yaml(config_path)
+    """Load configuration from YAML file, with env-var overrides for secrets."""
+    return _apply_env_overrides(WitsV3Config.from_yaml(config_path))
 
 # For backwards compatibility
 AppConfig = WitsV3Config

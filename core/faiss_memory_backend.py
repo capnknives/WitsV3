@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import faiss
-from pydantic import parse_obj_as
+from pydantic import TypeAdapter
 
 from .memory_manager import BaseMemoryBackend, MemorySegment
 from .config import WitsV3Config
@@ -91,7 +91,10 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
             if self.memory_file_path.exists():
                 with open(self.memory_file_path, 'r') as f:
                     segments_data = json.load(f)
-                    self.segments = parse_obj_as(List[MemorySegment], segments_data)
+                    # Support both plain-list and {"segments": [...]} template formats
+                    if isinstance(segments_data, dict):
+                        segments_data = segments_data.get("segments", [])
+                    self.segments = TypeAdapter(List[MemorySegment]).validate_python(segments_data)
                     self.logger.info(f"Loaded {len(self.segments)} memory segments from {self.memory_file_path}")
             else:
                 self.segments = []
@@ -104,7 +107,7 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
         """Save memory segments to disk."""
         try:
             with open(self.memory_file_path, 'w') as f:
-                json.dump([segment.model_dump() for segment in self.segments], f, indent=2)
+                json.dump([segment.model_dump(mode="json") for segment in self.segments], f, indent=2)
 
             # Save FAISS index if it exists
             if self.index is not None:

@@ -8,13 +8,13 @@ WitsV3 is designed for maximum flexibility and LLM-driven decision making. It fo
 
 ## ✅ Current Status - PRODUCTION READY 🚀
 
-**WitsV3 v2.0 - STABLE RELEASE** (Updated: 2025-06-08)
+**WitsV3 v2.0 - STABLE RELEASE** (Updated: 2026-07-06)
 
 WitsV3 has achieved **production-grade stability** with comprehensive testing and bug fixes:
 
-- **🎯 Test Suite**: **93.3% pass rate** (56/60 tests passing)
-- **🔧 Stability**: **25 critical bugs fixed** across all core components
-- **⚙️ Tool Registry**: 6 tools properly registered and fully functional
+- **🎯 Test Suite**: **100% pass rate** (142 passed, 2 skipped — external MCP-server integration tests)
+- **🔧 Stability**: **25+ critical bugs fixed** across all core components
+- **⚙️ Tool Registry**: 14 tools properly registered and fully functional
 - **🤖 LLM Integration**: Successfully connects to Ollama with llama3 model
 - **💾 Memory Management**: Robust datetime serialization and JSON handling
 - **🧠 Agent System**: LLM-driven orchestrator with ReAct pattern implementation
@@ -108,9 +108,11 @@ make build
 
 After installation, WitsV3 requires some initial configuration:
 
-1. **Authentication Setup**: Run `python setup_auth.py` to generate your authentication token
-2. **Local Data**: Run `python scripts/setup_local_data.py` to initialize memory files
-3. **Ollama Models**: Ensure you have compatible models installed:
+1. **Secrets**: Copy `.env.example` to `.env` and fill in your values. Secrets
+   (Supabase key, auth token hash) live in the gitignored `.env` — never in `config.yaml`.
+2. **Authentication Setup**: Run `python setup_auth.py` to generate your authentication token
+3. **Local Data**: Run `python scripts/setup_local_data.py` to initialize memory files
+4. **Ollama Models**: Ensure you have compatible models installed:
    ```bash
    ollama pull llama3
    ollama pull codellama
