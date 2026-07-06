@@ -9,6 +9,10 @@ import os
 import getpass
 from pathlib import Path
 
+# Ensure emoji output works on Windows consoles (cp1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 # Add the project root to the path so we can import WitsV3 modules
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -61,17 +65,24 @@ def main():
         print("   • Your password manager")
 
         # Ask if user wants to save to environment file
-        save_env = input("\n💾 Create .env file with token? (y/N): ").strip().lower()
+        save_env = input("\n💾 Save token to .env file? (y/N): ").strip().lower()
         if save_env in ['y', 'yes']:
             try:
+                # Update .env in place - never overwrite it wholesale, other
+                # secrets (Supabase, web token, auth hash) live there too.
+                lines = []
+                if os.path.exists('.env'):
+                    with open('.env', 'r') as f:
+                        lines = [
+                            line for line in f.read().splitlines()
+                            if not line.startswith("WITSV3_AUTH_TOKEN=")
+                        ]
+                lines.append(f"WITSV3_AUTH_TOKEN={token}")
                 with open('.env', 'w') as f:
-                    f.write(f"# WitsV3 Authentication Token\n")
-                    f.write(f"# Generated: {auth_manager.config.memory_manager.get('timestamp', 'unknown')}\n")
-                    f.write(f"WITSV3_AUTH_TOKEN={token}\n")
-                print("✅ Token saved to .env file")
-                print("⚠️  Add .env to your .gitignore to prevent accidental commits!")
+                    f.write("\n".join(lines) + "\n")
+                print("✅ Token saved to .env file (existing entries preserved)")
             except Exception as e:
-                print(f"❌ Failed to create .env file: {e}")
+                print(f"❌ Failed to update .env file: {e}")
     else:
         print("❌ Failed to configure authentication token")
         return 1
