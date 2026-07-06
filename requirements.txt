@@ -39,6 +39,11 @@ colorama>=0.4.6
 aiohttp>=3.8.0
 websockets>=10.0
 
+# Web UI
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9  # file uploads
+
 # New tool dependencies
 scipy>=1.10.0  # For statistical operations
 pandas>=2.0.0  # For data manipulation

@@ -17,6 +17,13 @@ WitsV3 is designed for maximum flexibility and LLM-driven decision making. It fo
 
 ### 📋 Changelog
 
+**2026-07-06 — Web UI (desktop + phone)**
+
+- New browser interface: streaming chat (SSE) over the full agent system, with side panels for tools, memory search, and document upload/list
+- Mobile-first + installable as a PWA on Android ("Add to Home screen")
+- Runs with `python run_web.py`; binds to the LAN so your phone can connect; bearer-token auth via `WITSV3_WEB_TOKEN` in `.env`
+- Control center now routes document/file/memory questions to the tool-equipped orchestrator instead of answering directly
+
 **2026-07-06 — Document RAG**
 
 - New `documents/` drop folder: files are chunked, embedded with `nomic-embed-text`, and stored as searchable memory segments (auto-ingest at startup + `ingest_documents` tool)
@@ -159,6 +166,25 @@ Secrets are supplied via `.env` / environment variables (loaded in `core/config.
 - **Adaptive LLM System** — complexity analyzer + dynamic module loader + semantic cache for routing queries to appropriately-sized models (`llm_interface.default_provider: adaptive` to enable)
 - **MCP integration** — Model Context Protocol adapter for external tool servers (opt-in at startup)
 
+## Web UI
+
+```bash
+python run_web.py
+```
+
+Open `http://localhost:8000` on the PC — or from your **Android phone** on the same Wi-Fi,
+open the `http://<PC-IP>:8000` URL the server prints at startup, enter your
+`WITSV3_WEB_TOKEN`, and use the browser menu → **Add to Home screen** for an app-like
+fullscreen experience (PWA).
+
+- Streaming chat with live thinking/tool-call events from the agent system
+- ☰ panel: tool list, semantic memory search, document list + upload (feeds Document RAG)
+- Auth: set `WITSV3_WEB_TOKEN` in `.env` (any strong random string); the UI prompts once and remembers it
+- One-time firewall rule (run PowerShell **as Administrator**):
+  `New-NetFirewallRule -DisplayName "WitsV3 Web UI" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow`
+- Away from home? Install [Tailscale](https://tailscale.com) on the PC and phone — the same URL works
+  over its private VPN with zero port forwarding.
+
 ## Document RAG
 
 Drop files into the `documents/` folder and WitsV3 ingests them automatically at startup
@@ -173,7 +199,7 @@ orchestrator uses the `document_search` tool to find relevant passages.
 
 ## Roadmap
 
-1. **Web UI** — FastAPI + SSE streaming chat over the existing engine, with memory browser and goal tracking
+1. ~~**Web UI**~~ — ✅ shipped 2026-07-06 (see above), including Android/PWA access
 2. ~~**Document RAG**~~ — ✅ shipped 2026-07-06 (see above)
 3. **Smart model routing** — wire the adaptive-LLM stack so trivial queries hit `llama3.2:3b`, code hits `qwen2.5-coder:7b`, and complex reasoning hits `qwen3:8b`
 4. PyQt6 desktop GUI and background-agent revival (in progress on a separate branch)

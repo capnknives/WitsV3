@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1117">
+  <title>WITS</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header>
+    <button id="menu-btn" title="Panels">☰</button>
+    <div class="title">
+      <span class="logo">◆</span> WITS
+      <span id="status-dot" class="dot" title="checking…"></span>
+    </div>
+    <button id="new-chat-btn" title="New chat">＋</button>
+  </header>
+
+  <main id="chat"></main>
+
+  <form id="composer">
+    <textarea id="input" rows="1" placeholder="Ask WITS anything…" autocomplete="off"></textarea>
+    <button id="send-btn" type="submit" title="Send">➤</button>
+  </form>
+
+  <!-- slide-over side panel -->
+  <div id="panel-backdrop" hidden></div>
+  <aside id="panel" hidden>
+    <div class="panel-header">
+      <h2 id="panel-title">WITS</h2>
+      <button id="panel-close">✕</button>
+    </div>
+    <nav class="panel-tabs">
+      <button data-tab="tools" class="active">Tools</button>
+      <button data-tab="memory">Memory</button>
+      <button data-tab="docs">Documents</button>
+    </nav>
+    <section id="tab-tools" class="tab active"></section>
+    <section id="tab-memory" class="tab">
+      <div class="row">
+        <input id="memory-q" type="search" placeholder="Search memory…">
+        <button id="memory-go">Go</button>
+      </div>
+      <div id="memory-results"></div>
+    </section>
+    <section id="tab-docs" class="tab">
+      <label class="upload-btn">
+        Upload document
+        <input id="doc-file" type="file" hidden>
+      </label>
+      <div id="doc-list"></div>
+    </section>
+  </aside>
+
+  <!-- token prompt -->
+  <div id="token-modal" hidden>
+    <div class="modal-card">
+      <h2>Access token</h2>
+      <p>Enter the WITSV3_WEB_TOKEN from your .env file.</p>
+      <input id="token-input" type="password" placeholder="token">
+      <button id="token-save">Connect</button>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

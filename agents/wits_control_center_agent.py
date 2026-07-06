@@ -213,6 +213,24 @@ User input: {user_input}
                 "confidence": 0.9
             }
 
+        # Requests that reference the user's documents, files, or stored memory
+        # always need tool access - route straight to the orchestrator instead
+        # of letting complexity analysis land on a (tool-less) direct response.
+        tool_hints = (
+            "document", "my notes", "my files", "search my", "in my memory",
+            "remember", "ingest", "uploaded", "read the file", "look up"
+        )
+        lowered = user_input.lower()
+        if any(hint in lowered for hint in tool_hints):
+            return {
+                "type": "task",
+                "complexity": "moderate",
+                "requires_tools": True,
+                "suggested_response": "orchestrator",
+                "notes": "References user documents/files/memory - routing to orchestrator for tool use.",
+                "confidence": 0.85
+            }
+
         # For task-oriented messages, use enhanced capabilities if available
         if self.has_enhanced_capabilities and self.meta_reasoning and len(user_input.split()) > 8:
             try:
