@@ -1,122 +1,100 @@
 # WitsV3
 
-A streamlined, LLM-wrapper based AI orchestration system.
+A streamlined, LLM-wrapper based AI orchestration system that runs entirely on local models via Ollama.
 
 ## Overview
 
-WitsV3 is designed for maximum flexibility and LLM-driven decision making. It focuses on a CLI-first approach with a modular design to allow for future expansion (e.g., Web UI, advanced Book Writing System).
+WitsV3 is designed for maximum flexibility and LLM-driven decision making. It focuses on a CLI-first approach with a modular design: a control-center agent clarifies goals, a ReAct-style orchestrator decomposes and executes tasks with tools, and a persistent memory system (with optional vector search and a neural-web knowledge graph) carries context across sessions.
 
-## ✅ Current Status - PRODUCTION READY 🚀
+## ✅ Current Status — Fully Operational (Updated: 2026-07-06)
 
-**WitsV3 v2.0 - STABLE RELEASE** (Updated: 2026-07-06)
+- **🎯 Test Suite**: **142 passed, 2 skipped** (skips are external MCP-server integration tests), 0 failures
+- **⚡ 100% GPU inference**: all configured models fit fully in 8 GB VRAM — no CPU spillover
+- **🤖 Models**: Qwen3 8B (general/orchestration), Qwen2.5-Coder 7B (coding), Llama 3.2 3B (fast fallback), nomic-embed-text (embeddings)
+- **⚙️ Tool Registry**: 14 tools auto-discovered and registered
+- **🔐 Secrets hygiene**: credentials live in a gitignored `.env`, never in `config.yaml`
+- **🧠 Agent System**: LLM-driven orchestrator with ReAct pattern, control center, and specialized agents (book writing, coding, self-repair)
 
-WitsV3 has achieved **production-grade stability** with comprehensive testing and bug fixes:
+### 📋 Changelog
 
-- **🎯 Test Suite**: **100% pass rate** (142 passed, 2 skipped — external MCP-server integration tests)
-- **🔧 Stability**: **25+ critical bugs fixed** across all core components
-- **⚙️ Tool Registry**: 14 tools properly registered and fully functional
-- **🤖 LLM Integration**: Successfully connects to Ollama with llama3 model
-- **💾 Memory Management**: Robust datetime serialization and JSON handling
-- **🧠 Agent System**: LLM-driven orchestrator with ReAct pattern implementation
-- **📁 File Operations**: Read, write, and directory listing capabilities
-- **🌐 Unicode Support**: Clean text output without character encoding issues
-- **🎯 Adaptive LLM System**: Dynamic routing to specialized modules based on query complexity and domain
-- **🧪 Background Agents**: Scheduled tasks, monitoring, and maintenance
+**2026-07-06 — Model upgrade & performance pass** (`c3770fe`)
 
-### 🏆 Recent Major Improvements (2025-06-08)
+- Replaced the model lineup: `llama3` → **`qwen3:8b`** (default/orchestrator/control center), `deepseek-coder-v2:16b` (10 GB, spilled to CPU) → **`qwen2.5-coder:7b`** (4.7 GB, fully GPU); added `llama3.2:3b` as fast fallback
+- Fixed `memory_manager.vector_dim` to 768 to match nomic-embed-text (was 384 in config and 4096 in code defaults — neither correct)
+- New `tool_system.mcp_connect_on_startup` flag (default `false`) — startup no longer wastes ~20 s attempting to reach unbuilt external MCP node servers
+- `auto_restart_on_file_change` now defaults off (no surprise restarts while editing)
+- Ollama tuning applied at the environment level: flash attention, `q8_0` KV cache, 10-minute keep-alive; model store relocated to a dedicated data drive
+- Measured result: control-center responses dropped from ~14–21 s to **~2–3 s**
 
-- **Fixed all tool test suites**: JSON, Math, Python Execution tools now 100% stable
-- **Enhanced async patterns**: Proper async/await implementation throughout
-- **Robust external service mocking**: Supabase, Ollama properly tested
-- **Configuration validation**: Enhanced Pydantic models with assignment validation
-- **Memory system stability**: MemorySegment serialization working flawlessly
-- **Adaptive LLM testing**: Complete test coverage with dummy model files
+**2026-07-06 — Revival & hardening pass** (`705ebf0`)
 
-This version prioritizes:
-
-- LLM Wrapper Architecture
-- Core agent system (Control Center, Orchestrator)
-- Essential memory management (with optional FAISS-GPU)
-- Extensible tool system, including MCP (Model Context Protocol) tools
-- Langchain integration capabilities
-- Adaptive LLM capabilities for optimized resource usage
-- **Production-grade test coverage and stability**
+- Fixed 17 bugs across the codebase, including: broken stdout handling that crashed `run.py` at launch on Windows, tool auto-discovery failing on a missing `ToolResult` export, datetime-serialization failures in the FAISS memory backend and memory export, the cross-domain-learning module targeting a NeuralWeb API that didn't exist, missing `import os` in the JSON tool, and Windows `npm`/`npx` resolution in the MCP adapters
+- Restored conversation-summarization features (agent-interaction summaries, typed transcripts, manual topic extraction)
+- Moved all secrets (Supabase key, auth token hash) out of `config.yaml` into a gitignored `.env` with environment-variable overrides in `core/config.py`
+- Rebuilt the test suite health: **98 passed / 36 failed / 8 errors → 142 passed / 0 failed** (updated stale mocks to httpx 0.28 and the retry-aware LLM interface contract, fixed a nondeterministic embedding fixture)
+- Pinned a reproducible dependency set in `requirements.lock` (Python 3.10, pydantic 2.13, httpx 0.28, faiss-cpu 1.14, supabase 2.31)
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.10+
-- Ollama (with models like Llama3, CodeLlama, etc.)
-- Other dependencies (see `requirements.txt`)
+- **Python 3.10+**
+- **Ollama** ([ollama.com](https://ollama.com)) with the models below
+- An NVIDIA GPU with ~8 GB VRAM is recommended — every configured model fits fully on-GPU at that size
+
+### Models
+
+```bash
+ollama pull qwen3:8b            # general / orchestration (~5.2 GB)
+ollama pull qwen2.5-coder:7b    # coding agent (~4.7 GB)
+ollama pull llama3.2:3b         # fast fallback (~2.0 GB)
+ollama pull nomic-embed-text    # embeddings, 768-dim (~274 MB)
+```
+
+> **Tip — model storage location:** the Ollama desktop app stores models under `C:\Users\<you>\.ollama\models` by default and manages the location in its own settings (the `OLLAMA_MODELS` environment variable alone is not enough when using the tray app). Change it in the Ollama app settings if you want models on another drive.
+
+> **Tip — GPU performance:** setting `OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, and `OLLAMA_KEEP_ALIVE=10m` (user environment variables, then restart Ollama) speeds up attention, halves KV-cache VRAM, and avoids model reloads between agent calls.
 
 ### Installation
 
-#### Option 1: Automated Installation (Recommended)
+#### Option 1: Automated
 
 ```bash
-# Clone the repository
 git clone https://github.com/capnknives/WitsV3.git
 cd WitsV3
-
-# Run automated installation
 python install.py
 ```
 
-#### Option 2: Manual Installation
+#### Option 2: Manual
 
 ```bash
-# Clone the repository
 git clone https://github.com/capnknives/WitsV3.git
 cd WitsV3
 
-# Install dependencies
+# Recommended: use a virtual environment
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux/macOS
+
 pip install -r requirements.txt
 
 # Set up local data files (memory, neural web)
 python scripts/setup_local_data.py
 
-# Set up authentication (creates secure tokens)
-python setup_auth.py
+# Set up secrets + authentication
+copy .env.example .env        # then fill in your values
+python setup_auth.py          # generates an auth token (hash stored in .env)
 
-# Ensure Ollama is running
-ollama serve
-
-# Run tests to verify installation
-pytest tests/ -v
-```
-
-### Quick Start with Make
-
-WitsV3 includes a comprehensive Makefile for streamlined development:
-
-```bash
-# Install development dependencies
-make install-dev
-
-# Run the main application
-make dev
-
-# Run tests with coverage
-make test-cov
-
-# Clean and build package
-make build
+# Verify
+pytest tests/ -q --no-cov
 ```
 
 ### First Run Setup
 
-After installation, WitsV3 requires some initial configuration:
-
-1. **Secrets**: Copy `.env.example` to `.env` and fill in your values. Secrets
-   (Supabase key, auth token hash) live in the gitignored `.env` — never in `config.yaml`.
-2. **Authentication Setup**: Run `python setup_auth.py` to generate your authentication token
-3. **Local Data**: Run `python scripts/setup_local_data.py` to initialize memory files
-4. **Ollama Models**: Ensure you have compatible models installed:
-   ```bash
-   ollama pull llama3
-   ollama pull codellama
-   ```
+1. **Secrets**: copy `.env.example` to `.env` and fill in your values. Secrets (Supabase key, auth token hash) live in the gitignored `.env` — never in `config.yaml`.
+2. **Authentication**: run `python setup_auth.py` to generate your authentication token. Save the token securely; only its hash is stored.
+3. **Local data**: run `python scripts/setup_local_data.py` to initialize memory files.
+4. **Ollama**: make sure Ollama is running and the four models above are pulled.
 
 ### Running WitsV3
 
@@ -124,218 +102,103 @@ After installation, WitsV3 requires some initial configuration:
 # Start the CLI interface
 python run.py
 
-# Run background agent
-python -m agents.background_agent
+# Non-interactive system self-test (init + LLM + tools + memory + agents)
+python run.py --test
 
-# Run specific tests
-pytest tests/tools/test_json_tool.py -v
+# Run the background agent
+python run_background_agent.py
+
+# Run the test suite
+pytest tests/ -q --no-cov
 ```
 
-### Authentication & Security
+### Quick Start with Make
 
-WitsV3 includes enterprise-grade security features:
+```bash
+make install-dev   # install development dependencies
+make dev           # run the main application
+make test-cov      # run tests with coverage
+make build         # clean and build package
+```
 
-- **Token-based Authentication**: Secure access control with SHA-256 hashed tokens
-- **Network Access Control**: Configurable restrictions with user override capability
-- **Personality Profiles**: Comprehensive user recognition and behavior customization
-- **Ethics System**: Built-in ethical oversight with testing override capabilities
+## Configuration
 
-Your authentication token will be displayed during setup - **save it securely** as it's required for secure operations.
+Main configuration is `config.yaml`; the pydantic models (and defaults) live in `core/config.py`. Highlights:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `ollama_settings.default_model` | `qwen3:8b` | General/orchestration model |
+| `ollama_settings.coding_agent_model` | `qwen2.5-coder:7b` | Coding agent model |
+| `ollama_settings.embedding_model` | `nomic-embed-text` | Embeddings (768-dim) |
+| `ollama_settings.fallback_models` | qwen3:8b → llama3.2:3b → qwen2.5-coder:7b | Automatic fallback order |
+| `memory_manager.backend` | `basic` | `basic`, `faiss_cpu`, `faiss_gpu`, or `neural` |
+| `memory_manager.vector_dim` | `768` | Must match the embedding model |
+| `tool_system.mcp_connect_on_startup` | `false` | Connect to external MCP servers at boot |
+| `auto_restart_on_file_change` | `false` | Watchdog-based auto-restart for development |
+
+Secrets are supplied via `.env` / environment variables (loaded in `core/config.py`):
+
+- `WITSV3_SUPABASE_URL`, `WITSV3_SUPABASE_KEY` — optional Supabase memory backend
+- `WITSV3_AUTH_TOKEN_HASH` — SHA-256 hash of the admin token (written by `setup_auth.py`)
+
+## Architecture
+
+- **WitsControlCenterAgent (WCCA)** — user interaction, intent parsing, and goal clarification
+- **LLMDrivenOrchestrator** — ReAct-style reasoning loop that plans, calls tools, and synthesizes results
+- **Specialized agents** — book writing, coding, and self-repair agents invoked by the control center
+- **Memory Manager** — persistent memory segments with embeddings; backends for JSON (basic), FAISS, neural-web, and Supabase
+- **Neural Web** — concept graph with activation propagation and cross-domain learning
+- **Tool Registry** — auto-discovers tools (14 built-in: file ops, calculator, math, JSON, Python execution, web search, datetime, conversation analysis, network control, thinking, intent analysis)
+- **Adaptive LLM System** — complexity analyzer + dynamic module loader + semantic cache for routing queries to appropriately-sized models (`llm_interface.default_provider: adaptive` to enable)
+- **MCP integration** — Model Context Protocol adapter for external tool servers (opt-in at startup)
+
+## Roadmap
+
+1. **Web UI** — FastAPI + SSE streaming chat over the existing engine, with memory browser and goal tracking
+2. **Document RAG** — watched folder → chunk → embed → memory segments, plus a `document_search` tool for agents
+3. **Smart model routing** — wire the adaptive-LLM stack so trivial queries hit `llama3.2:3b`, code hits `qwen2.5-coder:7b`, and complex reasoning hits `qwen3:8b`
+4. PyQt6 desktop GUI and background-agent revival (in progress on a separate branch)
 
 ## Documentation
 
-### Project Structure
-
-- **[FILE_STRUCTURE.md](FILE_STRUCTURE.md)** - Comprehensive file structure documentation
-- **[PATH_MIGRATION_GUIDE.md](PATH_MIGRATION_GUIDE.md)** - Guide for file path changes from previous versions
-- **[TASK.md](TASK.md)** - Current task tracking and management
-
-### Detailed Documentation
-
-All project documentation is organized in the `/planning` directory:
-
-- **[Architecture](planning/architecture/)** - System design and components
-
-  - [System Architecture](planning/architecture/system-architecture.md) - Core architecture design
-
-- **[Implementation](planning/implementation/)** - Implementation details
-
-  - [Personality & Ethics System](planning/implementation/personality-ethics-network-implementation.md)
-  - [Adaptive LLM Design](planning/implementation/adaptive-llm-design.md)
-  - [Claude Evolution Integration](planning/implementation/claude-evolution-prompt.md)
-
-- **[Roadmap](planning/roadmap/)** - Future plans and enhancements
-
-  - [Neural Web Architecture](planning/roadmap/neural-web-roadmap.md) - Future enhancement roadmap
-
-- **[Tasks](planning/tasks/)** - Task tracking and management
-
-  - [Task Management](planning/tasks/task-management.md) - Current tasks and backlog
-
-- **[Technical Notes](planning/technical-notes/)** - Debug info and fixes
-  - [Consolidated System Fixes](planning/technical-notes/consolidated-system-fixes.md) - All system fixes and improvements
-
-### Documentation Maintenance
-
-Documentation is maintained using dedicated tools:
-
-```bash
-# List all documentation
-python scripts/doc_maintenance.py list
-
-# Create a new document
-python scripts/doc_maintenance.py create planning/path/to/doc.md "Document Title"
-
-# Update document metadata
-python scripts/doc_maintenance.py update planning/path/to/doc.md --status "draft"
-
-# Archive a document
-python scripts/doc_maintenance.py archive planning/path/to/doc.md
-```
-
-See the [Planning Documentation](planning/README.md) for more details.
-
-## Adaptive LLM System
-
-WitsV3 includes a sophisticated Adaptive LLM System that dynamically routes queries to specialized modules based on complexity and domain, with semantic caching for improved performance.
-
-Key components:
-
-- **ComplexityAnalyzer**: Analyzes query complexity and domain to route to appropriate modules
-- **DynamicModuleLoader**: Manages specialized LLM modules with VRAM/RAM budgeting and quantization
-- **SemanticCache**: Stores and retrieves patterns based on semantic similarity
-- **AdaptiveLLMInterface**: Main interface that integrates all components
-
-Benefits:
-
-- **Resource Efficiency**: Uses appropriate-sized models based on query complexity
-- **Domain Specialization**: Routes to domain-specific modules for better responses
-- **Performance Optimization**: Caches common patterns and responses
-- **Adaptive Quantization**: Uses lower precision for simple queries, full precision for complex ones
-
-## Test Suite Status 🧪
-
-WitsV3 maintains a comprehensive test suite with **93.3% pass rate**:
-
-- ✅ **Background Agent Tests** (5/5) - Scheduler, task execution, monitoring
-- ✅ **Configuration Tests** (8/8) - Pydantic validation, YAML loading
-- ✅ **JSON Tool Tests** (7/7) - Data manipulation, file operations
-- ✅ **Math Tool Tests** (7/7) - Statistics, probability, matrix operations
-- ✅ **Python Execution Tests** (7/7) - Code execution, timeout handling
-- ✅ **Memory Backend Tests** (3/3) - Supabase, neural memory systems
-- ✅ **LLM Interface Tests** (13/17) - Ollama integration, embeddings
-- ✅ **Adaptive LLM Tests** (1/1) - Complexity analysis, module loading
-- ✅ **Tool Integration Tests** (12/12) - Web search, file operations
-
-```bash
-# Run the full test suite
-pytest tests/ -v
-
-# Quick test run
-pytest tests/ --tb=no -q
-```
+- [FILE_STRUCTURE.md](FILE_STRUCTURE.md) — file structure reference
+- [AGENTS.md](AGENTS.md) — agent architecture
+- [PATH_MIGRATION_GUIDE.md](PATH_MIGRATION_GUIDE.md) — path changes from previous versions
+- [TASK.md](TASK.md) — task tracking
+- [planning/](planning/README.md) — architecture, implementation notes, roadmap, and technical notes
+  - [System Architecture](planning/architecture/system-architecture.md)
+  - [Neural Web Roadmap](planning/roadmap/neural-web-roadmap.md)
+  - [Consolidated System Fixes](planning/technical-notes/consolidated-system-fixes.md)
 
 ## Project Structure
 
 ```
 WitsV3/
-├── agents/              # Core agent implementations
-├── core/                # Core system components (config, llm, memory, schemas, tools)
-├── data/                # Data storage (memory files, mcp tools)
-├── logs/                # Application logs
-├── models/              # Adaptive LLM model files
-├── tests/               # Comprehensive test suite (93.3% pass rate)
-├── tools/               # Implementations of various tools
-├── config.yaml          # Main configuration file
-├── run.py            # Main entry point script
-├── requirements.txt     # Python dependencies
+├── agents/              # Agent implementations (control center, orchestrator, specialized)
+├── core/                # Core systems (config, LLM interface, memory, schemas, adapters)
+├── config/              # Additional YAML configs (personality, ethics, background agent)
+├── data/                # Local data (memory files, MCP tool definitions) — personal data gitignored
+├── gui/                 # PyQt6 desktop GUI (work in progress)
+├── planning/            # Design docs, roadmaps, technical notes
+├── scripts/             # Setup and maintenance scripts
+├── tests/               # Test suite (142 passing)
+├── tools/               # Tool implementations
+├── config.yaml          # Main configuration
+├── run.py               # Main entry point (CLI + --test self-check)
+├── requirements.txt     # Python dependencies (requirements.lock = pinned set)
 └── README.md            # This file
 ```
-
-## Key Features ✨
-
-- **LLM-Driven Orchestration:** Leverages the power of LLMs for task decomposition and execution planning.
-- **WitsControlCenterAgent (WCCA):** User interaction and goal clarification.
-- **OrchestratorAgent:** ReAct-style loop for managing tasks.
-- **Memory Management:** Persistent memory with semantic search capabilities.
-- **MCP Tools:** Dynamically created and managed tools based on LLM descriptions.
-- **Langchain Integration:** Ability to leverage Langchain tools and functionalities.
-- **CLI First:** Robust command-line interface for interaction and development.
-- **Adaptive LLM System:** Dynamic routing to specialized modules based on complexity and domain.
-- **Background Processing:** Automated maintenance, monitoring, and optimization.
-- **Production-Grade Testing:** Comprehensive test suite with high reliability.
 
 ## Contributing
 
 WitsV3 follows strict development standards:
 
-- **Testing Required**: All new features must include tests
-- **Async Patterns**: All I/O operations must be async
-- **Type Hints**: Full type annotation coverage
-- **Documentation**: Google-style docstrings for all functions
-- **Code Quality**: PEP8 compliance with black formatting
-
-See `task-md.md` for current development tasks and `.cursorrules` for detailed guidelines.
+- **Testing required** — all new features must include tests
+- **Async patterns** — all I/O operations must be async
+- **Type hints** — full type annotation coverage
+- **Documentation** — Google-style docstrings
+- **Code quality** — PEP8 with black formatting
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Environment Setup
-
-To ensure consistent dependency installation across environments:
-
-1. Install dependencies using the helper script:
-
-`ash
-# Install core dependencies only
-python setup_dependencies.py
-
-# Install both core and development dependencies
-python setup_dependencies.py --dev
-`
-
-2. Alternative manual installation:
-
-`ash
-# Install core dependencies
-pip install -r requirements.txt
-
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Fix numpy version
-pip install "numpy>=1.25.0,<3.0" --force-reinstall
-`
-
-3. For containerized environments, use the provided Dockerfile or the requirements.lock file.
-# WitsV3
-
-## Environment Setup
-
-To ensure consistent dependency installation across environments:
-
-1. Install dependencies using the helper script:
-
-`ash
-# Install core dependencies only
-python setup_dependencies.py
-
-# Install both core and development dependencies
-python setup_dependencies.py --dev
-`
-
-2. Alternative manual installation:
-
-`ash
-# Install core dependencies
-pip install -r requirements.txt
-
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Fix numpy version
-pip install "numpy>=1.25.0,<3.0" --force-reinstall
-`
-
-3. For containerized environments, use the provided Dockerfile or the requirements.lock file.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
