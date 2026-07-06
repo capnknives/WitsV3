@@ -64,6 +64,22 @@ cli:
   show_thoughts: true
   show_tool_calls: true
 debug_mode: false
+document_rag:
+  enabled: true
+  documents_path: documents
+  chunk_size: 1200
+  chunk_overlap: 150
+  auto_ingest_on_startup: true
+  file_extensions:
+    - .txt
+    - .md
+    - .markdown
+    - .py
+    - .json
+    - .csv
+    - .html
+    - .log
+    - .pdf
 docker:
   background_agents:
     cpu_limit: "1.0"
