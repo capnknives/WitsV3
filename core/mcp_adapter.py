@@ -143,18 +143,28 @@ class StdioMCPClient(MCPClient):
                     # Timeout reading stderr is not necessarily an error
                     pass
 
-                # Attempt to call the info endpoint to verify connection
+                # Perform the MCP initialize handshake to verify the connection
                 try:
                     request = {
                         "jsonrpc": "2.0",
                         "id": self._next_id(),
-                        "method": "info"
+                        "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2024-11-05",
+                            "capabilities": {},
+                            "clientInfo": {"name": "WitsV3", "version": "3.0"}
+                        }
                     }
 
                     await self._send_request(request)
                     response = await asyncio.wait_for(self._read_response(), timeout=init_timeout)
 
                     if response and "result" in response:
+                        # initialized is a notification (no id, no response expected)
+                        await self._send_request({
+                            "jsonrpc": "2.0",
+                            "method": "notifications/initialized"
+                        })
                         logger.info(f"Successfully connected to MCP server: {self.server_config.name}")
                         self.is_connected = True
                         return True
@@ -278,15 +288,23 @@ class StdioMCPClient(MCPClient):
         await self.process.stdin.drain()
 
     async def _read_response(self) -> Optional[Dict[str, Any]]:
-        """Read a JSON-RPC response from the MCP server"""
+        """Read a JSON-RPC response from the MCP server, skipping notifications"""
         if not self.process or not self.process.stdout:
             return None
 
         try:
-            line = await asyncio.wait_for(self.process.stdout.readline(), timeout=10.0)
-            if line:
-                return json.loads(line.decode().strip())
-            return None
+            deadline = asyncio.get_event_loop().time() + 10.0
+            while True:
+                remaining = deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError()
+                line = await asyncio.wait_for(self.process.stdout.readline(), timeout=remaining)
+                if not line:
+                    return None
+                message = json.loads(line.decode().strip())
+                # Server-initiated notifications/requests have no matching id; keep reading
+                if "id" in message and ("result" in message or "error" in message):
+                    return message
         except (asyncio.TimeoutError, json.JSONDecodeError) as e:
             logger.error(f"Error reading response: {e}")
             return None

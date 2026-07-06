@@ -99,6 +99,12 @@ class CLISettings(BaseModel):
     show_thoughts: bool = Field(default=True)
     show_tool_calls: bool = Field(default=True)
 
+class WebUISettings(BaseModel):
+    enabled: bool = Field(default=True, description="Enable the web UI server")
+    host: str = Field(default="0.0.0.0", description="Bind address (0.0.0.0 = reachable on the LAN, e.g. from a phone)")
+    port: int = Field(default=8000, gt=0, lt=65536, description="Web UI port")
+    require_auth: bool = Field(default=True, description="Require the WITSV3_WEB_TOKEN bearer token for API access")
+
 class DocumentRAGSettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the document RAG system")
     documents_path: str = Field(default="documents", description="Folder watched for documents to ingest")
@@ -135,6 +141,7 @@ class WitsV3Config(BaseModel):
     tool_system: ToolSystemSettings = ToolSystemSettings()
     cli: CLISettings = CLISettings()
     document_rag: DocumentRAGSettings = Field(default_factory=DocumentRAGSettings)
+    web_ui: WebUISettings = Field(default_factory=WebUISettings)
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
