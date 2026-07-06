@@ -39,11 +39,33 @@ def _lan_ip() -> str:
         return "127.0.0.1"
 
 
+def _port_in_use(host: str, port: int) -> bool:
+    """Check whether something is already listening on the target port."""
+    probe_host = "127.0.0.1" if host == "0.0.0.0" else host
+    try:
+        with socket.create_connection((probe_host, port), timeout=1.0):
+            return True
+    except OSError:
+        return False
+
+
 async def main() -> int:
     config = load_config()
 
     if not config.web_ui.enabled:
         print("web_ui.enabled is false in config.yaml - nothing to do.")
+        return 1
+
+    if _port_in_use(config.web_ui.host, config.web_ui.port):
+        port = config.web_ui.port
+        print()
+        print(f"  WitsV3 Web UI looks like it's ALREADY RUNNING on port {port}.")
+        print(f"  Just open:  http://localhost:{port}")
+        print()
+        print("  If you actually want to restart it, stop the other instance first:")
+        print(f"    Get-NetTCPConnection -LocalPort {port} -State Listen | ")
+        print("        ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }")
+        print()
         return 1
 
     system = WitsV3System(config)
