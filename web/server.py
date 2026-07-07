@@ -24,7 +24,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from core.schemas import ConversationHistory
+from core.schemas import ConversationHistory, StreamData
+from web.user_errors import format_chat_error
 
 logger = logging.getLogger("WitsV3.WebUI")
 
@@ -48,6 +49,11 @@ class SettingsUpdate(BaseModel):
     max_iterations: Optional[int] = None
     default_model: Optional[str] = None
     orchestrator_model: Optional[str] = None
+    routing_enabled: Optional[bool] = None
+    routing_trivial_model: Optional[str] = None
+    routing_code_model: Optional[str] = None
+    routing_complex_model: Optional[str] = None
+    routing_trivial_max_chars: Optional[int] = None
     escalation_enabled: Optional[bool] = None
     escalation_model: Optional[str] = None
     escalation_max_tokens: Optional[int] = None
@@ -148,6 +154,25 @@ def create_app(system) -> FastAPI:
                             headers={"Cache-Control": "no-cache"})
 
     # ------------------------------------------------------------- chat
+    def _stream_payload(stream_data: StreamData) -> Dict[str, Any]:
+        """Serialize a StreamData event for SSE, with friendly error copy."""
+        payload: Dict[str, Any] = {
+            "type": stream_data.type,
+            "content": stream_data.content,
+            "source": stream_data.source,
+        }
+        if stream_data.error_details:
+            payload["error_details"] = stream_data.error_details
+        if stream_data.type == "error":
+            combined = stream_data.content
+            if stream_data.error_details:
+                combined = f"{combined}\n{stream_data.error_details}"
+            fmt = format_chat_error(combined, system.config.ollama_settings.url)
+            if fmt["code"] != "generic":
+                payload["content"] = fmt["message"]
+            payload["user_error"] = fmt
+        return payload
+
     @app.post("/api/chat")
     async def chat(body: ChatRequest):
         session_id = body.session_id or str(uuid.uuid4())
@@ -169,14 +194,10 @@ def create_app(system) -> FastAPI:
                     conversation_history=conversation,
                     session_id=session_id,
                 ):
-                    payload = {
-                        "type": stream_data.type,
-                        "content": stream_data.content,
-                        "source": stream_data.source,
-                    }
+                    payload = _stream_payload(stream_data)
                     yield sse("stream", payload)
                     if stream_data.type in ("result", "error"):
-                        result_parts.append(stream_data.content)
+                        result_parts.append(payload["content"])
 
                 final_text = "\n".join(result_parts) or "(no response)"
                 conversation.add_message("assistant", final_text)
@@ -184,9 +205,17 @@ def create_app(system) -> FastAPI:
 
             except Exception as e:
                 logger.error(f"Chat stream failed: {e}", exc_info=True)
-                error_msg = f"Error processing request: {e}"
+                fmt = format_chat_error(e, system.config.ollama_settings.url)
+                error_msg = fmt["message"]
+                if fmt.get("hint"):
+                    error_msg = f"{fmt['message']}\n\n{fmt['hint']}"
                 conversation.add_message("assistant", error_msg)
-                yield sse("stream", {"type": "error", "content": error_msg, "source": "web"})
+                yield sse("stream", {
+                    "type": "error",
+                    "content": fmt["message"],
+                    "source": "web",
+                    "user_error": fmt,
+                })
                 yield sse("done", {"final": error_msg})
 
         return StreamingResponse(
@@ -199,6 +228,13 @@ def create_app(system) -> FastAPI:
     @app.get("/api/status")
     async def status():
         cfg = system.config
+        ollama_available = None
+        llm = getattr(system, "llm_interface", None)
+        if llm is not None and hasattr(llm, "is_service_available"):
+            try:
+                ollama_available = await llm.is_service_available()
+            except Exception:
+                ollama_available = False
         return {
             "project": cfg.project_name,
             "version": cfg.version,
@@ -206,6 +242,10 @@ def create_app(system) -> FastAPI:
                 "default": cfg.ollama_settings.default_model,
                 "orchestrator": cfg.ollama_settings.orchestrator_model,
                 "embedding": cfg.ollama_settings.embedding_model,
+            },
+            "ollama": {
+                "url": cfg.ollama_settings.url,
+                "available": ollama_available,
             },
             "tool_count": len(system.tool_registry.tools),
             "active_sessions": len(system.session_histories),
@@ -257,6 +297,7 @@ def create_app(system) -> FastAPI:
         from core.escalation import MODEL_PRICES, get_escalation_manager
 
         cfg = system.config
+        mr = cfg.model_routing
         return {
             "history_window": cfg.agents.history_window,
             "default_temperature": cfg.agents.default_temperature,
@@ -264,6 +305,13 @@ def create_app(system) -> FastAPI:
             "default_model": cfg.ollama_settings.default_model,
             "orchestrator_model": cfg.ollama_settings.orchestrator_model,
             "available_models": await _list_ollama_models(),
+            "model_routing": {
+                "enabled": mr.enabled,
+                "trivial_model": mr.trivial_model,
+                "code_model": mr.code_model,
+                "complex_model": mr.complex_model,
+                "trivial_max_chars": mr.trivial_max_chars,
+            },
             "escalation_enabled": cfg.escalation.enabled,
             "escalation_model": cfg.escalation.model,
             "escalation_max_tokens": cfg.escalation.max_tokens,
@@ -293,6 +341,11 @@ def create_app(system) -> FastAPI:
             apply(cfg.agents, "max_iterations", update.max_iterations, "agents")
             apply(cfg.ollama_settings, "default_model", update.default_model, "ollama_settings")
             apply(cfg.ollama_settings, "orchestrator_model", update.orchestrator_model, "ollama_settings")
+            apply(cfg.model_routing, "enabled", update.routing_enabled, "model_routing")
+            apply(cfg.model_routing, "trivial_model", update.routing_trivial_model, "model_routing")
+            apply(cfg.model_routing, "code_model", update.routing_code_model, "model_routing")
+            apply(cfg.model_routing, "complex_model", update.routing_complex_model, "model_routing")
+            apply(cfg.model_routing, "trivial_max_chars", update.routing_trivial_max_chars, "model_routing")
             apply(cfg.escalation, "enabled", update.escalation_enabled, "escalation")
             apply(cfg.escalation, "model", update.escalation_model, "escalation")
             apply(cfg.escalation, "max_tokens", update.escalation_max_tokens, "escalation")

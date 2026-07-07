@@ -103,8 +103,13 @@ async function checkStatus() {
     const res = await api("/api/status");
     if (res.ok) {
       const s = await res.json();
-      statusDot.className = "dot ok";
-      statusDot.title = `${s.project} v${s.version} — ${s.models.default}, ${s.tool_count} tools`;
+      if (s.ollama && s.ollama.available === false) {
+        statusDot.className = "dot warn";
+        statusDot.title = `Web UI OK — Ollama is not running (${s.ollama.url})`;
+      } else {
+        statusDot.className = "dot ok";
+        statusDot.title = `${s.project} v${s.version} — ${s.models.default}, ${s.tool_count} tools`;
+      }
       checkEscalations();
       return;
     }
@@ -196,6 +201,23 @@ function addAssistantMsg(text, isError = false) {
   scrollDown();
 }
 
+function addErrorMsg(message, userError) {
+  if (userError && userError.code === "ollama_unavailable") {
+    const card = el("div", "msg assistant error ollama-error");
+    card.appendChild(el("strong", null, `⚠ ${userError.message}`));
+    if (userError.hint) card.appendChild(el("div", "error-hint", userError.hint));
+    chatEl.appendChild(card);
+  } else if (userError && userError.hint) {
+    const card = el("div", "msg assistant error");
+    card.appendChild(el("div", null, message));
+    card.appendChild(el("div", "error-hint", userError.hint));
+    chatEl.appendChild(card);
+  } else {
+    addAssistantMsg(message, true);
+  }
+  scrollDown();
+}
+
 function addThinking(text) {
   const details = el("details", "thinking");
   const summary = el("summary", null, "thinking…");
@@ -257,14 +279,33 @@ async function sendMessage(text) {
           if (payload.type === "thinking") addThinking(payload.content);
           else if (payload.type === "tool_call" || payload.type === "action") addToolChip(payload.content);
           else if (payload.type === "result") { addAssistantMsg(payload.content); sawResult = true; }
-          else if (payload.type === "error") { addAssistantMsg(payload.content, true); sawResult = true; }
+          else if (payload.type === "error") {
+            addErrorMsg(payload.content, payload.user_error);
+            sawResult = true;
+          }
         } else if (event === "done") {
-          if (!sawResult && payload.final) addAssistantMsg(payload.final);
+          if (!sawResult && payload.final) {
+            if (payload.final.includes("Can't reach Ollama")) {
+              addErrorMsg(payload.final.split("\n\n")[0], {
+                code: "ollama_unavailable",
+                message: payload.final.split("\n\n")[0],
+                hint: payload.final.split("\n\n").slice(1).join("\n\n"),
+              });
+            } else {
+              addAssistantMsg(payload.final);
+            }
+          }
         }
       }
     }
   } catch (e) {
-    if (e.message !== "unauthorized") addAssistantMsg(`Connection error: ${e.message}`, true);
+    if (e.message !== "unauthorized") {
+      addErrorMsg("Can't reach the WITS web server.", {
+        code: "generic",
+        message: "Can't reach the WITS web server.",
+        hint: "Is run_web.py still running on this machine?",
+      });
+    }
   } finally {
     typing.remove();
     busy = false;

@@ -47,7 +47,10 @@ header button:active { background: var(--bg-3); }
 
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #666; display: inline-block; }
 .dot.ok { background: var(--accent-2); }
+.dot.warn { background: #ffcf8f; }
 .dot.bad { background: var(--error); }
+.msg.error .error-hint { margin-top: 8px; font-size: 13px; color: var(--fg-dim); line-height: 1.45; }
+.msg.error.ollama-error strong { display: block; margin-bottom: 4px; }
 
 /* ---------------------------------------------------------- chat */
 main#chat {
