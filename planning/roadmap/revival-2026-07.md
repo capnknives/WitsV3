@@ -50,6 +50,7 @@ suggested next steps.
 |---|---|
 | `8514e62` | "Amnesia" fix: direct-response window 5 → 20 messages (configurable via `/settings`) |
 | `89fd4ac` | `validate_tool_call` now unwraps schemas nested under `"parameters"` — valid args were flagged "unknown" and required-param checks were silently skipped for `document_search`/`web_search`/`ask_claude` |
+| `32f857f` | **Orchestrator JSON robustness** (roadmap #5): reasoning calls use Ollama `format=json`; parser strips `<think>` blocks, scans for balanced JSON, completes truncated objects, repairs common syntax slips; one-shot repair-reparse LLM retry before keyword fallback |
 | `277960d` | **Control-center routing overhaul** (the "too rigid" fix): (a) casual-chat detector substring-matched "hi" inside "things"/"this" → real requests answered as small talk, now word-boundary matching; (b) intent analysis + direct-response prompts now include a live ingested-document inventory, and any message mentioning an ingested filename (or words from it, e.g. "audit") routes straight to the orchestrator, checked before the casual heuristic; (c) LLM `goal_defined` intents defaulted to "simple" and never reached the orchestrator — now they delegate. Regression tests in `tests/agents/test_wcca_routing.py` |
 
 ### Environment (no commits — machine/system state)
