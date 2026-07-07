@@ -67,6 +67,22 @@ class PersonalityManager:
 
         logger.info(f"PersonalityManager initialized")
 
+    @staticmethod
+    def overrides_path_for(profile_path: str) -> str:
+        """Path of the questionnaire overrides file that sits next to the profile."""
+        return os.path.join(os.path.dirname(profile_path) or ".", "personality_overrides.yaml")
+
+    @staticmethod
+    def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge overrides into base: dicts merge recursively, everything else replaces."""
+        merged = dict(base)
+        for key, value in overrides.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = PersonalityManager._deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
     def _load_personality(self) -> bool:
         """Load personality profile from configuration"""
         if not self.config.personality.enabled:
@@ -88,6 +104,21 @@ class PersonalityManager:
                 return False
 
             self.personality_profile = data['wits_personality']
+
+            # Apply questionnaire overrides (written by the web UI's
+            # /personality page) on top of the hand-written base profile,
+            # so the base YAML never gets rewritten and stays commented.
+            overrides_path = self.overrides_path_for(profile_path)
+            if os.path.exists(overrides_path):
+                try:
+                    with open(overrides_path, 'r', encoding='utf-8') as f:
+                        overrides = yaml.safe_load(f) or {}
+                    if isinstance(overrides, dict) and overrides:
+                        self.personality_profile = self._deep_merge(self.personality_profile, overrides)
+                        logger.info(f"Applied personality overrides from {overrides_path}")
+                except Exception as e:
+                    logger.error(f"Ignoring bad personality overrides ({overrides_path}): {e}")
+
             logger.info(f"Loaded personality profile: {self.personality_profile.get('name', 'Unknown')}")
             return True
 
@@ -131,9 +162,12 @@ class PersonalityManager:
         prompt_parts = []
 
         # Identity and role
-        name = self.personality_profile.get('name', 'WitsV3')
-        profile_id = self.personality_profile.get('profile_id', 'default')
-        prompt_parts.append(f"You are {name} ({profile_id})")
+        name = self.personality_profile.get('identity_label') or self.personality_profile.get('name', 'WitsV3')
+        role = self.personality_profile.get('default_role', '')
+        identity = f"You are {name}"
+        if role:
+            identity += f" — {role}"
+        prompt_parts.append(identity)
 
         # Core directives
         core_directives = self.personality_profile.get('core_directives', [])
@@ -149,6 +183,15 @@ class PersonalityManager:
             prompt_parts.append(f"- Tone: {comm.get('tone', 'professional')}")
             prompt_parts.append(f"- Language Level: {comm.get('language_level', 'clear')}")
             prompt_parts.append(f"- Structure Preference: {comm.get('structure_preference', 'organized')}")
+            if comm.get('verbosity'):
+                prompt_parts.append(f"- Verbosity: {comm['verbosity']}")
+            if comm.get('humor'):
+                prompt_parts.append(f"- Humor: {comm['humor']}")
+
+        # Active persona
+        persona = self.personality_profile.get('persona_layers', {}).get('default_persona', '')
+        if persona:
+            prompt_parts.append(f"\nActive Persona: {persona}")
 
         # Ethics considerations
         if self.ethics_framework and self._is_ethics_active():
@@ -230,8 +273,8 @@ def get_personality_manager():
         _personality_manager = PersonalityManager()
     return _personality_manager
 
-def reload_personality_manager():
+def reload_personality_manager(config=None):
     """Reload the global personality manager"""
     global _personality_manager
-    _personality_manager = PersonalityManager()
+    _personality_manager = PersonalityManager(config=config)
     return _personality_manager

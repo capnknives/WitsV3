@@ -134,6 +134,9 @@ class AuthManager:
 
             # Write the hash to the gitignored .env file instead of
             # config.yaml, so the secret never ends up in version control.
+            # Any existing WITSV3_AUTH_TOKEN line belongs to the *previous*
+            # hash, so drop it too — a stale plain token that no longer
+            # matches the stored hash makes every verify_auth call fail.
             env_path = ".env"
             lines = []
             if os.path.exists(env_path):
@@ -141,6 +144,7 @@ class AuthManager:
                     lines = [
                         line for line in f.read().splitlines()
                         if not line.startswith("WITSV3_AUTH_TOKEN_HASH=")
+                        and not line.startswith("WITSV3_AUTH_TOKEN=")
                     ]
             lines.append(f"WITSV3_AUTH_TOKEN_HASH={token_hash}")
 

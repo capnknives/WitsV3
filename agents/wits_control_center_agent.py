@@ -5,8 +5,10 @@ The main entry point that handles user input and determines response strategy.
 """
 
 import json
+import re
 import uuid
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional, AsyncGenerator
 
 from agents.base_agent import BaseAgent
@@ -200,6 +202,37 @@ User input: {user_input}
         Returns:
             Intent analysis with response strategy
         """
+        # Requests that reference the user's documents, files, or stored memory
+        # always need tool access - route straight to the orchestrator instead
+        # of letting complexity analysis land on a (tool-less) direct response.
+        # This runs BEFORE the casual-conversation heuristic: "check the audit
+        # again" is a document request, not small talk.
+        doc_inventory = await self._get_document_inventory()
+        tool_hints = (
+            "document", "my notes", "my files", "search my", "in my memory",
+            "remember", "ingest", "uploaded", "read the file", "look up",
+            "the file", "attachment", "attached",
+        )
+        lowered = user_input.lower()
+        doc_hints = set()
+        for path in doc_inventory:
+            name = Path(path).name.lower()
+            doc_hints.add(name)
+            # Words from the filename ("audit", "report", ...) so loose
+            # references like "check the audit again" still route to tools.
+            doc_hints.update(
+                w for w in re.split(r"[\W_]+", Path(path).stem.lower()) if len(w) >= 4
+            )
+        if any(hint in lowered for hint in tool_hints) or any(hint in lowered for hint in doc_hints):
+            return {
+                "type": "task",
+                "complexity": "moderate",
+                "requires_tools": True,
+                "suggested_response": "orchestrator",
+                "notes": "References user documents/files/memory - routing to orchestrator for tool use.",
+                "confidence": 0.85
+            }
+
         # Check if this is casual conversation with a simple heuristic
         is_casual = self._is_casual_conversation(user_input)
 
@@ -211,24 +244,6 @@ User input: {user_input}
                 "suggested_response": "direct",
                 "notes": "This appears to be casual conversation.",
                 "confidence": 0.9
-            }
-
-        # Requests that reference the user's documents, files, or stored memory
-        # always need tool access - route straight to the orchestrator instead
-        # of letting complexity analysis land on a (tool-less) direct response.
-        tool_hints = (
-            "document", "my notes", "my files", "search my", "in my memory",
-            "remember", "ingest", "uploaded", "read the file", "look up"
-        )
-        lowered = user_input.lower()
-        if any(hint in lowered for hint in tool_hints):
-            return {
-                "type": "task",
-                "complexity": "moderate",
-                "requires_tools": True,
-                "suggested_response": "orchestrator",
-                "notes": "References user documents/files/memory - routing to orchestrator for tool use.",
-                "confidence": 0.85
             }
 
         # For task-oriented messages, use enhanced capabilities if available
@@ -259,13 +274,17 @@ User input: {user_input}
         # Build context from conversation history
         history_context = ""
         if conversation_history and conversation_history.messages:
-            recent_messages = conversation_history.get_recent_messages(5)
+            recent_messages = conversation_history.get_recent_messages(
+                min(10, self.config.agents.history_window)
+            )
             history_context = "\n".join([
                 f"{msg.role}: {msg.content}" for msg in recent_messages
             ])
 
         # Build the intent analysis prompt
-        prompt = self._build_intent_analysis_prompt(user_input, history_context)
+        prompt = self._build_intent_analysis_prompt(
+            user_input, history_context, self._documents_context(doc_inventory)
+        )
 
         try:
             # Get LLM response
@@ -284,6 +303,38 @@ User input: {user_input}
             # Return a fallback analysis
             return self._fallback_intent_parsing(user_input)
 
+    async def _get_document_inventory(self) -> Dict[str, int]:
+        """File path -> chunk count for every ingested document (empty if none)."""
+        if not self.memory_manager:
+            return {}
+        try:
+            segments = await self.memory_manager.get_recent_memory(
+                limit=1_000_000, filter_dict={"type": "DOCUMENT_CHUNK"}
+            )
+        except Exception as e:
+            self.logger.warning(f"Could not list ingested documents: {e}")
+            return {}
+        counts: Dict[str, int] = {}
+        for seg in segments:
+            fp = seg.metadata.get("file_path")
+            if fp:
+                counts[fp] = counts.get(fp, 0) + 1
+        return counts
+
+    @staticmethod
+    def _documents_context(inventory: Dict[str, int]) -> str:
+        """Prompt block describing which user documents are searchable."""
+        if not inventory:
+            return "No user documents are currently ingested."
+        listing = "\n".join(
+            f"- {name} ({count} chunks)" for name, count in sorted(inventory.items())
+        )
+        return (
+            "These user documents are ALREADY ingested and fully accessible via "
+            "the document_search tool. Never claim you cannot access them or "
+            "have no record of them:\n" + listing
+        )
+
     def _is_casual_conversation(self, message: str) -> bool:
         """
         Determine if a message is casual conversation.
@@ -294,37 +345,46 @@ User input: {user_input}
         Returns:
             True if it's casual conversation
         """
-        # Simple heuristic for casual conversation
-        casual_indicators = [
-            "hello", "hi", "hey", "how are you", "what's up", "how's it going",
-            "thanks", "thank you", "appreciate", "nice", "cool", "great",
-            "bye", "goodbye", "see you", "talk to you"
-        ]
-
-        question_indicators = ["?", "what", "how", "why", "when", "where", "who"]
+        lowered = message.lower()
+        # Single words match on word boundaries only — a plain substring test
+        # made "hi" match inside "things"/"this" and flagged real requests
+        # as small talk.
+        words = set(re.findall(r"[a-z']+", lowered))
+        casual_words = {
+            "hello", "hi", "hey", "thanks", "appreciate",
+            "nice", "cool", "great", "bye", "goodbye",
+        }
+        casual_phrases = (
+            "how are you", "what's up", "how's it going",
+            "thank you", "see you", "talk to you",
+        )
 
         # Short messages are usually casual
         if len(message.split()) < 6:
             return True
 
         # Check for casual indicators
-        if any(indicator in message.lower() for indicator in casual_indicators):
+        if words & casual_words or any(phrase in lowered for phrase in casual_phrases):
             return True
 
         # Short questions are usually casual
-        if any(indicator in message.lower() for indicator in question_indicators) and len(message.split()) < 10:
+        question_words = {"what", "how", "why", "when", "where", "who"}
+        if ("?" in message or words & question_words) and len(message.split()) < 10:
             return True
 
         # Longer messages are less likely to be casual
         return False
 
-    def _build_intent_analysis_prompt(self, user_input: str, history_context: str) -> str:
+    def _build_intent_analysis_prompt(
+        self, user_input: str, history_context: str, documents_context: str = ""
+    ) -> str:
         """
         Build the prompt for intent analysis.
 
         Args:
             user_input: User's input
             history_context: Recent conversation context
+            documents_context: Which user documents are ingested and searchable
 
         Returns:
             Formatted prompt for intent analysis
@@ -343,6 +403,9 @@ IMPORTANT: If the user identifies as "Richard Elliot" or mentions being "the cre
 CONVERSATION HISTORY:
 {history_context if history_context else "No previous conversation"}
 
+USER DOCUMENTS:
+{documents_context if documents_context else "No user documents are currently ingested."}
+
 USER INPUT: {user_input}
 
 Analyze this input and respond with JSON containing:
@@ -359,6 +422,7 @@ Guidelines:
 - Use "goal_defined" for clear, actionable requests that need orchestration
 - Use "clarification_question" for ambiguous requests needing more information
 - Use "direct_response" for simple questions, greetings, or chat
+- Any request about the user's documents or files is "goal_defined" (it needs the document_search tool). The USER DOCUMENTS list above is authoritative: if a document is listed there, it exists and is accessible — never ask the user to confirm it or claim there is no record of it.
 - For any request to 'remember', 'recall', or 'don't forget', use your semantic memory system (not file storage). Use the memory manager to store and retrieve facts for future conversations.
 
 Respond ONLY with valid JSON."""
@@ -387,6 +451,15 @@ Respond ONLY with valid JSON."""
                 # Validate required fields
                 if "type" not in parsed:
                     raise ValueError("Missing 'type' field")
+
+                # goal_defined means "needs orchestration", but the response
+                # handler picks the orchestrator from complexity/requires_tools
+                # — without these, every LLM-classified goal defaulted to
+                # "simple" and got a tool-less direct response.
+                if parsed["type"] == "goal_defined":
+                    parsed.setdefault("complexity", "moderate")
+                    parsed["requires_tools"] = True
+                    parsed["suggested_response"] = "orchestrator"
 
                 return parsed
             else:
@@ -467,18 +540,23 @@ Respond ONLY with valid JSON."""
             personality_manager = get_personality_manager()
 
             if conversation_history and conversation_history.messages:
-                # Format conversation history
+                # Format conversation history — window size is configurable
+                # from the web UI settings page (agents.history_window)
                 history_text = "\n".join([
                     f"{msg.role.upper()}: {msg.content}"
-                    for msg in conversation_history.get_recent_messages(5)
+                    for msg in conversation_history.get_recent_messages(self.config.agents.history_window)
                 ])
             else:
                 history_text = ""
 
             personality_prompt = personality_manager.get_system_prompt()
+            documents_context = self._documents_context(await self._get_document_inventory())
             conversation_prompt = f"""{personality_prompt}
 
 You are having a casual conversation with the user. Respond in a friendly, helpful manner.
+
+USER DOCUMENTS:
+{documents_context}
 
 CONVERSATION HISTORY:
 {history_text}
@@ -487,7 +565,12 @@ USER: {user_input}
 ASSISTANT:"""
 
             try:
-                response = await self.generate_response(conversation_prompt, temperature=0.7)
+                # Route on the raw user message, not the assembled prompt —
+                # short casual chat goes to the small fast model
+                routed_model = self.model_router.route(user_input, default=self.get_model_name())
+                response = await self.generate_response(
+                    conversation_prompt, model_name=routed_model, temperature=0.7
+                )
                 yield self.stream_result(response)
             except Exception as e:
                 self.logger.error(f"Error generating direct response: {e}")
@@ -578,6 +661,7 @@ ASSISTANT:"""
         yield self.stream_thinking("No specialized handling available, generating direct response...")
         response = await self.generate_response(
             f"You are a helpful assistant. Respond to this user query: {user_input}",
+            model_name=self.model_router.route(user_input, default=self.get_model_name()),
             temperature=0.7
         )
         yield self.stream_result(response)

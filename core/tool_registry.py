@@ -287,8 +287,12 @@ class ToolRegistry:
         validation_result["tool"] = tool
 
         try:
-            # Get tool schema to validate parameters
+            # Get tool schema to validate parameters. Schemas come in two
+            # shapes: flat ({"properties": ..., "required": ...}) and
+            # function-call style with everything under a "parameters" key.
             schema = tool.get_schema()
+            if "parameters" in schema and isinstance(schema["parameters"], dict):
+                schema = schema["parameters"]
             required_params = schema.get("required", [])
             properties = schema.get("properties", {})
 

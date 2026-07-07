@@ -11,6 +11,10 @@ import yaml
 from pathlib import Path
 import sys
 
+# Ensure emoji output works on Windows consoles (cp1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -24,6 +28,8 @@ class TestAuthenticationSystem:
     def __init__(self):
         self.temp_config = None
         self.original_config = None
+        self.original_ethics_config = None
+        self.original_env_hash = None
         self.test_token = None
         self.test_token_hash = None
 
@@ -50,14 +56,29 @@ class TestAuthenticationSystem:
             }
         }
 
-        # Backup original config
+        # Backup original configs (both get overwritten during the tests)
         if os.path.exists('config.yaml'):
             with open('config.yaml', 'r') as f:
                 self.original_config = f.read()
+        if os.path.exists('config/ethics_overlay.yaml'):
+            with open('config/ethics_overlay.yaml', 'r') as f:
+                self.original_ethics_config = f.read()
 
         # Write test config
         with open('config.yaml', 'w') as f:
             yaml.safe_dump(self.temp_config, f)
+
+        # load_config() overrides auth_token_hash from the environment
+        # (WITSV3_AUTH_TOKEN_HASH via .env), which would beat the test
+        # config written above — point the override at the test hash.
+        self.original_env_hash = os.environ.get("WITSV3_AUTH_TOKEN_HASH")
+        os.environ["WITSV3_AUTH_TOKEN_HASH"] = self.test_token_hash
+
+        # generate_new_token() above already created the module-level
+        # AuthManager singleton with the real hash — drop it so verify_auth
+        # rebuilds one that sees the test hash.
+        import core.auth_manager as auth_manager_module
+        auth_manager_module._auth_manager = None
 
         print(f"✅ Test token generated: {self.test_token[:16]}...")
         print(f"✅ Test environment configured")
@@ -66,10 +87,22 @@ class TestAuthenticationSystem:
         """Clean up test environment"""
         print("🧹 Cleaning up test environment...")
 
-        # Restore original config
+        # Restore original configs and environment
         if self.original_config:
             with open('config.yaml', 'w') as f:
                 f.write(self.original_config)
+        if self.original_ethics_config:
+            with open('config/ethics_overlay.yaml', 'w') as f:
+                f.write(self.original_ethics_config)
+
+        if self.original_env_hash is None:
+            os.environ.pop("WITSV3_AUTH_TOKEN_HASH", None)
+        else:
+            os.environ["WITSV3_AUTH_TOKEN_HASH"] = self.original_env_hash
+
+        # Drop the singleton built against the test hash
+        import core.auth_manager as auth_manager_module
+        auth_manager_module._auth_manager = None
 
         print("✅ Test environment cleaned up")
 
@@ -203,12 +236,17 @@ class TestAuthenticationSystem:
         """Test security configuration options"""
         print("\n⚙️  Testing security configuration...")
 
+        import core.auth_manager as auth_manager_module
+
         # Test disabling auth requirements
         test_config = self.temp_config.copy()
         test_config['security']['require_auth_for_network_control'] = False
 
         with open('config.yaml', 'w') as f:
             yaml.safe_dump(test_config, f)
+        # AuthManager caches its config at creation — rebuild the singleton
+        # so verify_auth sees the rewritten config.yaml
+        auth_manager_module._auth_manager = None
 
         # Network control should work without auth now
         tool = NetworkControlTool()
@@ -219,6 +257,7 @@ class TestAuthenticationSystem:
         test_config['security']['require_auth_for_network_control'] = True
         with open('config.yaml', 'w') as f:
             yaml.safe_dump(test_config, f)
+        auth_manager_module._auth_manager = None
 
         print("✅ Security configuration tests passed")
 

@@ -152,12 +152,15 @@ class DocumentIngestTool(_DocumentToolBase):
             limit=1_000_000, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
         )
         stored_hashes: Dict[str, str] = {}
+        existing_counts: Dict[str, int] = {}
         for seg in existing:
             fp = seg.metadata.get("file_path")
             if fp:
                 stored_hashes[fp] = seg.metadata.get("file_hash", "")
+                existing_counts[fp] = existing_counts.get(fp, 0) + 1
 
         seen_paths = set()
+        searchable: Dict[str, int] = {}
 
         for path in sorted(docs_dir.rglob("*")):
             if not path.is_file() or path.suffix.lower() not in extensions:
@@ -173,6 +176,7 @@ class DocumentIngestTool(_DocumentToolBase):
 
                 if stored_hashes.get(rel_path) == file_hash:
                     summary["files_unchanged"] += 1
+                    searchable[rel_path] = existing_counts.get(rel_path, 0)
                     continue
 
                 text = _read_file_text(path)
@@ -208,6 +212,7 @@ class DocumentIngestTool(_DocumentToolBase):
 
                 summary["files_ingested"] += 1
                 summary["chunks_added"] += len(chunks)
+                searchable[rel_path] = len(chunks)
                 self.logger.info(f"Ingested {rel_path}: {len(chunks)} chunks")
 
             except Exception as e:
@@ -222,6 +227,34 @@ class DocumentIngestTool(_DocumentToolBase):
             if removed:
                 summary["files_removed"] += 1
                 self.logger.info(f"Removed {removed} chunks for deleted file {stale_path}")
+
+        # Plain-language summary so the LLM doesn't misread "files_ingested: 0"
+        # as "nothing is accessible" — unchanged files are already ingested.
+        parts = []
+        if summary["files_ingested"]:
+            parts.append(
+                f"ingested {summary['files_ingested']} new or changed file(s), "
+                f"adding {summary['chunks_added']} chunks"
+            )
+        if summary["files_unchanged"]:
+            parts.append(
+                f"{summary['files_unchanged']} file(s) were already ingested and are unchanged"
+            )
+        if summary["files_removed"]:
+            parts.append(f"removed {summary['files_removed']} file(s) deleted from disk")
+        if searchable:
+            listing = ", ".join(
+                f"{name} ({count} chunks)" for name, count in sorted(searchable.items())
+            )
+            parts.append(
+                f"ALL of these documents are ingested and searchable via document_search: {listing}"
+            )
+        else:
+            parts.append("no documents are currently ingested")
+        if summary["errors"]:
+            parts.append(f"{len(summary['errors'])} file(s) failed to ingest")
+        summary["searchable_files"] = searchable
+        summary["message"] = "Scan complete: " + "; ".join(parts) + "."
 
         return summary
 

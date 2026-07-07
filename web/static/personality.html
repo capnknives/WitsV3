@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1117">
+  <title>WITS — Personality</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { display: block; overflow: auto; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 18px 16px 60px; }
+    .wrap header { position: static; display: flex; align-items: center; gap: 10px;
+                   padding: 0 0 6px; background: none; border: none; }
+    .wrap header a { color: var(--fg-dim); text-decoration: none; font-size: 14px; }
+    .wrap header a:hover { color: var(--fg); }
+    h1 { font-size: 20px; margin: 0; }
+    p.lead { color: var(--fg-dim); font-size: 14px; margin: 6px 0 22px; }
+    .q { background: var(--bg-2); border: 1px solid #2c3245; border-radius: var(--radius);
+         padding: 16px; margin-bottom: 14px; }
+    .q label { display: block; font-weight: 600; margin-bottom: 4px; }
+    .q .hint { color: var(--fg-dim); font-size: 13px; margin-bottom: 10px; }
+    .q input, .q textarea {
+      width: 100%; box-sizing: border-box; background: var(--bg-3); border: 1px solid #2c3245;
+      color: var(--fg); border-radius: 8px; padding: 10px 12px; font: inherit;
+    }
+    .q textarea { min-height: 130px; resize: vertical; line-height: 1.5; }
+    .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+    .actions button {
+      border: none; border-radius: 8px; padding: 12px 18px; font: inherit; cursor: pointer;
+    }
+    #save-btn { background: var(--accent); color: #fff; flex: 1; }
+    #save-btn:disabled { opacity: .6; cursor: wait; }
+    #reset-btn { background: var(--bg-3); color: var(--fg-dim); border: 1px solid #2c3245; }
+    #status { margin-top: 14px; font-size: 14px; }
+    #status.ok { color: #7dd68a; }
+    #status.bad { color: #ff8f8f; }
+    #prompt-preview { display: none; margin-top: 18px; }
+    #prompt-preview h2 { font-size: 15px; margin: 0 0 8px; }
+    #prompt-preview pre {
+      background: var(--bg-2); border: 1px solid #2c3245; border-radius: var(--radius);
+      padding: 14px; font-size: 12.5px; white-space: pre-wrap; color: var(--fg-dim); margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a href="/">← back to chat</a>
+    </header>
+    <h1>◆ WITS Personality Setup</h1>
+    <p class="lead">
+      Answer these questions to shape how WITS talks and thinks. Your answers are saved as
+      overrides on top of the base profile — the hand-written
+      <code>wits_personality.yaml</code> is never touched, and "Reset" brings it all back.
+    </p>
+
+    <form id="quiz">
+      <div class="q">
+        <label for="identity_label">1. What should I call myself?</label>
+        <div class="hint">The name WITS uses for itself in conversation.</div>
+        <input id="identity_label" placeholder="e.g. WITS (Wisdom-Integrated Tactical System)">
+      </div>
+
+      <div class="q">
+        <label for="default_role">2. What am I, in one line?</label>
+        <div class="hint">Its job description — the role it plays for you.</div>
+        <input id="default_role" placeholder="e.g. AI Strategist & Systems Assistant">
+      </div>
+
+      <div class="q">
+        <label for="tone">3. How should I sound?</label>
+        <div class="hint">A few adjectives for the overall tone.</div>
+        <input id="tone" list="tone-opts" placeholder="e.g. confident, direct, respectful">
+        <datalist id="tone-opts">
+          <option value="confident, direct, respectful">
+          <option value="warm and encouraging">
+          <option value="blunt, no pleasantries">
+          <option value="calm and precise">
+        </datalist>
+      </div>
+
+      <div class="q">
+        <label for="language_level">4. How technical should my language be?</label>
+        <input id="language_level" list="lang-opts" placeholder="e.g. technical but human-readable">
+        <datalist id="lang-opts">
+          <option value="technical but human-readable">
+          <option value="full jargon, assume expertise">
+          <option value="plain English, explain terms">
+        </datalist>
+      </div>
+
+      <div class="q">
+        <label for="verbosity">5. How long should my answers run?</label>
+        <input id="verbosity" list="verb-opts" placeholder="e.g. adaptive">
+        <datalist id="verb-opts">
+          <option value="concise">
+          <option value="adaptive">
+          <option value="detailed">
+        </datalist>
+      </div>
+
+      <div class="q">
+        <label for="structure_preference">6. How should I structure answers?</label>
+        <input id="structure_preference" list="struct-opts" placeholder="e.g. bullets, steps, labeled sections">
+        <datalist id="struct-opts">
+          <option value="bullets, steps, labeled sections">
+          <option value="flowing prose, minimal formatting">
+          <option value="short paragraphs with headers">
+        </datalist>
+      </div>
+
+      <div class="q">
+        <label for="humor">7. Humor?</label>
+        <input id="humor" list="humor-opts" placeholder="e.g. dry or dark if requested, otherwise off">
+        <datalist id="humor-opts">
+          <option value="off">
+          <option value="dry">
+          <option value="dark">
+          <option value="playful">
+          <option value="dry or dark if requested, otherwise off">
+        </datalist>
+      </div>
+
+      <div class="q">
+        <label for="default_persona">8. Which persona should I default to?</label>
+        <div class="hint">Personas come from the base profile (Engineer, Truth-Seeker, Companion, Sentinel…).</div>
+        <input id="default_persona" list="persona-opts" placeholder="e.g. Engineer-Strategist hybrid">
+        <datalist id="persona-opts"></datalist>
+      </div>
+
+      <div class="q">
+        <label for="core_directives">9. Core directives — the rules I live by</label>
+        <div class="hint">One per line. These replace the base list, so include everything you want kept.</div>
+        <textarea id="core_directives" placeholder="Serve the user with absolute ethical integrity, even if inconvenient.&#10;Prioritize verified truth over consensus.&#10;..."></textarea>
+      </div>
+
+      <div class="actions">
+        <button id="save-btn" type="submit">Save personality</button>
+        <button id="reset-btn" type="button">Reset to base profile</button>
+      </div>
+      <div id="status"></div>
+    </form>
+
+    <div id="prompt-preview">
+      <h2>System prompt WITS now receives:</h2>
+      <pre id="prompt-text"></pre>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+    const $ = (sel) => document.querySelector(sel);
+    const token = localStorage.getItem("wits_token") || "";
+    const FIELDS = ["identity_label", "default_role", "tone", "language_level",
+                    "verbosity", "structure_preference", "humor", "default_persona"];
+
+    function setStatus(msg, ok) {
+      const s = $("#status");
+      s.textContent = msg;
+      s.className = ok ? "ok" : "bad";
+    }
+
+    function showPrompt(text) {
+      $("#prompt-preview").style.display = "block";
+      $("#prompt-text").textContent = text;
+    }
+
+    async function api(path, opts = {}) {
+      const headers = { ...(opts.headers || {}) };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(path, { ...opts, headers });
+      if (res.status === 401) {
+        setStatus("Not logged in — open the chat page first and enter your token, then come back.", false);
+        throw new Error("unauthorized");
+      }
+      return res;
+    }
+
+    async function load() {
+      try {
+        const res = await api("/api/personality");
+        const p = await res.json();
+        for (const f of FIELDS) if (p[f]) $(`#${f}`).value = p[f];
+        $("#core_directives").value = (p.core_directives || []).join("\n");
+        const dl = $("#persona-opts");
+        (p.available_personas || []).forEach((name) => {
+          const opt = document.createElement("option");
+          opt.value = name;
+          dl.appendChild(opt);
+        });
+        showPrompt(p.system_prompt || "");
+      } catch (e) { /* status already set on 401 */ }
+    }
+
+    $("#quiz").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = {};
+      for (const f of FIELDS) body[f] = $(`#${f}`).value;
+      body.core_directives = $("#core_directives").value.split("\n").filter((l) => l.trim());
+
+      const btn = $("#save-btn");
+      btn.disabled = true;
+      setStatus("Saving…", true);
+      try {
+        const res = await api("/api/personality", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setStatus("✅ Saved and applied — WITS is using this personality right now.", true);
+          showPrompt(data.system_prompt || "");
+        } else {
+          setStatus(`Save failed (HTTP ${res.status}).`, false);
+        }
+      } catch (e) {
+        if (e.message !== "unauthorized") setStatus(`Save failed: ${e.message}`, false);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $("#reset-btn").addEventListener("click", async () => {
+      if (!confirm("Remove all questionnaire overrides and go back to the base wits_personality.yaml?")) return;
+      try {
+        const res = await api("/api/personality", { method: "DELETE" });
+        if (res.ok) {
+          const data = await res.json();
+          setStatus("Overrides removed — base profile restored. Reloading…", true);
+          showPrompt(data.system_prompt || "");
+          setTimeout(() => location.reload(), 900);
+        } else {
+          setStatus(`Reset failed (HTTP ${res.status}).`, false);
+        }
+      } catch (e) { /* handled */ }
+    });
+
+    load();
+  </script>
+</body>
+</html>
