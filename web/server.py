@@ -32,12 +32,26 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 # Paths that never require auth (the shell page + PWA assets load before the
 # user can enter a token; every /api/* call is protected).
-PUBLIC_PATHS = {"/", "/manifest.webmanifest", "/icon.svg", "/app.js", "/style.css"}
+PUBLIC_PATHS = {"/", "/personality", "/manifest.webmanifest", "/icon.svg", "/app.js", "/style.css"}
 
 
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+
+
+class PersonalityAnswers(BaseModel):
+    """Questionnaire answers from the /personality page. All optional —
+    only the fields the user filled in are written to the overrides file."""
+    identity_label: Optional[str] = None
+    default_role: Optional[str] = None
+    tone: Optional[str] = None
+    language_level: Optional[str] = None
+    verbosity: Optional[str] = None
+    structure_preference: Optional[str] = None
+    humor: Optional[str] = None
+    default_persona: Optional[str] = None
+    core_directives: Optional[list[str]] = None
 
 
 def create_app(system) -> FastAPI:
@@ -69,6 +83,10 @@ def create_app(system) -> FastAPI:
     async def index():
         # no-store so browsers always pick up frontend updates
         return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/personality")
+    async def personality_page():
+        return FileResponse(STATIC_DIR / "personality.html", headers={"Cache-Control": "no-store"})
 
     @app.get("/manifest.webmanifest")
     async def manifest():
@@ -175,6 +193,89 @@ def create_app(system) -> FastAPI:
                 for s in segments
             ]
         }
+
+    # ------------------------------------------------------ personality
+    @app.get("/api/personality")
+    async def get_personality():
+        from core.personality_manager import PersonalityManager
+
+        pm = PersonalityManager(config=system.config)
+        profile = pm.personality_profile or {}
+        comm = profile.get("communication", {})
+        personas = [
+            r.get("name") for r in profile.get("persona_layers", {}).get("available_roles", [])
+            if isinstance(r, dict) and r.get("name")
+        ]
+        return {
+            "identity_label": profile.get("identity_label", ""),
+            "default_role": profile.get("default_role", ""),
+            "tone": comm.get("tone", ""),
+            "language_level": comm.get("language_level", ""),
+            "verbosity": comm.get("verbosity", ""),
+            "structure_preference": comm.get("structure_preference", ""),
+            "humor": comm.get("humor", ""),
+            "default_persona": profile.get("persona_layers", {}).get("default_persona", ""),
+            "core_directives": profile.get("core_directives", []),
+            "available_personas": personas,
+            "system_prompt": pm.get_system_prompt(),
+        }
+
+    @app.post("/api/personality")
+    async def save_personality(answers: PersonalityAnswers):
+        import yaml
+        from core.personality_manager import PersonalityManager, reload_personality_manager
+
+        overrides: Dict[str, Any] = {}
+        comm: Dict[str, Any] = {}
+
+        def clean(value: Optional[str]) -> Optional[str]:
+            return value.strip() if value and value.strip() else None
+
+        if clean(answers.identity_label):
+            overrides["identity_label"] = clean(answers.identity_label)
+        if clean(answers.default_role):
+            overrides["default_role"] = clean(answers.default_role)
+        for field in ("tone", "language_level", "verbosity", "structure_preference", "humor"):
+            value = clean(getattr(answers, field))
+            if value:
+                comm[field] = value
+        if comm:
+            overrides["communication"] = comm
+        if clean(answers.default_persona):
+            overrides["persona_layers"] = {"default_persona": clean(answers.default_persona)}
+        if answers.core_directives is not None:
+            directives = [d.strip() for d in answers.core_directives if d.strip()]
+            if directives:
+                overrides["core_directives"] = directives
+
+        if not overrides:
+            return JSONResponse({"detail": "no answers provided"}, status_code=400)
+
+        overrides_path = Path(PersonalityManager.overrides_path_for(system.config.personality.profile_path))
+        overrides_path.parent.mkdir(parents=True, exist_ok=True)
+        header = (
+            "# Written by the WITS web UI personality questionnaire (/personality).\n"
+            "# Merged over config/wits_personality.yaml at load - delete this file\n"
+            "# to revert to the base profile.\n"
+        )
+        overrides_path.write_text(header + yaml.safe_dump(overrides, sort_keys=False, allow_unicode=True),
+                                  encoding="utf-8")
+
+        # Apply immediately: agents fetch the personality manager per call
+        pm = reload_personality_manager(config=system.config)
+        logger.info(f"Personality overrides saved to {overrides_path}")
+        return {"saved": True, "system_prompt": pm.get_system_prompt()}
+
+    @app.delete("/api/personality")
+    async def reset_personality():
+        from core.personality_manager import PersonalityManager, reload_personality_manager
+
+        overrides_path = Path(PersonalityManager.overrides_path_for(system.config.personality.profile_path))
+        existed = overrides_path.exists()
+        if existed:
+            overrides_path.unlink()
+        pm = reload_personality_manager(config=system.config)
+        return {"reset": existed, "system_prompt": pm.get_system_prompt()}
 
     # -------------------------------------------------------- documents
     @app.get("/api/documents")

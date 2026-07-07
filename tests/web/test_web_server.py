@@ -219,3 +219,91 @@ def test_index_served(client_noauth):
     res = client.get("/")
     assert res.status_code == 200
     assert "WITS" in res.text
+
+
+# ------------------------------------------------------------------ personality
+
+PROFILE_YAML = """
+wits_personality:
+  name: "Test Profile"
+  profile_id: "test"
+  identity_label: "WITS"
+  default_role: "Test Assistant"
+  core_directives:
+    - "Be excellent."
+  communication:
+    tone: "neutral"
+    language_level: "plain"
+    verbosity: "adaptive"
+    structure_preference: "prose"
+    humor: "off"
+  persona_layers:
+    default_persona: "Engineer"
+    available_roles:
+      - name: "Engineer"
+      - name: "Companion"
+"""
+
+
+@pytest.fixture
+def client_personality(tmp_path, monkeypatch):
+    monkeypatch.delenv("WITSV3_WEB_TOKEN", raising=False)
+    system = FakeSystem(tmp_path)
+    profile = tmp_path / "wits_personality.yaml"
+    profile.write_text(PROFILE_YAML, encoding="utf-8")
+    system.config.personality.profile_path = str(profile)
+    yield TestClient(create_app(system)), system, tmp_path
+    # POST/DELETE swap the global personality manager - don't leak it
+    import core.personality_manager as pm_module
+    pm_module._personality_manager = None
+
+
+def test_personality_get(client_personality):
+    client, _, _ = client_personality
+    body = client.get("/api/personality").json()
+    assert body["identity_label"] == "WITS"
+    assert body["tone"] == "neutral"
+    assert body["available_personas"] == ["Engineer", "Companion"]
+    assert "You are WITS" in body["system_prompt"]
+
+
+def test_personality_save_apply_and_reset(client_personality):
+    client, _, tmp_path = client_personality
+    res = client.post("/api/personality", json={
+        "identity_label": "JARVIS",
+        "tone": "wry and unflappable",
+        "humor": "dry",
+        "core_directives": ["Never lose the plot.", "   ", "Serve tea."],
+    })
+    assert res.status_code == 200
+    body = res.json()
+    assert body["saved"] is True
+    assert "You are JARVIS" in body["system_prompt"]
+    assert "wry and unflappable" in body["system_prompt"]
+
+    overrides = tmp_path / "personality_overrides.yaml"
+    assert overrides.exists()
+
+    # GET reflects merged values; untouched fields keep base values
+    merged = client.get("/api/personality").json()
+    assert merged["identity_label"] == "JARVIS"
+    assert merged["language_level"] == "plain"
+    assert merged["core_directives"] == ["Never lose the plot.", "Serve tea."]
+
+    # Reset removes the overrides and restores the base profile
+    res = client.delete("/api/personality")
+    assert res.status_code == 200
+    assert res.json()["reset"] is True
+    assert not overrides.exists()
+    assert client.get("/api/personality").json()["identity_label"] == "WITS"
+
+
+def test_personality_empty_post_rejected(client_personality):
+    client, _, _ = client_personality
+    assert client.post("/api/personality", json={}).status_code == 400
+
+
+def test_personality_page_public_but_api_protected(client_auth):
+    client, _ = client_auth
+    assert client.get("/personality").status_code == 200
+    assert client.get("/api/personality").status_code == 401
