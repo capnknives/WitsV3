@@ -67,7 +67,8 @@ def create_app(system) -> FastAPI:
     # ------------------------------------------------------------- pages
     @app.get("/")
     async def index():
-        return FileResponse(STATIC_DIR / "index.html")
+        # no-store so browsers always pick up frontend updates
+        return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-store"})
 
     @app.get("/manifest.webmanifest")
     async def manifest():
@@ -79,11 +80,13 @@ def create_app(system) -> FastAPI:
 
     @app.get("/app.js")
     async def app_js():
-        return FileResponse(STATIC_DIR / "app.js", media_type="text/javascript")
+        return FileResponse(STATIC_DIR / "app.js", media_type="text/javascript",
+                            headers={"Cache-Control": "no-cache"})
 
     @app.get("/style.css")
     async def style_css():
-        return FileResponse(STATIC_DIR / "style.css", media_type="text/css")
+        return FileResponse(STATIC_DIR / "style.css", media_type="text/css",
+                            headers={"Cache-Control": "no-cache"})
 
     # ------------------------------------------------------------- chat
     @app.post("/api/chat")

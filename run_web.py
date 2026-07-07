@@ -76,13 +76,22 @@ async def main() -> int:
     host, port = config.web_ui.host, config.web_ui.port
     web_token = os.getenv("WITSV3_WEB_TOKEN", "")
     token_suffix = f"/?token={web_token}" if web_token else "/"
+    phone_url = f"http://{_lan_ip()}:{port}{token_suffix}"
     print()
     print("=" * 72)
     print("  WitsV3 Web UI is starting")
     print(f"    This PC:    http://localhost:{port}{token_suffix}")
     if host == "0.0.0.0":
-        print(f"    Your phone: http://{_lan_ip()}:{port}{token_suffix}")
+        print(f"    Your phone: {phone_url}")
         print("                (same Wi-Fi; the link logs you in automatically)")
+        try:
+            import qrcode
+            qr = qrcode.QRCode(border=1)
+            qr.add_data(phone_url)
+            print("\n  Or just scan this with your phone camera:\n")
+            qr.print_ascii(invert=True)
+        except ImportError:
+            pass
     print("=" * 72)
     print()
 

@@ -29,6 +29,9 @@ function authHeaders(extra = {}) {
 async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers: authHeaders(opts.headers || {}) });
   if (res.status === 401) {
+    // Whatever token we had is wrong - drop it so it can't stick around
+    token = "";
+    localStorage.removeItem("wits_token");
     showTokenModal();
     throw new Error("unauthorized");
   }
