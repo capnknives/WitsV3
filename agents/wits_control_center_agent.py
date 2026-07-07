@@ -565,7 +565,12 @@ USER: {user_input}
 ASSISTANT:"""
 
             try:
-                response = await self.generate_response(conversation_prompt, temperature=0.7)
+                # Route on the raw user message, not the assembled prompt —
+                # short casual chat goes to the small fast model
+                routed_model = self.model_router.route(user_input, default=self.get_model_name())
+                response = await self.generate_response(
+                    conversation_prompt, model_name=routed_model, temperature=0.7
+                )
                 yield self.stream_result(response)
             except Exception as e:
                 self.logger.error(f"Error generating direct response: {e}")
@@ -656,6 +661,7 @@ ASSISTANT:"""
         yield self.stream_thinking("No specialized handling available, generating direct response...")
         response = await self.generate_response(
             f"You are a helpful assistant. Respond to this user query: {user_input}",
+            model_name=self.model_router.route(user_input, default=self.get_model_name()),
             temperature=0.7
         )
         yield self.stream_result(response)

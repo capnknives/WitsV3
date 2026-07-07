@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, AsyncGenerator, Literal
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
+from core.model_router import ModelRouter
 from core.schemas import StreamData, AgentResponse, ConversationHistory
 
 
@@ -49,6 +50,10 @@ class BaseAgent(ABC):
         # Agent configuration from config
         self.temperature = config.agents.default_temperature
         self.max_iterations = config.agents.max_iterations
+
+        # Smart model routing: agents pass the raw user message/goal to
+        # self.model_router.route() to pick a per-request model
+        self.model_router = ModelRouter(config)
 
         self.logger.info(f"Initialized {self.__class__.__name__}: {agent_name}")
 

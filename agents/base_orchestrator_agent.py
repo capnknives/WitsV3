@@ -77,7 +77,17 @@ class BaseOrchestratorAgent(BaseAgent):
             StreamData objects showing the reasoning and action process
         """
         self.current_iteration = 0
-        
+
+        # Route the whole ReAct session on the goal: code goals go to the
+        # coder model (better structured output than qwen3), everything else
+        # stays on the orchestrator model. Never the trivial model — the
+        # small model can't hold the ReAct JSON format.
+        self._session_model = self.model_router.route(
+            goal, default=self.get_model_name(), allow_trivial=False
+        )
+        if self._session_model != self.get_model_name():
+            self.logger.info(f"Orchestrating with routed model: {self._session_model}")
+
         # Initial setup
         yield self.stream_thinking(f"Starting orchestration for goal: {goal}")
         
@@ -140,7 +150,10 @@ class BaseOrchestratorAgent(BaseAgent):
             
             yield self.stream_thinking("Analyzing the situation and planning next steps...")
             
-            reasoning_response = await self.generate_response(reasoning_prompt)
+            reasoning_response = await self.generate_response(
+                reasoning_prompt,
+                model_name=getattr(self, "_session_model", None)
+            )
             parsed_reasoning = self._parse_reasoning_response(reasoning_response)
             
             # Stream the reasoning

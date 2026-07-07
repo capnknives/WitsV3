@@ -130,6 +130,18 @@ class EscalationSettings(BaseModel):
     model: str = Field(default="claude-opus-4-8", description="Claude model used for approved escalations")
     max_tokens: int = Field(default=2048, ge=256, le=16000, description="Hard cap on Claude's response length (caps cost)")
 
+class ModelRoutingSettings(BaseModel):
+    """Smart model routing: pick the Ollama model per request based on what the
+    user actually asked, instead of sending everything to the default model.
+    Trivial chat goes to a small fast model, code work goes to the coder model,
+    everything else stays on the default. The router only ever sees the raw
+    user message or goal, never full prompt templates."""
+    enabled: bool = Field(default=True, description="Enable per-request model routing")
+    trivial_model: str = Field(default="llama3.2:3b", description="Model for short casual chat")
+    code_model: str = Field(default="qwen2.5-coder:7b", description="Model for code-related requests")
+    complex_model: str = Field(default="qwen3:8b", description="Model for everything else")
+    trivial_max_chars: int = Field(default=140, gt=0, description="Messages longer than this are never routed to the trivial model")
+
 class PersonalitySettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable personality system")
     profile_path: str = Field(default="config/wits_personality.yaml", description="Path to personality profile")
@@ -155,6 +167,7 @@ class WitsV3Config(BaseModel):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
     escalation: EscalationSettings = Field(default_factory=EscalationSettings)
+    model_routing: ModelRoutingSettings = Field(default_factory=ModelRoutingSettings)
 
     class Config:
         validate_assignment = True
