@@ -12,6 +12,15 @@ let sessionId = localStorage.getItem("wits_session") || null;
 let token = localStorage.getItem("wits_token") || "";
 let busy = false;
 
+// Magic login link: /?token=XYZ stores the token and cleans the URL,
+// so phones never have to type it manually.
+const urlToken = new URLSearchParams(location.search).get("token");
+if (urlToken) {
+  token = urlToken.trim();
+  localStorage.setItem("wits_token", token);
+  history.replaceState(null, "", location.pathname);
+}
+
 /* ---------------------------------------------------------- helpers */
 function authHeaders(extra = {}) {
   return token ? { Authorization: `Bearer ${token}`, ...extra } : extra;

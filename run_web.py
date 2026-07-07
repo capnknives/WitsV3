@@ -74,15 +74,16 @@ async def main() -> int:
     app = create_app(system)
 
     host, port = config.web_ui.host, config.web_ui.port
+    web_token = os.getenv("WITSV3_WEB_TOKEN", "")
+    token_suffix = f"/?token={web_token}" if web_token else "/"
     print()
-    print("=" * 56)
+    print("=" * 72)
     print("  WitsV3 Web UI is starting")
-    print(f"    This PC:    http://localhost:{port}")
+    print(f"    This PC:    http://localhost:{port}{token_suffix}")
     if host == "0.0.0.0":
-        print(f"    Your phone: http://{_lan_ip()}:{port}   (same Wi-Fi)")
-    if os.getenv("WITSV3_WEB_TOKEN"):
-        print("    Access token: set (see WITSV3_WEB_TOKEN in .env)")
-    print("=" * 56)
+        print(f"    Your phone: http://{_lan_ip()}:{port}{token_suffix}")
+        print("                (same Wi-Fi; the link logs you in automatically)")
+    print("=" * 72)
     print()
 
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="info"))
