@@ -150,6 +150,9 @@ main#chat {
   background: rgba(0,0,0,.65);
   display: flex; align-items: center; justify-content: center; padding: 20px;
 }
+/* display:flex above beats the UA stylesheet's [hidden]{display:none},
+   so the modal could never close — restore it explicitly */
+#token-modal[hidden] { display: none; }
 .modal-card {
   background: var(--bg-2); border: 1px solid #2c3245; border-radius: var(--radius);
   padding: 22px; width: 100%; max-width: 360px;
