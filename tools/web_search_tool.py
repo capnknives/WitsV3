@@ -84,10 +84,13 @@ class WebSearchTool(BaseTool):
     # --- entry point ----------------------------------------------------
 
     async def execute(self, query: str, max_results: int = 5) -> Dict[str, Any]:
-        """Run a web search across the provider fallback chain.
+        """Run a web search.
 
-        Returns a dict: {success, results: [{title, link, snippet}], provider,
-        answer?, error?}. `results` is always present (empty on failure).
+        In "auto" mode with both keys set, Tavily and Brave are queried
+        concurrently and their results merged, so the caller gets one AI
+        summary (from Tavily) plus independent sources from both engines to
+        cross-check it against. Returns {success, provider, results:
+        [{title, link, snippet}], answer?, answer_provider?, error?}.
         """
         query = (query or "").strip()
         if not query:
@@ -96,21 +99,34 @@ class WebSearchTool(BaseTool):
         provider = str(self._get("provider", "auto")).lower()
         max_results = max(1, int(max_results or self._get("max_results", 5)))
 
-        # Build the ordered list of providers to try.
         if provider == "tavily":
-            chain = [self._search_tavily]
-        elif provider == "brave":
-            chain = [self._search_brave]
-        elif provider == "duckduckgo":
-            chain = [self._search_ddg_html, self._search_ddg_lite, self._search_ddg_instant]
-        else:  # "auto"
-            chain = []
-            if self._tavily_key():
-                chain.append(self._search_tavily)
-            if self._brave_key():
-                chain.append(self._search_brave)
-            chain += [self._search_ddg_html, self._search_ddg_lite, self._search_ddg_instant]
+            return await self._run_chain([self._search_tavily], query, max_results)
+        if provider == "brave":
+            return await self._run_chain([self._search_brave], query, max_results)
+        if provider == "duckduckgo":
+            return await self._run_chain(
+                [self._search_ddg_html, self._search_ddg_lite, self._search_ddg_instant],
+                query, max_results,
+            )
 
+        # "auto": query the configured keyed engines together and merge; fall
+        # back to keyless DuckDuckGo only if neither returns anything.
+        keyed = []
+        if self._tavily_key():
+            keyed.append(self._search_tavily)
+        if self._brave_key():
+            keyed.append(self._search_brave)
+        if keyed:
+            merged = await self._gather_and_merge(keyed, query, max_results)
+            if merged["success"]:
+                return merged
+        return await self._run_chain(
+            [self._search_ddg_html, self._search_ddg_lite, self._search_ddg_instant],
+            query, max_results,
+        )
+
+    async def _run_chain(self, chain, query: str, max_results: int) -> Dict[str, Any]:
+        """Try providers in order; first one with results wins."""
         errors: List[str] = []
         for search_fn in chain:
             name = search_fn.__name__.replace("_search_", "")
@@ -120,15 +136,11 @@ class WebSearchTool(BaseTool):
                 logger.warning("web_search provider '%s' failed: %s", name, e)
                 errors.append(f"{name}: {e}")
                 continue
-
             if results:
-                out: Dict[str, Any] = {
-                    "success": True,
-                    "provider": name,
-                    "results": results[:max_results],
-                }
+                out: Dict[str, Any] = {"success": True, "provider": name, "results": results[:max_results]}
                 if answer:
                     out["answer"] = answer
+                    out["answer_provider"] = name
                 return out
             errors.append(f"{name}: no results")
 
@@ -138,6 +150,65 @@ class WebSearchTool(BaseTool):
             "error": "All search providers failed or returned no results. " + "; ".join(errors),
             "results": [],
         }
+
+    async def _gather_and_merge(self, providers, query: str, max_results: int) -> Dict[str, Any]:
+        """Query keyed providers concurrently and merge their results.
+
+        Keeps the first available AI summary (Tavily's) and interleaves each
+        engine's results, deduped by URL, so both engines are represented.
+        """
+        import asyncio as _asyncio  # local alias; asyncio imported at module top
+
+        outcomes = await _asyncio.gather(
+            *[p(query, max_results) for p in providers], return_exceptions=True
+        )
+        answer: Optional[str] = None
+        answer_provider: Optional[str] = None
+        result_lists: List[List[Dict[str, str]]] = []
+        names_ok: List[str] = []
+        for prov, outcome in zip(providers, outcomes):
+            name = prov.__name__.replace("_search_", "")
+            if isinstance(outcome, Exception):
+                logger.warning("web_search provider '%s' failed: %s", name, outcome)
+                continue
+            results, prov_answer = outcome
+            if prov_answer and not answer:
+                answer, answer_provider = prov_answer, name
+            if results:
+                result_lists.append(results)
+                names_ok.append(name)
+
+        if not result_lists:
+            return {"success": False, "results": []}
+
+        # More sources when merging engines, so the model can cross-check.
+        cap = min(max_results * 2, 8) if len(result_lists) > 1 else max_results
+        merged = self._interleave_dedupe(result_lists, cap)
+        out: Dict[str, Any] = {"success": True, "provider": "+".join(names_ok), "results": merged}
+        if answer:
+            out["answer"] = answer
+            out["answer_provider"] = answer_provider
+        return out
+
+    @staticmethod
+    def _interleave_dedupe(result_lists: List[List[Dict[str, str]]], cap: int) -> List[Dict[str, str]]:
+        """Round-robin across providers' result lists, deduping by URL."""
+        from itertools import zip_longest
+
+        seen = set()
+        merged: List[Dict[str, str]] = []
+        for group in zip_longest(*result_lists):
+            for r in group:
+                if not r or not r.get("link"):
+                    continue
+                key = r["link"].rstrip("/").lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(r)
+                if len(merged) >= cap:
+                    return merged
+        return merged
 
     # --- providers ------------------------------------------------------
 

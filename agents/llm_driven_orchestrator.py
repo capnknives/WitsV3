@@ -157,11 +157,11 @@ Respond with JSON in this format:
 }}
 
 Important:
-- Use "tool_call" when you need to gather information or perform an action
-- Use "final_answer" when you can provide a complete response to the goal
-- Be specific and practical in your reasoning
-- Consider what you've already learned from previous observations
-- If the goal needs current, recent, real-time, or post-training information (news, events, dates, who did/won/died something, prices, weather) and a web_search tool is available, you MUST call web_search to look it up. NEVER answer such questions from memory and NEVER refuse by citing a knowledge/training cutoff — search first, then answer from the results.
+- Use "tool_call" ONLY when you still lack information needed to answer. Use "final_answer" as soon as your observations are enough — do NOT repeat a search you already ran, and do NOT keep gathering once you can answer. One good web_search is usually enough.
+- If the goal needs current, recent, or post-training information (news, events, dates, who did/won/died something, prices, weather) and web_search is available, you MUST call web_search. NEVER answer such questions from memory or refuse by citing a knowledge/training cutoff.
+- web_search is for the public web. document_search ONLY searches the user's own uploaded private files — do NOT use it for general knowledge, current events, or public figures; it returns unrelated personal documents and will mislead you.
+- When your observations contain web_search results, they include a "summary" line plus numbered SOURCES. The summary is usually the correct, already-extracted answer — make your final_answer that summary, phrased to address the exact question. Only override it if a source clearly contradicts it. Do NOT discard a correct summary just because the sources are broad "list of everyone who died in 2026" pages — those lists are noisy and easy to misread.
+- Answer only the specific thing asked. If the question is "who did X on <date>", give the single correct person for that exact date as a direct sentence, not a long list of many names and dates.
 - Do not claim you cannot access information a tool could retrieve; call the tool instead.
 
 Respond ONLY with valid JSON."""

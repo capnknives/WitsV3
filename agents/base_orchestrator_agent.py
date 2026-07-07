@@ -25,7 +25,14 @@ class BaseOrchestratorAgent(BaseAgent):
     - Act: Take an action (use tool, call agent, or provide answer)
     - Observe: Observe the results and plan next steps
     """
-    
+
+    # ReAct tool-selection/synthesis needs to be near-deterministic; the global
+    # default_temperature (0.7) is tuned for chat/creative work and makes the
+    # loop wander (redundant searches, listing instead of answering the specific
+    # question). Low temp here dramatically improves consistency.
+    REASONING_TEMPERATURE = 0.2
+
+
     def __init__(
         self,
         agent_name: str,
@@ -153,6 +160,7 @@ class BaseOrchestratorAgent(BaseAgent):
             reasoning_response = await self.generate_response(
                 reasoning_prompt,
                 model_name=getattr(self, "_session_model", None),
+                temperature=self.REASONING_TEMPERATURE,
                 response_format="json"
             )
             parsed_reasoning = self._parse_reasoning_response(reasoning_response)
@@ -166,6 +174,7 @@ class BaseOrchestratorAgent(BaseAgent):
                     repaired_response = await self.generate_response(
                         self._build_json_repair_prompt(reasoning_response, parse_error),
                         model_name=getattr(self, "_session_model", None),
+                        temperature=self.REASONING_TEMPERATURE,
                         response_format="json"
                     )
                     reparsed = self._parse_reasoning_response(repaired_response)
@@ -255,7 +264,7 @@ class BaseOrchestratorAgent(BaseAgent):
             try:
                 # This will be implemented when we create the tool registry
                 tool_result = await self._call_tool(tool_name, tool_args)
-                observation = f"Tool {tool_name} result: {tool_result}"
+                observation = self._format_tool_observation(tool_name, tool_result)
             except Exception as e:
                 observation = f"Tool {tool_name} failed: {str(e)}"
                 yield self.stream_error(f"Tool execution failed: {str(e)}")
@@ -274,6 +283,40 @@ class BaseOrchestratorAgent(BaseAgent):
             metadata={"tool_name": tool_name, "session_id": session_id}
         )
     
+    def _format_tool_observation(self, tool_name: str, result: Any) -> str:
+        """Render a tool result for the ReAct observation.
+
+        Search-shaped results (a dict with a "results" list) are rendered as
+        readable text — the AI summary is explicitly flagged as unverified and
+        the individual sources are numbered — so the model reconciles the
+        answer against the sources instead of echoing a possibly-wrong summary.
+        """
+        if isinstance(result, dict) and isinstance(result.get("results"), list) and (
+            "answer" in result or result.get("results")
+        ):
+            return self._format_search_observation(tool_name, result)
+        return f"Tool {tool_name} result: {result}"
+
+    @staticmethod
+    def _format_search_observation(tool_name: str, result: Dict[str, Any]) -> str:
+        lines = [f"{tool_name} results (base your answer on the SOURCES below):"]
+        answer = result.get("answer")
+        if answer:
+            provider = result.get("answer_provider", "search engine")
+            lines.append(
+                f"{provider} summary (usually accurate — use it, but trust the "
+                f"sources below if any clearly contradicts it): {answer}"
+            )
+        sources = result.get("results") or []
+        for i, r in enumerate(sources, 1):
+            title = (r.get("title") or "").strip()
+            snippet = (r.get("snippet") or "").strip()
+            link = (r.get("link") or "").strip()
+            lines.append(f"[{i}] {title}\n    {snippet}\n    source: {link}")
+        if not sources and not answer:
+            lines.append("(no results found)")
+        return "\n".join(lines)
+
     async def _call_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
         """
         Call a tool through the tool registry.
