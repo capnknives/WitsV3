@@ -61,8 +61,11 @@
     <div class="modal-card">
       <h2>Access token</h2>
       <p>Enter the WITSV3_WEB_TOKEN from your .env file.</p>
-      <input id="token-input" type="password" placeholder="token">
-      <button id="token-save">Connect</button>
+      <form id="token-form">
+        <input id="token-input" type="password" placeholder="token" autocomplete="off">
+        <p id="token-error" class="modal-error" hidden></p>
+        <button id="token-save" type="submit">Connect</button>
+      </form>
     </div>
   </div>
 

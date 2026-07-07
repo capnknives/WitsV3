@@ -55,11 +55,46 @@ function showTokenModal() {
   $("#token-input").focus();
 }
 
-$("#token-save").addEventListener("click", () => {
-  token = $("#token-input").value.trim();
-  localStorage.setItem("wits_token", token);
-  $("#token-modal").hidden = true;
-  checkStatus();
+$("#token-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errEl = $("#token-error");
+  const btn = $("#token-save");
+  const candidate = $("#token-input").value.trim();
+
+  if (!candidate) {
+    errEl.textContent = "Paste the token first — the field is empty.";
+    errEl.hidden = false;
+    return;
+  }
+
+  // Validate against the server BEFORE closing the modal, with a raw fetch
+  // so a 401 here doesn't loop back through api()'s modal handling.
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  try {
+    const res = await fetch("/api/status", { headers: { Authorization: `Bearer ${candidate}` } });
+    if (res.ok) {
+      token = candidate;
+      localStorage.setItem("wits_token", token);
+      $("#token-input").value = "";
+      errEl.hidden = true;
+      $("#token-modal").hidden = true;
+      addAssistantMsg("✅ Token accepted — you're connected.");
+      checkStatus();
+    } else if (res.status === 401) {
+      errEl.textContent = "Token rejected — it doesn't match WITSV3_WEB_TOKEN on the server.";
+      errEl.hidden = false;
+    } else {
+      errEl.textContent = `Server error (HTTP ${res.status}) — try again.`;
+      errEl.hidden = false;
+    }
+  } catch {
+    errEl.textContent = "Can't reach the server — is run_web.py still running?";
+    errEl.hidden = false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Connect";
+  }
 });
 
 /* ---------------------------------------------------------- status */
