@@ -83,7 +83,7 @@ suggested next steps.
 ### Richard's manual action items (browser/keys — can't be automated)
 - [ ] **Revoke the leaked `sbp_...` Supabase personal access token** at supabase.com/dashboard/account/tokens (leaked in git history before the secrets cleanup).
 - [ ] **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
-- [ ] **Get a Tavily web-search API key** at tavily.com (free tier: 1000 searches/mo, LLM-optimized) and add `TAVILY_API_KEY=...` to `.env`. Highest-value key for search quality; `web_search` auto-prefers it when present.
+- [x] ~~**Get a Tavily web-search API key**~~ DONE July 7 2026 — key added to `.env` as `TAVILY_API_KEY`; verified live, `web_search` now routes through Tavily (returns synthesized answer + results).
 - [ ] **Get a Brave Search API key** at brave.com/search/api (free tier: 2000/mo) and add `BRAVE_SEARCH_API_KEY=...` to `.env`. Good second option / fallback. Neither key is required — `web_search` already returns real results keyless via DuckDuckGo.
 
 ### Repo hygiene
