@@ -106,6 +106,8 @@ async def test_ingest_new_file(rag_env):
     assert result["files_scanned"] == 1
     assert result["files_ingested"] == 1
     assert result["chunks_added"] >= 1
+    assert result["searchable_files"] == {"notes.md": result["chunks_added"]}
+    assert "ingested and searchable" in result["message"]
 
     segments = await memory.get_recent_memory(limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE})
     assert len(segments) == result["chunks_added"]
@@ -127,6 +129,12 @@ async def test_ingest_unchanged_file_skipped(rag_env):
     assert result2["files_unchanged"] == 1
     assert result2["files_ingested"] == 0
     assert result2["chunks_added"] == 0
+    # The unchanged file must still be reported as searchable — an LLM reading
+    # bare "files_ingested: 0" concluded the document wasn't accessible.
+    assert list(result2["searchable_files"]) == ["notes.md"]
+    assert result2["searchable_files"]["notes.md"] >= 1
+    assert "already ingested" in result2["message"]
+    assert "searchable via document_search" in result2["message"]
 
 
 @pytest.mark.asyncio
