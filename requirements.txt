@@ -75,3 +75,4 @@ scikit-learn>=1.0.0
 typer>=0.9.0
 supabase>=1.0.0
 anthropic>=0.90  # ask-Claude escalation (web UI approval required per request)
+pypdf>=6.0  # PDF ingestion for the documents/ drop folder (document RAG)
