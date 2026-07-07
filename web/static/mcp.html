@@ -64,6 +64,23 @@
 
     <div id="server-list"></div>
 
+    <h2>Discover servers</h2>
+    <p class="lead" style="margin-top:-4px">
+      Search the official MCP registry for new capabilities (e.g. “postgres”,
+      “slack”, “brave search”). Installing adds the server to your config;
+      you then click Connect to run it — that runs its code on this PC.
+    </p>
+    <form id="discover-form">
+      <div style="display:flex; gap:8px">
+        <input id="discover-q" placeholder="What do you want WITS to be able to do?"
+               autocomplete="off" style="flex:1; box-sizing:border-box; background:var(--bg-3);
+               border:1px solid #2c3245; color:var(--fg); border-radius:8px; padding:10px 12px; font:inherit">
+        <button id="discover-btn" type="submit" style="background:var(--accent); border:none;
+               color:#fff; border-radius:8px; padding:0 18px; font:inherit; cursor:pointer">Search</button>
+      </div>
+    </form>
+    <div id="discover-results"></div>
+
     <h2>Add a server</h2>
     <form id="add-form">
       <label for="add-name">Name</label>
@@ -188,6 +205,104 @@
         }
       } catch (e) { /* handled */ }
     }
+
+    async function installFromRegistry(entry, card, btn) {
+      btn.disabled = true;
+      btn.textContent = "Installing…";
+      const env = {};
+      card.querySelectorAll("input.env-input").forEach((inp) => {
+        if (inp.value.trim()) env[inp.dataset.name] = inp.value.trim();
+      });
+      const body = { name: entry.name, command: entry.install.command };
+      if (Object.keys(env).length) body.env = env;
+      try {
+        const res = await api("/api/mcp/registry/install", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setStatus(`✅ Installed "${entry.name}" — scroll up and click Connect to start it.`, true);
+          btn.textContent = "Installed ✓";
+          await load();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          setStatus(`Install failed: ${data.detail || res.status}`, false);
+          btn.disabled = false;
+          btn.textContent = "Install";
+        }
+      } catch (e) {
+        if (e.message !== "unauthorized") setStatus(`Install failed: ${e.message}`, false);
+        btn.disabled = false;
+        btn.textContent = "Install";
+      }
+    }
+
+    function renderDiscoverCard(entry) {
+      const card = el("div", "server");
+      const head = el("div", "server-head");
+      head.appendChild(el("div", "server-name", entry.name));
+      if (entry.already_added) head.appendChild(el("span", "chip on", "added"));
+      else if (!entry.install) head.appendChild(el("span", "chip off", "remote / manual"));
+      card.appendChild(head);
+
+      if (entry.description) card.appendChild(el("div", "cmd", entry.description));
+      if (entry.install) card.appendChild(el("div", "cmd", entry.install.command.join(" ")));
+      if (entry.repository) {
+        const repo = el("div", "cmd");
+        const a = el("a", null, entry.repository);
+        a.href = entry.repository; a.target = "_blank"; a.rel = "noopener noreferrer";
+        a.style.color = "var(--accent-2)";
+        repo.appendChild(a);
+        card.appendChild(repo);
+      }
+
+      const requiredEnv = (entry.install ? entry.install.env_vars : []).filter((v) => v.required);
+      for (const ev of requiredEnv) {
+        const wrap = el("div"); wrap.style.marginTop = "8px";
+        wrap.appendChild(el("div", "cmd", `${ev.name}${ev.secret ? " (secret)" : ""} — ${ev.description || "required"}`));
+        const inp = el("input", "env-input");
+        inp.dataset.name = ev.name;
+        inp.placeholder = ev.name;
+        if (ev.secret) inp.type = "password";
+        inp.style.cssText = "width:100%; box-sizing:border-box; margin-top:4px; background:var(--bg-3);" +
+          "border:1px solid #2c3245; color:var(--fg); border-radius:8px; padding:8px 10px; font:inherit";
+        wrap.appendChild(inp);
+        card.appendChild(wrap);
+      }
+
+      const actions = el("div", "server-actions");
+      if (entry.install && !entry.already_added) {
+        const installBtn = el("button", "primary", "Install");
+        installBtn.addEventListener("click", (e) => { e.preventDefault(); installFromRegistry(entry, card, installBtn); });
+        actions.appendChild(installBtn);
+      }
+      card.appendChild(actions);
+      return card;
+    }
+
+    async function discover(query) {
+      const box = $("#discover-results");
+      box.innerHTML = "";
+      box.appendChild(el("p", "lead", "Searching the MCP registry…"));
+      try {
+        const res = await api(`/api/mcp/registry/search?q=${encodeURIComponent(query)}&limit=12`);
+        const data = await res.json().catch(() => ({}));
+        box.innerHTML = "";
+        if (!res.ok) { box.appendChild(el("p", "lead", `Search failed: ${data.detail || res.status}`)); return; }
+        if (!data.results.length) { box.appendChild(el("p", "lead", "No matching servers found.")); return; }
+        for (const entry of data.results) box.appendChild(renderDiscoverCard(entry));
+      } catch (e) {
+        if (e.message !== "unauthorized") box.innerHTML = `<p class="lead">Search failed: ${e.message}</p>`;
+      }
+    }
+
+    $("#discover-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = $("#discover-q").value.trim();
+      if (q) discover(q);
+    });
 
     $("#add-form").addEventListener("submit", async (e) => {
       e.preventDefault();

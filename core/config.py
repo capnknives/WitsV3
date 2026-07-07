@@ -94,6 +94,7 @@ class ToolSystemSettings(BaseModel):
     enable_mcp_tools: bool = Field(default=True)
     mcp_connect_on_startup: bool = Field(default=False, description="Connect to external MCP servers during startup (slows boot when servers are unavailable)")
     mcp_tool_definitions_path: str = Field(default="data/mcp_tools.json")
+    mcp_registry_url: str = Field(default="https://registry.modelcontextprotocol.io", description="Official MCP registry used by the discover/search feature")
     # langchain_bridge_enabled: bool = Field(default=False) # Placeholder
 
 class CLISettings(BaseModel):

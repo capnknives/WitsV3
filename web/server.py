@@ -60,6 +60,15 @@ class MCPServerAdd(BaseModel):
     args: Optional[list[str]] = None
 
 
+class MCPRegistryInstall(BaseModel):
+    """Install a server discovered via the MCP registry search. Writes a config
+    entry (does NOT connect — connecting runs the command, a separate action)."""
+    name: str
+    command: list[str]
+    working_directory: Optional[str] = None
+    env: Optional[Dict[str, str]] = None
+
+
 class EscalationDecision(BaseModel):
     session_id: Optional[str] = None
 
@@ -471,6 +480,48 @@ def create_app(system) -> FastAPI:
             return JSONResponse({"detail": "server not connected"}, status_code=409)
         tools = [t for t in await adapter.list_available_tools() if t.server_name == name]
         return {"tools": [{"name": t.name, "description": t.description} for t in tools]}
+
+    # -------------------------------------------- mcp registry (discover)
+    @app.get("/api/mcp/registry/search")
+    async def mcp_registry_search(q: str = "", limit: int = 10):
+        from core.mcp_registry_search import search_registry
+
+        try:
+            entries = await search_registry(
+                q, limit=max(1, min(limit, 25)),
+                registry_url=system.config.tool_system.mcp_registry_url,
+            )
+        except Exception as e:
+            logger.warning(f"MCP registry search failed: {e}")
+            return JSONResponse({"detail": f"registry search failed: {e}"}, status_code=502)
+
+        existing = {s.get("name") for s in _load_mcp_config().get("servers", [])}
+        for entry in entries:
+            entry["already_added"] = entry["name"] in existing
+        return {"results": entries}
+
+    @app.post("/api/mcp/registry/install")
+    async def mcp_registry_install(body: MCPRegistryInstall):
+        name = body.name.strip()
+        if not name or not body.command:
+            return JSONResponse({"detail": "name and command are required"}, status_code=400)
+
+        config = _load_mcp_config()
+        if any(s.get("name") == name for s in config.get("servers", [])):
+            return JSONResponse({"detail": f"server '{name}' already exists"}, status_code=409)
+
+        entry: Dict[str, Any] = {"name": name, "command": body.command, "source": "registry"}
+        if body.working_directory:
+            entry["working_directory"] = body.working_directory
+        if body.env:
+            # Drop blank values so we don't feed empty required vars to the server.
+            env = {k: v for k, v in body.env.items() if v}
+            if env:
+                entry["env"] = env
+        config.setdefault("servers", []).append(entry)
+        _save_mcp_config(config)
+        logger.info(f"MCP server installed from registry via web UI: {name}")
+        return {"installed": True, "server": entry}
 
     # ------------------------------------------------------ personality
     @app.get("/api/personality")

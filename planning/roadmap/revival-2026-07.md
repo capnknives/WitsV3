@@ -81,12 +81,13 @@ suggested next steps.
 ## 3. What's left to do
 
 ### Richard's manual action items (browser/keys — can't be automated)
-1. **Revoke the leaked `sbp_...` Supabase personal access token** at supabase.com/dashboard/account/tokens (leaked in git history before the secrets cleanup).
-2. **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
-3. *(Optional)* **Add a web-search API key to `.env`** for higher-quality results — `TAVILY_API_KEY` (tavily.com, 1000 free/mo, LLM-optimized) or `BRAVE_SEARCH_API_KEY` (brave.com/search/api, 2000 free/mo). Not required: `web_search` already returns real results keyless via DuckDuckGo.
+- [ ] **Revoke the leaked `sbp_...` Supabase personal access token** at supabase.com/dashboard/account/tokens (leaked in git history before the secrets cleanup).
+- [ ] **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
+- [ ] **Get a Tavily web-search API key** at tavily.com (free tier: 1000 searches/mo, LLM-optimized) and add `TAVILY_API_KEY=...` to `.env`. Highest-value key for search quality; `web_search` auto-prefers it when present.
+- [ ] **Get a Brave Search API key** at brave.com/search/api (free tier: 2000/mo) and add `BRAVE_SEARCH_API_KEY=...` to `.env`. Good second option / fallback. Neither key is required — `web_search` already returns real results keyless via DuckDuckGo.
 
 ### Repo hygiene
-3. ~~Push `fix/revive-2026-07` to GitHub and merge to `main`~~ DONE July 7 — branch pushed (with the mcp_servers repos registered as proper submodules) and merged to `main` (1a555f2) with Richard's authorization. Repo hygiene fully resolved.
+- [x] ~~Push `fix/revive-2026-07` to GitHub and merge to `main`~~ DONE July 7 — branch pushed (with the mcp_servers repos registered as proper submodules) and merged to `main` (1a555f2) with Richard's authorization. Repo hygiene fully resolved.
 
 ### Roadmap (approved earlier)
 4. ~~Smart model routing~~ SHIPPED July 7 2026: new `core/model_router.py` + `model_routing` config section (enabled by default; trivial → llama3.2:3b, code → qwen2.5-coder:7b, complex → default). Routes on the **raw user message/goal only** — never full prompt templates, which always look complex. Wired at three points: WCCA casual-chat response, WCCA fallback direct response, and the orchestrator ReAct loop (routes once per goal in `run()`; `allow_trivial=False` so the 3b model never handles ReAct JSON; code goals go to qwen2.5-coder, which should also reduce the malformed-JSON failures). `core/adaptive_llm_interface.py` was NOT activated — it routes to on-disk neural "modules" that don't exist, not to Ollama models; the lean router replaces that idea. Tests in `tests/core/test_model_router.py`; suite 207 passed / 2 skipped. Note: routing config is not in the /settings web page yet (config.local.yaml can override it).
@@ -94,8 +95,10 @@ suggested next steps.
 
 ### Smaller quality items
 6. ~~**web_search resilience**~~ SHIPPED July 7 2026: `tools/web_search_tool.py` rewritten from a single dead endpoint into a provider fallback chain. Root cause was deeper than the 202 — the old tool only hit the DuckDuckGo **Instant Answer API** (`api.duckduckgo.com`), which is not a web search engine (it returns Wikipedia-style disambiguation "RelatedTopics" for a tiny set of queries and 202s under load), so most searches returned empty even when not blocked. New chain: **Tavily** (if `TAVILY_API_KEY`) → **Brave** (if `BRAVE_SEARCH_API_KEY`) → **DuckDuckGo HTML** scrape → **DuckDuckGo Lite** scrape → Instant Answer API (last resort). The DDG scrape paths send a real browser User-Agent (the default aiohttp UA is what triggers the 202 bot wall), unwrap DDG's `/l/?uddg=` redirect links, and retry on 202/429 with exponential backoff. Keyless works out of the box (verified live — real organic results with snippets); keys just improve quality. New `web_search` config section (`provider`/`max_results`/`timeout`/`region`/`safesearch`); keys injected from `.env`, never config.yaml. Tool now takes `set_dependencies(config, ...)`. Tests in `tests/tools/test_web_search_tool.py` (8 cases: HTML parse, redirect-unwrap, max_results, 202→Lite fallthrough, Tavily-preferred, all-fail); suite 226 passed / 2 skipped.
-7. **Friendlier "Ollama is down" handling** in the web UI (currently three retries then a raw error in chat).
-8. **Intent-handler cleanup**: `clarification_question`/`direct_response` LLM intents still funnel through the casual-chat prompt instead of using their own generated text; the enhanced/meta-reasoning path duplicates routing logic. Worth unifying when touching WCCA next.
+7. ~~**MCP tool discovery / marketplace**~~ SHIPPED July 7 2026: WITS can now find and add *new* capabilities on demand from the official MCP registry (registry.modelcontextprotocol.io), instead of only using pre-configured servers. New `core/mcp_registry_search.py` queries the registry and derives a runnable stdio command per package (npm → `npx -y pkg@ver`, pypi → `uvx pkg==ver`), surfaces required env vars, dedupes by `isLatest`, and — because the registry matches `search` as a literal phrase — falls back from a multi-word query to individual keywords, merging + relevance-ranking the results. Two ways in: (a) agent-facing read-only tool `search_mcp_tools` (`tools/mcp_discovery_tool.py`, auto-registered) so WITS can look up a server when no installed tool fits; (b) `/mcp` web page "Discover servers" search box with one-click **Install** (writes the config entry + required-env inputs) then the existing **Connect** button runs it. New web routes `GET /api/mcp/registry/search` + `POST /api/mcp/registry/install`; new `tool_system.mcp_registry_url` config. **Security boundary:** searching is read-only and safe; *installing/connecting downloads and runs third-party code*, so that stays a deliberate human click in the web UI — the agent can discover but never self-installs. Tests in `tests/core/test_mcp_registry_search.py` (12: command derivation for npm/pypi/non-stdio/oci, env-var + isLatest handling, keyword fallback, HTTP-error). Verified live against the real registry (postgres/slack/gmail/spotify all return installable servers with correct commands). Suite 238 passed / 2 skipped.
+8. **Friendlier "Ollama is down" handling** in the web UI (currently three retries then a raw error in chat).
+9. **Intent-handler cleanup**: `clarification_question`/`direct_response` LLM intents still funnel through the casual-chat prompt instead of using their own generated text; the enhanced/meta-reasoning path duplicates routing logic. Worth unifying when touching WCCA next.
+10. **MCP discovery follow-ups** (optional): support OCI/Docker packages (currently npm+pypi only); a "Browse tools before install" preview; and let `search_mcp_tools` results deep-link the user straight to the /mcp discover box.
 
 ### Parked (explicitly out of scope for now)
 - Docker packaging, Supabase cloud sync
@@ -105,6 +108,6 @@ suggested next steps.
 
 ## 4. Suggested next steps (in order)
 
-1. Do the two manual items (revoke Supabase token, add Anthropic key).
+1. Do the manual items (revoke Supabase token, add Anthropic key; optionally Tavily/Brave keys).
 2. Expose model_routing in the /settings web page.
-4. Friendlier "Ollama is down" error in the web UI (#7).
+3. Friendlier "Ollama is down" error in the web UI (#8).
