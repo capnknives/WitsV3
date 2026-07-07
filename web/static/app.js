@@ -105,12 +105,84 @@ async function checkStatus() {
       const s = await res.json();
       statusDot.className = "dot ok";
       statusDot.title = `${s.project} v${s.version} — ${s.models.default}, ${s.tool_count} tools`;
+      checkEscalations();
       return;
     }
     statusDot.className = "dot bad";
   } catch (e) {
     statusDot.className = "dot bad";
   }
+}
+
+/* ---------------------------------------------- ask-Claude approvals */
+const seenEscalations = new Set();
+
+async function checkEscalations() {
+  try {
+    const res = await api("/api/escalations");
+    if (!res.ok) return;
+    const { requests } = await res.json();
+    for (const r of requests) {
+      if (r.status === "pending" && !seenEscalations.has(r.id)) {
+        seenEscalations.add(r.id);
+        addEscalationCard(r);
+      }
+    }
+  } catch (e) { /* handled by api() */ }
+}
+
+function addEscalationCard(r) {
+  const card = el("div", "escalation-card");
+  card.appendChild(el("div", "esc-title", "🤖 WITS wants to ask Claude"));
+  card.appendChild(el("div", "esc-question", r.question));
+  if (r.context) {
+    const details = el("details", "esc-context");
+    details.appendChild(el("summary", null, "context it will send"));
+    details.appendChild(el("div", null, r.context));
+    card.appendChild(details);
+  }
+  card.appendChild(el("div", "esc-cost",
+    `${r.model} — worst case ≈ $${r.estimate.max_cost_usd} (nothing is sent until you approve)`));
+
+  const actions = el("div", "esc-actions");
+  const approveBtn = el("button", "esc-approve", "Approve & send");
+  const denyBtn = el("button", "esc-deny", "Deny");
+
+  approveBtn.addEventListener("click", async () => {
+    approveBtn.disabled = denyBtn.disabled = true;
+    approveBtn.textContent = "Asking Claude…";
+    try {
+      const res = await api(`/api/escalations/${r.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const result = await res.json();
+      card.remove();
+      if (res.ok && result.status === "answered") {
+        const cost = result.cost_usd != null ? ` (cost: $${result.cost_usd})` : "";
+        addAssistantMsg(`💠 Claude (${result.model})${cost}:\n\n${result.answer}`);
+      } else {
+        addAssistantMsg(`Claude escalation failed: ${result.error || result.detail || "unknown error"}`, true);
+      }
+    } catch (e) {
+      approveBtn.disabled = denyBtn.disabled = false;
+      approveBtn.textContent = "Approve & send";
+    }
+  });
+
+  denyBtn.addEventListener("click", async () => {
+    approveBtn.disabled = denyBtn.disabled = true;
+    try { await api(`/api/escalations/${r.id}/deny`, { method: "POST" }); } catch (e) { /* ok */ }
+    card.remove();
+    addAssistantMsg("Escalation denied — no tokens were spent.");
+  });
+
+  actions.appendChild(approveBtn);
+  actions.appendChild(denyBtn);
+  card.appendChild(actions);
+  chatEl.appendChild(card);
+  scrollDown();
 }
 
 /* ---------------------------------------------------------- chat */
@@ -198,6 +270,7 @@ async function sendMessage(text) {
     busy = false;
     sendBtn.disabled = false;
     inputEl.focus();
+    checkEscalations(); // pick up any ask-Claude request queued during this turn
   }
 }
 

@@ -154,6 +154,35 @@ main#chat {
 .mem-item, .doc-item { padding: 8px 0; border-bottom: 1px solid #232838; font-size: 14px; }
 .mem-item .meta, .doc-item .meta { color: var(--fg-dim); font-size: 12px; }
 
+/* --------------------------------------------- ask-Claude approvals */
+.escalation-card {
+  background: var(--bg-2); border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 14px 16px; max-width: 92%;
+}
+.escalation-card .esc-title { font-weight: 700; margin-bottom: 8px; }
+.escalation-card .esc-question { white-space: pre-wrap; margin-bottom: 8px; }
+.escalation-card .esc-context { color: var(--fg-dim); font-size: 13px; margin-bottom: 8px; }
+.escalation-card .esc-context div { white-space: pre-wrap; margin-top: 6px; }
+.escalation-card .esc-cost { color: #ffcf8f; font-size: 13px; margin-bottom: 10px; }
+.escalation-card .esc-actions { display: flex; gap: 8px; }
+.escalation-card button {
+  border: none; border-radius: 8px; padding: 9px 16px; font: inherit; cursor: pointer;
+}
+.escalation-card .esc-approve { background: var(--accent); color: #fff; }
+.escalation-card .esc-deny { background: var(--bg-3); color: var(--fg); border: 1px solid #2c3245; }
+.escalation-card button:disabled { opacity: .6; cursor: wait; }
+
+/* panel footer links */
+.panel-links {
+  display: flex; gap: 4px; padding: 10px; border-top: 1px solid #262b3a;
+  margin-top: auto; flex-wrap: wrap;
+}
+.panel-links a {
+  color: var(--fg-dim); text-decoration: none; font-size: 13.5px;
+  padding: 8px 10px; border-radius: 8px; flex: 1; text-align: center; white-space: nowrap;
+}
+.panel-links a:hover { color: var(--fg); background: var(--bg-3); }
+
 /* ---------------------------------------------------------- modal */
 #token-modal {
   position: fixed; inset: 0; z-index: 20;

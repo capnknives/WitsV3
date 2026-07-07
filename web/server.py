@@ -32,11 +32,35 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 # Paths that never require auth (the shell page + PWA assets load before the
 # user can enter a token; every /api/* call is protected).
-PUBLIC_PATHS = {"/", "/personality", "/manifest.webmanifest", "/icon.svg", "/app.js", "/style.css"}
+PUBLIC_PATHS = {"/", "/personality", "/settings", "/mcp",
+                "/manifest.webmanifest", "/icon.svg", "/app.js", "/style.css"}
 
 
 class ChatRequest(BaseModel):
     message: str
+    session_id: Optional[str] = None
+
+
+class SettingsUpdate(BaseModel):
+    """Runtime-adjustable settings from the /settings page. All optional."""
+    history_window: Optional[int] = None
+    default_temperature: Optional[float] = None
+    max_iterations: Optional[int] = None
+    default_model: Optional[str] = None
+    orchestrator_model: Optional[str] = None
+    escalation_enabled: Optional[bool] = None
+    escalation_model: Optional[str] = None
+    escalation_max_tokens: Optional[int] = None
+
+
+class MCPServerAdd(BaseModel):
+    name: str
+    command: str
+    working_directory: Optional[str] = None
+    args: Optional[list[str]] = None
+
+
+class EscalationDecision(BaseModel):
     session_id: Optional[str] = None
 
 
@@ -87,6 +111,14 @@ def create_app(system) -> FastAPI:
     @app.get("/personality")
     async def personality_page():
         return FileResponse(STATIC_DIR / "personality.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/settings")
+    async def settings_page():
+        return FileResponse(STATIC_DIR / "settings.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/mcp")
+    async def mcp_page():
+        return FileResponse(STATIC_DIR / "mcp.html", headers={"Cache-Control": "no-store"})
 
     @app.get("/manifest.webmanifest")
     async def manifest():
@@ -193,6 +225,252 @@ def create_app(system) -> FastAPI:
                 for s in segments
             ]
         }
+
+    # --------------------------------------------------------- settings
+    async def _list_ollama_models() -> list:
+        """Best-effort list of locally available Ollama models."""
+        import asyncio
+        import urllib.request
+
+        def fetch():
+            url = system.config.ollama_settings.url.rstrip("/") + "/api/tags"
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                return json.loads(resp.read())
+
+        try:
+            data = await asyncio.to_thread(fetch)
+            return sorted(m["name"] for m in data.get("models", []))
+        except Exception:
+            return []
+
+    @app.get("/api/settings")
+    async def get_settings():
+        from core.escalation import MODEL_PRICES, get_escalation_manager
+
+        cfg = system.config
+        return {
+            "history_window": cfg.agents.history_window,
+            "default_temperature": cfg.agents.default_temperature,
+            "max_iterations": cfg.agents.max_iterations,
+            "default_model": cfg.ollama_settings.default_model,
+            "orchestrator_model": cfg.ollama_settings.orchestrator_model,
+            "available_models": await _list_ollama_models(),
+            "escalation_enabled": cfg.escalation.enabled,
+            "escalation_model": cfg.escalation.model,
+            "escalation_max_tokens": cfg.escalation.max_tokens,
+            "escalation_models": {
+                name: {"input_per_mtok": p[0], "output_per_mtok": p[1]}
+                for name, p in MODEL_PRICES.items()
+            },
+            "anthropic_key_configured": get_escalation_manager().api_key_configured(),
+        }
+
+    @app.post("/api/settings")
+    async def save_settings(update: SettingsUpdate):
+        from core.config import save_local_overrides
+
+        cfg = system.config
+        overrides: Dict[str, Any] = {}
+
+        def apply(section, field, value, override_section):
+            if value is None:
+                return
+            setattr(section, field, value)  # validates via pydantic
+            overrides.setdefault(override_section, {})[field] = getattr(section, field)
+
+        try:
+            apply(cfg.agents, "history_window", update.history_window, "agents")
+            apply(cfg.agents, "default_temperature", update.default_temperature, "agents")
+            apply(cfg.agents, "max_iterations", update.max_iterations, "agents")
+            apply(cfg.ollama_settings, "default_model", update.default_model, "ollama_settings")
+            apply(cfg.ollama_settings, "orchestrator_model", update.orchestrator_model, "ollama_settings")
+            apply(cfg.escalation, "enabled", update.escalation_enabled, "escalation")
+            apply(cfg.escalation, "model", update.escalation_model, "escalation")
+            apply(cfg.escalation, "max_tokens", update.escalation_max_tokens, "escalation")
+        except Exception as e:
+            return JSONResponse({"detail": f"invalid value: {e}"}, status_code=400)
+
+        if not overrides:
+            return JSONResponse({"detail": "no settings provided"}, status_code=400)
+
+        path = save_local_overrides(overrides)
+        logger.info(f"Settings updated via web UI: {list(overrides)} -> {path}")
+        return {"saved": True, "applied_live": True}
+
+    # ------------------------------------------------------ escalations
+    @app.get("/api/escalations")
+    async def list_escalations():
+        from core.escalation import get_escalation_manager
+        return {"requests": get_escalation_manager().list()}
+
+    @app.post("/api/escalations/{request_id}/approve")
+    async def approve_escalation(request_id: str, decision: Optional[EscalationDecision] = None):
+        from core.escalation import get_escalation_manager
+
+        manager = get_escalation_manager()
+        try:
+            request = await manager.approve(request_id)
+        except KeyError:
+            return JSONResponse({"detail": "unknown escalation"}, status_code=404)
+        except ValueError as e:
+            return JSONResponse({"detail": str(e)}, status_code=409)
+
+        # Put Claude's answer into the conversation so WITS sees it next turn
+        session_id = decision.session_id if decision else None
+        if request.status == "answered" and session_id in system.session_histories:
+            system.session_histories[session_id].add_message(
+                "assistant",
+                f"[Claude ({request.model}) answered the escalated question]\n{request.answer}",
+            )
+        return request.to_dict()
+
+    @app.post("/api/escalations/{request_id}/deny")
+    async def deny_escalation(request_id: str):
+        from core.escalation import get_escalation_manager
+
+        if not get_escalation_manager().deny(request_id):
+            return JSONResponse({"detail": "not a pending escalation"}, status_code=404)
+        return {"denied": True}
+
+    # -------------------------------------------------------------- mcp
+    def _mcp_config_path() -> Path:
+        return Path(system.config.tool_system.mcp_tool_definitions_path)
+
+    def _load_mcp_config() -> Dict[str, Any]:
+        path = _mcp_config_path()
+        if not path.exists():
+            return {"auto_connect": True, "servers": []}
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _save_mcp_config(config: Dict[str, Any]) -> None:
+        path = _mcp_config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+    def _mcp_adapter(create: bool = False):
+        """The live MCP adapter, creating a registry on the system lazily."""
+        registry = getattr(system, "mcp_registry", None)
+        if registry is not None and registry.mcp_adapter is not None:
+            return registry.mcp_adapter
+        if not create:
+            return None
+        from core.enhanced_mcp_adapter import EnhancedMCPAdapter
+        from tools.mcp_tool_registry import MCPToolRegistry
+
+        registry = MCPToolRegistry(str(_mcp_config_path()))
+        registry.config = _load_mcp_config()
+        registry.mcp_adapter = EnhancedMCPAdapter(str(_mcp_config_path()))
+        system.mcp_registry = registry  # system.shutdown() disconnects it
+        return registry.mcp_adapter
+
+    @app.get("/api/mcp/servers")
+    async def mcp_servers():
+        adapter = _mcp_adapter()
+        connected = set(adapter.clients.keys()) if adapter else set()
+        tools_by_server: Dict[str, int] = {}
+        if adapter:
+            for tool in await adapter.list_available_tools():
+                tools_by_server[tool.server_name] = tools_by_server.get(tool.server_name, 0) + 1
+        servers = []
+        for entry in _load_mcp_config().get("servers", []):
+            name = entry.get("name", "unknown")
+            servers.append({
+                "name": name,
+                "command": entry.get("command"),
+                "working_directory": entry.get("working_directory"),
+                "connected": name in connected,
+                "tool_count": tools_by_server.get(name, 0),
+            })
+        return {"servers": servers}
+
+    @app.post("/api/mcp/servers")
+    async def mcp_add_server(body: MCPServerAdd):
+        name = body.name.strip()
+        command = body.command.strip()
+        if not name or not command:
+            return JSONResponse({"detail": "name and command are required"}, status_code=400)
+
+        config = _load_mcp_config()
+        if any(s.get("name") == name for s in config.get("servers", [])):
+            return JSONResponse({"detail": f"server '{name}' already exists"}, status_code=409)
+
+        entry: Dict[str, Any] = {"name": name, "command": command}
+        if body.working_directory:
+            entry["working_directory"] = body.working_directory
+        if body.args:
+            entry["args"] = body.args
+        config.setdefault("servers", []).append(entry)
+        _save_mcp_config(config)
+        logger.info(f"MCP server added via web UI: {name}")
+        return {"added": True, "server": entry}
+
+    @app.delete("/api/mcp/servers/{name:path}")
+    async def mcp_remove_server(name: str):
+        adapter = _mcp_adapter()
+        if adapter and name in adapter.clients:
+            await adapter.remove_server(name)
+
+        config = _load_mcp_config()
+        before = len(config.get("servers", []))
+        config["servers"] = [s for s in config.get("servers", []) if s.get("name") != name]
+        if len(config["servers"]) == before:
+            return JSONResponse({"detail": "unknown server"}, status_code=404)
+        _save_mcp_config(config)
+        return {"removed": True}
+
+    @app.post("/api/mcp/servers/{name:path}/connect")
+    async def mcp_connect_server(name: str):
+        import asyncio
+        from core.mcp_adapter import MCPServer
+        from tools.mcp_tool import MCPTool as MCPToolWrapper
+
+        entry = next((s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None)
+        if entry is None:
+            return JSONResponse({"detail": "unknown server"}, status_code=404)
+        if "command" not in entry:
+            return JSONResponse({"detail": "server entry has no command"}, status_code=400)
+
+        adapter = _mcp_adapter(create=True)
+        if name in adapter.clients:
+            return JSONResponse({"detail": "already connected"}, status_code=409)
+
+        command = entry["command"]
+        server = MCPServer(
+            name=name,
+            command=command.split() if isinstance(command, str) else command,
+            args=entry.get("args"),
+            env=entry.get("env"),
+            working_directory=entry.get("working_directory"),
+        )
+        try:
+            ok = await asyncio.wait_for(adapter.add_server(server), timeout=45)
+        except asyncio.TimeoutError:
+            return JSONResponse({"detail": "connection timed out (45s)"}, status_code=502)
+        if not ok:
+            return JSONResponse({"detail": "connection failed - check the server log"}, status_code=502)
+
+        # Register this server's tools with the live tool registry
+        tools = [t for t in await adapter.list_available_tools() if t.server_name == name]
+        for mcp_tool in tools:
+            system.tool_registry.register_tool(MCPToolWrapper(
+                name=f"mcp_{mcp_tool.name}",
+                description=mcp_tool.description,
+                mcp_tool=mcp_tool,
+                mcp_adapter=adapter,
+            ))
+        logger.info(f"MCP server connected via web UI: {name} ({len(tools)} tools)")
+        return {
+            "connected": True,
+            "tools": [{"name": t.name, "description": t.description} for t in tools],
+        }
+
+    @app.get("/api/mcp/servers/{name:path}/tools")
+    async def mcp_server_tools(name: str):
+        adapter = _mcp_adapter()
+        if not adapter or name not in adapter.clients:
+            return JSONResponse({"detail": "server not connected"}, status_code=409)
+        tools = [t for t in await adapter.list_available_tools() if t.server_name == name]
+        return {"tools": [{"name": t.name, "description": t.description} for t in tools]}
 
     # ------------------------------------------------------ personality
     @app.get("/api/personality")

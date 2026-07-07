@@ -44,6 +44,7 @@ class LLMInterfaceSettings(BaseModel):
 class AgentSettings(BaseModel):
     default_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_iterations: int = Field(default=15, gt=0)
+    history_window: int = Field(default=20, ge=2, le=100, description="How many recent conversation messages are included in the prompt")
 
     class Config:
         validate_assignment = True
@@ -121,6 +122,14 @@ class SupabaseSettings(BaseModel):
     key: str = Field(default="")
     enable_realtime: bool = Field(default=True)
 
+class EscalationSettings(BaseModel):
+    """Ask-Claude escalation: WITS can queue a question for the Claude API,
+    but every request must be approved by the user in the web UI first.
+    The API key comes from the ANTHROPIC_API_KEY environment variable (.env)."""
+    enabled: bool = Field(default=True, description="Allow WITS to queue escalation requests to Claude")
+    model: str = Field(default="claude-opus-4-8", description="Claude model used for approved escalations")
+    max_tokens: int = Field(default=2048, ge=256, le=16000, description="Hard cap on Claude's response length (caps cost)")
+
 class PersonalitySettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable personality system")
     profile_path: str = Field(default="config/wits_personality.yaml", description="Path to personality profile")
@@ -145,6 +154,7 @@ class WitsV3Config(BaseModel):
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
+    escalation: EscalationSettings = Field(default_factory=EscalationSettings)
 
     class Config:
         validate_assignment = True
@@ -193,10 +203,63 @@ def _apply_env_overrides(config: "WitsV3Config") -> "WitsV3Config":
     return config
 
 
+# Settings changed at runtime (web UI settings page) are stored in a separate
+# gitignored overrides file, deep-merged over config.yaml at load. This keeps
+# the hand-written, commented config.yaml untouched by programmatic saves.
+LOCAL_OVERRIDES_PATH = "config.local.yaml"
+
+
+def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(base)
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _apply_local_overrides(config: "WitsV3Config", config_path: str) -> "WitsV3Config":
+    overrides_path = os.path.join(os.path.dirname(config_path) or ".", LOCAL_OVERRIDES_PATH)
+    if not os.path.exists(overrides_path):
+        return config
+    try:
+        with open(overrides_path, 'r', encoding='utf-8') as f:
+            overrides = yaml.safe_load(f) or {}
+        if isinstance(overrides, dict) and overrides:
+            merged = _deep_merge(config.model_dump() if hasattr(config, "model_dump") else config.dict(), overrides)
+            return WitsV3Config(**merged)
+    except Exception as e:
+        print(f"Warning: ignoring bad local config overrides ({overrides_path}): {e}")
+    return config
+
+
+def save_local_overrides(new_overrides: Dict[str, Any], config_path: str = "config.yaml") -> str:
+    """Merge new_overrides into config.local.yaml (creating it if needed)."""
+    overrides_path = os.path.join(os.path.dirname(config_path) or ".", LOCAL_OVERRIDES_PATH)
+    existing: Dict[str, Any] = {}
+    if os.path.exists(overrides_path):
+        try:
+            with open(overrides_path, 'r', encoding='utf-8') as f:
+                existing = yaml.safe_load(f) or {}
+        except Exception:
+            existing = {}
+    merged = _deep_merge(existing, new_overrides)
+    header = (
+        "# Runtime settings saved from the WITS web UI (/settings).\n"
+        "# Deep-merged over config.yaml at load - delete this file to revert.\n"
+    )
+    with open(overrides_path, 'w', encoding='utf-8') as f:
+        f.write(header + yaml.safe_dump(merged, sort_keys=False, allow_unicode=True))
+    return overrides_path
+
+
 # Convenience function for loading config
 def load_config(config_path: str = "config.yaml") -> WitsV3Config:
-    """Load configuration from YAML file, with env-var overrides for secrets."""
-    return _apply_env_overrides(WitsV3Config.from_yaml(config_path))
+    """Load configuration from YAML file, with local + env-var overrides."""
+    config = WitsV3Config.from_yaml(config_path)
+    config = _apply_local_overrides(config, config_path)
+    return _apply_env_overrides(config)
 
 # For backwards compatibility
 AppConfig = WitsV3Config

@@ -307,3 +307,185 @@ def test_personality_page_public_but_api_protected(client_auth):
     client, _ = client_auth
     assert client.get("/personality").status_code == 200
     assert client.get("/api/personality").status_code == 401
+
+
+# ------------------------------------------------------------------ settings
+
+@pytest.fixture
+def client_settings(tmp_path, monkeypatch):
+    monkeypatch.delenv("WITSV3_WEB_TOKEN", raising=False)
+    monkeypatch.chdir(tmp_path)  # config.local.yaml is written to the CWD
+    system = FakeSystem(tmp_path)
+    return TestClient(create_app(system)), system, tmp_path
+
+
+def test_settings_get(client_settings):
+    client, system, _ = client_settings
+    body = client.get("/api/settings").json()
+    assert body["history_window"] == system.config.agents.history_window
+    assert body["escalation_model"] == "claude-opus-4-8"
+    assert "claude-opus-4-8" in body["escalation_models"]
+    assert isinstance(body["anthropic_key_configured"], bool)
+
+
+def test_settings_post_applies_live_and_persists(client_settings):
+    client, system, tmp_path = client_settings
+    res = client.post("/api/settings", json={
+        "history_window": 40,
+        "default_temperature": 0.3,
+        "escalation_max_tokens": 1024,
+    })
+    assert res.status_code == 200
+    # Applied live to the running system config
+    assert system.config.agents.history_window == 40
+    assert system.config.agents.default_temperature == 0.3
+    assert system.config.escalation.max_tokens == 1024
+    # Persisted to the overrides file, not config.yaml
+    overrides = tmp_path / "config.local.yaml"
+    assert overrides.exists()
+    assert "history_window: 40" in overrides.read_text()
+
+
+def test_settings_post_rejects_bad_values(client_settings):
+    client, system, _ = client_settings
+    original = system.config.agents.history_window
+    res = client.post("/api/settings", json={"history_window": 9999})
+    assert res.status_code == 400
+    assert system.config.agents.history_window == original
+
+
+def test_local_overrides_are_loaded(client_settings, monkeypatch):
+    client, _, tmp_path = client_settings
+    client.post("/api/settings", json={"history_window": 44})
+    from core.config import load_config
+    fresh = load_config()  # cwd is tmp_path; default config + local overrides
+    assert fresh.agents.history_window == 44
+
+
+# --------------------------------------------------------------- escalations
+
+@pytest.fixture
+def client_escalation(tmp_path, monkeypatch):
+    monkeypatch.delenv("WITSV3_WEB_TOKEN", raising=False)
+    import core.escalation as escalation_module
+    escalation_module._manager = None  # fresh queue per test
+    system = FakeSystem(tmp_path)
+    yield TestClient(create_app(system)), system
+    escalation_module._manager = None
+
+
+def test_escalation_flow_approve(client_escalation, monkeypatch):
+    client, system = client_escalation
+    from core.escalation import EscalationManager, get_escalation_manager
+
+    async def fake_call(self, request):
+        return "Claude says: use a mutex.", {"input_tokens": 100, "output_tokens": 50}
+
+    monkeypatch.setattr(EscalationManager, "_call_claude", fake_call)
+
+    manager = get_escalation_manager()
+    request = manager.create("How do I fix this race?", context="some code")
+    assert request.estimate()["max_cost_usd"] > 0
+
+    # Pending request is visible
+    body = client.get("/api/escalations").json()
+    assert body["requests"][0]["status"] == "pending"
+
+    # Approve → fake Claude call runs, answer lands in the session history
+    from core.schemas import ConversationHistory
+    system.session_histories["sess1"] = ConversationHistory(session_id="sess1")
+    res = client.post(f"/api/escalations/{request.id}/approve", json={"session_id": "sess1"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "answered"
+    assert "mutex" in body["answer"]
+    assert body["cost_usd"] > 0
+    assert "mutex" in system.session_histories["sess1"].messages[-1].content
+
+    # Approving twice is rejected
+    assert client.post(f"/api/escalations/{request.id}/approve").status_code == 409
+
+
+def test_escalation_deny_spends_nothing(client_escalation, monkeypatch):
+    client, _ = client_escalation
+    from core.escalation import EscalationManager, get_escalation_manager
+
+    called = []
+
+    async def fake_call(self, request):
+        called.append(request.id)
+        return "x", {}
+
+    monkeypatch.setattr(EscalationManager, "_call_claude", fake_call)
+    request = get_escalation_manager().create("q")
+
+    res = client.post(f"/api/escalations/{request.id}/deny")
+    assert res.status_code == 200
+    assert called == []  # the API was never touched
+    assert get_escalation_manager().get(request.id).status == "denied"
+    # A denied request can no longer be approved
+    assert client.post(f"/api/escalations/{request.id}/approve").status_code == 409
+
+
+def test_ask_claude_tool_queues_pending(client_escalation, tmp_path, monkeypatch):
+    _, _ = client_escalation
+    import asyncio
+    from tools.ask_claude_tool import AskClaudeTool
+    from core.escalation import get_escalation_manager
+
+    tool = AskClaudeTool()
+    result = asyncio.run(tool.execute(question="What is a monad?", context="haskell"))
+    assert result["success"] is True
+    assert result["status"] == "pending_user_approval"
+    queued = get_escalation_manager().get(result["escalation_id"])
+    assert queued.status == "pending"
+    assert queued.question == "What is a monad?"
+
+
+# ------------------------------------------------------------------ mcp
+
+@pytest.fixture
+def client_mcp(tmp_path, monkeypatch):
+    monkeypatch.delenv("WITSV3_WEB_TOKEN", raising=False)
+    system = FakeSystem(tmp_path)
+    mcp_config = tmp_path / "mcp_tools.json"
+    mcp_config.write_text(json.dumps({
+        "auto_connect": True,
+        "servers": [{"name": "demo", "command": "node server.js"}],
+    }))
+    system.config.tool_system.mcp_tool_definitions_path = str(mcp_config)
+    return TestClient(create_app(system)), system, mcp_config
+
+
+def test_mcp_list_servers(client_mcp):
+    client, _, _ = client_mcp
+    body = client.get("/api/mcp/servers").json()
+    assert body["servers"][0]["name"] == "demo"
+    assert body["servers"][0]["connected"] is False
+
+
+def test_mcp_add_and_remove_server(client_mcp):
+    client, _, mcp_config = client_mcp
+    res = client.post("/api/mcp/servers", json={
+        "name": "memory",
+        "command": "npx -y @modelcontextprotocol/server-memory",
+    })
+    assert res.status_code == 200
+    saved = json.loads(mcp_config.read_text())
+    assert any(s["name"] == "memory" for s in saved["servers"])
+
+    # Duplicate names are rejected
+    assert client.post("/api/mcp/servers", json={
+        "name": "memory", "command": "x",
+    }).status_code == 409
+
+    # Removal updates the config file
+    assert client.delete("/api/mcp/servers/memory").status_code == 200
+    saved = json.loads(mcp_config.read_text())
+    assert not any(s["name"] == "memory" for s in saved["servers"])
+    assert client.delete("/api/mcp/servers/memory").status_code == 404
+
+
+def test_mcp_tools_requires_connection(client_mcp):
+    client, _, _ = client_mcp
+    assert client.get("/api/mcp/servers/demo/tools").status_code == 409
