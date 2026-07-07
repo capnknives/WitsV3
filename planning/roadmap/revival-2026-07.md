@@ -84,7 +84,7 @@ suggested next steps.
 2. **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
 
 ### Repo hygiene
-3. ~~Push `fix/revive-2026-07` to GitHub~~ DONE July 7 — branch is on GitHub (with the mcp_servers repos registered as proper submodules). **Merging to `main` is still Richard's call** (merge locally or open a PR).
+3. ~~Push `fix/revive-2026-07` to GitHub and merge to `main`~~ DONE July 7 — branch pushed (with the mcp_servers repos registered as proper submodules) and merged to `main` (1a555f2) with Richard's authorization. Repo hygiene fully resolved.
 
 ### Roadmap (approved earlier)
 4. ~~Smart model routing~~ SHIPPED July 7 2026: new `core/model_router.py` + `model_routing` config section (enabled by default; trivial → llama3.2:3b, code → qwen2.5-coder:7b, complex → default). Routes on the **raw user message/goal only** — never full prompt templates, which always look complex. Wired at three points: WCCA casual-chat response, WCCA fallback direct response, and the orchestrator ReAct loop (routes once per goal in `run()`; `allow_trivial=False` so the 3b model never handles ReAct JSON; code goals go to qwen2.5-coder, which should also reduce the malformed-JSON failures). `core/adaptive_llm_interface.py` was NOT activated — it routes to on-disk neural "modules" that don't exist, not to Ollama models; the lean router replaces that idea. Tests in `tests/core/test_model_router.py`; suite 207 passed / 2 skipped. Note: routing config is not in the /settings web page yet (config.local.yaml can override it).
@@ -103,8 +103,7 @@ suggested next steps.
 
 ## 4. Suggested next steps (in order)
 
-1. Merge `fix/revive-2026-07` to `main` (branch is pushed; merge or PR is Richard's call).
-2. Do the two manual items (revoke Supabase token, add Anthropic key).
-3. Orchestrator JSON robustness (#5) — `format=json` on reasoning calls + repair-reparse.
-4. web_search fallback (#6) as a standalone small task.
-5. Expose model_routing in the /settings web page.
+1. Do the two manual items (revoke Supabase token, add Anthropic key).
+2. Orchestrator JSON robustness (#5) — `format=json` on reasoning calls + repair-reparse.
+3. web_search fallback (#6) as a standalone small task.
+4. Expose model_routing in the /settings web page.
