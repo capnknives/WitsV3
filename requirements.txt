@@ -43,6 +43,7 @@ websockets>=10.0
 fastapi>=0.110
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9  # file uploads
+qrcode>=8.0  # login QR in the startup banner
 
 # New tool dependencies
 scipy>=1.10.0  # For statistical operations
