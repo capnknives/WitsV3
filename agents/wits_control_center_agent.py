@@ -233,6 +233,21 @@ User input: {user_input}
                 "confidence": 0.85
             }
 
+        # Questions that need current, real-time, or post-training-cutoff
+        # information (or an explicit "look it up") must reach the web_search
+        # tool. This runs BEFORE the casual heuristic, which would otherwise
+        # flag a short factual question ("who died on june 14 2026?") as small
+        # talk and answer it from the model's stale memory.
+        if self._needs_web_search(user_input):
+            return {
+                "type": "task",
+                "complexity": "moderate",
+                "requires_tools": True,
+                "suggested_response": "orchestrator",
+                "notes": "Needs current/external info or an explicit lookup - routing to orchestrator for web_search.",
+                "confidence": 0.8,
+            }
+
         # Check if this is casual conversation with a simple heuristic
         is_casual = self._is_casual_conversation(user_input)
 
@@ -335,6 +350,43 @@ User input: {user_input}
             "have no record of them:\n" + listing
         )
 
+    # Phrases that signal the user wants live/external info fetched. Kept
+    # deliberately precise so ordinary chat ("how are you today") is NOT routed
+    # to the slow orchestrator — "today"/"current" alone are too weak to trust.
+    _WEB_SEARCH_SIGNALS = (
+        # explicit "go find this online" commands
+        "look up", "look it up", "look that up", "look this up", "look them up",
+        "search for", "search the web", "web search", "search online", "search it up",
+        "google it", "google for", "find out", "check online", "look online",
+        "on the internet", "on the web", "browse the web",
+        # real-time / recency signals a local model can't answer from memory
+        "latest", "most recent", "breaking news", "in the news", "news about",
+        "up to date", "up-to-date", "weather", "forecast",
+        # common current-fact question patterns
+        "who won", "who died", "who passed away", "who is the current",
+        "who's the current", "what happened to", "price of", "stock price",
+        "exchange rate", "score of", "release date", "when is the next",
+        "when does the next",
+    )
+
+    def _needs_web_search(self, message: str) -> bool:
+        """True if answering needs current/external info or an explicit lookup.
+
+        Such queries must reach the orchestrator (which owns the web_search
+        tool) rather than being answered directly from the model's training.
+        """
+        lowered = message.lower()
+        if any(sig in lowered for sig in self._WEB_SEARCH_SIGNALS):
+            return True
+        # A recent/near-future year (>= 2024) in a question usually implies
+        # information past the local model's training cutoff.
+        has_question = "?" in message or bool(
+            re.search(r"\b(who|what|when|where|which|whose|did|does|is|are|died|won)\b", lowered)
+        )
+        if has_question and re.search(r"\b(202[4-9]|20[3-9]\d)\b", lowered):
+            return True
+        return False
+
     def _is_casual_conversation(self, message: str) -> bool:
         """
         Determine if a message is casual conversation.
@@ -422,6 +474,7 @@ Guidelines:
 - Use "goal_defined" for clear, actionable requests that need orchestration
 - Use "clarification_question" for ambiguous requests needing more information
 - Use "direct_response" for simple questions, greetings, or chat
+- If answering needs current, real-time, or post-training-cutoff information (news, recent or upcoming events, who won/died recently, prices, weather, sports results) OR the user says to "look it up"/"search", use "goal_defined" — the orchestrator has a web_search tool. Do NOT answer such questions from memory or claim a knowledge cutoff; route them so they get searched.
 - Any request about the user's documents or files is "goal_defined" (it needs the document_search tool). The USER DOCUMENTS list above is authoritative: if a document is listed there, it exists and is accessible — never ask the user to confirm it or claim there is no record of it.
 - For any request to 'remember', 'recall', or 'don't forget', use your semantic memory system (not file storage). Use the memory manager to store and retrieve facts for future conversations.
 

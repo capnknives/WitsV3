@@ -161,6 +161,8 @@ Important:
 - Use "final_answer" when you can provide a complete response to the goal
 - Be specific and practical in your reasoning
 - Consider what you've already learned from previous observations
+- If the goal needs current, recent, real-time, or post-training information (news, events, dates, who did/won/died something, prices, weather) and a web_search tool is available, you MUST call web_search to look it up. NEVER answer such questions from memory and NEVER refuse by citing a knowledge/training cutoff — search first, then answer from the results.
+- Do not claim you cannot access information a tool could retrieve; call the tool instead.
 
 Respond ONLY with valid JSON."""
         

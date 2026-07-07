@@ -88,6 +88,41 @@ async def test_document_mentions_route_to_orchestrator(wcca, message):
     assert intent["requires_tools"] is True
 
 
+# ------------------------------------------------- web-search routing
+
+@pytest.mark.parametrize("message", [
+    "What famous musician died of june 14th 2026?",   # the reported failure
+    "look it up",                                     # explicit follow-up command
+    "who won the world cup this year?",
+    "what's the latest news on Ollama?",
+    "search the web for python 3.14 release date",
+    "what's the weather in Seattle right now?",
+])
+def test_current_info_questions_need_web_search(wcca, message):
+    assert wcca._needs_web_search(message) is True
+
+
+@pytest.mark.parametrize("message", [
+    "hi there, how are you doing today my friend",  # 'today' must NOT trigger
+    "thanks, that was helpful",
+    "what can you do?",
+    "write me a python function to reverse a list",
+])
+def test_ordinary_chat_does_not_need_web_search(wcca, message):
+    assert wcca._needs_web_search(message) is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message", [
+    "What famous musician died of june 14th 2026?",
+    "look it up",
+])
+async def test_current_info_routes_to_orchestrator(wcca, message):
+    intent = await wcca._analyze_user_intent(message, None)
+    assert intent["suggested_response"] == "orchestrator"
+    assert intent["requires_tools"] is True
+
+
 # ------------------------------------------------------- intent parsing
 
 def test_goal_defined_routes_to_orchestrator(wcca):

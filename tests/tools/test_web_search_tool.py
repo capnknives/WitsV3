@@ -144,6 +144,38 @@ async def test_tavily_used_when_key_present(web_search_tool):
 
 
 @pytest.mark.asyncio
+async def test_tavily_uses_configured_search_depth(web_search_tool):
+    """The Tavily payload must carry the configured depth (default 'advanced');
+    'basic' returned wrong answers for date/fact queries in testing."""
+    from types import SimpleNamespace
+    web_search_tool.config = SimpleNamespace(
+        web_search=SimpleNamespace(tavily_search_depth="advanced", provider="tavily")
+    )
+    captured = {}
+    response = AsyncMock()
+    response.status = 200
+    response.json.return_value = {"results": [{"title": "T", "url": "https://t/1", "content": "c"}]}
+    post_cm = AsyncMock()
+    post_cm.__aenter__.return_value = response
+
+    def capture_post(url, **kwargs):
+        captured.update(kwargs.get("json", {}))
+        return post_cm
+
+    session = MagicMock()
+    session.post.side_effect = capture_post
+    session_cm = AsyncMock()
+    session_cm.__aenter__.return_value = session
+
+    with patch.object(web_search_tool, "_tavily_key", return_value="tvly-x"), \
+         patch.object(web_search_tool, "_session", return_value=session_cm):
+        result = await web_search_tool.execute(query="who died june 14 2026")
+
+    assert result["provider"] == "tavily"
+    assert captured["search_depth"] == "advanced"
+
+
+@pytest.mark.asyncio
 async def test_all_providers_fail_returns_error(web_search_tool):
     with patch.object(web_search_tool, "_session", return_value=_fake_session(status=202, text_data="", json_data={})), \
          patch("tools.web_search_tool.asyncio.sleep", new=AsyncMock()):

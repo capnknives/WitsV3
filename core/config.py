@@ -158,6 +158,11 @@ class WebSearchSettings(BaseModel):
         description="Provider to use: auto (try all, best-available first), tavily, brave, or duckduckgo",
     )
     max_results: int = Field(default=5, gt=0, le=25, description="Default number of results to return")
+    tavily_search_depth: str = Field(
+        default="advanced",
+        description="Tavily depth: 'advanced' (more accurate answers, 2 credits) or 'basic' (1 credit). "
+                    "'basic' can return wrong answers for date/fact queries — 'advanced' is worth it.",
+    )
     timeout_seconds: float = Field(default=12.0, gt=0, description="Per-request HTTP timeout")
     region: str = Field(default="wt-wt", description="DuckDuckGo region code (wt-wt = no region)")
     safesearch: str = Field(default="moderate", description="Safe search level: off, moderate, strict")

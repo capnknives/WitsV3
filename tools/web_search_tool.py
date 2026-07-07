@@ -145,10 +145,12 @@ class WebSearchTool(BaseTool):
         key = self._tavily_key()
         if not key:
             raise RuntimeError("TAVILY_API_KEY not set")
+        # 'advanced' depth is materially more accurate for date/fact queries —
+        # 'basic' returned a wrong answer for "who died on <date>" in testing.
         payload = {
             "query": query,
             "max_results": max_results,
-            "search_depth": "basic",
+            "search_depth": self._get("tavily_search_depth", "advanced"),
             "include_answer": True,
         }
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}

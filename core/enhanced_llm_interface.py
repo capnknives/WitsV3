@@ -84,8 +84,15 @@ class ReliableOllamaInterface(OllamaInterface):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stop_sequences: Optional[List[str]] = None,
+        **kwargs,
     ) -> str:
-        """Generate text with model reliability tracking."""
+        """Generate text with model reliability tracking.
+
+        Extra keyword args (e.g. `format="json"` for Ollama structured output)
+        are forwarded to the base interface — this wrapper must not swallow
+        params the base class understands, or callers like the orchestrator's
+        JSON reasoning break with 'unexpected keyword argument'.
+        """
         # Get the best available model
         effective_model = self._get_best_model(model, "generate")
         start_time = time.time()
@@ -96,7 +103,8 @@ class ReliableOllamaInterface(OllamaInterface):
                 model=effective_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                stop_sequences=stop_sequences
+                stop_sequences=stop_sequences,
+                **kwargs,
             )
 
             # Record success
@@ -120,8 +128,9 @@ class ReliableOllamaInterface(OllamaInterface):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stop_sequences: Optional[List[str]] = None,
+        **kwargs,
     ) -> AsyncGenerator[str, None]:
-        """Stream text with model reliability tracking."""
+        """Stream text with model reliability tracking. Extra kwargs forwarded."""
         # Get the best available model
         effective_model = self._get_best_model(model, "stream")
         start_time = time.time()
@@ -133,7 +142,8 @@ class ReliableOllamaInterface(OllamaInterface):
                 model=effective_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                stop_sequences=stop_sequences
+                stop_sequences=stop_sequences,
+                **kwargs,
             ):
                 yield chunk
                 success = True  # At least one chunk was yielded
