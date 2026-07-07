@@ -39,7 +39,11 @@ class NetworkControlTool(BaseTool):
             Dictionary containing operation result
         """
         try:
-            # Check authorization (both user ID and authentication token)
+            # Status is read-only and needs no auth; the mutating actions
+            # require both the authorized user ID and a valid token.
+            if action == "status":
+                return self._get_status()
+
             is_authorized, auth_message = verify_auth(user_id, auth_token, "network_control")
             if not is_authorized:
                 return {
@@ -52,8 +56,6 @@ class NetworkControlTool(BaseTool):
                 return await self._enable_network(user_id, duration_minutes)
             elif action == "disable_network":
                 return await self._disable_network(user_id)
-            elif action == "status":
-                return self._get_status()
             else:
                 return {
                     "success": False,
