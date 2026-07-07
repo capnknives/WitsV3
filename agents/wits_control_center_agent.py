@@ -259,7 +259,7 @@ User input: {user_input}
         # Build context from conversation history
         history_context = ""
         if conversation_history and conversation_history.messages:
-            recent_messages = conversation_history.get_recent_messages(5)
+            recent_messages = conversation_history.get_recent_messages(10)
             history_context = "\n".join([
                 f"{msg.role}: {msg.content}" for msg in recent_messages
             ])
@@ -467,10 +467,12 @@ Respond ONLY with valid JSON."""
             personality_manager = get_personality_manager()
 
             if conversation_history and conversation_history.messages:
-                # Format conversation history
+                # Format conversation history — keep a generous window so the
+                # model can answer questions about earlier turns (qwen3:8b
+                # runs with 16k tokens of context, 5 messages was far too few)
                 history_text = "\n".join([
                     f"{msg.role.upper()}: {msg.content}"
-                    for msg in conversation_history.get_recent_messages(5)
+                    for msg in conversation_history.get_recent_messages(20)
                 ])
             else:
                 history_text = ""
