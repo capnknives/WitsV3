@@ -152,9 +152,31 @@ class BaseOrchestratorAgent(BaseAgent):
             
             reasoning_response = await self.generate_response(
                 reasoning_prompt,
-                model_name=getattr(self, "_session_model", None)
+                model_name=getattr(self, "_session_model", None),
+                response_format="json"
             )
             parsed_reasoning = self._parse_reasoning_response(reasoning_response)
+
+            # Repair-reparse: if the response wasn't usable JSON, ask the model
+            # once to rewrite its own output as valid JSON before falling back.
+            if parsed_reasoning.pop("_parse_failed", False):
+                parse_error = parsed_reasoning.pop("_parse_error", "invalid JSON")
+                yield self.stream_thinking("Reasoning response was malformed; attempting JSON repair...")
+                try:
+                    repaired_response = await self.generate_response(
+                        self._build_json_repair_prompt(reasoning_response, parse_error),
+                        model_name=getattr(self, "_session_model", None),
+                        response_format="json"
+                    )
+                    reparsed = self._parse_reasoning_response(repaired_response)
+                    if not reparsed.pop("_parse_failed", False):
+                        reparsed.pop("_parse_error", None)
+                        parsed_reasoning = reparsed
+                        reasoning_response = repaired_response
+                    else:
+                        self.logger.warning("JSON repair attempt also failed to parse; using fallback reasoning")
+                except Exception as e:
+                    self.logger.warning(f"JSON repair attempt errored: {e}; using fallback reasoning")
             
             # Stream the reasoning
             if parsed_reasoning.get("thought"):
@@ -274,6 +296,27 @@ class BaseOrchestratorAgent(BaseAgent):
         
         return await tool.execute(**tool_args)
     
+    def _build_json_repair_prompt(self, raw_response: str, parse_error: str) -> str:
+        """
+        Build a prompt asking the model to rewrite its malformed reasoning
+        output as valid JSON.
+
+        Args:
+            raw_response: The response that failed to parse
+            parse_error: The parse error message
+
+        Returns:
+            Repair prompt
+        """
+        return f"""The following text was supposed to be a single valid JSON object, but it failed to parse ({parse_error}).
+
+TEXT:
+{raw_response}
+
+Rewrite it as ONE valid JSON object. Preserve the intended content and keys ("thought", "action_type", "tool_name", "tool_args", "final_answer"). Do not add commentary, markdown fences, or any text outside the JSON object.
+
+Respond ONLY with the corrected JSON object."""
+
     @abstractmethod
     def _build_reasoning_prompt(self, state: Dict[str, Any]) -> str:
         """

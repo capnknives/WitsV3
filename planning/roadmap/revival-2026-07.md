@@ -1,7 +1,7 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
-**Branch:** `fix/revive-2026-07` (16 commits, July 6–7 2026, not yet merged to `main`)
-**Test suite:** 191 passed / 2 skipped (skips are external MCP-server integration tests)
+**Branch:** `fix/revive-2026-07` (July 6–7 2026, merged to `main` at 1a555f2; later work continues on the branch)
+**Test suite:** 222 passed / 2 skipped (skips are external MCP-server integration tests)
 **Last updated:** July 7, 2026
 
 This document tracks the July 2026 revival effort: what was worked on, what
@@ -72,7 +72,7 @@ suggested next steps.
 | "I don't have access to your report" despite successful search | ✅ Fixed (`ed0ef6c` + `277960d`) |
 | Document questions misrouted to chat/clarification unless phrased exactly | ✅ Fixed (`277960d`) |
 | `web_search` fails with DuckDuckGo status 202 (rate-limited/blocked) | ⚠️ OPEN — external; needs fallback backend or backoff |
-| Orchestrator "Failed to parse reasoning response: Expecting ',' delimiter" (×15 in one session) | ⚠️ OPEN — qwen3 emits malformed JSON in the ReAct loop |
+| Orchestrator "Failed to parse reasoning response: Expecting ',' delimiter" (×15 in one session) | ✅ Fixed July 7 (orchestrator JSON robustness: `format=json` + robust parse + repair-reparse) |
 | Ollama connection refused (service not running) | ⚠️ Environmental — start the tray app; consider a friendlier UI error |
 
 ---
@@ -88,7 +88,7 @@ suggested next steps.
 
 ### Roadmap (approved earlier)
 4. ~~Smart model routing~~ SHIPPED July 7 2026: new `core/model_router.py` + `model_routing` config section (enabled by default; trivial → llama3.2:3b, code → qwen2.5-coder:7b, complex → default). Routes on the **raw user message/goal only** — never full prompt templates, which always look complex. Wired at three points: WCCA casual-chat response, WCCA fallback direct response, and the orchestrator ReAct loop (routes once per goal in `run()`; `allow_trivial=False` so the 3b model never handles ReAct JSON; code goals go to qwen2.5-coder, which should also reduce the malformed-JSON failures). `core/adaptive_llm_interface.py` was NOT activated — it routes to on-disk neural "modules" that don't exist, not to Ollama models; the lean router replaces that idea. Tests in `tests/core/test_model_router.py`; suite 207 passed / 2 skipped. Note: routing config is not in the /settings web page yet (config.local.yaml can override it).
-5. **Orchestrator reasoning robustness**: the qwen3 malformed-JSON parse failures and result-dismissing synthesis are the same weakness. Code goals now hit qwen2.5-coder via routing (item 4), which should help; still worth doing: Ollama structured output (`format=json`) on reasoning calls and/or a repair-reparse pass.
+5. ~~Orchestrator reasoning robustness~~ SHIPPED July 7 2026: three layers of defense against qwen3's malformed ReAct JSON. (a) **Ollama structured output**: reasoning calls now send `format=json` (new `format` param on `OllamaInterface.generate_text`/`_prepare_payload`, `response_format` on `BaseAgent.generate_response` — passed only when set, so other interfaces/test fakes are unaffected), which grammar-constrains generation to valid JSON. (b) **Robust parsing** in `LLMDrivenOrchestrator`: strips qwen3 `<think>` blocks, extracts candidates from markdown fences and string-aware balanced-brace scanning (the old greedy `\{.*\}` regex broke whenever a response had multiple `{...}` spans), completes truncated objects (closes open strings/braces), and applies conservative repairs (trailing commas, smart quotes, Python `True/False/None`). (c) **Repair-reparse round trip** in the ReAct loop: if parsing still fails, the fallback result is flagged `_parse_failed` and the model is asked once (also `format=json`) to rewrite its own output as valid JSON before keyword fallback is used. Tests in `tests/agents/test_orchestrator_json.py` (15 cases incl. the literal "Expecting ',' delimiter" failure); suite 222 passed / 2 skipped. Note: the related result-dismissing synthesis ("hallucinates instead of using document_search results") should also shrink — structured output stops think-block leakage into parsed thoughts — but watch the logs to confirm.
 
 ### Smaller quality items
 6. **web_search resilience**: DuckDuckGo HTML endpoint rate-limits (status 202); add retry/backoff and/or an alternative backend.
@@ -104,6 +104,6 @@ suggested next steps.
 ## 4. Suggested next steps (in order)
 
 1. Do the two manual items (revoke Supabase token, add Anthropic key).
-2. Orchestrator JSON robustness (#5) — `format=json` on reasoning calls + repair-reparse.
-3. web_search fallback (#6) as a standalone small task.
-4. Expose model_routing in the /settings web page.
+2. web_search fallback (#6) as a standalone small task.
+3. Expose model_routing in the /settings web page.
+4. Friendlier "Ollama is down" error in the web UI (#7).
