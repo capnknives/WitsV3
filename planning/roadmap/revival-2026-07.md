@@ -72,7 +72,7 @@ suggested next steps.
 | PDFs skipped — pypdf missing | ✅ Fixed (`89fd4ac`) |
 | "I don't have access to your report" despite successful search | ✅ Fixed (`ed0ef6c` + `277960d`) |
 | Document questions misrouted to chat/clarification unless phrased exactly | ✅ Fixed (`277960d`) |
-| `web_search` fails with DuckDuckGo status 202 (rate-limited/blocked) | ⚠️ OPEN — external; needs fallback backend or backoff |
+| `web_search` fails with DuckDuckGo status 202 (rate-limited/blocked) | ✅ Fixed July 7 — rewritten as a multi-provider tool: real DuckDuckGo HTML/Lite scraping (with a browser UA + 202/429 retry-backoff) instead of the useless Instant Answer API, plus optional Tavily/Brave via `.env` keys |
 | Orchestrator "Failed to parse reasoning response: Expecting ',' delimiter" (×15 in one session) | ✅ Fixed July 7 (orchestrator JSON robustness: `format=json` + robust parse + repair-reparse) |
 | Ollama connection refused (service not running) | ⚠️ Environmental — start the tray app; consider a friendlier UI error |
 
@@ -83,6 +83,7 @@ suggested next steps.
 ### Richard's manual action items (browser/keys — can't be automated)
 1. **Revoke the leaked `sbp_...` Supabase personal access token** at supabase.com/dashboard/account/tokens (leaked in git history before the secrets cleanup).
 2. **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
+3. *(Optional)* **Add a web-search API key to `.env`** for higher-quality results — `TAVILY_API_KEY` (tavily.com, 1000 free/mo, LLM-optimized) or `BRAVE_SEARCH_API_KEY` (brave.com/search/api, 2000 free/mo). Not required: `web_search` already returns real results keyless via DuckDuckGo.
 
 ### Repo hygiene
 3. ~~Push `fix/revive-2026-07` to GitHub and merge to `main`~~ DONE July 7 — branch pushed (with the mcp_servers repos registered as proper submodules) and merged to `main` (1a555f2) with Richard's authorization. Repo hygiene fully resolved.
@@ -92,7 +93,7 @@ suggested next steps.
 5. ~~Orchestrator reasoning robustness~~ SHIPPED July 7 2026: three layers of defense against qwen3's malformed ReAct JSON. (a) **Ollama structured output**: reasoning calls now send `format=json` (new `format` param on `OllamaInterface.generate_text`/`_prepare_payload`, `response_format` on `BaseAgent.generate_response` — passed only when set, so other interfaces/test fakes are unaffected), which grammar-constrains generation to valid JSON. (b) **Robust parsing** in `LLMDrivenOrchestrator`: strips qwen3 `<think>` blocks, extracts candidates from markdown fences and string-aware balanced-brace scanning (the old greedy `\{.*\}` regex broke whenever a response had multiple `{...}` spans), completes truncated objects (closes open strings/braces), and applies conservative repairs (trailing commas, smart quotes, Python `True/False/None`). (c) **Repair-reparse round trip** in the ReAct loop: if parsing still fails, the fallback result is flagged `_parse_failed` and the model is asked once (also `format=json`) to rewrite its own output as valid JSON before keyword fallback is used. Tests in `tests/agents/test_orchestrator_json.py` (15 cases incl. the literal "Expecting ',' delimiter" failure); suite 222 passed / 2 skipped. Note: the related result-dismissing synthesis ("hallucinates instead of using document_search results") should also shrink — structured output stops think-block leakage into parsed thoughts — but watch the logs to confirm.
 
 ### Smaller quality items
-6. **web_search resilience**: DuckDuckGo HTML endpoint rate-limits (status 202); add retry/backoff and/or an alternative backend.
+6. ~~**web_search resilience**~~ SHIPPED July 7 2026: `tools/web_search_tool.py` rewritten from a single dead endpoint into a provider fallback chain. Root cause was deeper than the 202 — the old tool only hit the DuckDuckGo **Instant Answer API** (`api.duckduckgo.com`), which is not a web search engine (it returns Wikipedia-style disambiguation "RelatedTopics" for a tiny set of queries and 202s under load), so most searches returned empty even when not blocked. New chain: **Tavily** (if `TAVILY_API_KEY`) → **Brave** (if `BRAVE_SEARCH_API_KEY`) → **DuckDuckGo HTML** scrape → **DuckDuckGo Lite** scrape → Instant Answer API (last resort). The DDG scrape paths send a real browser User-Agent (the default aiohttp UA is what triggers the 202 bot wall), unwrap DDG's `/l/?uddg=` redirect links, and retry on 202/429 with exponential backoff. Keyless works out of the box (verified live — real organic results with snippets); keys just improve quality. New `web_search` config section (`provider`/`max_results`/`timeout`/`region`/`safesearch`); keys injected from `.env`, never config.yaml. Tool now takes `set_dependencies(config, ...)`. Tests in `tests/tools/test_web_search_tool.py` (8 cases: HTML parse, redirect-unwrap, max_results, 202→Lite fallthrough, Tavily-preferred, all-fail); suite 226 passed / 2 skipped.
 7. **Friendlier "Ollama is down" handling** in the web UI (currently three retries then a raw error in chat).
 8. **Intent-handler cleanup**: `clarification_question`/`direct_response` LLM intents still funnel through the casual-chat prompt instead of using their own generated text; the enhanced/meta-reasoning path duplicates routing logic. Worth unifying when touching WCCA next.
 
@@ -105,6 +106,5 @@ suggested next steps.
 ## 4. Suggested next steps (in order)
 
 1. Do the two manual items (revoke Supabase token, add Anthropic key).
-2. web_search fallback (#6) as a standalone small task.
-3. Expose model_routing in the /settings web page.
+2. Expose model_routing in the /settings web page.
 4. Friendlier "Ollama is down" error in the web UI (#7).

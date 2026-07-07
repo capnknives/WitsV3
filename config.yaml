@@ -85,6 +85,16 @@ document_rag:
     - .html
     - .log
     - .pdf
+web_search:
+  # Provider fallback chain gives real web results with NO API key (DuckDuckGo).
+  # Add a key in .env for much better quality:
+  #   TAVILY_API_KEY        (tavily.com — 1000 free searches/mo, LLM-optimized)
+  #   BRAVE_SEARCH_API_KEY  (brave.com/search/api — 2000 free/mo)
+  provider: auto        # auto | tavily | brave | duckduckgo
+  max_results: 5
+  timeout_seconds: 12
+  region: wt-wt         # DuckDuckGo region (wt-wt = no region)
+  safesearch: moderate  # off | moderate | strict
 docker:
   background_agents:
     cpu_limit: "1.0"
