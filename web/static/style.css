@@ -116,6 +116,10 @@ main#chat {
   display: flex; flex-direction: column;
   padding-top: env(safe-area-inset-top);
 }
+/* same trap as the token modal: an author display rule beats the UA
+   [hidden]{display:none}, leaving the panel stuck open (worst on phones
+   where it covers the whole chat) */
+#panel[hidden], #panel-backdrop[hidden] { display: none; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 14px; }
 .panel-header h2 { flex: 1; }
 .panel-header button { background: none; border: none; color: var(--fg); font-size: 18px; cursor: pointer; width: 40px; height: 40px; }
