@@ -282,6 +282,164 @@ class OrchestratorToolHelpersMixin:
             lines.append("(no results found)")
         return "\n".join(lines)
 
+    # --- final-answer synthesis guard ----------------------------------------
+
+    _REFUSAL_PHRASES = (
+        "don't have access",
+        "do not have access",
+        "cannot access",
+        "can't access",
+        "not uploaded",
+        "no documents",
+        "don't have your",
+        "do not have your",
+        "knowledge cutoff",
+        "training data",
+        "as an ai",
+        "i'm not able to browse",
+        "i cannot browse",
+    )
+
+    @staticmethod
+    def _latest_observation_prefix(observations: List[str], prefix: str) -> Optional[str]:
+        for obs in reversed(observations):
+            if prefix in obs:
+                return obs
+        return None
+
+    @staticmethod
+    def _significant_terms(text: str, min_len: int = 4) -> set:
+        words = re.findall(r"[a-z0-9]+", text.lower())
+        stop = {
+            "that", "this", "with", "from", "have", "your", "about", "what",
+            "when", "where", "which", "their", "there", "would", "could",
+            "should", "been", "were", "they", "them", "than", "then", "into",
+            "only", "also", "just", "like", "some", "such", "very", "does",
+            "answer", "using", "below", "results", "search", "document",
+        }
+        return {w for w in words if len(w) >= min_len and w not in stop}
+
+    def _answer_denies_access(self, answer: str) -> bool:
+        lowered = answer.lower()
+        return any(phrase in lowered for phrase in self._REFUSAL_PHRASES)
+
+    def _answer_references_evidence(self, answer: str, evidence_terms: set, min_overlap: int = 2) -> bool:
+        if not evidence_terms:
+            return True
+        answer_terms = self._significant_terms(answer)
+        return len(answer_terms & evidence_terms) >= min_overlap
+
+    @classmethod
+    def _extract_document_evidence_terms(cls, observation: str) -> set:
+        terms: set = set()
+        for line in observation.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("document_search"):
+                continue
+            if stripped.startswith("("):
+                continue
+            if stripped.startswith("["):
+                header, _, body = stripped.partition("]")
+                terms |= cls._significant_terms(header)
+                if body.strip():
+                    terms |= cls._significant_terms(body)
+            else:
+                terms |= cls._significant_terms(stripped)
+        return terms
+
+    @classmethod
+    def _extract_web_summary(cls, observation: str) -> Optional[str]:
+        for line in observation.splitlines():
+            if "summary" in line.lower() and ":" in line:
+                return line.split(":", 1)[1].strip()
+        return None
+
+    def _validate_final_answer_synthesis(self, final_answer: str, state: Dict[str, Any]) -> Optional[str]:
+        """
+        Return a guard message when final_answer ignores usable search observations.
+        """
+        observations = state.get("observations", [])
+        if not observations or not final_answer or not str(final_answer).strip():
+            return None
+
+        doc_obs = self._latest_observation_prefix(observations, "document_search results")
+        if doc_obs and "(no matching passages" not in doc_obs:
+            if self._answer_denies_access(final_answer):
+                return (
+                    "document_search returned excerpts but the answer claims no access. "
+                    "Summarize the numbered EXCERPTS only."
+                )
+            evidence = self._extract_document_evidence_terms(doc_obs)
+            if evidence and not self._answer_references_evidence(final_answer, evidence):
+                return (
+                    "Answer does not appear grounded in document_search EXCERPTS. "
+                    "Cite or paraphrase the numbered passages."
+                )
+
+        web_obs = self._latest_observation_prefix(observations, "web_search results")
+        if web_obs and "(no results found)" not in web_obs:
+            if state.get("lookup_search_done") and self._answer_denies_access(final_answer):
+                return (
+                    "web_search already returned SOURCES but the answer refuses or deflects. "
+                    "Use the summary and SOURCES in observations."
+                )
+            summary = self._extract_web_summary(web_obs)
+            if summary and len(final_answer.strip()) < 50 and not self._answer_references_evidence(
+                final_answer, self._significant_terms(summary), min_overlap=1
+            ):
+                return "Answer is too thin given an available web_search summary."
+
+        return None
+
+    def _auto_synthesize_from_observations(self, state: Dict[str, Any]) -> Optional[str]:
+        """Build a grounded answer from the latest search observation when the model won't."""
+        observations = state.get("observations", [])
+        goal = state.get("goal", "")
+
+        web_obs = self._latest_observation_prefix(observations, "web_search results")
+        if web_obs and "(no results found)" not in web_obs:
+            summary = self._extract_web_summary(web_obs)
+            if summary:
+                return summary
+            lines = [ln.strip() for ln in web_obs.splitlines() if ln.strip().startswith("[")]
+            if lines:
+                return f"Based on web search for your question: {lines[0]}"
+
+        doc_obs = self._latest_observation_prefix(observations, "document_search results")
+        if doc_obs and "(no matching passages" not in doc_obs:
+            excerpt_lines = [
+                ln.strip()
+                for ln in doc_obs.splitlines()
+                if ln.strip().startswith("[") or (ln.startswith("    ") and ln.strip())
+            ]
+            if excerpt_lines:
+                body = "\n".join(excerpt_lines[:4])
+                return f"From your uploaded documents (re: {goal}):\n{body}"
+
+        return None
+
+    def _resolve_final_answer(self, final_answer: str, state: Dict[str, Any]) -> tuple:
+        """
+        Apply synthesis guard before accepting final_answer.
+
+        Returns:
+            (resolved_answer, completed) — completed False means retry the ReAct loop.
+        """
+        guard_msg = self._validate_final_answer_synthesis(final_answer, state)
+        if guard_msg:
+            retries = state.get("synthesis_guard_retries", 0)
+            if retries == 0:
+                state["synthesis_guard_retries"] = 1
+                state["observations"].append(f"Synthesis guard: {guard_msg}")
+                return final_answer, False
+            fallback = self._auto_synthesize_from_observations(state)
+            if fallback:
+                final_answer = fallback
+
+        state["completed"] = True
+        state["final_answer"] = final_answer
+        return final_answer, True
+
     async def _prepare_tool_args(
         self,
         tool_name: str,

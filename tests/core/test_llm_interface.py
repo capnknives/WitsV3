@@ -407,22 +407,11 @@ def test_get_llm_interface_ollama(mock_config: WitsV3Config):
 
 
 def test_get_llm_interface_adaptive(mock_config: WitsV3Config):
-    """Test get_llm_interface returns AdaptiveLLMInterface for 'adaptive' provider."""
+    """Adaptive provider is deprecated — falls back to OllamaInterface."""
     mock_config.llm_interface.default_provider = "adaptive"
-
-    # Mock the AdaptiveLLMInterface import at the correct location
-    with patch('core.adaptive_llm_interface.AdaptiveLLMInterface') as MockAdaptiveLLMInterface, \
-         patch('httpx.AsyncClient'):
-
-        mock_adaptive_instance = MockAdaptiveLLMInterface.return_value
+    with patch("httpx.AsyncClient"):
         interface = get_llm_interface(mock_config)
-
-        # Verify AdaptiveLLMInterface was called with config and an OllamaInterface
-        MockAdaptiveLLMInterface.assert_called_once()
-        call_args = MockAdaptiveLLMInterface.call_args
-        assert call_args[0][0] == mock_config  # First arg is config
-        assert isinstance(call_args[0][1], OllamaInterface)  # Second arg is OllamaInterface
-        assert interface == mock_adaptive_instance
+        assert isinstance(interface, OllamaInterface)
 
 def test_get_llm_interface_unsupported(mock_config: WitsV3Config):
     """Test get_llm_interface raises ValueError for an unsupported provider."""

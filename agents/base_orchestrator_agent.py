@@ -125,6 +125,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "tool_repeat_failures": {},
             "tool_total_failures": {},
             "lookup_search_done": False,
+            "synthesis_guard_retries": 0,
         }
         
         try:
@@ -215,21 +216,20 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                     yield stream_data
                     
             elif action_type == "final_answer":
-                # Provide final answer
                 final_answer = parsed_reasoning.get("final_answer", "I've completed the task.")
-                state["completed"] = True
-                state["final_answer"] = final_answer
-                
+                final_answer, done = self._resolve_final_answer(final_answer, state)
+                if not done:
+                    yield self.stream_thinking(state["observations"][-1])
+                    continue
+
                 yield self.stream_result(final_answer)
-                
-                # Store final answer
                 await self.store_memory(
                     content=f"Final Answer: {final_answer}",
                     segment_type="FINAL_ANSWER",
                     importance=1.0,
-                    metadata={"session_id": session_id}
+                    metadata={"session_id": session_id},
                 )
-                
+
             else:
                 coerced = self._coerce_unknown_action(parsed_reasoning)
                 if coerced:
@@ -245,8 +245,10 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                         final_answer = parsed_reasoning.get(
                             "final_answer", "I've completed the task."
                         )
-                        state["completed"] = True
-                        state["final_answer"] = final_answer
+                        final_answer, done = self._resolve_final_answer(final_answer, state)
+                        if not done:
+                            yield self.stream_thinking(state["observations"][-1])
+                            continue
                         yield self.stream_result(final_answer)
                         await self.store_memory(
                             content=f"Final Answer: {final_answer}",

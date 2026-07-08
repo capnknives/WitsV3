@@ -10,6 +10,11 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = None
 
 
+class ExportRequest(BaseModel):
+    session_id: Optional[str] = None
+    file_path: Optional[str] = None
+
+
 class SettingsUpdate(BaseModel):
     """Runtime-adjustable settings from the /settings page. All optional."""
 

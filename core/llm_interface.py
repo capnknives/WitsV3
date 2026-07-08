@@ -336,14 +336,16 @@ class LLMInterface(OllamaInterface):
 
 def get_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
     if config.llm_interface.default_provider == "adaptive":
-        # Import here to avoid circular imports
-        from .adaptive_llm_interface import AdaptiveLLMInterface
+        # Reason: adaptive_llm_interface routes to on-disk "modules" that do not
+        # exist in the revival stack; model_router + Ollama is the supported path.
+        import logging
 
-        # First create a base LLM interface (Ollama by default)
-        base_llm = OllamaInterface(config)
-
-        # Then create the adaptive LLM interface with the base LLM
-        return AdaptiveLLMInterface(config, base_llm)
+        logging.getLogger("WitsV3.LLMInterface").warning(
+            "llm_interface.default_provider 'adaptive' is deprecated and ignored — "
+            "using Ollama. See planning/archive/adaptive_llm/README.md and "
+            "core/model_router.py for smart routing."
+        )
+        return OllamaInterface(config)
     elif config.llm_interface.default_provider == "ollama":
         return OllamaInterface(config)
     # Example for future extension:
