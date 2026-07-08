@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from core.base_tool import BaseTool
+from core.document_hybrid_search import fuse_hybrid_scores
 
 logger = logging.getLogger(__name__)
 
@@ -362,23 +363,20 @@ class DocumentSearchTool(_DocumentToolBase):
             if file_filters and not explicit_query:
                 segments = await self._segments_for_files(file_filters, max_results)
             else:
-                segments = await self.memory_manager.search_memory(
-                    query_text=query,
-                    limit=max_results if not file_filters else max(max_results, max_results * 3),
+                segments = await self._hybrid_segment_search(
+                    query=query,
+                    max_results=max_results,
                     min_relevance=min_relevance,
-                    filter_dict={"type": DOCUMENT_SEGMENT_TYPE},
+                    file_filters=file_filters,
                 )
-                segments = [
-                    seg
-                    for seg in segments
-                    if _file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
-                ][:max_results]
 
             results = [
                 {
                     "file": seg.metadata.get("file_path", seg.source),
                     "chunk": f"{seg.metadata.get('chunk_index', 0) + 1}/{seg.metadata.get('total_chunks', 1)}",
                     "relevance": round(seg.relevance_score or 0.0, 3),
+                    "lexical_score": round(float(seg.metadata.get("_lexical_score", 0.0)), 3),
+                    "vector_score": round(float(seg.metadata.get("_vector_score", 0.0)), 3),
                     "text": seg.content.text or "",
                 }
                 for seg in segments
@@ -414,6 +412,59 @@ class DocumentSearchTool(_DocumentToolBase):
             )
         )
         return matched[:max_results]
+
+    async def _hybrid_segment_search(
+        self,
+        *,
+        query: str,
+        max_results: int,
+        min_relevance: float,
+        file_filters: list[str],
+    ) -> list[Any]:
+        """BM25 + vector fusion over ingested document chunks."""
+        pool_limit = max(max_results * 4, 20)
+        vector_segments = await self.memory_manager.search_memory(
+            query_text=query,
+            limit=pool_limit,
+            min_relevance=0.0,
+            filter_dict={"type": DOCUMENT_SEGMENT_TYPE},
+        )
+        if file_filters:
+            vector_segments = [
+                seg
+                for seg in vector_segments
+                if _file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
+            ]
+
+        corpus = await self.memory_manager.get_recent_memory(
+            limit=1_000_000, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
+        )
+        if file_filters:
+            corpus = [
+                seg
+                for seg in corpus
+                if _file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
+            ]
+
+        merged: dict[str, Any] = {}
+        for seg in corpus:
+            merged[seg.id] = seg
+            seg.relevance_score = 0.0
+        for seg in vector_segments:
+            merged[seg.id] = seg
+
+        fused = fuse_hybrid_scores(list(merged.values()), query=query)
+        selected: list[Any] = []
+        for seg, vector_score, lexical_score, combined in fused:
+            if combined < min_relevance:
+                continue
+            seg.relevance_score = combined
+            seg.metadata["_vector_score"] = vector_score
+            seg.metadata["_lexical_score"] = lexical_score
+            selected.append(seg)
+            if len(selected) >= max_results:
+                break
+        return selected
 
     def get_schema(self) -> dict[str, Any]:
         return {

@@ -297,6 +297,27 @@ def test_tool_schemas():
     assert schema["parameters"]["required"] == ["query"]
 
 
+# ---------------------------------------------------------------- hybrid search
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_boosts_exact_lexical_match(rag_env):
+    config, memory, ingest, search, docs_dir = rag_env
+    (docs_dir / "generic.md").write_text("General audit notes about animals and forests.")
+    (docs_dir / "compliance.md").write_text(
+        "ISO-27001 compliance checklist for the security audit."
+    )
+    await ingest.execute()
+
+    result = await search.execute(query="ISO-27001 compliance", max_results=1, min_relevance=0.0)
+
+    assert result["success"] is True
+    assert result["result_count"] == 1
+    assert result["results"][0]["file"] == "compliance.md"
+    assert result["results"][0]["lexical_score"] > 0
+    assert result["results"][0]["vector_score"] >= 0
+
+
 # ---------------------------------------------------------------- delete API
 
 
