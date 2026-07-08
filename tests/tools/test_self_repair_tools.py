@@ -8,7 +8,7 @@ from tools.self_repair_tools import (
     DiagnoseLogErrorsTool,
     RestartAppTool,
     RunTestSuiteTool,
-    _parse_log_issues,
+    parse_traceback_issues,
 )
 
 SAMPLE_LOG = """\
@@ -22,8 +22,8 @@ ZeroDivisionError: division by zero
 """
 
 
-def test_parse_log_issues_extracts_traceback_with_file_and_line():
-    issues = _parse_log_issues(SAMPLE_LOG, max_issues=5)
+def test_parse_traceback_issues_extracts_traceback_with_file_and_line():
+    issues = parse_traceback_issues(SAMPLE_LOG, max_issues=5)
     actionable = [i for i in issues if i["actionable"]]
     assert actionable, "expected at least one actionable (file-resolvable) issue"
     assert actionable[0]["file"] == "agents/base_agent.py"
@@ -31,17 +31,17 @@ def test_parse_log_issues_extracts_traceback_with_file_and_line():
     assert "ZeroDivisionError" in actionable[0]["message"]
 
 
-def test_parse_log_issues_includes_bare_error_lines_as_non_actionable():
-    issues = _parse_log_issues(SAMPLE_LOG, max_issues=5)
+def test_parse_traceback_issues_includes_bare_error_lines_as_non_actionable():
+    issues = parse_traceback_issues(SAMPLE_LOG, max_issues=5)
     non_actionable = [i for i in issues if not i["actionable"]]
     assert any("Unrelated bare error" in i["message"] for i in non_actionable)
 
 
-def test_parse_log_issues_respects_max_issues():
+def test_parse_traceback_issues_respects_max_issues():
     big_log = "\n".join(
         f"2026-07-08 03:00:0{i},000 - WitsV3.X - ERROR - distinct error {i}" for i in range(9)
     )
-    issues = _parse_log_issues(big_log, max_issues=2)
+    issues = parse_traceback_issues(big_log, max_issues=2)
     assert len(issues) == 2
 
 
