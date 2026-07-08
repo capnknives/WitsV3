@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Test script for enhanced WitsV3 features
-Tests the new meta-reasoning, tool composition, and adaptive components
+Tests the meta-reasoning and tool composition components.
+
+Note: the adaptive-LLM stack was archived July 2026 (see
+planning/archive/adaptive_llm/); its smoke checks were removed here.
 """
 
 import asyncio
@@ -9,7 +12,6 @@ import logging
 from core.config import WitsV3Config
 from core.concrete_meta_reasoning import WitsV3MetaReasoningEngine
 from core.tool_composition import IntelligentToolComposer
-from core.adaptive import PerformanceTracker, AdaptiveTokenizer, ResponseGenerator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -23,18 +25,6 @@ async def test_enhanced_features():
         # Load config
         config = WitsV3Config.from_yaml('config.yaml')
         print("✅ Configuration loaded successfully")
-
-        # Test Adaptive Components
-        print("\n🧠 Testing Adaptive Components...")
-        tokenizer = AdaptiveTokenizer()
-        response_generator = ResponseGenerator(tokenizer)
-        print("✅ Adaptive tokenizer and response generator initialized")
-
-        # Test a simple tokenization
-        test_text = "Hello, this is a test of the enhanced WitsV3 system!"
-        tokens = await tokenizer.tokenize(test_text)
-        decoded = await tokenizer.decode(tokens.squeeze(0))
-        print(f"✅ Tokenization test: '{test_text[:20]}...' -> {tokens.shape[1]} tokens")
 
         # Test Meta-reasoning Engine
         print("\n🧠 Testing Meta-reasoning Engine...")
@@ -86,38 +76,10 @@ async def test_enhanced_features():
         execution_order = workflow.get_execution_order()
         print(f"✅ Execution order calculated: {len(execution_order)} levels")
 
-        # Test Performance Tracking
-        print("\n📊 Testing Performance Tracking...")
-
-        # Create a mock settings object
-        class MockSettings:
-            enable_performance_tracking = True
-            performance_log_path = "logs/performance.json"
-
-        perf_tracker = PerformanceTracker(MockSettings())
-
-        # Track some performance data
-        perf_tracker.track_performance(
-            prompt="Test prompt",
-            response="Test response",
-            module="test_module",
-            complexity=0.5,
-            generation_time=1.23,
-            cache_hit=False
-        )
-
-        stats = perf_tracker.get_performance_stats()
-        print(f"✅ Performance tracking working:")
-        print(f"   - Entries: {stats['count']}")
-        print(f"   - Avg time: {stats['avg_generation_time']:.2f}s")
-        print(f"   - Cache hit rate: {stats['cache_hit_rate']:.0%}")
-
         print("\n🎉 All Enhanced Features Test Complete!")
         print("=" * 50)
         print("✅ Meta-reasoning: Problem analysis and execution planning")
         print("✅ Tool Composition: Intelligent workflow generation")
-        print("✅ Adaptive Components: Tokenization and response generation")
-        print("✅ Performance Tracking: Metrics collection and analysis")
         print("\n🚀 WitsV3 Enhanced System is fully operational!")
 
         return True

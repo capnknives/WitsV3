@@ -12,16 +12,23 @@ return the standard Ollama interface instead.
 were never shipped in the revival stack. Smart model routing lives in
 `core/model_router.py` and is exposed on `/settings`.
 
-## Source still in repo
+## Source archived here (July 8, 2026)
 
-| File | Role |
-|------|------|
+The modules were moved out of the live `core/` package into this folder so they
+no longer sit on the import path. They are preserved for research revival only.
+
+| Archived path (under this folder) | Role |
+|-----------------------------------|------|
 | `core/adaptive_llm_interface.py` | Main adaptive interface (experimental) |
 | `core/adaptive_llm_config.py` | Settings dataclasses |
 | `core/complexity_analyzer.py` | Query complexity scoring |
-| `core/dynamic_module_loader.py` | Module loader |
+| `core/dynamic_module_loader.py` | Module loader (the only `torch` consumer) |
 | `core/semantic_cache.py` | Semantic cache |
-| `tests/test_adaptive_llm.py` | Manual/integration smoke (optional) |
+| `core/adaptive/` | Placeholder tokenizer / response generator / performance tracker |
+
+The former `tests/test_adaptive_llm.py` integration smoke and its `tests/config.yaml`
+were deleted (recoverable via git history) since their subjects are archived.
 
 Re-enable only for research — do not wire back into production without replacing
-the module-loader design with real Ollama model routing.
+the module-loader design with real Ollama model routing. If you revive these,
+restore the root `torch.py` shim expectation or add a real `torch` dependency.
