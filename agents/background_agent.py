@@ -336,9 +336,14 @@ async def main():
         "background", app_config, llm_interface, memory_manager, tool_registry=tool_registry
     )
     await agent.start()
-    health_runner = await _start_health_server(agent)
 
+    # Reason: start the health server *inside* the try so that if it fails the
+    # finally still stops the already-started agent (otherwise the scheduler is
+    # left running and leaks). health_runner stays None until it exists, so the
+    # guarded cleanup never touches an unbound/None runner.
+    health_runner = None
     try:
+        health_runner = await _start_health_server(agent)
         # Keep the agent running
         while True:
             await asyncio.sleep(1)
@@ -346,7 +351,8 @@ async def main():
         pass
     finally:
         await agent.stop()
-        await health_runner.cleanup()
+        if health_runner is not None:
+            await health_runner.cleanup()
 
 
 if __name__ == "__main__":
