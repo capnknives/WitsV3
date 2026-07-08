@@ -145,7 +145,7 @@ class _DocumentToolBase(BaseTool):
         self.llm_interface = None
         self.memory_manager = None
 
-    def set_dependencies(self, config, llm_interface, memory_manager) -> None:
+    def set_dependencies(self, config, llm_interface, memory_manager, **kwargs) -> None:
         """Called by WitsV3System after startup wiring."""
         self.config = config
         self.llm_interface = llm_interface

@@ -149,7 +149,12 @@ class WitsV3System:
             # need the live MemoryManager rather than their own instance)
             for tool in self.tool_registry.tools.values():
                 if hasattr(tool, "set_dependencies"):
-                    tool.set_dependencies(self.config, self.llm_interface, self.memory_manager)
+                    tool.set_dependencies(
+                        self.config,
+                        self.llm_interface,
+                        self.memory_manager,
+                        tool_registry=self.tool_registry,
+                    )
 
             # Document RAG: ensure the documents folder exists and optionally
             # ingest new/changed files at startup

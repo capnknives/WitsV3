@@ -62,7 +62,7 @@ class WebSearchTool(BaseTool):
         # Populated by set_dependencies(); safe defaults until then.
         self.config = None
 
-    def set_dependencies(self, config, llm_interface=None, memory_manager=None) -> None:
+    def set_dependencies(self, config, llm_interface=None, memory_manager=None, **kwargs) -> None:
         """Called by WitsV3System at startup to share the live config."""
         self.config = config
 

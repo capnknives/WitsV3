@@ -16,6 +16,22 @@ from .schemas import ToolCall, ToolResult, StreamData
 
 logger = logging.getLogger(__name__)
 
+# npx/uvx cold start can take 60–120s on first run.
+DEFAULT_IO_TIMEOUT = 60.0
+NPX_STARTUP_TIMEOUT = 120.0
+DEFAULT_STARTUP_TIMEOUT = 30.0
+
+
+def startup_timeout_for_command(command: List[str]) -> float:
+    """How long to wait for the MCP server process to answer initialize."""
+    if not command:
+        return DEFAULT_STARTUP_TIMEOUT
+    exe = command[0].lower()
+    joined = " ".join(command).lower()
+    if "npx" in exe or "uvx" in exe or "npx" in joined or "uvx" in joined:
+        return NPX_STARTUP_TIMEOUT
+    return DEFAULT_STARTUP_TIMEOUT
+
 
 @dataclass
 class MCPServer:
@@ -67,136 +83,136 @@ class StdioMCPClient(MCPClient):
         self.server_config = server_config
         self.process: Optional[asyncio.subprocess.Process] = None
         self.is_connected = False
+        self.handshake_complete = False
         self.request_id = 0
         self._tools_cache: List[MCPTool] = []
+        self._stderr_task: Optional[asyncio.Task] = None
+        self._io_timeout = DEFAULT_IO_TIMEOUT
+
+    def _start_stderr_drain(self) -> None:
+        """Log MCP server stderr without blocking the JSON-RPC handshake."""
+
+        async def _drain() -> None:
+            if not self.process or not self.process.stderr:
+                return
+            while True:
+                line = await self.process.stderr.readline()
+                if not line:
+                    break
+                text = line.decode(errors="replace").strip()
+                if not text:
+                    continue
+                lowered = text.lower()
+                if "error" in lowered and "level=info" not in lowered:
+                    logger.warning(
+                        "MCP %s stderr: %s",
+                        self.server_config.name,
+                        text[:800],
+                    )
+                else:
+                    logger.debug("MCP %s stderr: %s", self.server_config.name, text[:500])
+
+        self._stderr_task = asyncio.create_task(_drain())
+
+    async def _cleanup_failed_connect(self) -> None:
+        if self._stderr_task and not self._stderr_task.done():
+            self._stderr_task.cancel()
+        self._stderr_task = None
+        if self.process and self.process.returncode is None:
+            try:
+                self.process.terminate()
+                await asyncio.wait_for(self.process.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                self.process.kill()
+                await self.process.wait()
+        self.process = None
+        self.is_connected = False
+        self.handshake_complete = False
 
     async def connect(self) -> bool:
         """Connect to the MCP server"""
-        if self.is_connected:
+        if self.is_connected and self.handshake_complete:
             return True
 
         try:
             logger.info(f"Connecting to MCP server: {self.server_config.name}")
 
-            # Build command with arguments
             cmd = list(self.server_config.command)
             if self.server_config.args:
                 cmd.extend(self.server_config.args)
 
-            # Process environment variables
             env = os.environ.copy()
             if self.server_config.env:
                 env.update(self.server_config.env)
 
-            # Resolve the executable path. On Windows, commands like npm/npx are
-            # .cmd files that create_subprocess_exec cannot resolve by bare name
-            # (raises FileNotFoundError / WinError 2).
             resolved_cmd = shutil.which(cmd[0])
             if resolved_cmd:
                 cmd[0] = resolved_cmd
 
-            # Check if command is a string instead of a list (for Windows command paths)
             if isinstance(cmd[0], str) and (cmd[0].endswith('.js') or cmd[0].endswith('.ts')):
-                cmd_str = " ".join(cmd)
-                logger.info(f"Running MCP command: {cmd_str} in {self.server_config.working_directory}")
-
-                # Check if directory exists
                 if self.server_config.working_directory and not os.path.exists(self.server_config.working_directory):
                     logger.error(f"MCP server working directory does not exist: {self.server_config.working_directory}")
                     return False
-
-                # Check if command exists
                 if self.server_config.working_directory:
                     full_cmd_path = os.path.join(self.server_config.working_directory, cmd[0])
                     if not os.path.exists(full_cmd_path) and not os.path.exists(full_cmd_path.replace('\\', '/')):
                         logger.error(f"MCP server command not found: {full_cmd_path}")
-                        logger.info(f"Checking directory contents: {os.listdir(self.server_config.working_directory)}")
                         return False
 
-            # Start the process
-            logger.info(f"Starting MCP server process: {cmd}")
+            startup_timeout = startup_timeout_for_command(cmd)
+            logger.info(f"Starting MCP server process: {cmd} (startup timeout {startup_timeout:.0f}s)")
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
-                cwd=self.server_config.working_directory
+                cwd=self.server_config.working_directory,
             )
+            self._start_stderr_drain()
 
-            # Wait for server to initialize
-            try:
-                stderr_data = b""
-                init_timeout = 5.0  # 5 seconds timeout for initialization
+            request = {
+                "jsonrpc": "2.0",
+                "id": self._next_id(),
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "WitsV3", "version": "3.0"},
+                },
+            }
+            await self._send_request(request)
+            response = await self._read_response(timeout=startup_timeout)
 
-                try:
-                    # Read from stderr with timeout
-                    stderr_reader = asyncio.create_task(self.process.stderr.read(1024))
-                    stderr_data = await asyncio.wait_for(stderr_reader, timeout=init_timeout)
-
-                    if stderr_data and b"error" in stderr_data.lower():
-                        error_msg = stderr_data.decode().strip()
-                        logger.error(f"MCP server initialization error: {error_msg}")
-                        return False
-
-                except asyncio.TimeoutError:
-                    # Timeout reading stderr is not necessarily an error
-                    pass
-
-                # Perform the MCP initialize handshake to verify the connection
-                try:
-                    request = {
-                        "jsonrpc": "2.0",
-                        "id": self._next_id(),
-                        "method": "initialize",
-                        "params": {
-                            "protocolVersion": "2024-11-05",
-                            "capabilities": {},
-                            "clientInfo": {"name": "WitsV3", "version": "3.0"}
-                        }
-                    }
-
-                    await self._send_request(request)
-                    response = await asyncio.wait_for(self._read_response(), timeout=init_timeout)
-
-                    if response and "result" in response:
-                        # initialized is a notification (no id, no response expected)
-                        await self._send_request({
-                            "jsonrpc": "2.0",
-                            "method": "notifications/initialized"
-                        })
-                        logger.info(f"Successfully connected to MCP server: {self.server_config.name}")
-                        self.is_connected = True
-                        return True
-                    else:
-                        error_msg = response.get("error", {}).get("message", "Unknown error") if response else "No response"
-                        logger.error(f"Failed to verify MCP server connection: {error_msg}")
-                        return False
-
-                except (asyncio.TimeoutError, Exception) as e:
-                    logger.error(f"Failed to verify MCP server connection: {e}")
-
-                    # Fall back to checking if process is running
-                    if self.process.returncode is None:
-                        logger.info(f"MCP server process is running, assuming connection successful")
-                        self.is_connected = True
-                        return True
-                    else:
-                        logger.error(f"MCP server process exited with code {self.process.returncode}")
-                        return False
-
-            except Exception as e:
-                logger.error(f"Error initializing MCP server: {e}")
-                if self.process and self.process.returncode is None:
-                    self.process.terminate()
+            if not response or "result" not in response:
+                error_msg = (
+                    response.get("error", {}).get("message", "No response")
+                    if response
+                    else f"No initialize response within {startup_timeout:.0f}s"
+                )
+                logger.error(f"MCP initialize failed for {self.server_config.name}: {error_msg}")
+                await self._cleanup_failed_connect()
                 return False
+
+            await self._send_request({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+            })
+            self.is_connected = True
+            self.handshake_complete = True
+            logger.info(f"Successfully connected to MCP server: {self.server_config.name}")
+            return True
 
         except Exception as e:
             logger.error(f"Error connecting to MCP server {self.server_config.name}: {e}")
+            await self._cleanup_failed_connect()
             return False
 
     async def disconnect(self) -> None:
         """Disconnect from the MCP server"""
+        if self._stderr_task and not self._stderr_task.done():
+            self._stderr_task.cancel()
+        self._stderr_task = None
         if self.process:
             try:
                 self.process.terminate()
@@ -206,22 +222,23 @@ class StdioMCPClient(MCPClient):
                 await self.process.wait()
             self.process = None
         self.is_connected = False
+        self.handshake_complete = False
         logger.info(f"Disconnected from MCP server: {self.server_config.name}")
 
     async def list_tools(self) -> List[MCPTool]:
         """List available tools from the MCP server"""
-        if not self.is_connected:
+        if not self.is_connected or not self.handshake_complete:
             return []
 
         try:
             request = {
                 "jsonrpc": "2.0",
                 "id": self._next_id(),
-                "method": "tools/list"
+                "method": "tools/list",
             }
 
             await self._send_request(request)
-            response = await self._read_response()
+            response = await self._read_response(timeout=self._io_timeout)
 
             if response and "result" in response:
                 tools = []
@@ -261,7 +278,7 @@ class StdioMCPClient(MCPClient):
             }
 
             await self._send_request(request)
-            response = await self._read_response()
+            response = await self._read_response(timeout=self._io_timeout)
 
             if response and "result" in response:
                 return response["result"]
@@ -287,13 +304,13 @@ class StdioMCPClient(MCPClient):
         self.process.stdin.write(message.encode())
         await self.process.stdin.drain()
 
-    async def _read_response(self) -> Optional[Dict[str, Any]]:
+    async def _read_response(self, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
         """Read a JSON-RPC response from the MCP server, skipping notifications"""
         if not self.process or not self.process.stdout:
             return None
 
+        deadline = asyncio.get_event_loop().time() + (timeout or self._io_timeout)
         try:
-            deadline = asyncio.get_event_loop().time() + 10.0
             while True:
                 remaining = deadline - asyncio.get_event_loop().time()
                 if remaining <= 0:
@@ -302,11 +319,10 @@ class StdioMCPClient(MCPClient):
                 if not line:
                     return None
                 message = json.loads(line.decode().strip())
-                # Server-initiated notifications/requests have no matching id; keep reading
                 if "id" in message and ("result" in message or "error" in message):
                     return message
         except (asyncio.TimeoutError, json.JSONDecodeError) as e:
-            logger.error(f"Error reading response: {e}")
+            logger.error(f"Error reading MCP response from {self.server_config.name}: {e}")
             return None
 
 
@@ -324,8 +340,12 @@ class MCPAdapter:
         if await client.connect():
             self.clients[server_config.name] = client
 
-            # Load tools from this server
             tools = await client.list_tools()
+            if not tools:
+                logger.warning(
+                    "MCP server %s connected but reported 0 tools",
+                    server_config.name,
+                )
             for tool in tools:
                 self.tools[tool.name] = tool
 

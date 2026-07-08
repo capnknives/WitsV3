@@ -46,6 +46,7 @@
 .mcp-chip.on  { background: rgba(61,220,151,.15); color: var(--accent-2); }
 .mcp-chip.off { background: var(--bg-3); color: var(--fg-dim); }
 .mcp-chip.warn { background: rgba(255,207,143,.12); color: #ffcf8f; }
+.mcp-chip.err { background: rgba(255,111,111,.12); color: #ff9f9f; }
 .mcp-cmd { color: var(--fg-dim); font-size: 12.5px; font-family: ui-monospace, monospace;
   margin-top: 8px; word-break: break-all; line-height: 1.45; }
 

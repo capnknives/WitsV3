@@ -252,25 +252,39 @@
       card.appendChild(box);
     }
 
-    async function connectServer(btn, name) {
+    async function connectServer(btn, name, isReconnect = false) {
       btn.disabled = true;
-      btn.textContent = "Connecting…";
-      setStatus(`Starting ${name}…`, true);
+      btn.textContent = isReconnect ? "Reconnecting…" : "Connecting…";
+      setStatus(
+        isReconnect
+          ? `Reconnecting ${name}… (npx first run can take up to 2 min)`
+          : `Starting ${name}… (npx first run can take up to 2 min)`,
+        true
+      );
+      const path = isReconnect ? "reconnect" : "connect";
       try {
-        const res = await api(`/api/mcp/servers/${encodeURIComponent(name)}/connect`, { method: "POST" });
+        const res = await api(`/api/mcp/servers/${encodeURIComponent(name)}/${path}`, { method: "POST" });
         const body = await res.json().catch(() => ({}));
         if (res.ok) {
-          setStatus(`Connected — ${body.tools.length} tools registered.`, true);
+          const n = body.tool_count ?? body.tools?.length ?? 0;
+          if (n === 0) {
+            setStatus(
+              `Connected but 0 tools — try Reconnect (npx may still be warming up).`,
+              false
+            );
+          } else {
+            setStatus(`Connected — ${n} tools registered with WITS.`, true);
+          }
           await load();
         } else {
-          setStatus(`Connect failed: ${body.detail || res.status}`, false);
+          setStatus(`${isReconnect ? "Reconnect" : "Connect"} failed: ${body.detail || res.status}`, false);
           btn.disabled = false;
-          btn.textContent = "Connect";
+          btn.textContent = isReconnect ? "Reconnect" : "Connect";
         }
       } catch (e) {
         if (e.message !== "unauthorized") setStatus(`Connect failed: ${e.message}`, false);
         btn.disabled = false;
-        btn.textContent = "Connect";
+        btn.textContent = isReconnect ? "Reconnect" : "Connect";
       }
     }
 
@@ -291,7 +305,9 @@
       const card = el("div", "mcp-card");
       const head = el("div", "mcp-card-head");
       head.appendChild(el("div", "mcp-card-title", s.name));
-      head.appendChild(el("span", `mcp-chip ${s.connected ? "on" : "off"}`,
+      const zeroTools = s.connected && s.tool_count === 0;
+      head.appendChild(el("span", `mcp-chip ${zeroTools ? "err" : s.connected ? "on" : "off"}`,
+        zeroTools ? "connected · 0 tools (reconnect)" :
         s.connected ? `connected · ${s.tool_count} tools` : "not connected"));
       card.appendChild(head);
       const cmd = Array.isArray(s.command) ? s.command.join(" ") : (s.command || "");
@@ -299,6 +315,11 @@
 
       const actions = el("div", "mcp-actions");
       if (s.connected) {
+        if (zeroTools) {
+          const reconnectBtn = el("button", "primary", "Reconnect");
+          reconnectBtn.addEventListener("click", () => connectServer(reconnectBtn, s.name, true));
+          actions.appendChild(reconnectBtn);
+        }
         const toolsBtn = el("button", null, "Browse tools");
         toolsBtn.addEventListener("click", () => showTools(card, s.name));
         actions.appendChild(toolsBtn);
@@ -351,9 +372,9 @@
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           const msg = andConnect && data.connect?.connected
-            ? `Installed & connected — ${data.connect.tools?.length || 0} tools live.`
-            : `Installed "${entry.name}" — connect it from My servers.`;
-          setStatus("✅ " + msg, true);
+            ? `Installed & connected — ${data.connect.tool_count ?? data.connect.tools?.length ?? 0} tools live.`
+            : `Installed "${entry.name}" — connect it from My servers (allow up to 2 min for npx).`;
+          setStatus("✅ " + msg, !!(data.connect?.tool_count || data.connect?.tools?.length));
           btn.textContent = "Installed ✓";
           await load();
           document.querySelector('[data-tab="servers"]').click();

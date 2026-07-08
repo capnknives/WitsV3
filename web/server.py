@@ -468,29 +468,35 @@ def create_app(system) -> FastAPI:
     async def _connect_mcp_server_entry(name: str, entry: Dict[str, Any]):
         """Connect one configured MCP server; returns (ok, tools_or_error)."""
         import asyncio
-        from core.mcp_adapter import MCPServer
+        from core.mcp_adapter import MCPServer, startup_timeout_for_command
 
         if "command" not in entry:
             return False, "server entry has no command"
 
         adapter = _mcp_adapter(create=True)
         if name in adapter.clients:
-            return False, "already connected"
+            await adapter.remove_server(name)
+            _unregister_mcp_tools_for_server(name)
 
         command = entry["command"]
+        cmd_list = command.split() if isinstance(command, str) else list(command)
         server = MCPServer(
             name=name,
-            command=command.split() if isinstance(command, str) else command,
+            command=cmd_list,
             args=entry.get("args"),
             env=entry.get("env"),
             working_directory=entry.get("working_directory"),
         )
+        connect_timeout = startup_timeout_for_command(cmd_list) + 15.0
         try:
-            ok = await asyncio.wait_for(adapter.add_server(server), timeout=45)
+            ok = await asyncio.wait_for(adapter.add_server(server), timeout=connect_timeout)
         except asyncio.TimeoutError:
-            return False, "connection timed out (45s)"
+            return False, (
+                f"connection timed out ({connect_timeout:.0f}s). "
+                "npx/uvx servers can take 1–2 minutes on first run — try Reconnect."
+            )
         if not ok:
-            return False, "connection failed - check the server log"
+            return False, "connection failed — check logs/witsv3.log for details"
 
         tools = _register_mcp_tools_for_server(adapter, name)
         logger.info(f"MCP server connected: {name} ({len(tools)} tools)")
@@ -588,9 +594,34 @@ def create_app(system) -> FastAPI:
             return JSONResponse({"detail": payload}, status_code=status)
 
         tools = payload
+        tool_list = [{"name": t.name, "description": t.description} for t in tools]
+        result = {"connected": True, "tools": tool_list, "tool_count": len(tool_list)}
+        if not tool_list:
+            result["warning"] = (
+                "Server handshake succeeded but no tools were listed. "
+                "Try Reconnect — npx servers often need a second attempt after cache warm-up."
+            )
+        return result
+
+    @app.post("/api/mcp/servers/{name:path}/reconnect")
+    async def mcp_reconnect_server(name: str):
+        """Disconnect (if needed) and connect again — fixes stale 0-tool sessions."""
+        entry = next((s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None)
+        if entry is None:
+            return JSONResponse({"detail": "unknown server"}, status_code=404)
+        adapter = _mcp_adapter()
+        if adapter and name in adapter.clients:
+            await adapter.remove_server(name)
+            _unregister_mcp_tools_for_server(name)
+        ok, payload = await _connect_mcp_server_entry(name, entry)
+        if not ok:
+            return JSONResponse({"detail": payload}, status_code=502)
+        tools = payload
+        tool_list = [{"name": t.name, "description": t.description} for t in tools]
         return {
-            "connected": True,
-            "tools": [{"name": t.name, "description": t.description} for t in tools],
+            "reconnected": True,
+            "tools": tool_list,
+            "tool_count": len(tool_list),
         }
 
     @app.post("/api/mcp/servers/{name:path}/disconnect")

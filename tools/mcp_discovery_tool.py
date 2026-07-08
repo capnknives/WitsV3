@@ -37,7 +37,7 @@ class SearchMCPToolsTool(BaseTool):
         )
         self.config = None
 
-    def set_dependencies(self, config, llm_interface=None, memory_manager=None) -> None:
+    def set_dependencies(self, config, llm_interface=None, memory_manager=None, **kwargs) -> None:
         self.config = config
 
     def _registry_url(self) -> str:
