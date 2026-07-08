@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 import pytest
 
 from agents.wcca_routing_mixin import OrchestratorRoutingMixin
-from core.guest_access import GuestRegistry
+from core.guest_access import GuestRegistry, format_active_guest_accounts
 from core.guest_audit import GuestAuditLog, build_owner_audit_digest
-from tools.guest_audit_tool import GuestAuditSummaryTool
+from tools.guest_audit_tool import GuestAccountsListTool, GuestAuditSummaryTool
 
 
 class _RoutingProbe(OrchestratorRoutingMixin):
@@ -63,6 +63,44 @@ async def test_wcca_routes_guest_log_questions_to_orchestrator():
     probe = _RoutingProbe()
     assert await probe._requires_orchestrator_for_input("summarize TESTER guest logs from today")
     assert await probe._requires_orchestrator_for_input("what did my nephew ask?")
+
+
+@pytest.mark.asyncio
+async def test_wcca_routes_guest_accounts_list_to_orchestrator():
+    probe = _RoutingProbe()
+    assert await probe._requires_orchestrator_for_input("list all active guest accounts")
+    assert await probe._requires_orchestrator_for_input("who are the registered guests?")
+
+
+@pytest.mark.asyncio
+async def test_guest_accounts_list_tool(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    reg = GuestRegistry()
+    reg.register_or_update(display_name="Sean", device_id="dev-sean-001")
+    reg.register_or_update(display_name="TESTER", device_id="dev-tester-002")
+
+    tool = GuestAccountsListTool()
+    tool.registry = reg
+    report = await tool.execute(user_role="owner")
+
+    assert "Active guest accounts: 2" in report
+    assert "Sean" in report
+    assert "TESTER" in report
+
+
+@pytest.mark.asyncio
+async def test_guest_accounts_list_denied_for_guest():
+    tool = GuestAccountsListTool()
+    report = await tool.execute(user_role="guest")
+    assert "only available to the owner" in report
+
+
+def test_format_active_guest_accounts_empty(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    text = format_active_guest_accounts(GuestRegistry())
+    assert "No active guest accounts" in text
 
 
 def test_build_owner_audit_digest_all_guests(tmp_path, monkeypatch):

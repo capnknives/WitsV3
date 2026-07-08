@@ -529,7 +529,7 @@ class OrchestratorToolHelpersMixin:
                 if path:
                     args["file_path"] = path
 
-        if tool_name == "guest_audit_summary":
+        if tool_name in ("guest_audit_summary", "guest_accounts_list"):
             args.setdefault("user_role", state.get("user_role", "owner"))
 
         return args

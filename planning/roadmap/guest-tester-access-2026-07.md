@@ -229,7 +229,7 @@ Do **not** ship guest chat without tool/route locks.
 
 **Exit criteria:** Obvious inappropriate queries refused without tool calls.
 
-**Owner chat:** Ask e.g. "summarize TESTER's guest logs" — routes to `guest_audit_summary` tool; Wits discusses the digest.
+**Owner chat:** Ask e.g. "summarize TESTER's guest logs" — routes to `guest_audit_summary` tool; "list active guest accounts" — `guest_accounts_list`.
 
 ### Phase 4 — Owner admin & polish (~1 session)
 

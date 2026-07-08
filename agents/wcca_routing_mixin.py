@@ -192,7 +192,7 @@ class OrchestratorRoutingMixin:
         lowered = message.lower()
         return any(sig in lowered for sig in self._SELF_REPAIR_SIGNALS)
 
-    # Owner review of family-tester / guest audit logs (routes to guest_audit_summary tool).
+    # Owner guest admin: audit summaries + account roster (guest_audit_summary / guest_accounts_list).
     _GUEST_AUDIT_SIGNALS = (
         "guest log",
         "guest logs",
@@ -212,13 +212,37 @@ class OrchestratorRoutingMixin:
         "nephews",
     )
 
+    _GUEST_ACCOUNTS_SIGNALS = (
+        "list guest",
+        "list guests",
+        "list all guest",
+        "list active guest",
+        "guest accounts",
+        "guest account",
+        "active guest",
+        "active guests",
+        "registered guest",
+        "registered guests",
+        "who are the guests",
+        "show me guests",
+        "family testers",
+        "tester accounts",
+    )
+
     def _needs_guest_audit_review(self, message: str) -> bool:
         lowered = message.lower()
         return any(sig in lowered for sig in self._GUEST_AUDIT_SIGNALS)
 
+    def _needs_guest_accounts_list(self, message: str) -> bool:
+        lowered = message.lower()
+        return any(sig in lowered for sig in self._GUEST_ACCOUNTS_SIGNALS)
+
+    def _needs_guest_admin_review(self, message: str) -> bool:
+        return self._needs_guest_audit_review(message) or self._needs_guest_accounts_list(message)
+
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
         """True when answering requires tools (ingested docs or live web search)."""
-        if self._needs_guest_audit_review(user_input):
+        if self._needs_guest_admin_review(user_input):
             return True
         if self._needs_file_write(user_input):
             return True
