@@ -23,12 +23,15 @@ from typing import Any
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from core.content_policy import check_guest_content
 from core.guest_access import (
     GuestRegistry,
     guest_access_enabled,
     guest_session_key,
 )
+from core.guest_audit import GuestAuditLog
 from core.schemas import ConversationHistory, StreamData
+from web.access_log import install_access_log_middleware
 from web.guest_auth import (
     guest_forbidden_response,
     resolve_auth,
@@ -82,6 +85,10 @@ def create_app(system) -> FastAPI:
     web_token = os.getenv("WITSV3_WEB_TOKEN", "")
     require_auth = bool(system.config.web_ui.require_auth and web_token)
     guest_registry = GuestRegistry()
+    guest_cfg = system.config.web_ui.guest_access
+    guest_audit = GuestAuditLog(enabled=guest_cfg.audit_chat)
+
+    install_access_log_middleware(app, system.config)
 
     if system.config.web_ui.require_auth and not web_token:
         logger.warning(
@@ -208,6 +215,30 @@ def create_app(system) -> FastAPI:
         conversation = system.session_histories[session_id]
         conversation.add_message("user", body.message)
 
+        def _guest_age_band() -> str:
+            if not guest:
+                return "teen"
+            profile = guest_registry.get(guest["guest_id"])
+            return (profile or {}).get("age_band", "teen")
+
+        def _audit(
+            event_type: str,
+            *,
+            content: str | None = None,
+            meta: dict[str, Any] | None = None,
+        ) -> None:
+            if not guest:
+                return
+            guest_audit.log(
+                guest_id=guest["guest_id"],
+                event_type=event_type,
+                display_name=guest.get("display_name"),
+                device_id=guest.get("device_id"),
+                session_id=client_session_id,
+                content=content,
+                meta=meta,
+            )
+
         owner_action = parse_owner_command(body.message)
         # Guests never get owner slash commands (even if they type /shutdown).
         if guest and owner_action:
@@ -225,6 +256,27 @@ def create_app(system) -> FastAPI:
                     "display_name": (guest or {}).get("display_name"),
                 },
             )
+
+            if guest and guest_cfg.content_policy_enabled:
+                allowed, refusal = check_guest_content(
+                    body.message, direction="input", age_band=_guest_age_band()
+                )
+                if not allowed and refusal:
+                    _audit(
+                        "content_blocked",
+                        content=body.message,
+                        meta={"direction": "input"},
+                    )
+                    conversation.add_message("assistant", refusal)
+                    yield sse(
+                        "stream",
+                        {"type": "result", "content": refusal, "source": "web"},
+                    )
+                    yield sse("done", {"final": refusal, "content_blocked": True})
+                    return
+
+            if guest:
+                _audit("chat_user", content=body.message)
 
             # Exact slash commands bypass the agent so the owner can kill a hung UI.
             if owner_action:
@@ -267,10 +319,31 @@ def create_app(system) -> FastAPI:
                 ):
                     payload = _stream_payload(stream_data)
                     yield sse("stream", payload)
+                    if guest and stream_data.type in ("tool_call", "action"):
+                        _audit(
+                            "tool_call",
+                            content=stream_data.content,
+                            meta={"stream_type": stream_data.type},
+                        )
+                    if guest and stream_data.type == "error":
+                        _audit("error", content=payload.get("content"))
                     if stream_data.type in ("result", "error"):
                         result_parts.append(payload["content"])
 
                 final_text = "\n".join(result_parts) or "(no response)"
+                if guest and guest_cfg.content_policy_enabled:
+                    allowed, refusal = check_guest_content(
+                        final_text, direction="output", age_band=_guest_age_band()
+                    )
+                    if not allowed and refusal:
+                        _audit(
+                            "content_blocked",
+                            content=final_text,
+                            meta={"direction": "output"},
+                        )
+                        final_text = refusal
+                if guest:
+                    _audit("chat_assistant", content=final_text)
                 conversation.add_message("assistant", final_text)
                 yield sse("done", {"final": final_text})
 
@@ -281,6 +354,8 @@ def create_app(system) -> FastAPI:
                 if fmt.get("hint"):
                     error_msg = f"{fmt['message']}\n\n{fmt['hint']}"
                 conversation.add_message("assistant", error_msg)
+                if guest:
+                    _audit("error", content=error_msg)
                 yield sse(
                     "stream",
                     {
@@ -735,7 +810,7 @@ def create_app(system) -> FastAPI:
         )
         return {"ingest": summary}
 
-    register_guest_routes(app, system, guest_registry)
+    register_guest_routes(app, system, guest_registry, guest_audit)
     register_mcp_routes(app, system)
     register_personality_routes(app, system)
 

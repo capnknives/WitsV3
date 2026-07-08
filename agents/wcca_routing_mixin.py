@@ -192,8 +192,34 @@ class OrchestratorRoutingMixin:
         lowered = message.lower()
         return any(sig in lowered for sig in self._SELF_REPAIR_SIGNALS)
 
+    # Owner review of family-tester / guest audit logs (routes to guest_audit_summary tool).
+    _GUEST_AUDIT_SIGNALS = (
+        "guest log",
+        "guest logs",
+        "guest audit",
+        "guest activity",
+        "family tester",
+        "tester log",
+        "tester logs",
+        "what did tester",
+        "what has tester",
+        "summarize tester",
+        "other user",
+        "other users",
+        "guest user",
+        "who joined",
+        "nephew",
+        "nephews",
+    )
+
+    def _needs_guest_audit_review(self, message: str) -> bool:
+        lowered = message.lower()
+        return any(sig in lowered for sig in self._GUEST_AUDIT_SIGNALS)
+
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
         """True when answering requires tools (ingested docs or live web search)."""
+        if self._needs_guest_audit_review(user_input):
+            return True
         if self._needs_file_write(user_input):
             return True
         doc_inventory = await self._get_document_inventory()

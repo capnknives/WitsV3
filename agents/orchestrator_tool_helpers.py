@@ -529,6 +529,9 @@ class OrchestratorToolHelpersMixin:
                 if path:
                     args["file_path"] = path
 
+        if tool_name == "guest_audit_summary":
+            args.setdefault("user_role", state.get("user_role", "owner"))
+
         return args
 
     @staticmethod

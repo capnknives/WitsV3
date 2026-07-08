@@ -198,6 +198,12 @@ class GuestAccessSettings(BaseModel):
     allow_document_search: bool = Field(
         default=False, description="Let guests use document_search on owner-ingested docs"
     )
+    audit_chat: bool = Field(
+        default=True, description="Append guest turns to data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl"
+    )
+    content_policy_enabled: bool = Field(
+        default=True, description="Block inappropriate guest input/output (family-friendly)"
+    )
 
 
 class WebUISettings(BaseModel):
@@ -209,6 +215,10 @@ class WebUISettings(BaseModel):
     port: int = Field(default=8000, gt=0, lt=65536, description="Web UI port")
     require_auth: bool = Field(
         default=True, description="Require the WITSV3_WEB_TOKEN bearer token for API access"
+    )
+    owner_display_name: str = Field(
+        default="Owner",
+        description="Name shown in web UI access logs for owner sessions (override with WITSV3_OWNER_NAME)",
     )
     guest_access: GuestAccessSettings = Field(default_factory=GuestAccessSettings)
 
