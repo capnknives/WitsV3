@@ -26,8 +26,8 @@ import asyncio
 import html
 import logging
 import os
-from typing import Any, Dict, List, Optional
-from urllib.parse import parse_qs, quote_plus, unquote, urlparse
+from typing import Any
+from urllib.parse import parse_qs, unquote, urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -83,7 +83,7 @@ class WebSearchTool(BaseTool):
 
     # --- entry point ----------------------------------------------------
 
-    async def execute(self, query: str, max_results: int = 5) -> Dict[str, Any]:
+    async def execute(self, query: str, max_results: int = 5) -> dict[str, Any]:
         """Run a web search.
 
         In "auto" mode with both keys set, Tavily and Brave are queried
@@ -106,7 +106,8 @@ class WebSearchTool(BaseTool):
         if provider == "duckduckgo":
             return await self._run_chain(
                 [self._search_ddg_html, self._search_ddg_lite, self._search_ddg_instant],
-                query, max_results,
+                query,
+                max_results,
             )
 
         # "auto": query the configured keyed engines together and merge; fall
@@ -122,12 +123,13 @@ class WebSearchTool(BaseTool):
                 return merged
         return await self._run_chain(
             [self._search_ddg_html, self._search_ddg_lite, self._search_ddg_instant],
-            query, max_results,
+            query,
+            max_results,
         )
 
-    async def _run_chain(self, chain, query: str, max_results: int) -> Dict[str, Any]:
+    async def _run_chain(self, chain, query: str, max_results: int) -> dict[str, Any]:
         """Try providers in order; first one with results wins."""
-        errors: List[str] = []
+        errors: list[str] = []
         for search_fn in chain:
             name = search_fn.__name__.replace("_search_", "")
             try:
@@ -137,7 +139,11 @@ class WebSearchTool(BaseTool):
                 errors.append(f"{name}: {e}")
                 continue
             if results:
-                out: Dict[str, Any] = {"success": True, "provider": name, "results": results[:max_results]}
+                out: dict[str, Any] = {
+                    "success": True,
+                    "provider": name,
+                    "results": results[:max_results],
+                }
                 if answer:
                     out["answer"] = answer
                     out["answer_provider"] = name
@@ -151,7 +157,7 @@ class WebSearchTool(BaseTool):
             "results": [],
         }
 
-    async def _gather_and_merge(self, providers, query: str, max_results: int) -> Dict[str, Any]:
+    async def _gather_and_merge(self, providers, query: str, max_results: int) -> dict[str, Any]:
         """Query keyed providers concurrently and merge their results.
 
         Keeps the first available AI summary (Tavily's) and interleaves each
@@ -162,11 +168,11 @@ class WebSearchTool(BaseTool):
         outcomes = await _asyncio.gather(
             *[p(query, max_results) for p in providers], return_exceptions=True
         )
-        answer: Optional[str] = None
-        answer_provider: Optional[str] = None
-        result_lists: List[List[Dict[str, str]]] = []
-        names_ok: List[str] = []
-        for prov, outcome in zip(providers, outcomes):
+        answer: str | None = None
+        answer_provider: str | None = None
+        result_lists: list[list[dict[str, str]]] = []
+        names_ok: list[str] = []
+        for prov, outcome in zip(providers, outcomes, strict=False):
             name = prov.__name__.replace("_search_", "")
             if isinstance(outcome, Exception):
                 logger.warning("web_search provider '%s' failed: %s", name, outcome)
@@ -184,19 +190,21 @@ class WebSearchTool(BaseTool):
         # More sources when merging engines, so the model can cross-check.
         cap = min(max_results * 2, 8) if len(result_lists) > 1 else max_results
         merged = self._interleave_dedupe(result_lists, cap)
-        out: Dict[str, Any] = {"success": True, "provider": "+".join(names_ok), "results": merged}
+        out: dict[str, Any] = {"success": True, "provider": "+".join(names_ok), "results": merged}
         if answer:
             out["answer"] = answer
             out["answer_provider"] = answer_provider
         return out
 
     @staticmethod
-    def _interleave_dedupe(result_lists: List[List[Dict[str, str]]], cap: int) -> List[Dict[str, str]]:
+    def _interleave_dedupe(
+        result_lists: list[list[dict[str, str]]], cap: int
+    ) -> list[dict[str, str]]:
         """Round-robin across providers' result lists, deduping by URL."""
         from itertools import zip_longest
 
         seen = set()
-        merged: List[Dict[str, str]] = []
+        merged: list[dict[str, str]] = []
         for group in zip_longest(*result_lists):
             for r in group:
                 if not r or not r.get("link"):
@@ -285,7 +293,7 @@ class WebSearchTool(BaseTool):
         markup = await self._ddg_post("https://lite.duckduckgo.com/lite/", data)
         return self._parse_ddg_lite(markup, max_results), None
 
-    async def _ddg_post(self, url: str, data: Dict[str, str]) -> str:
+    async def _ddg_post(self, url: str, data: dict[str, str]) -> str:
         """POST to a DuckDuckGo scrape endpoint, retrying on the 202/429 soft
         rate-limit with exponential backoff before giving up on this provider."""
         delays = [0.0, 0.8, 1.8]  # first try immediate, then back off
@@ -316,7 +324,7 @@ class WebSearchTool(BaseTool):
                     raise RuntimeError(f"HTTP {resp.status}")
                 data = await resp.json(content_type=None)
 
-        results: List[Dict[str, str]] = []
+        results: list[dict[str, str]] = []
         abstract = (data.get("AbstractText") or "").strip()
         if abstract and data.get("AbstractURL"):
             results.append(
@@ -347,9 +355,9 @@ class WebSearchTool(BaseTool):
 
     # --- parsing helpers ------------------------------------------------
 
-    def _parse_ddg_html(self, markup: str, max_results: int) -> List[Dict[str, str]]:
+    def _parse_ddg_html(self, markup: str, max_results: int) -> list[dict[str, str]]:
         soup = BeautifulSoup(markup, "html.parser")
-        results: List[Dict[str, str]] = []
+        results: list[dict[str, str]] = []
         for result in soup.select("div.result, div.web-result"):
             link_el = result.select_one("a.result__a")
             if not link_el:
@@ -369,9 +377,9 @@ class WebSearchTool(BaseTool):
                 break
         return results
 
-    def _parse_ddg_lite(self, markup: str, max_results: int) -> List[Dict[str, str]]:
+    def _parse_ddg_lite(self, markup: str, max_results: int) -> list[dict[str, str]]:
         soup = BeautifulSoup(markup, "html.parser")
-        results: List[Dict[str, str]] = []
+        results: list[dict[str, str]] = []
         # Lite renders results as <a class="result-link"> with the snippet in the
         # following <td class="result-snippet">.
         for link_el in soup.select("a.result-link"):
@@ -426,7 +434,7 @@ class WebSearchTool(BaseTool):
             headers={"User-Agent": _USER_AGENT, "Accept-Language": "en-US,en;q=0.9"},
         )
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "name": "web_search",
             "description": (

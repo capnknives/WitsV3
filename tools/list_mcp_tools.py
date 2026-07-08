@@ -6,7 +6,7 @@ particular server is connected, or which mcp_* tools the orchestrator can call.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.base_tool import BaseTool
 
@@ -33,7 +33,7 @@ class ListMCPToolsTool(BaseTool):
     def set_dependencies(self, config, llm_interface=None, memory_manager=None, **kwargs) -> None:
         self.tool_registry = kwargs.get("tool_registry")
 
-    async def execute(self, server_name: Optional[str] = None) -> Dict[str, Any]:
+    async def execute(self, server_name: str | None = None) -> dict[str, Any]:
         if not self.tool_registry:
             return {
                 "success": False,
@@ -42,8 +42,8 @@ class ListMCPToolsTool(BaseTool):
                 "tools": [],
             }
 
-        tools: List[Dict[str, Any]] = []
-        by_server: Dict[str, List[Dict[str, Any]]] = {}
+        tools: list[dict[str, Any]] = []
+        by_server: dict[str, list[dict[str, Any]]] = {}
 
         for name, tool in sorted(self.tool_registry.tools.items()):
             if not name.startswith("mcp_"):
@@ -94,7 +94,7 @@ class ListMCPToolsTool(BaseTool):
             ),
         }
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "name": "list_mcp_tools",
             "description": self.description,

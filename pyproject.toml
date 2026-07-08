@@ -39,6 +39,9 @@ ignore = ["E203", "E501"]
 "__init__.py" = ["F401"]
 "tests/**" = ["E203"]
 "conftest.py" = ["F401"]
+# FastAPI dependency defaults (File/Form/Depends) are idiomatic; B008 is noise here.
+"web/server.py" = ["B008"]
+"web/**/*.py" = ["B008"]
 
 [tool.mypy]
 python_version = "3.10"

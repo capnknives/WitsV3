@@ -4,29 +4,32 @@ Handles model failures, automatic fallbacks, and health monitoring.
 """
 
 import asyncio
-import time
 import logging
-from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field
-from enum import Enum
 from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any
 
 import httpx
 
-from .config import WitsV3Config, OllamaSettings
+from .config import OllamaSettings, WitsV3Config
 
 logger = logging.getLogger(__name__)
 
+
 class ModelStatus(Enum):
     """Model status enumeration."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     QUARANTINED = "quarantined"
     FAILED = "failed"
     UNKNOWN = "unknown"
 
+
 class FailureType(Enum):
     """Types of model failures."""
+
     TIMEOUT = "timeout"
     CONNECTION_ERROR = "connection_error"
     MODEL_NOT_FOUND = "model_not_found"
@@ -34,28 +37,33 @@ class FailureType(Enum):
     GENERATION_ERROR = "generation_error"
     UNKNOWN_ERROR = "unknown_error"
 
+
 @dataclass
 class ModelFailure:
     """Record of a model failure."""
+
     model_name: str
     failure_type: FailureType
     error_message: str
     timestamp: datetime
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class ModelHealth:
     """Health status of a model."""
+
     model_name: str
     status: ModelStatus
-    last_success: Optional[datetime] = None
-    last_failure: Optional[datetime] = None
+    last_success: datetime | None = None
+    last_failure: datetime | None = None
     consecutive_failures: int = 0
     total_failures: int = 0
     total_requests: int = 0
     average_response_time: float = 0.0
-    quarantine_until: Optional[datetime] = None
-    failure_history: List[ModelFailure] = field(default_factory=list)
+    quarantine_until: datetime | None = None
+    failure_history: list[ModelFailure] = field(default_factory=list)
+
 
 class ModelReliabilityManager:
     """
@@ -74,16 +82,16 @@ class ModelReliabilityManager:
         self.logger = logging.getLogger("WitsV3.ModelReliability")
 
         # Model health tracking
-        self.model_health: Dict[str, ModelHealth] = {}
-        self.quarantined_models: Set[str] = set()
+        self.model_health: dict[str, ModelHealth] = {}
+        self.quarantined_models: set[str] = set()
 
         # Model selection cache
-        self._model_selection_cache: Dict[str, str] = {}
+        self._model_selection_cache: dict[str, str] = {}
         self._cache_ttl = 300  # 5 minutes
-        self._cache_timestamps: Dict[str, datetime] = {}
+        self._cache_timestamps: dict[str, datetime] = {}
 
         # Health monitoring task
-        self._health_monitor_task: Optional[asyncio.Task] = None
+        self._health_monitor_task: asyncio.Task | None = None
         self._is_monitoring = False
 
         # Initialize model health for configured models
@@ -105,10 +113,7 @@ class ModelReliabilityManager:
 
         for model in models_to_track:
             if model not in self.model_health:
-                self.model_health[model] = ModelHealth(
-                    model_name=model,
-                    status=ModelStatus.UNKNOWN
-                )
+                self.model_health[model] = ModelHealth(model_name=model, status=ModelStatus.UNKNOWN)
                 self.logger.debug(f"Initialized health tracking for model: {model}")
 
     async def start_health_monitoring(self):
@@ -158,7 +163,7 @@ class ModelReliabilityManager:
             except Exception as e:
                 self.logger.error(f"Error checking health for model {model_name}: {e}")
 
-    async def _probe_ollama(self) -> Tuple[bool, Optional[Set[str]]]:
+    async def _probe_ollama(self) -> tuple[bool, set[str] | None]:
         """Ping Ollama's tag list once per health-check cycle.
 
         Returns (reachable, available_model_names). available_model_names is
@@ -174,7 +179,7 @@ class ModelReliabilityManager:
             self.logger.warning(f"Ollama health probe failed: {e}")
             return False, None
 
-        names: Set[str] = set()
+        names: set[str] = set()
         for m in data.get("models", []):
             name = m.get("name") or m.get("model") or ""
             if not name:
@@ -187,7 +192,7 @@ class ModelReliabilityManager:
         self,
         model_name: str,
         ollama_reachable: bool = True,
-        available_models: Optional[Set[str]] = None,
+        available_models: set[str] | None = None,
     ):
         """
         Check health of a specific model.
@@ -212,15 +217,21 @@ class ModelReliabilityManager:
             health.status = ModelStatus.DEGRADED
             return
 
-        if available_models is not None and model_name.split(":")[0] not in available_models \
-                and model_name not in available_models:
-            self.logger.warning(f"Model '{model_name}' not found in Ollama's tag list (not pulled?)")
+        if (
+            available_models is not None
+            and model_name.split(":")[0] not in available_models
+            and model_name not in available_models
+        ):
+            self.logger.warning(
+                f"Model '{model_name}' not found in Ollama's tag list (not pulled?)"
+            )
             health.status = ModelStatus.DEGRADED
             return
 
         # Ollama is up and the model is present — assess from recent failures.
         recent_failures = [
-            f for f in health.failure_history
+            f
+            for f in health.failure_history
             if f.timestamp > datetime.now() - timedelta(minutes=10)
         ]
 
@@ -279,13 +290,12 @@ class ModelReliabilityManager:
         if health.status in [ModelStatus.DEGRADED, ModelStatus.UNKNOWN]:
             health.status = ModelStatus.HEALTHY
 
-        self.logger.debug(f"Recorded success for model {model_name} (response_time: {response_time:.2f}s)")
+        self.logger.debug(
+            f"Recorded success for model {model_name} (response_time: {response_time:.2f}s)"
+        )
 
     def record_failure(
-        self,
-        model_name: str,
-        error: Exception,
-        context: Optional[Dict[str, Any]] = None
+        self, model_name: str, error: Exception, context: dict[str, Any] | None = None
     ):
         """
         Record a model failure.
@@ -306,7 +316,7 @@ class ModelReliabilityManager:
             failure_type=failure_type,
             error_message=str(error),
             timestamp=datetime.now(),
-            context=context or {}
+            context=context or {},
         )
 
         # Update health metrics
@@ -371,12 +381,11 @@ class ModelReliabilityManager:
         """
         if model_name not in self.model_health:
             self.model_health[model_name] = ModelHealth(
-                model_name=model_name,
-                status=ModelStatus.UNKNOWN
+                model_name=model_name, status=ModelStatus.UNKNOWN
             )
         return self.model_health[model_name]
 
-    def get_best_model(self, preferred_model: str, agent_type: Optional[str] = None) -> str:
+    def get_best_model(self, preferred_model: str, agent_type: str | None = None) -> str:
         """
         Get the best available model, considering health and fallbacks.
 
@@ -448,15 +457,16 @@ class ModelReliabilityManager:
                 return fallback
 
         # If no configured fallbacks are available, try the default model
-        if (preferred_model != self.ollama_settings.default_model and
-            self._is_model_available(self.ollama_settings.default_model)):
+        if preferred_model != self.ollama_settings.default_model and self._is_model_available(
+            self.ollama_settings.default_model
+        ):
             return self.ollama_settings.default_model
 
         # Last resort: return the preferred model anyway
         self.logger.error(f"No fallback models available for {preferred_model}, using anyway")
         return preferred_model
 
-    def get_health_summary(self) -> Dict[str, Any]:
+    def get_health_summary(self) -> dict[str, Any]:
         """
         Get a summary of model health status.
 
@@ -468,7 +478,7 @@ class ModelReliabilityManager:
             "healthy_models": 0,
             "degraded_models": 0,
             "quarantined_models": len(self.quarantined_models),
-            "models": {}
+            "models": {},
         }
 
         for model_name, health in self.model_health.items():
@@ -484,12 +494,15 @@ class ModelReliabilityManager:
                 "total_requests": health.total_requests,
                 "success_rate": (
                     (health.total_requests - health.total_failures) / health.total_requests
-                    if health.total_requests > 0 else 0
+                    if health.total_requests > 0
+                    else 0
                 ),
                 "average_response_time": health.average_response_time,
                 "last_success": health.last_success.isoformat() if health.last_success else None,
                 "last_failure": health.last_failure.isoformat() if health.last_failure else None,
-                "quarantine_until": health.quarantine_until.isoformat() if health.quarantine_until else None
+                "quarantine_until": (
+                    health.quarantine_until.isoformat() if health.quarantine_until else None
+                ),
             }
 
         return summary
@@ -519,10 +532,12 @@ class ModelReliabilityManager:
         self._cache_timestamps.clear()
         self.logger.debug("Cleared model selection cache")
 
-# Global model reliability manager instance
-_model_reliability_manager: Optional[ModelReliabilityManager] = None
 
-def get_model_reliability_manager(config: Optional[WitsV3Config] = None) -> ModelReliabilityManager:
+# Global model reliability manager instance
+_model_reliability_manager: ModelReliabilityManager | None = None
+
+
+def get_model_reliability_manager(config: WitsV3Config | None = None) -> ModelReliabilityManager:
     """
     Get the global model reliability manager instance.
 

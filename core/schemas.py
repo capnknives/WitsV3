@@ -4,9 +4,10 @@ Core schemas and data models for WitsV3.
 These define the structure for all data flowing through the system.
 """
 
-from typing import Any, Dict, List, Optional, Union, Literal, Type
-from pydantic import BaseModel, Field, ValidationError, validator
 from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
 
 
 class StreamData(BaseModel):
@@ -15,82 +16,80 @@ class StreamData(BaseModel):
     This allows real-time feedback to users during agent processing.
     Enhanced with comprehensive error context and tracing.
     """
+
     type: Literal[
-        "thinking", "action", "observation", "result", "error",
-        "clarification", "goal_defined", "memory_search", "tool_call",
-        "warning", "debug", "trace"
+        "thinking",
+        "action",
+        "observation",
+        "result",
+        "error",
+        "clarification",
+        "goal_defined",
+        "memory_search",
+        "tool_call",
+        "warning",
+        "debug",
+        "trace",
     ] = Field(description="Type of stream data")
 
     content: str = Field(description="The main content/message")
 
     source: str = Field(description="Which agent/component generated this")
 
-    metadata: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Additional metadata about this stream"
+    metadata: dict[str, Any] | None = Field(
+        default=None, description="Additional metadata about this stream"
     )
 
     timestamp: datetime = Field(default_factory=datetime.now)
 
     # Enhanced error context fields
-    error_details: Optional[str] = Field(
-        default=None,
-        description="Error details if type is 'error'"
-    )
+    error_details: str | None = Field(default=None, description="Error details if type is 'error'")
 
-    error_code: Optional[str] = Field(
-        default=None,
-        description="Error code for programmatic handling"
-    )
+    error_code: str | None = Field(default=None, description="Error code for programmatic handling")
 
-    error_category: Optional[Literal[
-        "validation", "execution", "communication", "configuration",
-        "authentication", "permission", "resource", "timeout", "network"
-    ]] = Field(
-        default=None,
-        description="Category of error for better classification"
-    )
+    error_category: (
+        Literal[
+            "validation",
+            "execution",
+            "communication",
+            "configuration",
+            "authentication",
+            "permission",
+            "resource",
+            "timeout",
+            "network",
+        ]
+        | None
+    ) = Field(default=None, description="Category of error for better classification")
 
-    stack_trace: Optional[str] = Field(
-        default=None,
-        description="Stack trace for debugging errors"
-    )
+    stack_trace: str | None = Field(default=None, description="Stack trace for debugging errors")
 
     # Context and tracing fields
-    context: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Contextual information relevant to this stream"
+    context: dict[str, Any] | None = Field(
+        default=None, description="Contextual information relevant to this stream"
     )
 
-    correlation_id: Optional[str] = Field(
-        default=None,
-        description="ID to correlate related stream events"
+    correlation_id: str | None = Field(
+        default=None, description="ID to correlate related stream events"
     )
 
-    parent_id: Optional[str] = Field(
-        default=None,
-        description="ID of parent stream event for tracing"
+    parent_id: str | None = Field(default=None, description="ID of parent stream event for tracing")
+
+    trace_id: str | None = Field(
+        default=None, description="Unique trace ID for end-to-end request tracing"
     )
 
-    trace_id: Optional[str] = Field(
-        default=None,
-        description="Unique trace ID for end-to-end request tracing"
-    )
-
-    severity: Optional[Literal["low", "medium", "high", "critical"]] = Field(
-        default=None,
-        description="Severity level for errors and warnings"
+    severity: Literal["low", "medium", "high", "critical"] | None = Field(
+        default=None, description="Severity level for errors and warnings"
     )
 
     # Recovery and suggestions
-    suggested_actions: Optional[List[str]] = Field(
-        default=None,
-        description="Suggested actions to resolve errors or improve results"
+    suggested_actions: list[str] | None = Field(
+        default=None, description="Suggested actions to resolve errors or improve results"
     )
 
-    retry_info: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Information about retry attempts and strategies"
+    retry_info: dict[str, Any] | None = Field(
+        default=None, description="Information about retry attempts and strategies"
     )
 
     def is_error(self) -> bool:
@@ -105,7 +104,7 @@ class StreamData(BaseModel):
         """Check if this stream data has context information."""
         return self.context is not None and len(self.context) > 0
 
-    def get_error_summary(self) -> Optional[str]:
+    def get_error_summary(self) -> str | None:
         """Get a concise error summary for logging."""
         if not self.is_error():
             return None
@@ -123,7 +122,9 @@ class StreamData(BaseModel):
 
         return " | ".join(parts)
 
-    def add_trace_context(self, trace_id: str, correlation_id: Optional[str] = None, parent_id: Optional[str] = None) -> 'StreamData':
+    def add_trace_context(
+        self, trace_id: str, correlation_id: str | None = None, parent_id: str | None = None
+    ) -> "StreamData":
         """Add tracing context to this stream data."""
         self.trace_id = trace_id
         if correlation_id:
@@ -132,8 +133,14 @@ class StreamData(BaseModel):
             self.parent_id = parent_id
         return self
 
-    def add_error_context(self, error_code: str, category: str, severity: str = "medium",
-                         stack_trace: Optional[str] = None, suggested_actions: Optional[List[str]] = None) -> 'StreamData':
+    def add_error_context(
+        self,
+        error_code: str,
+        category: str,
+        severity: str = "medium",
+        stack_trace: str | None = None,
+        suggested_actions: list[str] | None = None,
+    ) -> "StreamData":
         """Add comprehensive error context to this stream data."""
         self.error_code = error_code
         self.error_category = category
@@ -147,26 +154,34 @@ class StreamData(BaseModel):
 
 class ToolParameter(BaseModel):
     """Schema for individual tool parameters."""
+
     name: str = Field(description="Parameter name")
     type: str = Field(description="Parameter type")
     description: str = Field(description="Parameter description")
     required: bool = Field(default=False, description="Whether parameter is required")
-    default: Optional[Any] = Field(default=None, description="Default value if not required")
-    enum_values: Optional[List[Any]] = Field(default=None, description="Allowed values for enum parameters")
-    min_value: Optional[Union[int, float]] = Field(default=None, description="Minimum value for numeric parameters")
-    max_value: Optional[Union[int, float]] = Field(default=None, description="Maximum value for numeric parameters")
-    min_length: Optional[int] = Field(default=None, description="Minimum length for string parameters")
-    max_length: Optional[int] = Field(default=None, description="Maximum length for string parameters")
-    pattern: Optional[str] = Field(default=None, description="Regex pattern for string validation")
+    default: Any | None = Field(default=None, description="Default value if not required")
+    enum_values: list[Any] | None = Field(
+        default=None, description="Allowed values for enum parameters"
+    )
+    min_value: int | float | None = Field(
+        default=None, description="Minimum value for numeric parameters"
+    )
+    max_value: int | float | None = Field(
+        default=None, description="Maximum value for numeric parameters"
+    )
+    min_length: int | None = Field(default=None, description="Minimum length for string parameters")
+    max_length: int | None = Field(default=None, description="Maximum length for string parameters")
+    pattern: str | None = Field(default=None, description="Regex pattern for string validation")
 
 
 class ToolSchema(BaseModel):
     """Enhanced tool schema with validation support."""
+
     name: str = Field(description="Tool name")
     description: str = Field(description="Tool description")
-    parameters: List[ToolParameter] = Field(default_factory=list, description="Tool parameters")
+    parameters: list[ToolParameter] = Field(default_factory=list, description="Tool parameters")
 
-    def validate_arguments(self, arguments: Dict[str, Any]) -> "ToolValidationResult":
+    def validate_arguments(self, arguments: dict[str, Any]) -> "ToolValidationResult":
         """Validate tool arguments against this schema."""
         errors = []
         warnings = []
@@ -204,10 +219,10 @@ class ToolSchema(BaseModel):
             valid=len(errors) == 0,
             errors=errors,
             warnings=warnings,
-            validated_arguments=validated_args
+            validated_arguments=validated_args,
         )
 
-    def _validate_parameter(self, param: ToolParameter, value: Any) -> Dict[str, Any]:
+    def _validate_parameter(self, param: ToolParameter, value: Any) -> dict[str, Any]:
         """Validate a single parameter value."""
         errors = []
 
@@ -257,7 +272,7 @@ class ToolSchema(BaseModel):
         # Enum validation
         if param.enum_values and value not in param.enum_values:
             errors.append(f"Parameter '{param.name}' must be one of: {param.enum_values}")
-          # Range validation for numbers
+        # Range validation for numbers
         if param.type in ("integer", "number") and isinstance(value, (int, float)):
             if param.min_value is not None and value < param.min_value:
                 errors.append(f"Parameter '{param.name}' must be >= {param.min_value}")
@@ -267,13 +282,18 @@ class ToolSchema(BaseModel):
         # Length validation for strings
         if param.type == "string" and isinstance(value, str):
             if param.min_length is not None and len(value) < param.min_length:
-                errors.append(f"Parameter '{param.name}' must be at least {param.min_length} characters")
+                errors.append(
+                    f"Parameter '{param.name}' must be at least {param.min_length} characters"
+                )
             if param.max_length is not None and len(value) > param.max_length:
-                errors.append(f"Parameter '{param.name}' must be at most {param.max_length} characters")
+                errors.append(
+                    f"Parameter '{param.name}' must be at most {param.max_length} characters"
+                )
 
         # Pattern validation for strings
         if param.type == "string" and param.pattern and isinstance(value, str):
             import re
+
             if not re.match(param.pattern, value):
                 errors.append(f"Parameter '{param.name}' does not match required pattern")
 
@@ -282,50 +302,61 @@ class ToolSchema(BaseModel):
 
 class ToolValidationResult(BaseModel):
     """Result of tool argument validation."""
+
     valid: bool = Field(description="Whether validation passed")
-    errors: List[str] = Field(default_factory=list, description="Validation errors")
-    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
-    validated_arguments: Dict[str, Any] = Field(default_factory=dict, description="Validated and coerced arguments")
+    errors: list[str] = Field(default_factory=list, description="Validation errors")
+    warnings: list[str] = Field(default_factory=list, description="Validation warnings")
+    validated_arguments: dict[str, Any] = Field(
+        default_factory=dict, description="Validated and coerced arguments"
+    )
 
 
 class ToolExecutionContext(BaseModel):
     """Context for tool execution with validation and error handling."""
+
     tool_name: str = Field(description="Name of the tool being executed")
-    arguments: Dict[str, Any] = Field(description="Tool arguments")
-    call_id: Optional[str] = Field(default=None, description="Unique call ID")
-    timeout: Optional[int] = Field(default=30, description="Execution timeout in seconds")
+    arguments: dict[str, Any] = Field(description="Tool arguments")
+    call_id: str | None = Field(default=None, description="Unique call ID")
+    timeout: int | None = Field(default=30, description="Execution timeout in seconds")
     retry_count: int = Field(default=0, description="Number of retries attempted")
     max_retries: int = Field(default=2, description="Maximum number of retries")
-    validation_result: Optional[ToolValidationResult] = Field(default=None, description="Validation result")
+    validation_result: ToolValidationResult | None = Field(
+        default=None, description="Validation result"
+    )
 
 
 class EnhancedToolResult(BaseModel):
     """Enhanced tool result with execution context and detailed error information."""
-    call_id: Optional[str] = Field(default=None, description="ID of the tool call")
+
+    call_id: str | None = Field(default=None, description="ID of the tool call")
     success: bool = Field(description="Whether the tool execution was successful")
     result: Any = Field(description="The result data from the tool")
-    error: Optional[str] = Field(default=None, description="Error message if failed")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
-    execution_context: Optional[ToolExecutionContext] = Field(default=None, description="Execution context")
-    execution_time: Optional[float] = Field(default=None, description="Execution time in seconds")
-    validation_errors: List[str] = Field(default_factory=list, description="Validation errors")
-    warnings: List[str] = Field(default_factory=list, description="Execution warnings")
+    error: str | None = Field(default=None, description="Error message if failed")
+    metadata: dict[str, Any] | None = Field(default=None, description="Additional metadata")
+    execution_context: ToolExecutionContext | None = Field(
+        default=None, description="Execution context"
+    )
+    execution_time: float | None = Field(default=None, description="Execution time in seconds")
+    validation_errors: list[str] = Field(default_factory=list, description="Validation errors")
+    warnings: list[str] = Field(default_factory=list, description="Execution warnings")
 
 
 class ToolCall(BaseModel):
     """Represents a tool being called by an agent."""
+
     tool_name: str = Field(description="Name of the tool to call")
-    arguments: Dict[str, Any] = Field(description="Arguments to pass to the tool")
-    call_id: Optional[str] = Field(default=None, description="Unique ID for this tool call")
+    arguments: dict[str, Any] = Field(description="Arguments to pass to the tool")
+    call_id: str | None = Field(default=None, description="Unique ID for this tool call")
 
 
 class ToolResult(BaseModel):
     """Result from a tool execution."""
-    call_id: Optional[str] = Field(default=None, description="ID of the tool call")
+
+    call_id: str | None = Field(default=None, description="ID of the tool call")
     success: bool = Field(description="Whether the tool execution was successful")
     result: Any = Field(description="The result data from the tool")
-    error: Optional[str] = Field(default=None, description="Error message if failed")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
+    error: str | None = Field(default=None, description="Error message if failed")
+    metadata: dict[str, Any] | None = Field(default=None, description="Additional metadata")
 
 
 class AgentResponse(BaseModel):
@@ -333,80 +364,79 @@ class AgentResponse(BaseModel):
     Structured response from an agent's decision-making process.
     This is what agents return after processing user input.
     """
+
     type: Literal[
-        "goal_defined", "clarification_question", "direct_response",
-        "tool_call", "final_answer", "delegate_to_agent"
+        "goal_defined",
+        "clarification_question",
+        "direct_response",
+        "tool_call",
+        "final_answer",
+        "delegate_to_agent",
     ] = Field(description="Type of response")
 
     content: str = Field(description="Main response content")
 
     # For goal definition
-    goal_statement: Optional[str] = Field(
-        default=None,
-        description="Clear goal statement for orchestrator"
+    goal_statement: str | None = Field(
+        default=None, description="Clear goal statement for orchestrator"
     )
 
     # For clarification
-    clarification_question: Optional[str] = Field(
-        default=None,
-        description="Question to ask user for clarification"
+    clarification_question: str | None = Field(
+        default=None, description="Question to ask user for clarification"
     )
 
     # For tool calls
-    tool_call: Optional[ToolCall] = Field(
-        default=None,
-        description="Tool to be executed"
-    )
+    tool_call: ToolCall | None = Field(default=None, description="Tool to be executed")
 
     # For agent delegation
-    target_agent: Optional[str] = Field(
-        default=None,
-        description="Name of agent to delegate to"
-    )
+    target_agent: str | None = Field(default=None, description="Name of agent to delegate to")
 
     # Reasoning process
-    thought_process: Optional[str] = Field(
-        default=None,
-        description="Agent's reasoning about the decision"
+    thought_process: str | None = Field(
+        default=None, description="Agent's reasoning about the decision"
     )
 
-    confidence: Optional[float] = Field(
-        default=None,
-        description="Confidence level (0.0 to 1.0)"
-    )
+    confidence: float | None = Field(default=None, description="Confidence level (0.0 to 1.0)")
 
-    metadata: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Additional response metadata"
+    metadata: dict[str, Any] | None = Field(
+        default=None, description="Additional response metadata"
     )
 
 
 class ConversationMessage(BaseModel):
     """Single message in a conversation."""
+
     role: Literal["user", "assistant", "system"] = Field(description="Message role")
     content: str = Field(description="Message content")
     timestamp: datetime = Field(default_factory=datetime.now)
-    metadata: Optional[Dict[str, Any]] = Field(default=None)
+    metadata: dict[str, Any] | None = Field(default=None)
 
 
 class ConversationHistory(BaseModel):
     """Complete conversation history."""
+
     session_id: str = Field(description="Unique session identifier")
-    messages: List[ConversationMessage] = Field(default_factory=list)
+    messages: list[ConversationMessage] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 
-    def add_message(self, role: Literal["user", "assistant", "system"], content: str, metadata: Optional[Dict[str, Any]] = None):
+    def add_message(
+        self,
+        role: Literal["user", "assistant", "system"],
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ):
         """Add a new message to the conversation."""
         message = ConversationMessage(role=role, content=content, metadata=metadata)
         self.messages.append(message)
         self.updated_at = datetime.now()
 
-    def get_recent_messages(self, limit: int = 10) -> List[ConversationMessage]:
+    def get_recent_messages(self, limit: int = 10) -> list[ConversationMessage]:
         """Get the most recent messages."""
         return self.messages[-limit:] if len(self.messages) > limit else self.messages
 
-    def to_llm_format(self, limit: int = 10) -> List[Dict[str, str]]:
+    def to_llm_format(self, limit: int = 10) -> list[dict[str, str]]:
         """Convert to format expected by LLM interface."""
         recent = self.get_recent_messages(limit)
         return [{"role": msg.role, "content": msg.content} for msg in recent]
@@ -419,9 +449,7 @@ async def test_schemas():
 
     # Test StreamData
     stream = StreamData(
-        type="thinking",
-        content="I'm analyzing your request...",
-        source="WitsControlCenter"
+        type="thinking", content="I'm analyzing your request...", source="WitsControlCenter"
     )
     print(f"✓ StreamData: {stream.type} - {stream.content}")
 
@@ -430,7 +458,7 @@ async def test_schemas():
         type="goal_defined",
         content="I understand you want to analyze the data.",
         goal_statement="Analyze the provided dataset and generate insights",
-        confidence=0.9
+        confidence=0.9,
     )
     print(f"✓ AgentResponse: {response.type} - {response.goal_statement}")
 
@@ -448,4 +476,5 @@ async def test_schemas():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_schemas())

@@ -19,16 +19,16 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any
 
 import yaml
 from pydantic import BaseModel
 
-from core.memory_manager import MemoryManager
-from core.working_memory import WorkingMemory
 from core.knowledge_graph import KnowledgeGraph
 from core.memory_export import export_memory
+from core.memory_manager import MemoryManager
 from core.memory_summarization import summarize_memory_segment
+from core.working_memory import WorkingMemory
 
 logger = logging.getLogger("WitsV3.MemoryHandler")
 
@@ -36,22 +36,24 @@ logger = logging.getLogger("WitsV3.MemoryHandler")
 # Define the models at module level for proper imports
 class MemorySegment(BaseModel):
     """Model representing a segment of memory."""
+
     id: str
     content: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     timestamp: float
     importance: float = 0.5
     memory_type: str  # "episodic", "semantic", "procedural"
-    associations: List[str] = []
-    embedding_id: Optional[str] = None
+    associations: list[str] = []
+    embedding_id: str | None = None
     last_accessed: float = 0.0
 
 
 class MemoryContext(BaseModel):
     """Model representing the current memory context."""
-    working_memory: Dict[str, Any] = {}
-    active_concepts: Set[str] = set()
-    recent_memories: List[str] = []
+
+    working_memory: dict[str, Any] = {}
+    active_concepts: set[str] = set()
+    recent_memories: list[str] = []
     context_id: str = ""
     creation_time: float = 0.0
     last_updated: float = 0.0
@@ -80,31 +82,36 @@ class MemoryHandler:
 
         # Current memory context
         self.context = MemoryContext(
-            context_id=str(uuid.uuid4()),
-            creation_time=time.time(),
-            last_updated=time.time()
+            context_id=str(uuid.uuid4()), creation_time=time.time(), last_updated=time.time()
         )
 
         # Directories for memory serialization
-        self.episodic_path = Path(self.config.get("memory_systems", {}).get(
-            "episodic", {}).get("serialization_path", "./logs/episodes"))
+        self.episodic_path = Path(
+            self.config.get("memory_systems", {})
+            .get("episodic", {})
+            .get("serialization_path", "./logs/episodes")
+        )
         os.makedirs(self.episodic_path, exist_ok=True)
 
         self.logger.info("Memory handler initialized")
 
-    def _load_config(self, config_path: str) -> Dict[str, Any]:
+    def _load_config(self, config_path: str) -> dict[str, Any]:
         """Load memory configuration from wits_core.yaml"""
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = yaml.safe_load(f)
                 return config
         except Exception as e:
             self.logger.error(f"Failed to load configuration from {config_path}: {e}")
             return {}
 
-    async def remember(self, content: str, memory_type: str = "episodic",
-                       metadata: Optional[Dict[str, Any]] = None,
-                       importance: float = 0.5) -> str:
+    async def remember(
+        self,
+        content: str,
+        memory_type: str = "episodic",
+        metadata: dict[str, Any] | None = None,
+        importance: float = 0.5,
+    ) -> str:
         """
         Store information in the appropriate memory system.
 
@@ -131,7 +138,7 @@ class MemoryHandler:
             timestamp=timestamp,
             importance=importance,
             memory_type=memory_type,
-            last_accessed=timestamp
+            last_accessed=timestamp,
         )
 
         # Update working memory context
@@ -152,8 +159,9 @@ class MemoryHandler:
 
         return memory_id
 
-    async def recall(self, query: str, memory_type: Optional[str] = None,
-                    limit: int = 5, threshold: float = 0.7) -> List[Dict[str, Any]]:
+    async def recall(
+        self, query: str, memory_type: str | None = None, limit: int = 5, threshold: float = 0.7
+    ) -> list[dict[str, Any]]:
         """
         Recall memories based on the query.
 
@@ -224,7 +232,9 @@ class MemoryHandler:
         # To be implemented in future phase
         self.logger.info("Procedural memory storage not yet implemented")
 
-    async def _recall_episodic(self, query: str, limit: int, threshold: float) -> List[Dict[str, Any]]:
+    async def _recall_episodic(
+        self, query: str, limit: int, threshold: float
+    ) -> list[dict[str, Any]]:
         """Recall episodic memories"""
         results = await self.memory_manager.search(query, limit=limit)
         filtered_results = []
@@ -238,7 +248,9 @@ class MemoryHandler:
 
         return filtered_results
 
-    async def _recall_semantic(self, query: str, limit: int, threshold: float) -> List[Dict[str, Any]]:
+    async def _recall_semantic(
+        self, query: str, limit: int, threshold: float
+    ) -> list[dict[str, Any]]:
         """Recall semantic memories"""
         results = await self.memory_manager.search(query, limit=limit)
         filtered_results = []
@@ -253,12 +265,14 @@ class MemoryHandler:
         # Also check knowledge graph for relevant concepts
         concepts = self.knowledge_graph.search_concepts(query, limit=limit)
         for concept in concepts:
-            filtered_results.append({
-                "id": f"concept:{concept.id}",
-                "content": concept.description,
-                "metadata": {"type": "concept"},
-                "relevance": concept.relevance
-            })
+            filtered_results.append(
+                {
+                    "id": f"concept:{concept.id}",
+                    "content": concept.description,
+                    "metadata": {"type": "concept"},
+                    "relevance": concept.relevance,
+                }
+            )
 
         # Sort by relevance and limit results
         filtered_results.sort(key=lambda x: x.get("relevance", 0), reverse=True)
@@ -270,7 +284,7 @@ class MemoryHandler:
         # Implementation will depend on the specifics of the memory backend
         pass
 
-    async def get_current_context(self) -> Dict[str, Any]:
+    async def get_current_context(self) -> dict[str, Any]:
         """
         Get the current memory context for reasoning and decisions.
 
@@ -286,10 +300,7 @@ class MemoryHandler:
         for memory_id in self.context.recent_memories:
             # In a real implementation, we would fetch this data from storage
             # For now, we'll return placeholder data
-            recent_memory_data.append({
-                "id": memory_id,
-                "summary": f"Memory {memory_id[:8]}..."
-            })
+            recent_memory_data.append({"id": memory_id, "summary": f"Memory {memory_id[:8]}..."})
 
         return {
             "context_id": self.context.context_id,
@@ -297,7 +308,7 @@ class MemoryHandler:
             "active_concepts": list(self.context.active_concepts),
             "recent_memories": recent_memory_data,
             "creation_time": self.context.creation_time,
-            "last_updated": self.context.last_updated
+            "last_updated": self.context.last_updated,
         }
 
     async def consolidate_memories(self) -> None:
@@ -317,7 +328,7 @@ class MemoryHandler:
         episodes = []
         for episode_file in yesterday_dir.glob("*.json"):
             try:
-                with open(episode_file, "r") as f:
+                with open(episode_file) as f:
                     episode = json.load(f)
                     episodes.append(episode)
             except Exception as e:
@@ -338,17 +349,10 @@ class MemoryHandler:
         summary = await summarize_memory_segment(summary_text)
 
         # Store the consolidated memory
-        metadata = {
-            "date": yesterday,
-            "num_episodes": len(episodes),
-            "type": "daily_consolidation"
-        }
+        metadata = {"date": yesterday, "num_episodes": len(episodes), "type": "daily_consolidation"}
 
         await self.remember(
-            content=summary,
-            memory_type="semantic",
-            metadata=metadata,
-            importance=0.8
+            content=summary, memory_type="semantic", metadata=metadata, importance=0.8
         )
 
         self.logger.info(f"Consolidated {len(episodes)} memories from {yesterday}")
@@ -370,16 +374,16 @@ async def test_memory_handler():
     handler = MemoryHandler()
 
     # Store some test memories
-    memory_id = await handler.remember(
+    await handler.remember(
         "User asked about climate change solutions",
         memory_type="episodic",
-        metadata={"source": "user", "topic": "climate"}
+        metadata={"source": "user", "topic": "climate"},
     )
 
     await handler.remember(
         "Solar panels convert sunlight directly into electricity",
         memory_type="semantic",
-        metadata={"topic": "renewable energy", "concepts": ["solar", "electricity"]}
+        metadata={"topic": "renewable energy", "concepts": ["solar", "electricity"]},
     )
 
     # Recall memories

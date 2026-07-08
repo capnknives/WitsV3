@@ -6,8 +6,8 @@ because the intent analyzer had no knowledge of ingested documents.
 """
 
 import inspect
+from collections.abc import AsyncGenerator
 from types import SimpleNamespace
-from typing import AsyncGenerator
 
 import pytest
 
@@ -65,11 +65,13 @@ def wcca():
 
 # ------------------------------------------------------- casual heuristic
 
+
 def test_casual_word_requires_word_boundary(wcca):
     # "things" must not match casual word "hi" (regression: substring match)
-    assert wcca._is_casual_conversation(
-        "i've updated things, please check the results once more"
-    ) is False
+    assert (
+        wcca._is_casual_conversation("i've updated things, please check the results once more")
+        is False
+    )
 
 
 def test_greetings_still_casual(wcca):
@@ -78,6 +80,7 @@ def test_greetings_still_casual(wcca):
 
 
 # ---------------------------------------------- specialized-agent selection
+
 
 @pytest.fixture
 def wcca_with_specialists():
@@ -137,13 +140,12 @@ async def test_plain_coding_request_still_routes_to_coding(wcca_with_specialists
 
 @pytest.mark.asyncio
 async def test_story_request_routes_to_book_writing(wcca_with_specialists):
-    agent = await wcca_with_specialists._select_specialized_agent(
-        "write a story about a dragon"
-    )
+    agent = await wcca_with_specialists._select_specialized_agent("write a story about a dragon")
     assert agent.name == "book_writing"
 
 
 # -------------------------------------------- unambiguous bug-hunt override
+
 
 def test_needs_self_repair_matches_the_live_finding(wcca_with_specialists):
     assert wcca_with_specialists._needs_self_repair("find and fix any bugs in your code.") is True
@@ -183,7 +185,8 @@ async def test_bug_hunt_request_reaches_self_repair_despite_clarification_classi
         "clarification_question": "Could you clarify what you'd like me to check?",
     }
     streams = [
-        item async for item in wcca_with_specialists._handle_intent_response(
+        item
+        async for item in wcca_with_specialists._handle_intent_response(
             intent_analysis, "find and fix any bugs in your code.", None, "sess-1"
         )
     ]
@@ -193,13 +196,17 @@ async def test_bug_hunt_request_reaches_self_repair_despite_clarification_classi
 
 # ------------------------------------------------------- document routing
 
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("message", [
-    # The three phrasings that failed on July 7 2026
-    "i've updated things, please check the audit again",
-    "summarize the audit report you have access to.",
-    "I shared Pleistocene_Megafauna_Audit_Report.md with you, summarize it.",
-])
+@pytest.mark.parametrize(
+    "message",
+    [
+        # The three phrasings that failed on July 7 2026
+        "i've updated things, please check the audit again",
+        "summarize the audit report you have access to.",
+        "I shared Pleistocene_Megafauna_Audit_Report.md with you, summarize it.",
+    ],
+)
 async def test_document_mentions_route_to_orchestrator(wcca, message):
     intent = await wcca._analyze_user_intent(message, None)
     assert intent["suggested_response"] == "orchestrator"
@@ -208,33 +215,43 @@ async def test_document_mentions_route_to_orchestrator(wcca, message):
 
 # ------------------------------------------------- web-search routing
 
-@pytest.mark.parametrize("message", [
-    "What famous musician died of june 14th 2026?",   # the reported failure
-    "look it up",                                     # explicit follow-up command
-    "who won the world cup this year?",
-    "what's the latest news on Ollama?",
-    "search the web for python 3.14 release date",
-    "what's the weather in Seattle right now?",
-])
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "What famous musician died of june 14th 2026?",  # the reported failure
+        "look it up",  # explicit follow-up command
+        "who won the world cup this year?",
+        "what's the latest news on Ollama?",
+        "search the web for python 3.14 release date",
+        "what's the weather in Seattle right now?",
+    ],
+)
 def test_current_info_questions_need_web_search(wcca, message):
     assert wcca._needs_web_search(message) is True
 
 
-@pytest.mark.parametrize("message", [
-    "hi there, how are you doing today my friend",  # 'today' must NOT trigger
-    "thanks, that was helpful",
-    "what can you do?",
-    "write me a python function to reverse a list",
-])
+@pytest.mark.parametrize(
+    "message",
+    [
+        "hi there, how are you doing today my friend",  # 'today' must NOT trigger
+        "thanks, that was helpful",
+        "what can you do?",
+        "write me a python function to reverse a list",
+    ],
+)
 def test_ordinary_chat_does_not_need_web_search(wcca, message):
     assert wcca._needs_web_search(message) is False
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("message", [
-    "What famous musician died of june 14th 2026?",
-    "look it up",
-])
+@pytest.mark.parametrize(
+    "message",
+    [
+        "What famous musician died of june 14th 2026?",
+        "look it up",
+    ],
+)
 async def test_current_info_routes_to_orchestrator(wcca, message):
     intent = await wcca._analyze_user_intent(message, None)
     assert intent["suggested_response"] == "orchestrator"
@@ -243,20 +260,27 @@ async def test_current_info_routes_to_orchestrator(wcca, message):
 
 # ------------------------------------------------------- save-to-file routing
 
-@pytest.mark.parametrize("message", [
-    "Please save this conversation to a file",
-    "Save a log of our conversations as a file",
-    "write the story to disk as goku.txt",
-])
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Please save this conversation to a file",
+        "Save a log of our conversations as a file",
+        "write the story to disk as goku.txt",
+    ],
+)
 def test_save_to_file_needs_orchestrator(wcca, message):
     assert wcca._needs_file_write(message) is True
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("message", [
-    "Please save this conversation to exports/chat.txt",
-    "Save a log of our conversations as a file",
-])
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Please save this conversation to exports/chat.txt",
+        "Save a log of our conversations as a file",
+    ],
+)
 async def test_save_to_file_routes_to_orchestrator(wcca, message):
     intent = await wcca._analyze_user_intent(message, None)
     assert intent["suggested_response"] == "orchestrator"
@@ -265,6 +289,7 @@ async def test_save_to_file_routes_to_orchestrator(wcca, message):
 
 
 # ------------------------------------------------------- intent parsing
+
 
 def test_goal_defined_routes_to_orchestrator(wcca):
     parsed = wcca._parse_intent_response(
@@ -295,6 +320,7 @@ def test_clarification_intent_metadata(wcca):
 
 # ---------------------------------------- intent handler (no double LLM)
 
+
 class TrackingLLM(DummyLLM):
     """Records generate_text calls so handler tests can assert zero extra LLM work."""
 
@@ -313,9 +339,7 @@ class MockOrchestrator:
 
 async def _collect_handler_results(wcca, intent, user_input):
     results = []
-    async for stream_data in wcca._handle_intent_response(
-        intent, user_input, None, "test-session"
-    ):
+    async for stream_data in wcca._handle_intent_response(intent, user_input, None, "test-session"):
         results.append(stream_data)
     return results
 
@@ -376,6 +400,7 @@ async def test_conversation_still_calls_llm_once(wcca):
 
 # ------------------------------------------------------- documents context
 
+
 def test_documents_context_lists_files(wcca):
     ctx = wcca._documents_context({"a_report.md": 3})
     assert "a_report.md (3 chunks)" in ctx
@@ -387,6 +412,7 @@ def test_documents_context_empty():
 
 
 # ---------------------------------------- agent delegation contract
+
 
 def test_orchestrator_and_coding_agents_use_user_input_param():
     """WCCA delegates with user_input=; all BaseAgent subclasses must accept it."""

@@ -4,13 +4,14 @@ Provides secure token-based authentication for sensitive operations
 """
 
 import hashlib
-import secrets
 import logging
 import os
-from typing import Optional, Tuple
+import secrets
+
 from core.config import load_config
 
 logger = logging.getLogger(__name__)
+
 
 class AuthManager:
     """Manages authentication for WitsV3 sensitive operations"""
@@ -41,9 +42,9 @@ class AuthManager:
         Returns:
             SHA256 hash as hex string
         """
-        return hashlib.sha256(token.encode('utf-8')).hexdigest()
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    def verify_token(self, provided_token: str, user_id: Optional[str] = None) -> bool:
+    def verify_token(self, provided_token: str, user_id: str | None = None) -> bool:
         """
         Verify a provided token against the stored hash
 
@@ -75,7 +76,9 @@ class AuthManager:
             logger.warning(f"Authentication failed for user: {user_id or 'unknown'}")
             return False
 
-    def verify_user_and_token(self, user_id: str, auth_token: str, operation_type: str = "general") -> Tuple[bool, str]:
+    def verify_user_and_token(
+        self, user_id: str, auth_token: str, operation_type: str = "general"
+    ) -> tuple[bool, str]:
         """
         Verify both user ID and authentication token
 
@@ -101,7 +104,10 @@ class AuthManager:
 
         # Check user ID
         if user_id != authorized_user:
-            return False, f"Unauthorized user: only '{authorized_user}' can perform {operation_type}"
+            return (
+                False,
+                f"Unauthorized user: only '{authorized_user}' can perform {operation_type}",
+            )
 
         # Check authentication token
         if not self.verify_token(auth_token, user_id):
@@ -140,15 +146,16 @@ class AuthManager:
             env_path = ".env"
             lines = []
             if os.path.exists(env_path):
-                with open(env_path, 'r') as f:
+                with open(env_path) as f:
                     lines = [
-                        line for line in f.read().splitlines()
+                        line
+                        for line in f.read().splitlines()
                         if not line.startswith("WITSV3_AUTH_TOKEN_HASH=")
                         and not line.startswith("WITSV3_AUTH_TOKEN=")
                     ]
             lines.append(f"WITSV3_AUTH_TOKEN_HASH={token_hash}")
 
-            with open(env_path, 'w') as f:
+            with open(env_path, "w") as f:
                 f.write("\n".join(lines) + "\n")
 
             # Update the in-memory config and environment for this process
@@ -162,8 +169,10 @@ class AuthManager:
             logger.error(f"Failed to setup authentication token: {e}")
             return False
 
+
 # Global authentication manager instance
-_auth_manager: Optional[AuthManager] = None
+_auth_manager: AuthManager | None = None
+
 
 def get_auth_manager() -> AuthManager:
     """Get global authentication manager instance"""
@@ -172,11 +181,13 @@ def get_auth_manager() -> AuthManager:
         _auth_manager = AuthManager()
     return _auth_manager
 
+
 def generate_new_token() -> str:
     """Generate a new secure authentication token"""
     return get_auth_manager().generate_token()
 
-def verify_auth(user_id: str, auth_token: str, operation_type: str = "general") -> Tuple[bool, str]:
+
+def verify_auth(user_id: str, auth_token: str, operation_type: str = "general") -> tuple[bool, str]:
     """
     Convenience function for authentication verification
 

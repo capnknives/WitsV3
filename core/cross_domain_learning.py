@@ -5,18 +5,17 @@ This module provides functionality for cross-domain knowledge transfer and
 concept propagation between different knowledge domains in the Neural Web.
 """
 
-import logging
 import asyncio
+import logging
 import uuid
-from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
 import networkx as nx
 
-from .neural_web_core import NeuralWeb, ConceptNode
-from .knowledge_graph import KnowledgeGraph
 from .config import WitsV3Config
-from .llm_interface import LLMInterface, LLMMessage, LLMResponse
+from .knowledge_graph import KnowledgeGraph
+from .llm_interface import LLMInterface, LLMMessage
+from .neural_web_core import NeuralWeb
 
 
 class DomainClassifier:
@@ -30,11 +29,26 @@ class DomainClassifier:
         self.llm_interface = LLMInterface(config)
         self.domain_embeddings = {}
         self.known_domains = [
-            "science", "art", "mathematics", "history",
-            "technology", "philosophy", "business", "literature",
-            "psychology", "economics", "politics", "medicine",
-            "physics", "biology", "chemistry", "computer_science",
-            "music", "sociology", "engineering", "law"
+            "science",
+            "art",
+            "mathematics",
+            "history",
+            "technology",
+            "philosophy",
+            "business",
+            "literature",
+            "psychology",
+            "economics",
+            "politics",
+            "medicine",
+            "physics",
+            "biology",
+            "chemistry",
+            "computer_science",
+            "music",
+            "sociology",
+            "engineering",
+            "law",
         ]
         self.logger = logging.getLogger(__name__)
 
@@ -129,7 +143,9 @@ class DomainClassifier:
             similarity = max(0.0, min(1.0, similarity))
             return similarity
         except ValueError:
-            self.logger.warning(f"Could not parse similarity from '{response.content}', defaulting to 0.5")
+            self.logger.warning(
+                f"Could not parse similarity from '{response.content}', defaulting to 0.5"
+            )
             return 0.5
 
 
@@ -140,8 +156,12 @@ class CrossDomainLearning:
     and similarity detection.
     """
 
-    def __init__(self, config: WitsV3Config, neural_web: NeuralWeb,
-                 knowledge_graph: Optional[KnowledgeGraph] = None):
+    def __init__(
+        self,
+        config: WitsV3Config,
+        neural_web: NeuralWeb,
+        knowledge_graph: KnowledgeGraph | None = None,
+    ):
         """
         Initialize the cross-domain learning system.
 
@@ -186,9 +206,9 @@ class CrossDomainLearning:
 
         return domain
 
-    async def find_cross_domain_analogies(self,
-                                          source_concept_id: str,
-                                          target_domain: str) -> List[str]:
+    async def find_cross_domain_analogies(
+        self, source_concept_id: str, target_domain: str
+    ) -> list[str]:
         """
         Finds analogies for a concept in a different domain.
 
@@ -206,7 +226,7 @@ class CrossDomainLearning:
 
         # Get all concepts in the target domain
         target_domain_concepts = []
-        for node_id, node in self.neural_web.concepts.items():
+        for _node_id, node in self.neural_web.concepts.items():
             if node.metadata.get("domain") == target_domain:
                 target_domain_concepts.append(node)
 
@@ -234,17 +254,16 @@ class CrossDomainLearning:
 
         # Parse response to get analogous concept indices
         try:
-            indices = [int(idx.strip()) - 1 for idx in response.content.split(',')]
+            indices = [int(idx.strip()) - 1 for idx in response.content.split(",")]
             valid_indices = [i for i in indices if 0 <= i < len(target_domain_concepts)]
             return [target_domain_concepts[i].id for i in valid_indices]
         except ValueError:
             self.logger.warning(f"Could not parse analogy indices from '{response.content}'")
             return []
 
-    async def transfer_knowledge(self,
-                                 source_domain: str,
-                                 target_domain: str,
-                                 concept_ids: List[str]) -> Dict[str, str]:
+    async def transfer_knowledge(
+        self, source_domain: str, target_domain: str, concept_ids: list[str]
+    ) -> dict[str, str]:
         """
         Transfers knowledge from one domain to another.
 
@@ -293,8 +312,8 @@ class CrossDomainLearning:
                     "domain": target_domain,
                     "source_concept_id": concept_id,
                     "source_domain": source_domain,
-                    "created_at": datetime.now().isoformat()
-                }
+                    "created_at": datetime.now().isoformat(),
+                },
             )
 
             # Create connection between the source and transferred concepts
@@ -302,16 +321,16 @@ class CrossDomainLearning:
                 source_id=concept_id,
                 target_id=new_concept_id,
                 relationship_type="domain_analogy",
-                strength=0.8
+                strength=0.8,
             )
 
             result_mapping[concept_id] = new_concept_id
 
         return result_mapping
 
-    async def propagate_cross_domain_activation(self,
-                                               concept_id: str,
-                                               activation_level: float) -> Dict[str, float]:
+    async def propagate_cross_domain_activation(
+        self, concept_id: str, activation_level: float
+    ) -> dict[str, float]:
         """
         Propagates activation of a concept across domains.
 
@@ -365,7 +384,9 @@ class CrossDomainLearning:
                 cross_domain_activations[conn_id] = final_activation
 
                 # If above threshold, continue propagation to second-order connections
-                threshold = self.config.memory_manager.neural_web_settings.connection_strength_threshold
+                threshold = (
+                    self.config.memory_manager.neural_web_settings.connection_strength_threshold
+                )
                 if final_activation > threshold:
                     # Recursively propagate with reduced activation
                     second_order = await self.propagate_cross_domain_activation(
@@ -384,7 +405,7 @@ class CrossDomainLearning:
 
         return cross_domain_activations
 
-    async def get_domain_concepts(self, domain: str, limit: int = 10) -> List[str]:
+    async def get_domain_concepts(self, domain: str, limit: int = 10) -> list[str]:
         """
         Get concepts from a specific domain.
 
@@ -406,7 +427,7 @@ class CrossDomainLearning:
 
         return domain_concepts
 
-    async def analyze_domain_relationships(self) -> Dict[Tuple[str, str], float]:
+    async def analyze_domain_relationships(self) -> dict[tuple[str, str], float]:
         """
         Analyze relationships between different knowledge domains.
 
@@ -474,9 +495,16 @@ class CrossDomainLearning:
                 # Add weight to the domain relationship edge
                 if graph.has_edge(source_domain, target_domain):
                     current_weight = graph.edges[source_domain, target_domain]["weight"]
-                    graph.edges[source_domain, target_domain]["weight"] = current_weight + conn.strength * 0.1
+                    graph.edges[source_domain, target_domain]["weight"] = (
+                        current_weight + conn.strength * 0.1
+                    )
                 else:
-                    graph.add_edge(source_domain, target_domain, weight=conn.strength * 0.1, type="domain_relationship")
+                    graph.add_edge(
+                        source_domain,
+                        target_domain,
+                        weight=conn.strength * 0.1,
+                        type="domain_relationship",
+                    )
 
         return graph
 

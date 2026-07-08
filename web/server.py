@@ -17,9 +17,9 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
-from fastapi import FastAPI, Request, UploadFile, File
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from core.schemas import ConversationHistory, StreamData
@@ -34,8 +34,17 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 # Paths that never require auth (the shell page + PWA assets load before the
 # user can enter a token; every /api/* call is protected).
-PUBLIC_PATHS = {"/", "/personality", "/settings", "/mcp",
-                "/manifest.webmanifest", "/icon.svg", "/app.js", "/style.css", "/mcp.css"}
+PUBLIC_PATHS = {
+    "/",
+    "/personality",
+    "/settings",
+    "/mcp",
+    "/manifest.webmanifest",
+    "/icon.svg",
+    "/app.js",
+    "/style.css",
+    "/mcp.css",
+}
 
 
 def create_app(system) -> FastAPI:
@@ -82,7 +91,9 @@ def create_app(system) -> FastAPI:
 
     @app.get("/manifest.webmanifest")
     async def manifest():
-        return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+        return FileResponse(
+            STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json"
+        )
 
     @app.get("/icon.svg")
     async def icon():
@@ -90,23 +101,28 @@ def create_app(system) -> FastAPI:
 
     @app.get("/app.js")
     async def app_js():
-        return FileResponse(STATIC_DIR / "app.js", media_type="text/javascript",
-                            headers={"Cache-Control": "no-cache"})
+        return FileResponse(
+            STATIC_DIR / "app.js",
+            media_type="text/javascript",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     @app.get("/style.css")
     async def style_css():
-        return FileResponse(STATIC_DIR / "style.css", media_type="text/css",
-                            headers={"Cache-Control": "no-cache"})
+        return FileResponse(
+            STATIC_DIR / "style.css", media_type="text/css", headers={"Cache-Control": "no-cache"}
+        )
 
     @app.get("/mcp.css")
     async def mcp_css():
-        return FileResponse(STATIC_DIR / "mcp.css", media_type="text/css",
-                            headers={"Cache-Control": "no-cache"})
+        return FileResponse(
+            STATIC_DIR / "mcp.css", media_type="text/css", headers={"Cache-Control": "no-cache"}
+        )
 
     # ------------------------------------------------------------- chat
-    def _stream_payload(stream_data: StreamData) -> Dict[str, Any]:
+    def _stream_payload(stream_data: StreamData) -> dict[str, Any]:
         """Serialize a StreamData event for SSE, with friendly error copy."""
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "type": stream_data.type,
             "content": stream_data.content,
             "source": stream_data.source,
@@ -133,7 +149,7 @@ def create_app(system) -> FastAPI:
         conversation.add_message("user", body.message)
 
         async def event_stream():
-            def sse(event: str, data: Dict[str, Any]) -> str:
+            def sse(event: str, data: dict[str, Any]) -> str:
                 return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
             yield sse("session", {"session_id": session_id})
@@ -160,12 +176,15 @@ def create_app(system) -> FastAPI:
                 if fmt.get("hint"):
                     error_msg = f"{fmt['message']}\n\n{fmt['hint']}"
                 conversation.add_message("assistant", error_msg)
-                yield sse("stream", {
-                    "type": "error",
-                    "content": fmt["message"],
-                    "source": "web",
-                    "user_error": fmt,
-                })
+                yield sse(
+                    "stream",
+                    {
+                        "type": "error",
+                        "content": fmt["message"],
+                        "source": "web",
+                        "user_error": fmt,
+                    },
+                )
                 yield sse("done", {"final": error_msg})
 
         return StreamingResponse(
@@ -329,7 +348,7 @@ def create_app(system) -> FastAPI:
         from core.config import save_local_overrides
 
         cfg = system.config
-        overrides: Dict[str, Any] = {}
+        overrides: dict[str, Any] = {}
 
         def apply(section, field, value, override_section):
             if value is None:
@@ -342,12 +361,22 @@ def create_app(system) -> FastAPI:
             apply(cfg.agents, "default_temperature", update.default_temperature, "agents")
             apply(cfg.agents, "max_iterations", update.max_iterations, "agents")
             apply(cfg.ollama_settings, "default_model", update.default_model, "ollama_settings")
-            apply(cfg.ollama_settings, "orchestrator_model", update.orchestrator_model, "ollama_settings")
+            apply(
+                cfg.ollama_settings,
+                "orchestrator_model",
+                update.orchestrator_model,
+                "ollama_settings",
+            )
             apply(cfg.model_routing, "enabled", update.routing_enabled, "model_routing")
             apply(cfg.model_routing, "trivial_model", update.routing_trivial_model, "model_routing")
             apply(cfg.model_routing, "code_model", update.routing_code_model, "model_routing")
             apply(cfg.model_routing, "complex_model", update.routing_complex_model, "model_routing")
-            apply(cfg.model_routing, "trivial_max_chars", update.routing_trivial_max_chars, "model_routing")
+            apply(
+                cfg.model_routing,
+                "trivial_max_chars",
+                update.routing_trivial_max_chars,
+                "model_routing",
+            )
             apply(cfg.escalation, "enabled", update.escalation_enabled, "escalation")
             apply(cfg.escalation, "model", update.escalation_model, "escalation")
             apply(cfg.escalation, "max_tokens", update.escalation_max_tokens, "escalation")
@@ -365,10 +394,11 @@ def create_app(system) -> FastAPI:
     @app.get("/api/escalations")
     async def list_escalations():
         from core.escalation import get_escalation_manager
+
         return {"requests": get_escalation_manager().list()}
 
     @app.post("/api/escalations/{request_id}/approve")
-    async def approve_escalation(request_id: str, decision: Optional[EscalationDecision] = None):
+    async def approve_escalation(request_id: str, decision: EscalationDecision | None = None):
         from core.escalation import get_escalation_manager
 
         manager = get_escalation_manager()
@@ -400,7 +430,7 @@ def create_app(system) -> FastAPI:
     @app.get("/api/documents")
     async def documents():
         docs_dir = Path(system.config.document_rag.documents_path)
-        chunks_by_file: Dict[str, int] = {}
+        chunks_by_file: dict[str, int] = {}
         segments = await system.memory_manager.get_recent_memory(
             limit=1_000_000, filter_dict={"type": "DOCUMENT_CHUNK"}
         )
@@ -414,11 +444,13 @@ def create_app(system) -> FastAPI:
             for path in sorted(docs_dir.rglob("*")):
                 if path.is_file() and path.name != ".gitkeep":
                     rel = path.relative_to(docs_dir).as_posix()
-                    files.append({
-                        "name": rel,
-                        "size": path.stat().st_size,
-                        "chunks": chunks_by_file.get(rel, 0),
-                    })
+                    files.append(
+                        {
+                            "name": rel,
+                            "size": path.stat().st_size,
+                            "chunks": chunks_by_file.get(rel, 0),
+                        }
+                    )
         return {"files": files}
 
     @app.post("/api/documents/upload")
@@ -432,7 +464,11 @@ def create_app(system) -> FastAPI:
         target.write_bytes(await file.read())
 
         ingest_tool = system.tool_registry.get_tool("ingest_documents")
-        summary = await ingest_tool.execute() if ingest_tool else {"success": False, "error": "ingest tool unavailable"}
+        summary = (
+            await ingest_tool.execute()
+            if ingest_tool
+            else {"success": False, "error": "ingest tool unavailable"}
+        )
         return {"saved": safe_name, "ingest": summary}
 
     register_mcp_routes(app, system)

@@ -1,14 +1,19 @@
 """Tests for the JSON tool."""
-import pytest
+
 import json
 import tempfile
 from pathlib import Path
+
+import pytest
+
 from tools.json_tool import JSONTool
+
 
 @pytest.fixture
 def json_tool():
     """Create a JSONTool instance for testing."""
     return JSONTool()
+
 
 @pytest.fixture
 def sample_json():
@@ -16,72 +21,53 @@ def sample_json():
     return {
         "name": "test",
         "values": [1, 2, 3],
-        "nested": {
-            "key": "value",
-            "array": [{"id": 1}, {"id": 2}]
-        }
+        "nested": {"key": "value", "array": [{"id": 1}, {"id": 2}]},
     }
+
 
 @pytest.mark.asyncio
 async def test_json_get_value(json_tool, sample_json):
     """Test getting values from JSON."""
-    result = await json_tool.execute(
-        operation="get",
-        data=json.dumps(sample_json),
-        path="name"
-    )
+    result = await json_tool.execute(operation="get", data=json.dumps(sample_json), path="name")
     assert result["success"] is True
     assert result["value"] == "test"
 
     result = await json_tool.execute(
-        operation="get",
-        data=json.dumps(sample_json),
-        path="nested.key"
+        operation="get", data=json.dumps(sample_json), path="nested.key"
     )
     assert result["success"] is True
     assert result["value"] == "value"
 
     result = await json_tool.execute(
-        operation="get",
-        data=json.dumps(sample_json),
-        path="values[0]"
+        operation="get", data=json.dumps(sample_json), path="values[0]"
     )
     assert result["success"] is True
     assert result["value"] == 1
+
 
 @pytest.mark.asyncio
 async def test_json_set_value(json_tool, sample_json):
     """Test setting values in JSON."""
     result = await json_tool.execute(
-        operation="set",
-        data=json.dumps(sample_json),
-        path="name",
-        value="new_name"
+        operation="set", data=json.dumps(sample_json), path="name", value="new_name"
     )
     assert result["success"] is True
     assert json.loads(result["data"])["name"] == "new_name"
 
     result = await json_tool.execute(
-        operation="set",
-        data=json.dumps(sample_json),
-        path="nested.new_key",
-        value="new_value"
+        operation="set", data=json.dumps(sample_json), path="nested.new_key", value="new_value"
     )
     assert result["success"] is True
     assert json.loads(result["data"])["nested"]["new_key"] == "new_value"
 
+
 @pytest.mark.asyncio
 async def test_json_merge(json_tool, sample_json):
     """Test merging JSON objects."""
-    merge_data = {
-        "name": "merged",
-        "new_field": "value"
-    }
+    merge_data = {"name": "merged", "new_field": "value"}
 
     result = await json_tool.execute(
-        operation="merge",
-        data=json.dumps(sample_json),
-        value=merge_data
+        operation="merge", data=json.dumps(sample_json), value=merge_data
     )
     assert result["success"] is True
     merged = json.loads(result["data"])
@@ -89,36 +75,30 @@ async def test_json_merge(json_tool, sample_json):
     assert merged["new_field"] == "value"
     assert "values" in merged
 
+
 @pytest.mark.asyncio
 async def test_json_validate(json_tool):
     """Test JSON validation."""
     valid_json = '{"name": "test"}'
-    result = await json_tool.execute(
-        operation="validate",
-        data=valid_json
-    )
+    result = await json_tool.execute(operation="validate", data=valid_json)
     assert result["success"] is True
     assert result["is_valid"] is True
 
     invalid_json = '{"name": test}'
-    result = await json_tool.execute(
-        operation="validate",
-        data=invalid_json
-    )
+    result = await json_tool.execute(operation="validate", data=invalid_json)
     assert result["success"] is True
     assert result["is_valid"] is False
+
 
 @pytest.mark.asyncio
 async def test_json_format(json_tool):
     """Test JSON formatting."""
     unformatted = '{"name":"test","values":[1,2,3]}'
-    result = await json_tool.execute(
-        operation="format",
-        data=unformatted
-    )
+    result = await json_tool.execute(operation="format", data=unformatted)
     assert result["success"] is True
     assert "\n" in result["formatted"]
     assert "    " in result["formatted"]
+
 
 @pytest.mark.asyncio
 async def test_json_file_operations(json_tool, sample_json):
@@ -134,7 +114,7 @@ async def test_json_file_operations(json_tool, sample_json):
         result = await json_tool.execute(
             operation="read_file",
             data="",  # Required parameter even for read operations
-            file_path=temp_path
+            file_path=temp_path,
         )
         assert result["success"] is True
         assert result["value"] == sample_json
@@ -142,9 +122,7 @@ async def test_json_file_operations(json_tool, sample_json):
         # Test write
         new_data = {"new": "data"}
         result = await json_tool.execute(
-            operation="write_file",
-            file_path=temp_path,
-            data=json.dumps(new_data)
+            operation="write_file", file_path=temp_path, data=json.dumps(new_data)
         )
         assert result["success"] is True
 
@@ -154,6 +132,7 @@ async def test_json_file_operations(json_tool, sample_json):
 
     finally:
         Path(temp_path).unlink()
+
 
 def test_json_schema(json_tool):
     """Test JSON tool schema."""

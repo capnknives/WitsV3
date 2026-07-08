@@ -3,25 +3,22 @@ Test module for the MCP tool registry in WitsV3.
 Tests the MCP tool registry for loading MCP tool configurations and registering tools.
 """
 
-import os
-import json
 import asyncio
-import tempfile
+import json
 import logging
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from typing import Dict, Any, List
-
-import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import sys
+import tempfile
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from tools.mcp_tool_registry import MCPToolRegistry
-from tools.mcp_tool import MCPTool
-from core.mcp_adapter import MCPAdapter, MCPServer, MCPTool as MCPToolInfo
+import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from core.enhanced_mcp_adapter import EnhancedMCPAdapter
+from core.mcp_adapter import MCPTool as MCPToolInfo
 from core.tool_registry import ToolRegistry
-from core.schemas import ToolCall, ToolResult
+from tools.mcp_tool_registry import MCPToolRegistry
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -45,14 +42,16 @@ def mock_mcp_adapter():
     adapter.add_server = AsyncMock(return_value=True)
 
     # Mock list_available_tools method
-    adapter.list_available_tools = AsyncMock(return_value=[
-        MCPToolInfo(
-            name="test_tool",
-            description="A test tool",
-            input_schema={"type": "object", "properties": {"arg1": {"type": "string"}}},
-            server_name="test_server"
-        )
-    ])
+    adapter.list_available_tools = AsyncMock(
+        return_value=[
+            MCPToolInfo(
+                name="test_tool",
+                description="A test tool",
+                input_schema={"type": "object", "properties": {"arg1": {"type": "string"}}},
+                server_name="test_server",
+            )
+        ]
+    )
 
     return adapter
 
@@ -60,16 +59,12 @@ def mock_mcp_adapter():
 @pytest.fixture
 def temp_config_file():
     """Fixture for a temporary MCP tools config file"""
-    with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.json') as f:
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".json") as f:
         config = {
             "auto_connect": True,
             "servers": [
-                {
-                    "name": "test_server",
-                    "command": ["echo", "test"],
-                    "working_directory": "."
-                }
-            ]
+                {"name": "test_server", "command": ["echo", "test"], "working_directory": "."}
+            ],
         }
         json.dump(config, f)
         f.flush()
@@ -86,7 +81,7 @@ async def test_initialize(mock_tool_registry, mock_mcp_adapter, temp_config_file
     registry = MCPToolRegistry(config_path=temp_config_file)
 
     # Mock EnhancedMCPAdapter creation
-    with patch('tools.mcp_tool_registry.EnhancedMCPAdapter', return_value=mock_mcp_adapter):
+    with patch("tools.mcp_tool_registry.EnhancedMCPAdapter", return_value=mock_mcp_adapter):
         success = await registry.initialize(mock_tool_registry)
 
         assert success is True
@@ -144,8 +139,9 @@ async def test_shutdown(mock_mcp_adapter):
     mock_mcp_adapter.shutdown.assert_called_once()
 
 
-@pytest.mark.skipif(not os.environ.get("WITSV3_RUN_INTEGRATION_TESTS"),
-                    reason="Integration tests are disabled")
+@pytest.mark.skipif(
+    not os.environ.get("WITSV3_RUN_INTEGRATION_TESTS"), reason="Integration tests are disabled"
+)
 @pytest.mark.asyncio
 async def test_mcp_tool_registry_integration():
     """Test integration with actual MCP servers"""

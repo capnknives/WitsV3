@@ -1,17 +1,15 @@
 """Reasoning pattern implementations for enhanced reasoning."""
 
-from typing import Dict, List, Optional, Any
+from typing import Any
 
-from core.config import WitsV3Config
-from core.llm_interface import BaseLLMInterface, LLMMessage
-from core.neural_web_core import NeuralWeb
-
+from core.llm_interface import LLMMessage
 from tools.enhanced_reasoning_models import (
-    ReasoningType,
+    BaseReasoningPattern,
     ReasoningContext,
     ReasoningResult,
-    BaseReasoningPattern,
+    ReasoningType,
 )
+
 
 class DeductiveReasoning(BaseReasoningPattern):
     """Implements deductive reasoning patterns."""
@@ -53,22 +51,24 @@ class DeductiveReasoning(BaseReasoningPattern):
                 supporting_evidence=supporting_evidence,
                 assumptions=[f"Principle validity in domain: {context.domain}"],
                 domain=context.domain,
-                metadata={"principles_used": len(principles)}
+                metadata={"principles_used": len(principles)},
             )
 
         except Exception as e:
             self.logger.error(f"Error in deductive reasoning: {e}")
             return self._create_error_result(ReasoningType.DEDUCTIVE, str(e))
 
-    async def _find_general_principles(self, context: ReasoningContext) -> List[str]:
+    async def _find_general_principles(self, context: ReasoningContext) -> list[str]:
         """Find general principles relevant to the reasoning context."""
         principles = []
 
         # Look for concepts marked as principles, laws, rules
-        for concept_id, concept in self.neural_web.concepts.items():
-            if any(keyword in concept.content.lower() for keyword in
-                   ['law', 'principle', 'rule', 'axiom', 'theorem', 'theory']):
-                if context.domain in concept.metadata.get('domain', ''):
+        for _concept_id, concept in self.neural_web.concepts.items():
+            if any(
+                keyword in concept.content.lower()
+                for keyword in ["law", "principle", "rule", "axiom", "theorem", "theory"]
+            ):
+                if context.domain in concept.metadata.get("domain", ""):
                     principles.append(concept.content)
 
         return principles
@@ -81,7 +81,7 @@ class DeductiveReasoning(BaseReasoningPattern):
         overlap = len(principle_words.intersection(context_words))
         return overlap > 0
 
-    async def _apply_principle(self, principle: str, context: ReasoningContext) -> Optional[str]:
+    async def _apply_principle(self, principle: str, context: ReasoningContext) -> str | None:
         """Apply a principle to derive a conclusion."""
         try:
             prompt = f"""
@@ -100,7 +100,9 @@ class DeductiveReasoning(BaseReasoningPattern):
             self.logger.error(f"Error applying principle: {e}")
             return None
 
-    async def _synthesize_deductive_conclusions(self, conclusions: List[str], context: ReasoningContext) -> str:
+    async def _synthesize_deductive_conclusions(
+        self, conclusions: list[str], context: ReasoningContext
+    ) -> str:
         """Synthesize multiple conclusions into a final result."""
         if not conclusions:
             return f"No deductive conclusions could be drawn for: {context.goal}"
@@ -128,7 +130,9 @@ class DeductiveReasoning(BaseReasoningPattern):
             self.logger.error(f"Error synthesizing conclusions: {e}")
             return f"Multiple conclusions derived: {'; '.join(conclusions)}"
 
-    def _calculate_deductive_confidence(self, principles: List[str], conclusions: List[str]) -> float:
+    def _calculate_deductive_confidence(
+        self, principles: list[str], conclusions: list[str]
+    ) -> float:
         """Calculate confidence in deductive reasoning."""
         base_confidence = 0.8  # Deductive reasoning is generally high confidence
 
@@ -144,7 +148,9 @@ class DeductiveReasoning(BaseReasoningPattern):
         final_confidence = (base_confidence + principle_bonus + consistency_bonus) * domain_factor
         return min(1.0, max(0.1, final_confidence))
 
-    def _create_error_result(self, reasoning_type: ReasoningType, error_msg: str) -> ReasoningResult:
+    def _create_error_result(
+        self, reasoning_type: ReasoningType, error_msg: str
+    ) -> ReasoningResult:
         """Create an error result for failed reasoning."""
         return ReasoningResult(
             reasoning_type=reasoning_type,
@@ -154,7 +160,7 @@ class DeductiveReasoning(BaseReasoningPattern):
             supporting_evidence=[],
             assumptions=[],
             domain="unknown",
-            metadata={"error": True}
+            metadata={"error": True},
         )
 
 
@@ -179,13 +185,15 @@ class InductiveReasoning(BaseReasoningPattern):
             generalizations = await self._create_generalizations(patterns, context)
 
             # Assess strength of inductive inference
-            confidence = self._calculate_inductive_confidence(observations, patterns, generalizations)
+            confidence = self._calculate_inductive_confidence(
+                observations, patterns, generalizations
+            )
 
             # Build reasoning path
             reasoning_path = [
                 f"Gathered {len(observations)} observations",
                 f"Identified {len(patterns)} patterns",
-                f"Generated {len(generalizations)} generalizations"
+                f"Generated {len(generalizations)} generalizations",
             ]
 
             final_conclusion = await self._synthesize_inductive_conclusion(generalizations, context)
@@ -198,27 +206,31 @@ class InductiveReasoning(BaseReasoningPattern):
                 supporting_evidence=observations,
                 assumptions=["Pattern regularity", "Sample representativeness"],
                 domain=context.domain,
-                metadata={"observations": len(observations), "patterns": len(patterns)}
+                metadata={"observations": len(observations), "patterns": len(patterns)},
             )
 
         except Exception as e:
             self.logger.error(f"Error in inductive reasoning: {e}")
             return self._create_error_result(ReasoningType.INDUCTIVE, str(e))
 
-    async def _gather_observations(self, context: ReasoningContext) -> List[str]:
+    async def _gather_observations(self, context: ReasoningContext) -> list[str]:
         """Gather specific observations related to the reasoning goal."""
         observations = []
 
         # Look for specific instances, examples, cases in the neural web
-        for concept_id, concept in self.neural_web.concepts.items():
-            if any(keyword in concept.content.lower() for keyword in
-                   ['example', 'case', 'instance', 'observation', 'data']):
+        for _concept_id, concept in self.neural_web.concepts.items():
+            if any(
+                keyword in concept.content.lower()
+                for keyword in ["example", "case", "instance", "observation", "data"]
+            ):
                 if self._is_relevant_to_context(concept.content, context):
                     observations.append(concept.content)
 
         return observations[:20]  # Limit to prevent overwhelming
 
-    async def _identify_patterns(self, observations: List[str], context: ReasoningContext) -> List[str]:
+    async def _identify_patterns(
+        self, observations: list[str], context: ReasoningContext
+    ) -> list[str]:
         """Identify patterns in the observations."""
         if not observations:
             return []
@@ -239,8 +251,11 @@ class InductiveReasoning(BaseReasoningPattern):
             response = await self.llm_interface.generate_response(messages=messages)
 
             # Simple parsing - could be enhanced
-            patterns = [line.strip('- ').strip() for line in response.content.split('\n')
-                       if line.strip() and not line.startswith('#')]
+            patterns = [
+                line.strip("- ").strip()
+                for line in response.content.split("\n")
+                if line.strip() and not line.startswith("#")
+            ]
 
             return patterns[:10]  # Limit patterns
 
@@ -248,7 +263,9 @@ class InductiveReasoning(BaseReasoningPattern):
             self.logger.error(f"Error identifying patterns: {e}")
             return []
 
-    async def _create_generalizations(self, patterns: List[str], context: ReasoningContext) -> List[str]:
+    async def _create_generalizations(
+        self, patterns: list[str], context: ReasoningContext
+    ) -> list[str]:
         """Create generalizations from identified patterns."""
         if not patterns:
             return []
@@ -268,8 +285,11 @@ class InductiveReasoning(BaseReasoningPattern):
             messages = [LLMMessage(role="user", content=prompt)]
             response = await self.llm_interface.generate_response(messages=messages)
 
-            generalizations = [line.strip('- ').strip() for line in response.content.split('\n')
-                             if line.strip() and not line.startswith('#')]
+            generalizations = [
+                line.strip("- ").strip()
+                for line in response.content.split("\n")
+                if line.strip() and not line.startswith("#")
+            ]
 
             return generalizations[:5]  # Limit generalizations
 
@@ -283,9 +303,9 @@ class InductiveReasoning(BaseReasoningPattern):
         goal_words = set(context.goal.lower().split())
         return len(content_words.intersection(goal_words)) > 0
 
-    def _calculate_inductive_confidence(self, observations: List[str],
-                                      patterns: List[str],
-                                      generalizations: List[str]) -> float:
+    def _calculate_inductive_confidence(
+        self, observations: list[str], patterns: list[str], generalizations: list[str]
+    ) -> float:
         """Calculate confidence in inductive reasoning."""
         base_confidence = 0.6  # Inductive reasoning is inherently less certain
 
@@ -298,11 +318,14 @@ class InductiveReasoning(BaseReasoningPattern):
         # Successful generalizations increase confidence
         generalization_bonus = min(0.1, len(generalizations) * 0.02)
 
-        final_confidence = base_confidence + observation_bonus + pattern_bonus + generalization_bonus
+        final_confidence = (
+            base_confidence + observation_bonus + pattern_bonus + generalization_bonus
+        )
         return min(1.0, max(0.1, final_confidence))
 
-    async def _synthesize_inductive_conclusion(self, generalizations: List[str],
-                                             context: ReasoningContext) -> str:
+    async def _synthesize_inductive_conclusion(
+        self, generalizations: list[str], context: ReasoningContext
+    ) -> str:
         """Synthesize generalizations into a final conclusion."""
         if not generalizations:
             return f"Insufficient data to draw inductive conclusions about: {context.goal}"
@@ -359,7 +382,7 @@ class AnalogicalReasoning(BaseReasoningPattern):
             reasoning_path = [
                 f"Found {len(analogies)} relevant analogies",
                 f"Created {len(mappings)} analogical mappings",
-                f"Transferred {len(insights)} insights"
+                f"Transferred {len(insights)} insights",
             ]
 
             return ReasoningResult(
@@ -370,25 +393,25 @@ class AnalogicalReasoning(BaseReasoningPattern):
                 supporting_evidence=[f"Analogy: {a}" for a in analogies],
                 assumptions=["Structural similarity", "Knowledge transferability"],
                 domain=context.domain,
-                metadata={"analogies_used": len(analogies)}
+                metadata={"analogies_used": len(analogies)},
             )
 
         except Exception as e:
             self.logger.error(f"Error in analogical reasoning: {e}")
             return self._create_error_result(ReasoningType.ANALOGICAL, str(e))
 
-    async def _find_analogies(self, context: ReasoningContext) -> List[str]:
+    async def _find_analogies(self, context: ReasoningContext) -> list[str]:
         """Find analogous situations or concepts."""
         analogies = []
 
         # Use neural web's analogical reasoning capability
         try:
-            relevant_concepts = await self._get_relevant_concepts(context.goal, 15)
-            reasoning_result = await self.neural_web.reason(context.goal, 'analogy')
+            await self._get_relevant_concepts(context.goal, 15)
+            reasoning_result = await self.neural_web.reason(context.goal, "analogy")
 
-            if 'results' in reasoning_result:
-                for result in reasoning_result['results']:
-                    if 'source' in result and 'target' in result:
+            if "results" in reasoning_result:
+                for result in reasoning_result["results"]:
+                    if "source" in result and "target" in result:
                         analogy = f"{result['source']} is analogous to {result['target']}"
                         analogies.append(analogy)
 
@@ -397,7 +420,9 @@ class AnalogicalReasoning(BaseReasoningPattern):
 
         return analogies[:10]
 
-    async def _create_analogical_mappings(self, analogies: List[str], context: ReasoningContext) -> List[Dict[str, Any]]:
+    async def _create_analogical_mappings(
+        self, analogies: list[str], context: ReasoningContext
+    ) -> list[dict[str, Any]]:
         """Create mappings between analogical elements."""
         mappings = []
 
@@ -420,18 +445,22 @@ class AnalogicalReasoning(BaseReasoningPattern):
                 messages = [LLMMessage(role="user", content=prompt)]
                 response = await self.llm_interface.generate_response(messages=messages)
 
-                mappings.append({
-                    "analogy": analogy,
-                    "mapping": response.content.strip(),
-                    "confidence": 0.7  # Default confidence
-                })
+                mappings.append(
+                    {
+                        "analogy": analogy,
+                        "mapping": response.content.strip(),
+                        "confidence": 0.7,  # Default confidence
+                    }
+                )
 
             except Exception as e:
                 self.logger.error(f"Error creating mapping for analogy {analogy}: {e}")
 
         return mappings
 
-    async def _transfer_insights(self, mappings: List[Dict[str, Any]], context: ReasoningContext) -> List[str]:
+    async def _transfer_insights(
+        self, mappings: list[dict[str, Any]], context: ReasoningContext
+    ) -> list[str]:
         """Transfer insights from analogical mappings."""
         insights = []
 
@@ -451,8 +480,11 @@ class AnalogicalReasoning(BaseReasoningPattern):
                 response = await self.llm_interface.generate_response(messages=messages)
 
                 # Extract insights from response
-                insight_lines = [line.strip() for line in response.content.split('\n')
-                               if line.strip() and not line.startswith('#')]
+                insight_lines = [
+                    line.strip()
+                    for line in response.content.split("\n")
+                    if line.strip() and not line.startswith("#")
+                ]
                 insights.extend(insight_lines[:3])  # Limit insights per mapping
 
             except Exception as e:
@@ -460,7 +492,9 @@ class AnalogicalReasoning(BaseReasoningPattern):
 
         return insights[:10]  # Limit total insights
 
-    async def _generate_analogical_conclusion(self, insights: List[str], context: ReasoningContext) -> str:
+    async def _generate_analogical_conclusion(
+        self, insights: list[str], context: ReasoningContext
+    ) -> str:
         """Generate conclusion from analogical insights."""
         if not insights:
             return f"No analogical insights found for: {context.goal}"
@@ -485,9 +519,9 @@ class AnalogicalReasoning(BaseReasoningPattern):
             self.logger.error(f"Error generating analogical conclusion: {e}")
             return f"Analogical insights suggest: {'; '.join(insights[:3])}"
 
-    def _calculate_analogical_confidence(self, analogies: List[str],
-                                       mappings: List[Dict[str, Any]],
-                                       insights: List[str]) -> float:
+    def _calculate_analogical_confidence(
+        self, analogies: list[str], mappings: list[dict[str, Any]], insights: list[str]
+    ) -> float:
         """Calculate confidence in analogical reasoning."""
         base_confidence = 0.5  # Analogical reasoning has moderate base confidence
 

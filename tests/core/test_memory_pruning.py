@@ -6,6 +6,7 @@
 config. These tests exercise the count- and size-based pruning paths through
 the real `add_segment` call to guard against a regression.
 """
+
 import pytest
 
 from core.config import WitsV3Config
@@ -84,7 +85,10 @@ async def test_add_segment_does_not_prune_when_disabled(tmp_path):
 @pytest.mark.asyncio
 async def test_add_segment_keeps_highest_importance_under_hybrid_strategy(tmp_path):
     backend = _make_backend(
-        tmp_path, max_memory_segments=2, max_memory_size_mb=10_000, pruning_strategy="least_relevant"
+        tmp_path,
+        max_memory_segments=2,
+        max_memory_size_mb=10_000,
+        pruning_strategy="least_relevant",
     )
     await backend.initialize()
 

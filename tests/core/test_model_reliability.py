@@ -6,6 +6,7 @@ a model with zero recorded failures stayed HEALTHY/UNKNOWN even while Ollama
 itself was completely unreachable. These tests cover the real `/api/tags`
 probe added to close that gap.
 """
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -42,7 +43,10 @@ def _response(models):
 
 @pytest.mark.asyncio
 async def test_probe_ollama_reports_unreachable_on_connection_error(manager):
-    with patch("core.model_reliability.httpx.AsyncClient", return_value=_client_cm(raise_exc=ConnectionError("down"))):
+    with patch(
+        "core.model_reliability.httpx.AsyncClient",
+        return_value=_client_cm(raise_exc=ConnectionError("down")),
+    ):
         reachable, models = await manager._probe_ollama()
     assert reachable is False
     assert models is None
@@ -93,7 +97,9 @@ async def test_check_model_health_tolerates_untagged_configured_name(manager):
     manager.model_health["nomic-embed-text"].status = ModelStatus.UNKNOWN
 
     await manager._check_model_health(
-        "nomic-embed-text", ollama_reachable=True, available_models={"nomic-embed-text:latest", "nomic-embed-text"}
+        "nomic-embed-text",
+        ollama_reachable=True,
+        available_models={"nomic-embed-text:latest", "nomic-embed-text"},
     )
     assert manager.model_health["nomic-embed-text"].status == ModelStatus.HEALTHY
 

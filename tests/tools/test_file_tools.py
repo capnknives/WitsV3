@@ -5,6 +5,7 @@ tool had two full try/except blocks back to back, where the first always
 returned before the second (which held the only path guard) could ever run
 — so write_file had zero enforced path restriction in practice.
 """
+
 import sys
 
 import pytest
@@ -29,7 +30,11 @@ async def test_write_file_succeeds_inside_project(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_write_file_refuses_outside_project():
-    outside = "C:/Windows/Temp/wits_should_not_write_here.txt" if sys.platform == "win32" else "/tmp/wits_should_not_write_here.txt"
+    outside = (
+        "C:/Windows/Temp/wits_should_not_write_here.txt"
+        if sys.platform == "win32"
+        else "/tmp/wits_should_not_write_here.txt"
+    )
     tool = FileWriteTool()
     result = await tool.execute(file_path=outside, content="should not land")
     assert result.startswith("Error:")

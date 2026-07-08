@@ -3,16 +3,18 @@ Configuration management for WitsV3 system
 """
 
 import os
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()  # Load .env from the working directory, if present
 except ImportError:
     pass
+
 
 class OllamaSettings(BaseModel):
     url: str = Field(default="http://localhost:11434")
@@ -21,53 +23,94 @@ class OllamaSettings(BaseModel):
     orchestrator_model: str = Field(default="qwen3:8b")
     embedding_model: str = Field(default="nomic-embed-text")
     request_timeout: int = Field(default=120)
-    retry_attempts: int = Field(default=3, description="Number of retry attempts for failed requests")
+    retry_attempts: int = Field(
+        default=3, description="Number of retry attempts for failed requests"
+    )
     retry_delay: float = Field(default=1.0, description="Delay between retry attempts in seconds")
-    exponential_backoff: bool = Field(default=True, description="Use exponential backoff for retries")
+    exponential_backoff: bool = Field(
+        default=True, description="Use exponential backoff for retries"
+    )
 
     # Model fallback configuration
-    fallback_models: List[str] = Field(default=["qwen3:8b", "llama3.2:3b", "qwen2.5-coder:7b"], description="Fallback models in order of preference")
-    enable_model_fallback: bool = Field(default=True, description="Enable automatic fallback to alternative models")
-    model_failure_threshold: int = Field(default=3, description="Number of consecutive failures before switching models")
-    model_timeout: int = Field(default=300, description="Timeout for individual model operations in seconds")
+    fallback_models: list[str] = Field(
+        default=["qwen3:8b", "llama3.2:3b", "qwen2.5-coder:7b"],
+        description="Fallback models in order of preference",
+    )
+    enable_model_fallback: bool = Field(
+        default=True, description="Enable automatic fallback to alternative models"
+    )
+    model_failure_threshold: int = Field(
+        default=3, description="Number of consecutive failures before switching models"
+    )
+    model_timeout: int = Field(
+        default=300, description="Timeout for individual model operations in seconds"
+    )
 
     # Model health monitoring
-    health_check_interval: int = Field(default=60, description="Interval for model health checks in seconds")
-    enable_health_monitoring: bool = Field(default=True, description="Enable continuous model health monitoring")
-    quarantine_duration: int = Field(default=300, description="Time to quarantine failed models in seconds")
+    health_check_interval: int = Field(
+        default=60, description="Interval for model health checks in seconds"
+    )
+    enable_health_monitoring: bool = Field(
+        default=True, description="Enable continuous model health monitoring"
+    )
+    quarantine_duration: int = Field(
+        default=300, description="Time to quarantine failed models in seconds"
+    )
+
 
 class LLMInterfaceSettings(BaseModel):
     default_provider: str = Field(default="ollama")
     timeout_seconds: int = Field(default=120)
     streaming_enabled: bool = Field(default=True)
 
+
 class AgentSettings(BaseModel):
     default_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_iterations: int = Field(default=15, gt=0)
-    history_window: int = Field(default=20, ge=2, le=100, description="How many recent conversation messages are included in the prompt")
+    history_window: int = Field(
+        default=20,
+        ge=2,
+        le=100,
+        description="How many recent conversation messages are included in the prompt",
+    )
 
     class Config:
         validate_assignment = True
+
 
 class NeuralWebSettings(BaseModel):
     activation_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
     decay_rate: float = Field(default=0.1, ge=0.0, le=1.0)
     auto_connect: bool = Field(default=True)
-    reasoning_patterns: List[str] = Field(default=["modus_ponens", "analogy", "chain", "contradiction"])
+    reasoning_patterns: list[str] = Field(
+        default=["modus_ponens", "analogy", "chain", "contradiction"]
+    )
     max_concept_connections: int = Field(default=50, gt=0)
     connection_strength_threshold: float = Field(default=0.2, ge=0.0, le=1.0)
     # Cross-domain learning settings
-    enable_cross_domain_learning: bool = Field(default=True, description="Enable cross-domain learning capabilities")
-    cross_domain_similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0, description="Minimum similarity threshold for cross-domain connections")
-    max_cross_domain_connections: int = Field(default=10, gt=0, description="Maximum number of connections across domains per concept")
-    domain_classification_confidence: float = Field(default=0.6, ge=0.0, le=1.0, description="Confidence threshold for domain classification")
+    enable_cross_domain_learning: bool = Field(
+        default=True, description="Enable cross-domain learning capabilities"
+    )
+    cross_domain_similarity_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity threshold for cross-domain connections",
+    )
+    max_cross_domain_connections: int = Field(
+        default=10, gt=0, description="Maximum number of connections across domains per concept"
+    )
+    domain_classification_confidence: float = Field(
+        default=0.6, ge=0.0, le=1.0, description="Confidence threshold for domain classification"
+    )
+
 
 class MemoryManagerSettings(BaseModel):
-    backend: str = Field(default="basic") # basic, faiss_cpu, faiss_gpu, neural
+    backend: str = Field(default="basic")  # basic, faiss_cpu, faiss_gpu, neural
     memory_file_path: str = Field(default="data/wits_memory.json")
     faiss_index_path: str = Field(default="data/wits_faiss_index.bin")
     neural_web_path: str = Field(default="data/neural_web.json")
-    vector_dim: int = Field(default=768) # nomic-embed-text embedding dimension
+    vector_dim: int = Field(default=768)  # nomic-embed-text embedding dimension
     max_results_per_search: int = Field(default=5)
     pruning_interval_seconds: int = Field(default=3600)
     max_memory_segments: int = Field(default=10000)
@@ -79,62 +122,117 @@ class MemoryManagerSettings(BaseModel):
 
     # Enhanced pruning settings
     enable_auto_pruning: bool = Field(default=True, description="Enable automatic memory pruning")
-    max_memory_size_mb: int = Field(default=50, gt=0, description="Maximum memory size in MB before pruning")
-    pruning_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Size threshold (as fraction) to trigger pruning")
-    pruning_strategy: str = Field(default="hybrid", description="Pruning strategy: oldest_first, least_relevant, or hybrid")
+    max_memory_size_mb: int = Field(
+        default=50, gt=0, description="Maximum memory size in MB before pruning"
+    )
+    pruning_threshold: float = Field(
+        default=0.8, ge=0.0, le=1.0, description="Size threshold (as fraction) to trigger pruning"
+    )
+    pruning_strategy: str = Field(
+        default="hybrid", description="Pruning strategy: oldest_first, least_relevant, or hybrid"
+    )
 
     neural_web_settings: NeuralWebSettings = Field(default_factory=NeuralWebSettings)
 
+
 class SecuritySettings(BaseModel):
-    python_execution_network_access: bool = Field(default=False, description="Allow network access in Python execution tool")
-    python_execution_subprocess_access: bool = Field(default=False, description="Allow subprocess execution in Python execution tool")
-    authorized_network_override_user: str = Field(default="richard_elliot", description="Only this user can override network restrictions")
+    python_execution_network_access: bool = Field(
+        default=False, description="Allow network access in Python execution tool"
+    )
+    python_execution_subprocess_access: bool = Field(
+        default=False, description="Allow subprocess execution in Python execution tool"
+    )
+    authorized_network_override_user: str = Field(
+        default="richard_elliot", description="Only this user can override network restrictions"
+    )
     ethics_system_enabled: bool = Field(default=True, description="Enable ethics overlay system")
-    ethics_override_authorized_user: str = Field(default="richard_elliot", description="Only this user can disable ethics during testing")
-    auth_token_hash: str = Field(default="", description="SHA256 hash of authorization token for secure operations")
-    require_auth_for_network_control: bool = Field(default=True, description="Require authentication token for network control")
-    require_auth_for_ethics_override: bool = Field(default=True, description="Require authentication token for ethics override")
+    ethics_override_authorized_user: str = Field(
+        default="richard_elliot", description="Only this user can disable ethics during testing"
+    )
+    auth_token_hash: str = Field(
+        default="", description="SHA256 hash of authorization token for secure operations"
+    )
+    require_auth_for_network_control: bool = Field(
+        default=True, description="Require authentication token for network control"
+    )
+    require_auth_for_ethics_override: bool = Field(
+        default=True, description="Require authentication token for ethics override"
+    )
+
 
 class ToolSystemSettings(BaseModel):
     enable_mcp_tools: bool = Field(default=True)
-    mcp_connect_on_startup: bool = Field(default=False, description="Connect to external MCP servers during startup (slows boot when servers are unavailable)")
+    mcp_connect_on_startup: bool = Field(
+        default=False,
+        description="Connect to external MCP servers during startup (slows boot when servers are unavailable)",
+    )
     mcp_tool_definitions_path: str = Field(default="data/mcp_tools.json")
-    mcp_registry_url: str = Field(default="https://registry.modelcontextprotocol.io", description="Official MCP registry used by the discover/search feature")
+    mcp_registry_url: str = Field(
+        default="https://registry.modelcontextprotocol.io",
+        description="Official MCP registry used by the discover/search feature",
+    )
     # langchain_bridge_enabled: bool = Field(default=False) # Placeholder
+
 
 class CLISettings(BaseModel):
     show_thoughts: bool = Field(default=True)
     show_tool_calls: bool = Field(default=True)
 
+
 class WebUISettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the web UI server")
-    host: str = Field(default="0.0.0.0", description="Bind address (0.0.0.0 = reachable on the LAN, e.g. from a phone)")
+    host: str = Field(
+        default="0.0.0.0",
+        description="Bind address (0.0.0.0 = reachable on the LAN, e.g. from a phone)",
+    )
     port: int = Field(default=8000, gt=0, lt=65536, description="Web UI port")
-    require_auth: bool = Field(default=True, description="Require the WITSV3_WEB_TOKEN bearer token for API access")
+    require_auth: bool = Field(
+        default=True, description="Require the WITSV3_WEB_TOKEN bearer token for API access"
+    )
+
 
 class DocumentRAGSettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the document RAG system")
-    documents_path: str = Field(default="documents", description="Folder watched for documents to ingest")
-    chunk_size: int = Field(default=1200, gt=0, description="Target chunk size in characters")
-    chunk_overlap: int = Field(default=150, ge=0, description="Characters of overlap between consecutive chunks")
-    auto_ingest_on_startup: bool = Field(default=True, description="Scan and ingest documents during system startup")
-    file_extensions: List[str] = Field(
-        default=[".txt", ".md", ".markdown", ".py", ".json", ".csv", ".html", ".log", ".pdf"],
-        description="File extensions considered for ingestion (.pdf requires pypdf)"
+    documents_path: str = Field(
+        default="documents", description="Folder watched for documents to ingest"
     )
+    chunk_size: int = Field(default=1200, gt=0, description="Target chunk size in characters")
+    chunk_overlap: int = Field(
+        default=150, ge=0, description="Characters of overlap between consecutive chunks"
+    )
+    auto_ingest_on_startup: bool = Field(
+        default=True, description="Scan and ingest documents during system startup"
+    )
+    file_extensions: list[str] = Field(
+        default=[".txt", ".md", ".markdown", ".py", ".json", ".csv", ".html", ".log", ".pdf"],
+        description="File extensions considered for ingestion (.pdf requires pypdf)",
+    )
+
 
 class SupabaseSettings(BaseModel):
     url: str = Field(default="")
     key: str = Field(default="")
     enable_realtime: bool = Field(default=True)
 
+
 class EscalationSettings(BaseModel):
     """Ask-Claude escalation: WITS can queue a question for the Claude API,
     but every request must be approved by the user in the web UI first.
     The API key comes from the ANTHROPIC_API_KEY environment variable (.env)."""
-    enabled: bool = Field(default=True, description="Allow WITS to queue escalation requests to Claude")
-    model: str = Field(default="claude-opus-4-8", description="Claude model used for approved escalations")
-    max_tokens: int = Field(default=2048, ge=256, le=16000, description="Hard cap on Claude's response length (caps cost)")
+
+    enabled: bool = Field(
+        default=True, description="Allow WITS to queue escalation requests to Claude"
+    )
+    model: str = Field(
+        default="claude-opus-4-8", description="Claude model used for approved escalations"
+    )
+    max_tokens: int = Field(
+        default=2048,
+        ge=256,
+        le=16000,
+        description="Hard cap on Claude's response length (caps cost)",
+    )
+
 
 class ModelRoutingSettings(BaseModel):
     """Smart model routing: pick the Ollama model per request based on what the
@@ -142,11 +240,19 @@ class ModelRoutingSettings(BaseModel):
     Trivial chat goes to a small fast model, code work goes to the coder model,
     everything else stays on the default. The router only ever sees the raw
     user message or goal, never full prompt templates."""
+
     enabled: bool = Field(default=True, description="Enable per-request model routing")
     trivial_model: str = Field(default="llama3.2:3b", description="Model for short casual chat")
-    code_model: str = Field(default="qwen2.5-coder:7b", description="Model for code-related requests")
+    code_model: str = Field(
+        default="qwen2.5-coder:7b", description="Model for code-related requests"
+    )
     complex_model: str = Field(default="qwen3:8b", description="Model for everything else")
-    trivial_max_chars: int = Field(default=140, gt=0, description="Messages longer than this are never routed to the trivial model")
+    trivial_max_chars: int = Field(
+        default=140,
+        gt=0,
+        description="Messages longer than this are never routed to the trivial model",
+    )
+
 
 class WebSearchSettings(BaseModel):
     """Web search tool configuration.
@@ -158,19 +264,24 @@ class WebSearchSettings(BaseModel):
       - BRAVE_SEARCH_API_KEY  (https://brave.com/search/api — 2000 free/mo)
     Keys are NEVER stored in config.yaml; they are injected from the
     environment at load time (see _apply_env_overrides)."""
+
     provider: str = Field(
         default="auto",
         description="Provider to use: auto (try all, best-available first), tavily, brave, or duckduckgo",
     )
-    max_results: int = Field(default=5, gt=0, le=25, description="Default number of results to return")
+    max_results: int = Field(
+        default=5, gt=0, le=25, description="Default number of results to return"
+    )
     tavily_search_depth: str = Field(
         default="advanced",
         description="Tavily depth: 'advanced' (more accurate answers, 2 credits) or 'basic' (1 credit). "
-                    "'basic' can return wrong answers for date/fact queries — 'advanced' is worth it.",
+        "'basic' can return wrong answers for date/fact queries — 'advanced' is worth it.",
     )
     timeout_seconds: float = Field(default=12.0, gt=0, description="Per-request HTTP timeout")
     region: str = Field(default="wt-wt", description="DuckDuckGo region code (wt-wt = no region)")
-    safesearch: str = Field(default="moderate", description="Safe search level: off, moderate, strict")
+    safesearch: str = Field(
+        default="moderate", description="Safe search level: off, moderate, strict"
+    )
     # Secrets — populated from the environment, not config.yaml.
     tavily_api_key: str = Field(default="", description="Set via TAVILY_API_KEY env var")
     brave_api_key: str = Field(default="", description="Set via BRAVE_SEARCH_API_KEY env var")
@@ -178,9 +289,15 @@ class WebSearchSettings(BaseModel):
 
 class PersonalitySettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable personality system")
-    profile_path: str = Field(default="config/wits_personality.yaml", description="Path to personality profile")
-    profile_id: str = Field(default="richard_elliot_wits", description="Active personality profile ID")
-    allow_runtime_switching: bool = Field(default=False, description="Allow personality switching at runtime")
+    profile_path: str = Field(
+        default="config/wits_personality.yaml", description="Path to personality profile"
+    )
+    profile_id: str = Field(
+        default="richard_elliot_wits", description="Active personality profile ID"
+    )
+    allow_runtime_switching: bool = Field(
+        default=False, description="Allow personality switching at runtime"
+    )
 
 
 class SelfRepairSettings(BaseModel):
@@ -189,20 +306,40 @@ class SelfRepairSettings(BaseModel):
     *verified* fix — tests must pass before anything is committed, and any
     failed attempt is reverted to the exact original bytes. Nothing broken
     is ever left in place or committed."""
-    enabled: bool = Field(default=True, description="Enable the self-repair agent's diagnose-and-fix capability")
-    daily_schedule_enabled: bool = Field(default=True, description="Run an autonomous self-repair scan on a schedule")
-    daily_schedule_cron: str = Field(default="0 3 * * *", description="Cron expression for the scheduled self-repair run (default: 3am daily)")
-    max_issues_per_run: int = Field(default=3, gt=0, description="Cap on distinct issues attempted per run")
-    log_scan_lines: int = Field(default=2000, gt=0, description="Trailing lines of logs/witsv3.log to scan for errors")
-    restart_after_fix: bool = Field(default=False, description="Automatically restart the app after a verified fix (off by default so a scheduled repair never surprises an active session)")
-    test_timeout_seconds: float = Field(default=120.0, gt=0, description="Timeout for the verification test run per fix attempt")
+
+    enabled: bool = Field(
+        default=True, description="Enable the self-repair agent's diagnose-and-fix capability"
+    )
+    daily_schedule_enabled: bool = Field(
+        default=True, description="Run an autonomous self-repair scan on a schedule"
+    )
+    daily_schedule_cron: str = Field(
+        default="0 3 * * *",
+        description="Cron expression for the scheduled self-repair run (default: 3am daily)",
+    )
+    max_issues_per_run: int = Field(
+        default=3, gt=0, description="Cap on distinct issues attempted per run"
+    )
+    log_scan_lines: int = Field(
+        default=2000, gt=0, description="Trailing lines of logs/witsv3.log to scan for errors"
+    )
+    restart_after_fix: bool = Field(
+        default=False,
+        description="Automatically restart the app after a verified fix (off by default so a scheduled repair never surprises an active session)",
+    )
+    test_timeout_seconds: float = Field(
+        default=120.0, gt=0, description="Timeout for the verification test run per fix attempt"
+    )
+
 
 class WitsV3Config(BaseModel):
     project_name: str = Field(default="WitsV3")
     version: str = Field(default="3.0.0")
     logging_level: str = Field(default="INFO")
     debug_mode: bool = Field(default=False)
-    auto_restart_on_file_change: bool = Field(default=True, description="Automatically restart the system when Python files are changed")
+    auto_restart_on_file_change: bool = Field(
+        default=True, description="Automatically restart the system when Python files are changed"
+    )
 
     llm_interface: LLMInterfaceSettings = LLMInterfaceSettings()
     ollama_settings: OllamaSettings = OllamaSettings()
@@ -227,21 +364,28 @@ class WitsV3Config(BaseModel):
     def from_yaml(cls, config_path: str = "config.yaml") -> "WitsV3Config":
         """Loads the YAML configuration file and returns a WitsV3Config object."""
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 config_data = yaml.safe_load(f)
             if not config_data:
-                print(f"Warning: Configuration file '{config_path}' is empty. Using default values.")
+                print(
+                    f"Warning: Configuration file '{config_path}' is empty. Using default values."
+                )
                 return cls()
             return cls(**config_data)
         except FileNotFoundError:
             print(f"Error: Configuration file '{config_path}' not found. Using default values.")
             return cls()
         except yaml.YAMLError as e:
-            print(f"Error parsing YAML configuration file '{config_path}': {e}. Using default values.")
+            print(
+                f"Error parsing YAML configuration file '{config_path}': {e}. Using default values."
+            )
             return cls()
         except Exception as e:
-            print(f"An unexpected error occurred while loading config '{config_path}': {e}. Using default values.")
+            print(
+                f"An unexpected error occurred while loading config '{config_path}': {e}. Using default values."
+            )
             return cls()
+
 
 def _apply_env_overrides(config: "WitsV3Config") -> "WitsV3Config":
     """Apply secret values from environment variables (or .env).
@@ -284,7 +428,7 @@ def _apply_env_overrides(config: "WitsV3Config") -> "WitsV3Config":
 LOCAL_OVERRIDES_PATH = "config.local.yaml"
 
 
-def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+def _deep_merge(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
     merged = dict(base)
     for key, value in overrides.items():
         if isinstance(value, dict) and isinstance(merged.get(key), dict):
@@ -299,23 +443,25 @@ def _apply_local_overrides(config: "WitsV3Config", config_path: str) -> "WitsV3C
     if not os.path.exists(overrides_path):
         return config
     try:
-        with open(overrides_path, 'r', encoding='utf-8') as f:
+        with open(overrides_path, encoding="utf-8") as f:
             overrides = yaml.safe_load(f) or {}
         if isinstance(overrides, dict) and overrides:
-            merged = _deep_merge(config.model_dump() if hasattr(config, "model_dump") else config.dict(), overrides)
+            merged = _deep_merge(
+                config.model_dump() if hasattr(config, "model_dump") else config.dict(), overrides
+            )
             return WitsV3Config(**merged)
     except Exception as e:
         print(f"Warning: ignoring bad local config overrides ({overrides_path}): {e}")
     return config
 
 
-def save_local_overrides(new_overrides: Dict[str, Any], config_path: str = "config.yaml") -> str:
+def save_local_overrides(new_overrides: dict[str, Any], config_path: str = "config.yaml") -> str:
     """Merge new_overrides into config.local.yaml (creating it if needed)."""
     overrides_path = os.path.join(os.path.dirname(config_path) or ".", LOCAL_OVERRIDES_PATH)
-    existing: Dict[str, Any] = {}
+    existing: dict[str, Any] = {}
     if os.path.exists(overrides_path):
         try:
-            with open(overrides_path, 'r', encoding='utf-8') as f:
+            with open(overrides_path, encoding="utf-8") as f:
                 existing = yaml.safe_load(f) or {}
         except Exception:
             existing = {}
@@ -324,7 +470,7 @@ def save_local_overrides(new_overrides: Dict[str, Any], config_path: str = "conf
         "# Runtime settings saved from the WITS web UI (/settings).\n"
         "# Deep-merged over config.yaml at load - delete this file to revert.\n"
     )
-    with open(overrides_path, 'w', encoding='utf-8') as f:
+    with open(overrides_path, "w", encoding="utf-8") as f:
         f.write(header + yaml.safe_dump(merged, sort_keys=False, allow_unicode=True))
     return overrides_path
 
@@ -336,12 +482,14 @@ def load_config(config_path: str = "config.yaml") -> WitsV3Config:
     config = _apply_local_overrides(config, config_path)
     return _apply_env_overrides(config)
 
+
 # For backwards compatibility
 AppConfig = WitsV3Config
 LLMConfig = LLMInterfaceSettings
 MemoryConfig = MemoryManagerSettings
 AgentConfig = AgentSettings
 ToolConfig = ToolSystemSettings
+
 
 # Test function
 def test_config():
@@ -371,6 +519,7 @@ def test_config():
         config.agents.default_temperature = -0.5
     except Exception as e:
         print(f"Validation works: {e}")
+
 
 if __name__ == "__main__":
     test_config()

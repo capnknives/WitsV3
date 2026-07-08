@@ -4,7 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
@@ -13,7 +13,7 @@ from core.neural_web_core import NeuralWeb
 logger = logging.getLogger(__name__)
 
 
-def _resolve_neural_web(memory_manager) -> Optional[NeuralWeb]:
+def _resolve_neural_web(memory_manager) -> NeuralWeb | None:
     """Pull the live NeuralWeb out of memory_manager when the neural backend is active."""
     if memory_manager is None:
         return None
@@ -49,11 +49,11 @@ class ReasoningContext:
 
     domain: str
     goal: str
-    constraints: List[str]
-    available_concepts: List[str]
+    constraints: list[str]
+    available_concepts: list[str]
     confidence_threshold: float = 0.5
     reasoning_depth: int = 3
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -63,11 +63,11 @@ class ReasoningResult:
     reasoning_type: ReasoningType
     conclusion: str
     confidence: float
-    reasoning_path: List[str]
-    supporting_evidence: List[str]
-    assumptions: List[str]
+    reasoning_path: list[str]
+    supporting_evidence: list[str]
+    assumptions: list[str]
     domain: str
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 class BaseReasoningPattern(ABC):
@@ -94,7 +94,7 @@ class BaseReasoningPattern(ABC):
         """Get the type of reasoning this pattern implements."""
         pass
 
-    async def _get_relevant_concepts(self, query: str, limit: int = 10) -> List[str]:
+    async def _get_relevant_concepts(self, query: str, limit: int = 10) -> list[str]:
         """Get concepts relevant to the reasoning query."""
         try:
             relevant_concepts = await self.neural_web._find_relevant_concepts(query)
@@ -103,7 +103,7 @@ class BaseReasoningPattern(ABC):
             self.logger.error(f"Error finding relevant concepts: {e}")
             return []
 
-    async def _activate_concept_network(self, concept_ids: List[str]) -> Dict[str, float]:
+    async def _activate_concept_network(self, concept_ids: list[str]) -> dict[str, float]:
         """Activate a network of concepts and return activation levels."""
         activations = {}
         for concept_id in concept_ids:

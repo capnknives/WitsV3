@@ -1,21 +1,22 @@
 """Tests for the math tool."""
-import pytest
+
 import numpy as np
+import pytest
+
 from tools.math_tool import MathTool
+
 
 @pytest.fixture
 def math_tool():
     """Create a MathTool instance for testing."""
     return MathTool()
 
+
 @pytest.mark.asyncio
 async def test_basic_statistics(math_tool):
     """Test basic statistical calculations."""
     data = [1, 2, 3, 4, 5]
-    result = await math_tool.execute(
-        operation="basic_stats",
-        data=data
-    )
+    result = await math_tool.execute(operation="basic_stats", data=data)
 
     assert result["success"] is True
     results = result["results"]
@@ -30,16 +31,14 @@ async def test_basic_statistics(math_tool):
     assert results["quartiles"]["q1"] == 2.0
     assert results["quartiles"]["q3"] == 4.0
 
+
 @pytest.mark.asyncio
 async def test_regression_analysis(math_tool):
     """Test regression analysis."""
     x = [1, 2, 3, 4, 5]
     y = [2, 4, 5, 4, 5]
 
-    result = await math_tool.execute(
-        operation="regression",
-        data={"x": x, "y": y}
-    )
+    result = await math_tool.execute(operation="regression", data={"x": x, "y": y})
 
     assert result["success"] is True
     results = result["results"]
@@ -51,20 +50,14 @@ async def test_regression_analysis(math_tool):
     assert "predictions" in results
     assert len(results["predictions"]) == len(x)
 
+
 @pytest.mark.asyncio
 async def test_probability_calculations(math_tool):
     """Test probability calculations."""
     # Test normal distribution
     result = await math_tool.execute(
         operation="probability",
-        data={
-            "distribution": "normal",
-            "parameters": {
-                "mean": 0,
-                "std": 1,
-                "x": 0
-            }
-        }
+        data={"distribution": "normal", "parameters": {"mean": 0, "std": 1, "x": 0}},
     )
 
     assert result["success"] is True
@@ -77,14 +70,7 @@ async def test_probability_calculations(math_tool):
     # Test binomial distribution
     result = await math_tool.execute(
         operation="probability",
-        data={
-            "distribution": "binomial",
-            "parameters": {
-                "n": 10,
-                "p": 0.5,
-                "k": 5
-            }
-        }
+        data={"distribution": "binomial", "parameters": {"n": 10, "p": 0.5, "k": 5}},
     )
 
     assert result["success"] is True
@@ -92,6 +78,7 @@ async def test_probability_calculations(math_tool):
     assert "pmf" in results  # Changed from "pdf" to "pmf" for binomial
     assert "cdf" in results
     assert results["pmf"] == pytest.approx(0.2461, rel=1e-3)
+
 
 @pytest.mark.asyncio
 async def test_matrix_operations(math_tool):
@@ -104,8 +91,8 @@ async def test_matrix_operations(math_tool):
         operation="matrix",
         data={
             "operation": "multiply",  # Changed from "operation_type"
-            "matrices": [a, b]        # Changed to "matrices" array
-        }
+            "matrices": [a, b],  # Changed to "matrices" array
+        },
     )
 
     assert result["success"] is True
@@ -113,11 +100,7 @@ async def test_matrix_operations(math_tool):
 
     # Test matrix inverse
     result = await math_tool.execute(
-        operation="matrix",
-        data={
-            "operation": "inverse",
-            "matrices": [a]
-        }
+        operation="matrix", data={"operation": "inverse", "matrices": [a]}
     )
 
     assert result["success"] is True
@@ -126,15 +109,12 @@ async def test_matrix_operations(math_tool):
 
     # Test determinant
     result = await math_tool.execute(
-        operation="matrix",
-        data={
-            "operation": "determinant",
-            "matrices": [a]
-        }
+        operation="matrix", data={"operation": "determinant", "matrices": [a]}
     )
 
     assert result["success"] is True
     assert result["result"] == pytest.approx(-2, rel=1e-3)
+
 
 @pytest.mark.asyncio
 async def test_optimization(math_tool):
@@ -143,15 +123,13 @@ async def test_optimization(math_tool):
     # let's test with a simpler error case
     result = await math_tool.execute(
         operation="optimization",
-        data={
-            "method": "minimize",
-            "function": "invalid"  # This will trigger an error
-        }
+        data={"method": "minimize", "function": "invalid"},  # This will trigger an error
     )
 
     # This should fail gracefully due to missing required parameters
     assert result["success"] is False
     assert "error" in result
+
 
 def test_math_schema(math_tool):
     """Test math tool schema."""
@@ -161,24 +139,19 @@ def test_math_schema(math_tool):
     assert "operation" in schema["parameters"]["properties"]
     assert schema["parameters"]["required"] == ["operation", "data"]  # Both required
 
+
 @pytest.mark.asyncio
 async def test_error_handling(math_tool):
     """Test error handling in math operations."""
     # Test invalid operation
-    result = await math_tool.execute(
-        operation="invalid_operation",
-        data={}
-    )
+    result = await math_tool.execute(operation="invalid_operation", data={})
     assert result["success"] is False
     assert "error" in result
 
     # Test invalid matrix dimensions (incorrect structure to trigger error)
     result = await math_tool.execute(
         operation="matrix",
-        data={
-            "operation": "multiply",
-            "matrices": "invalid"  # Should be a list
-        }
+        data={"operation": "multiply", "matrices": "invalid"},  # Should be a list
     )
     assert result["success"] is False
     assert "error" in result
@@ -188,12 +161,8 @@ async def test_error_handling(math_tool):
         operation="probability",
         data={
             "distribution": "normal",
-            "parameters": {
-                "mean": 0,
-                "std": -1,  # Invalid standard deviation
-                "x": 0
-            }
-        }
+            "parameters": {"mean": 0, "std": -1, "x": 0},  # Invalid standard deviation
+        },
     )
     assert result["success"] is False
     assert "error" in result

@@ -12,12 +12,13 @@ The API key is read from the ANTHROPIC_API_KEY environment variable
 """
 
 import asyncio
+import builtins
 import logging
 import os
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger("WitsV3.Escalation")
 
@@ -47,12 +48,12 @@ class EscalationRequest:
     created_at: float = field(default_factory=time.time)
     model: str = "claude-opus-4-8"
     max_tokens: int = 2048
-    answer: Optional[str] = None
-    error: Optional[str] = None
-    usage: Optional[Dict[str, int]] = None
-    cost_usd: Optional[float] = None
+    answer: str | None = None
+    error: str | None = None
+    usage: dict[str, int] | None = None
+    cost_usd: float | None = None
 
-    def estimate(self) -> Dict[str, Any]:
+    def estimate(self) -> dict[str, Any]:
         """Rough pre-approval cost estimate (chars/4 heuristic for input,
         worst case = the full max_tokens for output)."""
         in_price, out_price = MODEL_PRICES.get(self.model, (5.00, 25.00))
@@ -64,7 +65,7 @@ class EscalationRequest:
             "max_cost_usd": round(est_input_cost + max_output_cost, 4),
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "question": self.question,
@@ -87,15 +88,20 @@ class EscalationManager:
     MAX_KEPT = 50
 
     def __init__(self):
-        self.requests: Dict[str, EscalationRequest] = {}
+        self.requests: dict[str, EscalationRequest] = {}
         self._lock = asyncio.Lock()
 
     @staticmethod
     def api_key_configured() -> bool:
         return bool(os.getenv("ANTHROPIC_API_KEY"))
 
-    def create(self, question: str, context: str = "", model: str = "claude-opus-4-8",
-               max_tokens: int = 2048) -> EscalationRequest:
+    def create(
+        self,
+        question: str,
+        context: str = "",
+        model: str = "claude-opus-4-8",
+        max_tokens: int = 2048,
+    ) -> EscalationRequest:
         request = EscalationRequest(
             id=uuid.uuid4().hex[:12],
             question=question.strip(),
@@ -108,14 +114,14 @@ class EscalationManager:
         logger.info(f"Escalation queued: {request.id} ({len(request.question)} chars)")
         return request
 
-    def get(self, request_id: str) -> Optional[EscalationRequest]:
+    def get(self, request_id: str) -> EscalationRequest | None:
         return self.requests.get(request_id)
 
-    def list(self) -> List[Dict[str, Any]]:
+    def list(self) -> list[dict[str, Any]]:
         ordered = sorted(self.requests.values(), key=lambda r: r.created_at, reverse=True)
         return [r.to_dict() for r in ordered]
 
-    def pending(self) -> List[Dict[str, Any]]:
+    def pending(self) -> builtins.list[dict[str, Any]]:
         return [r.to_dict() for r in self.requests.values() if r.status == "pending"]
 
     def deny(self, request_id: str) -> bool:
@@ -143,7 +149,9 @@ class EscalationManager:
             in_price, out_price = MODEL_PRICES.get(request.model, (5.00, 25.00))
             request.cost_usd = round(
                 usage.get("input_tokens", 0) * in_price / 1_000_000
-                + usage.get("output_tokens", 0) * out_price / 1_000_000, 4)
+                + usage.get("output_tokens", 0) * out_price / 1_000_000,
+                4,
+            )
             request.status = "answered"
             logger.info(f"Escalation answered: {request_id} (${request.cost_usd})")
         except Exception as e:
@@ -162,7 +170,7 @@ class EscalationManager:
         if request.context:
             user_content = f"Context from the local session:\n{request.context}\n\nQuestion:\n{request.question}"
 
-        kwargs: Dict[str, Any] = dict(
+        kwargs: dict[str, Any] = dict(
             model=request.model,
             max_tokens=request.max_tokens,
             system=SYSTEM_PROMPT,
@@ -200,7 +208,7 @@ class EscalationManager:
 
 
 # Global manager — the ask_claude tool and the web server share this queue.
-_manager: Optional[EscalationManager] = None
+_manager: EscalationManager | None = None
 
 
 def get_escalation_manager() -> EscalationManager:

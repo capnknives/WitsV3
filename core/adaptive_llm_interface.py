@@ -11,18 +11,19 @@ Ollama instead — see `planning/archive/adaptive_llm/README.md`.
 Superseded by `core/model_router.py` for smart routing.
 """
 
-import logging
 import asyncio
+import logging
 import time
-from typing import Dict, List, Optional, Any, Union, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from .config import WitsV3Config
-from .llm_interface import BaseLLMInterface
-from .complexity_analyzer import ComplexityAnalyzer
-from .dynamic_module_loader import DynamicModuleLoader
-from .semantic_cache import SemanticCache
+from .adaptive import AdaptiveTokenizer, PerformanceTracker, ResponseGenerator
 from .adaptive_llm_config import AdaptiveLLMSettings
-from .adaptive import PerformanceTracker, AdaptiveTokenizer, ResponseGenerator
+from .complexity_analyzer import ComplexityAnalyzer
+from .config import WitsV3Config
+from .dynamic_module_loader import DynamicModuleLoader
+from .llm_interface import BaseLLMInterface
+from .semantic_cache import SemanticCache
 
 
 class AdaptiveLLMInterface(BaseLLMInterface):
@@ -99,11 +100,11 @@ class AdaptiveLLMInterface(BaseLLMInterface):
     async def generate(
         self,
         prompt: str,
-        max_tokens: Optional[int] = None,
-        temperature: Optional[float] = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
         stream: bool = False,
-        **kwargs
-    ) -> Union[str, AsyncGenerator[str, None]]:
+        **kwargs,
+    ) -> str | AsyncGenerator[str, None]:
         """
         Generate a response to the given prompt.
 
@@ -126,8 +127,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
         # Check cache if enabled
         if self.settings.enable_caching:
             cached_response = await self.semantic_cache.find_similar(
-                prompt,
-                threshold=self.settings.cache_similarity_threshold
+                prompt, threshold=self.settings.cache_similarity_threshold
             )
 
             if cached_response:
@@ -137,23 +137,25 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                 if self.settings.enable_performance_tracking:
                     self.performance_tracker.track_performance(
                         prompt=prompt,
-                        response=cached_response['response'],
-                        module='cache',
-                        complexity=cached_response['metadata'].get('complexity', 0.0),
+                        response=cached_response["response"],
+                        module="cache",
+                        complexity=cached_response["metadata"].get("complexity", 0.0),
                         generation_time=time.time() - start_time,
                         cache_hit=True,
-                        similarity=cached_response['similarity']
+                        similarity=cached_response["similarity"],
                     )
 
                 if stream:
-                    return self.response_generator.stream_cached_response(cached_response['response'])
+                    return self.response_generator.stream_cached_response(
+                        cached_response["response"]
+                    )
                 else:
-                    return cached_response['response']
+                    return cached_response["response"]
 
         # Analyze complexity
         analysis = await self.complexity_analyzer.analyze_complexity(prompt)
-        complexity = analysis['complexity']
-        domain = analysis['domain']
+        complexity = analysis["complexity"]
+        domain = analysis["domain"]
 
         self.logger.info(f"Prompt complexity: {complexity:.2f}, domain: {domain}")
 
@@ -181,11 +183,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                 if self.settings.enable_caching:
                     generation_time = time.time() - start_time
                     await self.semantic_cache.add_pattern(
-                        prompt,
-                        response,
-                        module_name,
-                        complexity,
-                        generation_time
+                        prompt, response, module_name, complexity, generation_time
                     )
 
                 # Track performance
@@ -196,7 +194,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                         module=module_name,
                         complexity=complexity,
                         generation_time=time.time() - start_time,
-                        cache_hit=False
+                        cache_hit=False,
                     )
 
                 return response
@@ -205,9 +203,14 @@ class AdaptiveLLMInterface(BaseLLMInterface):
             self.logger.error(f"Error generating response: {e}")
 
             # Fallback to base LLM interface
-            if self.settings.fallback_to_base_on_error and self.fallback_attempts < self.settings.max_fallback_attempts:
+            if (
+                self.settings.fallback_to_base_on_error
+                and self.fallback_attempts < self.settings.max_fallback_attempts
+            ):
                 self.fallback_attempts += 1
-                self.logger.warning(f"Falling back to base LLM interface (attempt {self.fallback_attempts})")
+                self.logger.warning(
+                    f"Falling back to base LLM interface (attempt {self.fallback_attempts})"
+                )
 
                 response = await self.response_generator.generate_with_fallback(
                     self.generate,  # Primary generator
@@ -216,7 +219,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                     max_tokens,
                     temperature,
                     stream,
-                    **kwargs
+                    **kwargs,
                 )
 
                 # Track performance for non-streaming fallback
@@ -224,11 +227,11 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                     self.performance_tracker.track_performance(
                         prompt=prompt,
                         response=response,
-                        module='fallback',
+                        module="fallback",
                         complexity=complexity,
                         generation_time=time.time() - start_time,
                         cache_hit=False,
-                        error=str(e)
+                        error=str(e),
                     )
 
                 return response
@@ -237,7 +240,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
                 self.fallback_attempts = 0
                 raise
 
-    async def get_embedding(self, text: str, model=None) -> List[float]:
+    async def get_embedding(self, text: str, model=None) -> list[float]:
         # 'model' parameter is ignored but accepted for compatibility with MemoryManager
         """
         Get embedding for the given text.
@@ -251,7 +254,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
         # Delegate to base LLM interface
         return await self.llm_interface.get_embedding(text)
 
-    def get_module_info(self, module_name: str) -> Dict[str, Any]:
+    def get_module_info(self, module_name: str) -> dict[str, Any]:
         """
         Get information about a module.
 
@@ -263,7 +266,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
         """
         return self.module_loader.get_module_info(module_name)
 
-    def get_resource_usage(self) -> Dict[str, float]:
+    def get_resource_usage(self) -> dict[str, float]:
         """
         Get current resource usage.
 
@@ -272,7 +275,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
         """
         return self.module_loader.get_resource_usage()
 
-    def get_performance_stats(self) -> Dict[str, Any]:
+    def get_performance_stats(self) -> dict[str, Any]:
         """
         Get performance statistics.
 
@@ -294,7 +297,7 @@ class AdaptiveLLMInterface(BaseLLMInterface):
 
         self.logger.info("AdaptiveLLMInterface shutdown complete")
 
-    def get_system_status(self) -> Dict[str, Any]:
+    def get_system_status(self) -> dict[str, Any]:
         """
         Get system status information.
 
@@ -302,21 +305,21 @@ class AdaptiveLLMInterface(BaseLLMInterface):
             Dictionary with system status information
         """
         return {
-            'resource_usage': self.get_resource_usage(),
-            'performance_stats': self.get_performance_stats(),
-            'modules': {
-                name: self.get_module_info(name)
-                for name in self.module_loader.module_registry
-            }
+            "resource_usage": self.get_resource_usage(),
+            "performance_stats": self.get_performance_stats(),
+            "modules": {
+                name: self.get_module_info(name) for name in self.module_loader.module_registry
+            },
         }
 
 
 # Test function
 async def test_adaptive_llm_interface():
     """Test the AdaptiveLLMInterface functionality."""
+    import os
+
     from .config import WitsV3Config
     from .llm_interface import get_llm_interface
-    import os
 
     print("Testing AdaptiveLLMInterface...")
 
@@ -339,7 +342,7 @@ async def test_adaptive_llm_interface():
         "Write a Python function to calculate the Fibonacci sequence recursively.",
         "Explain the philosophical implications of quantum mechanics on our understanding of reality.",
         "What is 2+2?",
-        "Write a short story about a robot who discovers emotions."
+        "Write a short story about a robot who discovers emotions.",
     ]
 
     for prompt in test_prompts:
@@ -362,8 +365,12 @@ async def test_adaptive_llm_interface():
     # Test resource usage
     print("\nResource usage:")
     usage = adaptive_llm.get_resource_usage()
-    print(f"VRAM usage: {usage['vram_usage'] / 1e9:.2f} GB / {usage['vram_budget'] / 1e9:.2f} GB ({usage['vram_percent']:.1f}%)")
-    print(f"RAM usage: {usage['ram_usage'] / 1e9:.2f} GB / {usage['ram_budget'] / 1e9:.2f} GB ({usage['ram_percent']:.1f}%)")
+    print(
+        f"VRAM usage: {usage['vram_usage'] / 1e9:.2f} GB / {usage['vram_budget'] / 1e9:.2f} GB ({usage['vram_percent']:.1f}%)"
+    )
+    print(
+        f"RAM usage: {usage['ram_usage'] / 1e9:.2f} GB / {usage['ram_budget'] / 1e9:.2f} GB ({usage['ram_percent']:.1f}%)"
+    )
 
     # Test shutdown
     print("\nShutting down...")
@@ -374,4 +381,5 @@ async def test_adaptive_llm_interface():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_adaptive_llm_interface())

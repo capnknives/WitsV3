@@ -5,60 +5,64 @@ These tests verify the functionality of the cognitive architecture's
 integration with various cognitive systems and its processing capabilities.
 """
 
-import asyncio
-import pytest
 import os
-import json
-import time
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
 
 # Ensure we can import from the root
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import CognitiveState directly - avoid importing CognitiveArchitecture before patching
 from core.cognitive_architecture import CognitiveState
 
 # CognitiveArchitecture will be imported after patching dependencies
-from core.schemas import StreamData
 
 
 @pytest.fixture
 def cognitive_architecture():
     """Fixture for a cognitive architecture instance with mocked dependencies."""
-    with patch('core.cognitive_architecture.MemoryHandler', return_value=AsyncMock()) as mock_memory_handler, \
-         patch('core.cognitive_architecture.get_enhanced_llm_interface', return_value=AsyncMock()) as mock_llm, \
-         patch('core.cognitive_architecture.ToolRegistry', return_value=MagicMock()) as mock_tool_registry, \
-         patch('core.cognitive_architecture.KnowledgeGraph', return_value=MagicMock()) as mock_knowledge_graph:
+    with (
+        patch("core.cognitive_architecture.MemoryHandler", return_value=AsyncMock()),
+        patch("core.cognitive_architecture.get_enhanced_llm_interface", return_value=AsyncMock()),
+        patch("core.cognitive_architecture.ToolRegistry", return_value=MagicMock()),
+        patch("core.cognitive_architecture.KnowledgeGraph", return_value=MagicMock()),
+    ):
 
         # Now import the CognitiveArchitecture class after dependencies are patched
         from core.cognitive_architecture import CognitiveArchitecture
 
         # Override _load_config method
-        CognitiveArchitecture._load_config = MagicMock(return_value={
-             "identity": {"name": "TestWITS"},
-             "cognitive_modules": {
-                 "perception": {"enabled": True, "input_processors": ["text_processor"]},
-                 "reasoning": {"enabled": True, "modules": ["deductive_reasoning"]},
-                 "metacognition": {"enabled": True}
-             }
-        })
+        CognitiveArchitecture._load_config = MagicMock(
+            return_value={
+                "identity": {"name": "TestWITS"},
+                "cognitive_modules": {
+                    "perception": {"enabled": True, "input_processors": ["text_processor"]},
+                    "reasoning": {"enabled": True, "modules": ["deductive_reasoning"]},
+                    "metacognition": {"enabled": True},
+                },
+            }
+        )
 
         # Create cognitive architecture
         architecture = CognitiveArchitecture()
 
         # Configure mocks
         architecture.memory_handler.remember = AsyncMock(return_value="memory-123")
-        architecture.memory_handler.recall = AsyncMock(return_value=[
-            {"id": "memory-1", "content": "Relevant memory", "relevance": 0.9}
-        ])
-        architecture.memory_handler.get_current_context = AsyncMock(return_value={
-            "context_id": "context-123",
-            "working_memory": {"test": "value"},
-            "active_concepts": ["concept1"],
-            "recent_memories": [{"id": "memory-1", "summary": "Memory summary"}]
-        })
+        architecture.memory_handler.recall = AsyncMock(
+            return_value=[{"id": "memory-1", "content": "Relevant memory", "relevance": 0.9}]
+        )
+        architecture.memory_handler.get_current_context = AsyncMock(
+            return_value={
+                "context_id": "context-123",
+                "working_memory": {"test": "value"},
+                "active_concepts": ["concept1"],
+                "recent_memories": [{"id": "memory-1", "summary": "Memory summary"}],
+            }
+        )
 
         architecture.llm_interface.generate_text = AsyncMock(
             return_value="Generated reasoning and response text."
@@ -117,16 +121,12 @@ async def test_perception_module(cognitive_architecture):
 async def test_reasoning_module(cognitive_architecture):
     """Test the reasoning module."""
     # Create test inputs
-    perception_result = {
-        "raw_input": "Test input",
-        "intent": "question",
-        "domains": ["general"]
-    }
+    perception_result = {"raw_input": "Test input", "intent": "question", "domains": ["general"]}
 
     memory_context = {
         "current_context": {"test": "value"},
         "relevant_memories": [{"content": "Relevant memory"}],
-        "active_concepts": ["concept1"]
+        "active_concepts": ["concept1"],
     }
 
     # Run reasoning directly
@@ -158,7 +158,7 @@ async def test_cognitive_state_model():
         active_goals=[{"name": "Answer user question", "priority": 1}],
         current_context={"focus": "user query"},
         reasoning_pathway="deductive",
-        attention_focus={"topic": "test topic"}
+        attention_focus={"topic": "test topic"},
     )
 
     # Verify attributes

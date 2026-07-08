@@ -11,7 +11,9 @@ def test_is_ollama_unavailable_detects_connection_errors():
 
 def test_format_chat_error_ollama():
     fmt = format_chat_error(
-        ValueError("Failed to connect to Ollama at http://localhost:11434. Please ensure Ollama is running."),
+        ValueError(
+            "Failed to connect to Ollama at http://localhost:11434. Please ensure Ollama is running."
+        ),
         ollama_url="http://localhost:11434",
     )
     assert fmt["code"] == "ollama_unavailable"

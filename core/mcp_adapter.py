@@ -8,11 +8,11 @@ import json
 import logging
 import os
 import shutil
-from typing import Dict, Any, List, Optional, Union
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
-from .schemas import ToolCall, ToolResult, StreamData
+from .schemas import ToolCall, ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ NPX_STARTUP_TIMEOUT = 120.0
 DEFAULT_STARTUP_TIMEOUT = 30.0
 
 
-def startup_timeout_for_command(command: List[str]) -> float:
+def startup_timeout_for_command(command: list[str]) -> float:
     """How long to wait for the MCP server process to answer initialize."""
     if not command:
         return DEFAULT_STARTUP_TIMEOUT
@@ -36,19 +36,21 @@ def startup_timeout_for_command(command: List[str]) -> float:
 @dataclass
 class MCPServer:
     """Configuration for an MCP server connection"""
+
     name: str
-    command: List[str]
-    args: Optional[List[str]] = None
-    env: Optional[Dict[str, str]] = None
-    working_directory: Optional[str] = None
+    command: list[str]
+    args: list[str] | None = None
+    env: dict[str, str] | None = None
+    working_directory: str | None = None
 
 
 @dataclass
 class MCPTool:
     """Represents an MCP tool"""
+
     name: str
     description: str
-    input_schema: Dict[str, Any]
+    input_schema: dict[str, Any]
     server_name: str
 
 
@@ -66,12 +68,12 @@ class MCPClient(ABC):
         pass
 
     @abstractmethod
-    async def list_tools(self) -> List[MCPTool]:
+    async def list_tools(self) -> list[MCPTool]:
         """List available tools from the MCP server"""
         pass
 
     @abstractmethod
-    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server"""
         pass
 
@@ -81,12 +83,12 @@ class StdioMCPClient(MCPClient):
 
     def __init__(self, server_config: MCPServer):
         self.server_config = server_config
-        self.process: Optional[asyncio.subprocess.Process] = None
+        self.process: asyncio.subprocess.Process | None = None
         self.is_connected = False
         self.handshake_complete = False
         self.request_id = 0
-        self._tools_cache: List[MCPTool] = []
-        self._stderr_task: Optional[asyncio.Task] = None
+        self._tools_cache: list[MCPTool] = []
+        self._stderr_task: asyncio.Task | None = None
         self._io_timeout = DEFAULT_IO_TIMEOUT
 
     def _start_stderr_drain(self) -> None:
@@ -149,18 +151,26 @@ class StdioMCPClient(MCPClient):
             if resolved_cmd:
                 cmd[0] = resolved_cmd
 
-            if isinstance(cmd[0], str) and (cmd[0].endswith('.js') or cmd[0].endswith('.ts')):
-                if self.server_config.working_directory and not os.path.exists(self.server_config.working_directory):
-                    logger.error(f"MCP server working directory does not exist: {self.server_config.working_directory}")
+            if isinstance(cmd[0], str) and (cmd[0].endswith(".js") or cmd[0].endswith(".ts")):
+                if self.server_config.working_directory and not os.path.exists(
+                    self.server_config.working_directory
+                ):
+                    logger.error(
+                        f"MCP server working directory does not exist: {self.server_config.working_directory}"
+                    )
                     return False
                 if self.server_config.working_directory:
                     full_cmd_path = os.path.join(self.server_config.working_directory, cmd[0])
-                    if not os.path.exists(full_cmd_path) and not os.path.exists(full_cmd_path.replace('\\', '/')):
+                    if not os.path.exists(full_cmd_path) and not os.path.exists(
+                        full_cmd_path.replace("\\", "/")
+                    ):
                         logger.error(f"MCP server command not found: {full_cmd_path}")
                         return False
 
             startup_timeout = startup_timeout_for_command(cmd)
-            logger.info(f"Starting MCP server process: {cmd} (startup timeout {startup_timeout:.0f}s)")
+            logger.info(
+                f"Starting MCP server process: {cmd} (startup timeout {startup_timeout:.0f}s)"
+            )
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE,
@@ -194,10 +204,12 @@ class StdioMCPClient(MCPClient):
                 await self._cleanup_failed_connect()
                 return False
 
-            await self._send_request({
-                "jsonrpc": "2.0",
-                "method": "notifications/initialized",
-            })
+            await self._send_request(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "notifications/initialized",
+                }
+            )
             self.is_connected = True
             self.handshake_complete = True
             logger.info(f"Successfully connected to MCP server: {self.server_config.name}")
@@ -225,7 +237,7 @@ class StdioMCPClient(MCPClient):
         self.handshake_complete = False
         logger.info(f"Disconnected from MCP server: {self.server_config.name}")
 
-    async def list_tools(self) -> List[MCPTool]:
+    async def list_tools(self) -> list[MCPTool]:
         """List available tools from the MCP server"""
         if not self.is_connected or not self.handshake_complete:
             return []
@@ -247,7 +259,7 @@ class StdioMCPClient(MCPClient):
                         name=tool_data["name"],
                         description=tool_data.get("description", ""),
                         input_schema=tool_data.get("inputSchema", {}),
-                        server_name=self.server_config.name
+                        server_name=self.server_config.name,
                     )
                     tools.append(tool)
 
@@ -261,7 +273,7 @@ class StdioMCPClient(MCPClient):
             logger.error(f"Error listing tools from {self.server_config.name}: {e}")
             return []
 
-    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server"""
         if not self.is_connected:
             return {"error": "Not connected to MCP server"}
@@ -271,10 +283,7 @@ class StdioMCPClient(MCPClient):
                 "jsonrpc": "2.0",
                 "id": self._next_id(),
                 "method": "tools/call",
-                "params": {
-                    "name": name,
-                    "arguments": arguments
-                }
+                "params": {"name": name, "arguments": arguments},
             }
 
             await self._send_request(request)
@@ -283,7 +292,11 @@ class StdioMCPClient(MCPClient):
             if response and "result" in response:
                 return response["result"]
             else:
-                error_msg = response.get("error", {}).get("message", "Unknown error") if response else "No response"
+                error_msg = (
+                    response.get("error", {}).get("message", "Unknown error")
+                    if response
+                    else "No response"
+                )
                 return {"error": f"Tool call failed: {error_msg}"}
 
         except Exception as e:
@@ -295,7 +308,7 @@ class StdioMCPClient(MCPClient):
         self.request_id += 1
         return self.request_id
 
-    async def _send_request(self, request: Dict[str, Any]) -> None:
+    async def _send_request(self, request: dict[str, Any]) -> None:
         """Send a JSON-RPC request to the MCP server"""
         if not self.process or not self.process.stdin:
             raise Exception("No active process to send request to")
@@ -304,7 +317,7 @@ class StdioMCPClient(MCPClient):
         self.process.stdin.write(message.encode())
         await self.process.stdin.drain()
 
-    async def _read_response(self, timeout: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    async def _read_response(self, timeout: float | None = None) -> dict[str, Any] | None:
         """Read a JSON-RPC response from the MCP server, skipping notifications"""
         if not self.process or not self.process.stdout:
             return None
@@ -330,8 +343,8 @@ class MCPAdapter:
     """Main adapter for managing MCP server connections and tool calls"""
 
     def __init__(self):
-        self.clients: Dict[str, MCPClient] = {}
-        self.tools: Dict[str, MCPTool] = {}
+        self.clients: dict[str, MCPClient] = {}
+        self.tools: dict[str, MCPTool] = {}
 
     async def add_server(self, server_config: MCPServer) -> bool:
         """Add and connect to an MCP server"""
@@ -360,15 +373,16 @@ class MCPAdapter:
         if server_name in self.clients:
             await self.clients[server_name].disconnect()
             del self.clients[server_name]
-              # Remove tools from this server
-            tools_to_remove = [name for name, tool in self.tools.items()
-                             if tool.server_name == server_name]
+            # Remove tools from this server
+            tools_to_remove = [
+                name for name, tool in self.tools.items() if tool.server_name == server_name
+            ]
             for tool_name in tools_to_remove:
                 del self.tools[tool_name]
 
             logger.info(f"Removed MCP server {server_name}")
 
-    async def list_available_tools(self) -> List[MCPTool]:
+    async def list_available_tools(self) -> list[MCPTool]:
         """List all available tools from all connected servers"""
         return list(self.tools.values())
 
@@ -381,7 +395,7 @@ class MCPAdapter:
                 call_id=tool_call.call_id,
                 success=False,
                 result=None,
-                error=f"Tool '{tool_name}' not found"
+                error=f"Tool '{tool_name}' not found",
             )
 
         tool = self.tools[tool_name]
@@ -392,7 +406,7 @@ class MCPAdapter:
                 call_id=tool_call.call_id,
                 success=False,
                 result=None,
-                error=f"Server '{tool.server_name}' not connected"
+                error=f"Server '{tool.server_name}' not connected",
             )
 
         try:
@@ -400,26 +414,15 @@ class MCPAdapter:
 
             if "error" in result:
                 return ToolResult(
-                    call_id=tool_call.call_id,
-                    success=False,
-                    result=None,
-                    error=result["error"]
+                    call_id=tool_call.call_id, success=False, result=None, error=result["error"]
                 )
             else:
                 return ToolResult(
-                    call_id=tool_call.call_id,
-                    success=True,
-                    result=result,
-                    error=None
+                    call_id=tool_call.call_id, success=True, result=result, error=None
                 )
 
         except Exception as e:
-            return ToolResult(
-                call_id=tool_call.call_id,
-                success=False,
-                result=None,
-                error=str(e)
-            )
+            return ToolResult(call_id=tool_call.call_id, success=False, result=None, error=str(e))
 
     async def shutdown(self) -> None:
         """Shutdown all MCP server connections"""
@@ -437,7 +440,7 @@ async def test_mcp_adapter():
     server_config = MCPServer(
         name="filesystem",
         command=["npx", "-y", "@modelcontextprotocol/server-filesystem"],
-        args=["/tmp"]
+        args=["/tmp"],
     )
 
     try:
@@ -449,13 +452,9 @@ async def test_mcp_adapter():
             # Test listing tools
             tools = await adapter.list_available_tools()
             print(f"Available tools: {[tool.name for tool in tools]}")
-              # Test tool call
+            # Test tool call
             if tools:
-                tool_call = ToolCall(
-                    call_id="test_1",
-                    tool_name=tools[0].name,
-                    arguments={}
-                )
+                tool_call = ToolCall(call_id="test_1", tool_name=tools[0].name, arguments={})
                 result = await adapter.call_tool(tool_call)
                 print(f"Tool call result: {result}")
 

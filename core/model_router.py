@@ -16,7 +16,7 @@ every request look "complex".
 
 import logging
 import re
-from typing import Literal, Optional
+from typing import Literal
 
 from .config import WitsV3Config
 
@@ -73,9 +73,9 @@ class ModelRouter:
     def route(
         self,
         text: str,
-        default: Optional[str] = None,
+        default: str | None = None,
         allow_trivial: bool = True,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Pick the model for the given raw user text.
 
@@ -102,5 +102,7 @@ class ModelRouter:
             model = fallback
 
         if model != fallback:
-            self.logger.info(f"Routed {route_class!r} request to model {model} (default was {fallback})")
+            self.logger.info(
+                f"Routed {route_class!r} request to model {model} (default was {fallback})"
+            )
         return model

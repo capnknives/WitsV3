@@ -31,6 +31,7 @@ Feature work → **`fix/revive-2026-07`** → Richard merges to **`main`** after
 | Routing bugfixes (keyword word-boundaries, whole-codebase scan fallback, clarification-bypass) | ✅ Shipped July 8 |
 | Dual self-repair schedule fix (Docker bg agent off by default) | ✅ Shipped July 8 |
 | Docs pass (README install guide, redirects, roadmap truth) | ✅ Shipped July 8 |
+| Full CI lint (ruff E/F/W/I/UP/B + black --check) | ✅ Shipped July 8 |
 | July revival feature backlog | ✅ **Closed** — polish + optional features remain |
 
 ---
@@ -84,7 +85,7 @@ Summary of what landed (detail also in README § Self-repair):
 | Friendlier Ollama-down (CLI) | Match web UX | Small | ✅ Done |
 | Conversation export UX | One-click export in web UI | Small–Medium | ✅ Done |
 | Conversation-history-aware intent | Short replies after a clarifying question misclassified as casual chat | Medium | Open |
-| Expand CI lint | Full ruff/black blocked by legacy noise | Medium (incremental) | Open |
+| Expand CI lint | Full ruff/black blocked by legacy noise | Medium (incremental) | ✅ Done July 8 — CI runs full `ruff check` + `black --check` |
 | Docs / README modernity | Install + honest status | Medium | ✅ Done July 8 |
 | Clutter cleanup wave 1 | Delete orphans listed in clutter catalog (`self_repair_handlers*`, `run_backup.py`, …) | Small–Medium | Open |
 
@@ -171,7 +172,7 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 1. Promote `fix/revive-2026-07` → `main` when ready  
 2. Clutter cleanup wave 1 (orphans from catalog §1)  
 3. Conversation-history-aware intent classification  
-4. Incremental lint hygiene until CI can enforce fuller ruff/black  
+4. ~~Incremental lint hygiene until CI can enforce fuller ruff/black~~ ✅  
 5. Optional: memory browser / multi-session chat  
 
 ---

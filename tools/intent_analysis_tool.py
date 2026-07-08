@@ -5,7 +5,7 @@ Analyzes user input to determine intent and appropriate response strategy.
 """
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 from core.base_tool import BaseTool
 
@@ -16,10 +16,10 @@ class IntentAnalysisTool(BaseTool):
     def __init__(self):
         super().__init__(
             name="intent_analysis",
-            description="Analyze user input to determine intent and response strategy"
+            description="Analyze user input to determine intent and response strategy",
         )
 
-    async def execute(self, input_text: str = "", context: Optional[str] = None) -> Dict[str, Any]:
+    async def execute(self, input_text: str = "", context: str | None = None) -> dict[str, Any]:
         """
         Analyze user intent.
 
@@ -39,7 +39,7 @@ class IntentAnalysisTool(BaseTool):
                     "goal_statement": None,
                     "direct_response": None,
                     "clarification_question": None,
-                    "reasoning": "Default intent analysis due to missing parameters"
+                    "reasoning": "Default intent analysis due to missing parameters",
                 }
 
             # This is a simplified implementation
@@ -53,15 +53,34 @@ class IntentAnalysisTool(BaseTool):
             goal_statement = input_text
 
             # Check for task/goal patterns
-            task_keywords = ["create", "make", "build", "write", "generate",
-                            "develop", "implement", "design", "fix", "solve"]
+            task_keywords = [
+                "create",
+                "make",
+                "build",
+                "write",
+                "generate",
+                "develop",
+                "implement",
+                "design",
+                "fix",
+                "solve",
+            ]
 
             if any(keyword in input_lower for keyword in task_keywords):
                 intent_type = "goal_defined"
                 confidence = 0.7
 
             # Check for question patterns
-            question_keywords = ["what", "how", "why", "when", "where", "who", "can you", "could you"]
+            question_keywords = [
+                "what",
+                "how",
+                "why",
+                "when",
+                "where",
+                "who",
+                "can you",
+                "could you",
+            ]
 
             if any(keyword in input_lower for keyword in question_keywords):
                 if "?" in input_text:
@@ -71,7 +90,10 @@ class IntentAnalysisTool(BaseTool):
             # Check for clarification needs
             ambiguous_keywords = ["it", "that", "this", "they", "them", "those", "something"]
 
-            if any(keyword in input_lower.split() for keyword in ambiguous_keywords) and len(input_text.split()) < 5:
+            if (
+                any(keyword in input_lower.split() for keyword in ambiguous_keywords)
+                and len(input_text.split()) < 5
+            ):
                 intent_type = "clarification_question"
                 confidence = 0.6
 
@@ -81,8 +103,12 @@ class IntentAnalysisTool(BaseTool):
                 "confidence": confidence,
                 "goal_statement": goal_statement if intent_type == "goal_defined" else None,
                 "direct_response": None,
-                "clarification_question": "Could you please provide more details?" if intent_type == "clarification_question" else None,
-                "reasoning": f"Detected intent type: {intent_type} based on keyword analysis"
+                "clarification_question": (
+                    "Could you please provide more details?"
+                    if intent_type == "clarification_question"
+                    else None
+                ),
+                "reasoning": f"Detected intent type: {intent_type} based on keyword analysis",
             }
 
             self.logger.info(f"Analyzed intent: {intent_type} (confidence: {confidence})")
@@ -90,28 +116,21 @@ class IntentAnalysisTool(BaseTool):
 
         except Exception as e:
             self.logger.error(f"Error analyzing intent: {e}")
-            return {
-                "type": "error",
-                "error": str(e),
-                "confidence": 0.0
-            }
+            return {"type": "error", "error": str(e), "confidence": 0.0}
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         """Get tool schema."""
         return {
             "type": "object",
             "properties": {
-                "input_text": {
-                    "type": "string",
-                    "description": "User input to analyze"
-                },
+                "input_text": {"type": "string", "description": "User input to analyze"},
                 "context": {
                     "type": "string",
                     "description": "Optional conversation context",
-                    "default": ""
-                }
+                    "default": "",
+                },
             },
-            "required": []  # Make input_text optional
+            "required": [],  # Make input_text optional
         }
 
 
@@ -127,7 +146,7 @@ async def test_intent_analysis_tool():
         "Write me a story about dragons",
         "What is the capital of France?",
         "Can you help me with this?",
-        "Fix the bug in my code"
+        "Fix the bug in my code",
     ]
 
     for input_text in test_inputs:
@@ -144,4 +163,5 @@ async def test_intent_analysis_tool():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_intent_analysis_tool())

@@ -6,7 +6,8 @@ real capabilities added: writing generated project files to workspace/ with
 a compile check, and editing an existing named file through the same
 verify-before-commit pipeline the self-repair agent uses.
 """
-from typing import AsyncGenerator, List, Optional
+
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -19,10 +20,10 @@ from core.safe_code_editor import PROJECT_ROOT
 
 
 class ScriptedLLM(BaseLLMInterface):
-    def __init__(self, response: str = "ok", config: Optional[WitsV3Config] = None):
+    def __init__(self, response: str = "ok", config: WitsV3Config | None = None):
         super().__init__(config or WitsV3Config())
         self.response = response
-        self.calls: List[str] = []
+        self.calls: list[str] = []
 
     async def generate_text(self, prompt: str, **kwargs) -> str:
         self.calls.append(prompt)
@@ -31,7 +32,7 @@ class ScriptedLLM(BaseLLMInterface):
     async def stream_text(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         yield self.response
 
-    async def get_embedding(self, text: str, model: Optional[str] = None) -> List[float]:
+    async def get_embedding(self, text: str, model: str | None = None) -> list[float]:
         return [0.0] * 8
 
 
@@ -44,15 +45,24 @@ def _fake_registry(tools: dict):
 @pytest.fixture
 def agent():
     return AdvancedCodingAgent(
-        agent_name="TestCoder", config=WitsV3Config(), llm_interface=ScriptedLLM(),
+        agent_name="TestCoder",
+        config=WitsV3Config(),
+        llm_interface=ScriptedLLM(),
     )
 
 
 @pytest.mark.asyncio
 async def test_write_project_files_writes_to_workspace_and_compiles(agent):
     project = CodeProject(
-        id="proj1", name="_scratch_test_project", description="", language="python",
-        project_type="cli_tool", structure={}, dependencies=[], files={}, tests={},
+        id="proj1",
+        name="_scratch_test_project",
+        description="",
+        language="python",
+        project_type="cli_tool",
+        structure={},
+        dependencies=[],
+        files={},
+        tests={},
         documentation="",
     )
     workspace_dir = PROJECT_ROOT / "workspace" / project.name
@@ -65,14 +75,22 @@ async def test_write_project_files_writes_to_workspace_and_compiles(agent):
         assert (workspace_dir / "main.py").read_text(encoding="utf-8") == "print('hello')\n"
     finally:
         import shutil
+
         shutil.rmtree(workspace_dir, ignore_errors=True)
 
 
 @pytest.mark.asyncio
 async def test_write_project_files_reports_syntax_errors(agent):
     project = CodeProject(
-        id="proj2", name="_scratch_bad_project", description="", language="python",
-        project_type="cli_tool", structure={}, dependencies=[], files={}, tests={},
+        id="proj2",
+        name="_scratch_bad_project",
+        description="",
+        language="python",
+        project_type="cli_tool",
+        structure={},
+        dependencies=[],
+        files={},
+        tests={},
         documentation="",
     )
     workspace_dir = PROJECT_ROOT / "workspace" / project.name
@@ -81,6 +99,7 @@ async def test_write_project_files_reports_syntax_errors(agent):
         assert any("syntax error" in r for r in results)
     finally:
         import shutil
+
         shutil.rmtree(workspace_dir, ignore_errors=True)
 
 
@@ -90,21 +109,28 @@ async def test_run_routes_to_existing_file_fix_when_file_named():
     scratch_abs = PROJECT_ROOT / scratch_rel
     scratch_abs.write_text("def broken():\n    return 1 / 0\n", encoding="utf-8")
 
-    fix_execute = AsyncMock(return_value={
-        "success": True, "committed": False, "commit_sha": None,
-        "message": "Edit applied and verified.", "test_output": "1 passed",
-    })
+    fix_execute = AsyncMock(
+        return_value={
+            "success": True,
+            "committed": False,
+            "commit_sha": None,
+            "message": "Edit applied and verified.",
+            "test_output": "1 passed",
+        }
+    )
     registry = _fake_registry({"apply_code_fix": MagicMock(execute=fix_execute)})
     llm = ScriptedLLM("```python\ndef broken():\n    return 0\n```")
     agent = AdvancedCodingAgent(
-        agent_name="TestCoder", config=WitsV3Config(), llm_interface=llm, tool_registry=registry,
+        agent_name="TestCoder",
+        config=WitsV3Config(),
+        llm_interface=llm,
+        tool_registry=registry,
     )
 
     try:
         streams = [
-            item async for item in agent.run(
-                f"{scratch_rel} raises a ZeroDivisionError, please fix it"
-            )
+            item
+            async for item in agent.run(f"{scratch_rel} raises a ZeroDivisionError, please fix it")
         ]
     finally:
         scratch_abs.unlink(missing_ok=True)
@@ -120,14 +146,22 @@ async def test_run_reports_failed_fix_as_reverted():
     scratch_abs = PROJECT_ROOT / scratch_rel
     scratch_abs.write_text("def broken():\n    return 1 / 0\n", encoding="utf-8")
 
-    fix_execute = AsyncMock(return_value={
-        "success": False, "committed": False, "commit_sha": None,
-        "message": "Verification failed; change reverted.", "test_output": "1 failed",
-    })
+    fix_execute = AsyncMock(
+        return_value={
+            "success": False,
+            "committed": False,
+            "commit_sha": None,
+            "message": "Verification failed; change reverted.",
+            "test_output": "1 failed",
+        }
+    )
     registry = _fake_registry({"apply_code_fix": MagicMock(execute=fix_execute)})
     llm = ScriptedLLM("```python\nstill broken\n```")
     agent = AdvancedCodingAgent(
-        agent_name="TestCoder", config=WitsV3Config(), llm_interface=llm, tool_registry=registry,
+        agent_name="TestCoder",
+        config=WitsV3Config(),
+        llm_interface=llm,
+        tool_registry=registry,
     )
 
     try:
@@ -144,7 +178,9 @@ async def test_run_without_tool_registry_reports_unavailable():
     scratch_abs = PROJECT_ROOT / scratch_rel
     scratch_abs.write_text("x = 1\n", encoding="utf-8")
 
-    agent = AdvancedCodingAgent(agent_name="TestCoder", config=WitsV3Config(), llm_interface=ScriptedLLM())
+    agent = AdvancedCodingAgent(
+        agent_name="TestCoder", config=WitsV3Config(), llm_interface=ScriptedLLM()
+    )
     try:
         streams = [item async for item in agent.run(f"clean up {scratch_rel}")]
     finally:

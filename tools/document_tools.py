@@ -16,7 +16,7 @@ import hashlib
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.base_tool import BaseTool
 
@@ -26,12 +26,13 @@ DOCUMENT_SEGMENT_TYPE = "DOCUMENT_CHUNK"
 
 try:
     from pypdf import PdfReader
+
     HAS_PYPDF = True
 except ImportError:
     HAS_PYPDF = False
 
 
-def _read_file_text(path: Path) -> Optional[str]:
+def _read_file_text(path: Path) -> str | None:
     """Read a file's text content. Returns None if unsupported/unreadable."""
     if path.suffix.lower() == ".pdf":
         if not HAS_PYPDF:
@@ -50,7 +51,7 @@ def _read_file_text(path: Path) -> Optional[str]:
         return None
 
 
-def _chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
+def _chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     """Split text into chunks of roughly chunk_size characters.
 
     Splits on paragraph boundaries where possible so chunks stay coherent;
@@ -63,7 +64,7 @@ def _chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
         return [text]
 
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    chunks: List[str] = []
+    chunks: list[str] = []
     current = ""
 
     for para in paragraphs:
@@ -90,9 +91,9 @@ def _chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
     return [c for c in chunks if c.strip()]
 
 
-def _coerce_file_filters(*values: Any) -> List[str]:
+def _coerce_file_filters(*values: Any) -> list[str]:
     """Normalize LLM file filter args (file_name, file_names, source_files, …)."""
-    out: List[str] = []
+    out: list[str] = []
     for value in values:
         if value is None:
             continue
@@ -106,7 +107,7 @@ def _coerce_file_filters(*values: Any) -> List[str]:
                     out.append(item.strip())
     # Preserve order while de-duplicating (case-insensitive).
     seen: set = set()
-    unique: List[str] = []
+    unique: list[str] = []
     for name in out:
         key = name.lower()
         if key not in seen:
@@ -115,7 +116,7 @@ def _coerce_file_filters(*values: Any) -> List[str]:
     return unique
 
 
-def _file_matches_filter(file_path: str, filters: List[str]) -> bool:
+def _file_matches_filter(file_path: str, filters: list[str]) -> bool:
     """True when *file_path* matches any basename or substring filter."""
     if not filters:
         return True
@@ -151,11 +152,11 @@ class _DocumentToolBase(BaseTool):
         self.llm_interface = llm_interface
         self.memory_manager = memory_manager
 
-    def _not_ready(self) -> Optional[Dict[str, Any]]:
+    def _not_ready(self) -> dict[str, Any] | None:
         if self.memory_manager is None or self.config is None:
             return {
                 "success": False,
-                "error": "Document tools are not initialized (system startup has not wired dependencies yet)"
+                "error": "Document tools are not initialized (system startup has not wired dependencies yet)",
             }
         return None
 
@@ -169,10 +170,10 @@ class DocumentIngestTool(_DocumentToolBase):
             description=(
                 "Scan the documents folder and ingest new or changed files into "
                 "searchable memory. Returns a summary of what was ingested."
-            )
+            ),
         )
 
-    async def execute(self, **kwargs) -> Dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         not_ready = self._not_ready()
         if not_ready:
             return not_ready
@@ -197,8 +198,8 @@ class DocumentIngestTool(_DocumentToolBase):
         existing = await self.memory_manager.get_recent_memory(
             limit=1_000_000, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
         )
-        stored_hashes: Dict[str, str] = {}
-        existing_counts: Dict[str, int] = {}
+        stored_hashes: dict[str, str] = {}
+        existing_counts: dict[str, int] = {}
         for seg in existing:
             fp = seg.metadata.get("file_path")
             if fp:
@@ -206,7 +207,7 @@ class DocumentIngestTool(_DocumentToolBase):
                 existing_counts[fp] = existing_counts.get(fp, 0) + 1
 
         seen_paths = set()
-        searchable: Dict[str, int] = {}
+        searchable: dict[str, int] = {}
 
         for path in sorted(docs_dir.rglob("*")):
             if not path.is_file() or path.suffix.lower() not in extensions:
@@ -304,7 +305,7 @@ class DocumentIngestTool(_DocumentToolBase):
 
         return summary
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -326,7 +327,7 @@ class DocumentSearchTool(_DocumentToolBase):
                 "Search the user's ingested documents by meaning and return the "
                 "most relevant passages with their source files. Use this when "
                 "the user asks about their documents, notes, or files."
-            )
+            ),
         )
 
     async def execute(
@@ -334,10 +335,10 @@ class DocumentSearchTool(_DocumentToolBase):
         query: str = "",
         max_results: int = 5,
         min_relevance: float = 0.3,
-        file_name: Optional[str] = None,
-        file_names: Optional[List[str]] = None,
+        file_name: str | None = None,
+        file_names: list[str] | None = None,
         **extra: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         not_ready = self._not_ready()
         if not_ready:
             return not_ready
@@ -370,9 +371,7 @@ class DocumentSearchTool(_DocumentToolBase):
                 segments = [
                     seg
                     for seg in segments
-                    if _file_matches_filter(
-                        seg.metadata.get("file_path", seg.source), file_filters
-                    )
+                    if _file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
                 ][:max_results]
 
             results = [
@@ -398,9 +397,7 @@ class DocumentSearchTool(_DocumentToolBase):
             self.logger.error(f"Document search failed: {e}")
             return {"success": False, "error": str(e), "results": []}
 
-    async def _segments_for_files(
-        self, file_filters: List[str], max_results: int
-    ) -> List[Any]:
+    async def _segments_for_files(self, file_filters: list[str], max_results: int) -> list[Any]:
         """Return ordered chunks for file-scoped browse (summarize-by-filename)."""
         all_segments = await self.memory_manager.get_recent_memory(
             limit=1_000_000, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
@@ -418,7 +415,7 @@ class DocumentSearchTool(_DocumentToolBase):
         )
         return matched[:max_results]
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -427,17 +424,17 @@ class DocumentSearchTool(_DocumentToolBase):
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "What to look for in the documents (natural language)"
+                        "description": "What to look for in the documents (natural language)",
                     },
                     "max_results": {
                         "type": "integer",
                         "description": "Maximum number of passages to return",
-                        "default": 5
+                        "default": 5,
                     },
                     "min_relevance": {
                         "type": "number",
                         "description": "Minimum similarity score (0-1) for a passage to be included",
-                        "default": 0.3
+                        "default": 0.3,
                     },
                     "file_name": {
                         "type": "string",

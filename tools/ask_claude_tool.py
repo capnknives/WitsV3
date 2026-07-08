@@ -7,7 +7,7 @@ for the user to approve or deny it, so no tokens are ever spent without
 explicit per-request consent.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from core.base_tool import BaseTool
 from core.config import load_config
@@ -30,7 +30,7 @@ class AskClaudeTool(BaseTool):
         )
         self.config = load_config()
 
-    async def execute(self, question: str = "", context: str = "", **kwargs) -> Dict[str, Any]:
+    async def execute(self, question: str = "", context: str = "", **kwargs) -> dict[str, Any]:
         if not question.strip():
             return {"success": False, "error": "question is required"}
 
@@ -62,7 +62,7 @@ class AskClaudeTool(BaseTool):
             ),
         }
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "name": "ask_claude",
             "description": self.description,

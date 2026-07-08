@@ -1,4 +1,5 @@
 """Tests for the self-repair tools (log diagnosis, test running, verified fixes, restart)."""
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -36,9 +37,7 @@ def test_parse_traceback_issues_extracts_traceback_with_file_and_line():
 def test_relative_to_project_remaps_sibling_worktree_paths():
     from tools.self_repair_tools import _relative_to_project
 
-    foreign = (
-        r"c:\Users\capta\source\repos\capnknives\WitsV3-claude\agents\base_agent.py"
-    )
+    foreign = r"c:\Users\capta\source\repos\capnknives\WitsV3-claude\agents\base_agent.py"
     assert _relative_to_project(foreign) == "agents/base_agent.py"
     assert _relative_to_project(r"C:\Python310\Lib\logging\__init__.py") is None
 
@@ -97,8 +96,12 @@ async def test_apply_code_fix_tool_wraps_apply_verified_edit():
     from core.safe_code_editor import EditResult
 
     fake_result = EditResult(
-        success=True, file_path="agents/base_agent.py", message="Edit applied and verified.",
-        test_output="1 passed", committed=True, commit_sha="abc1234",
+        success=True,
+        file_path="agents/base_agent.py",
+        message="Edit applied and verified.",
+        test_output="1 passed",
+        committed=True,
+        commit_sha="abc1234",
     )
     with patch(
         "tools.self_repair_tools.apply_verified_edit",
@@ -122,5 +125,6 @@ async def test_restart_app_tool_schedules_relaunch_without_executing_it():
         assert result["success"] is True
         assert "0s" in result["message"] or "1s" in result["message"]
         import asyncio
+
         await asyncio.sleep(0.7)
     mock_relaunch.assert_called_once()

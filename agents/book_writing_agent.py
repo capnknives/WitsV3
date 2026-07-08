@@ -8,7 +8,8 @@ import asyncio
 import json
 import re
 import uuid
-from typing import Dict, List, Optional, Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.book_writing_handlers import BookWritingHandlersMixin
@@ -16,8 +17,8 @@ from agents.book_writing_models import BookStructure, Chapter
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
-from core.schemas import StreamData, ConversationHistory
 from core.neural_web_core import NeuralWeb
+from core.schemas import ConversationHistory, StreamData
 
 # Re-export models for backward compatibility
 __all__ = ["BookWritingAgent", "BookStructure", "Chapter"]
@@ -33,9 +34,9 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
         agent_name: str,
         config: WitsV3Config,
         llm_interface: BaseLLMInterface,
-        memory_manager: Optional[MemoryManager] = None,
-        neural_web: Optional[NeuralWeb] = None,
-        tool_registry: Optional[Any] = None,
+        memory_manager: MemoryManager | None = None,
+        neural_web: NeuralWeb | None = None,
+        tool_registry: Any | None = None,
     ):
         super().__init__(agent_name, config, llm_interface, memory_manager)
 
@@ -43,18 +44,31 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
         self.tool_registry = tool_registry
 
         # Book writing specific state
-        self.current_books: Dict[str, BookStructure] = {}
-        self.writing_sessions: Dict[str, Dict[str, Any]] = {}
+        self.current_books: dict[str, BookStructure] = {}
+        self.writing_sessions: dict[str, dict[str, Any]] = {}
 
         # Writing capabilities
         self.genres = [
-            "fiction", "non-fiction", "technical", "academic",
-            "biography", "mystery", "sci-fi", "fantasy", "romance",
+            "fiction",
+            "non-fiction",
+            "technical",
+            "academic",
+            "biography",
+            "mystery",
+            "sci-fi",
+            "fantasy",
+            "romance",
         ]
 
         self.writing_styles = [
-            "narrative", "expository", "descriptive", "persuasive",
-            "academic", "conversational", "formal", "creative",
+            "narrative",
+            "expository",
+            "descriptive",
+            "persuasive",
+            "academic",
+            "conversational",
+            "formal",
+            "creative",
         ]
 
         # Neural web integration for narrative intelligence
@@ -64,8 +78,8 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
             "spiral": self._analyze_spiral_narrative,
         }
 
-        self.character_networks: Dict[str, Any] = {}
-        self.world_building_graph: Dict[str, Any] = {}
+        self.character_networks: dict[str, Any] = {}
+        self.world_building_graph: dict[str, Any] = {}
 
         # Enhanced writing capabilities with neural web
         if self.neural_web:
@@ -79,8 +93,8 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
     async def run(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory] = None,
-        session_id: Optional[str] = None,
+        conversation_history: ConversationHistory | None = None,
+        session_id: str | None = None,
         **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
         """
@@ -97,23 +111,23 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
         yield self.stream_thinking(f"Identified task type: {task_analysis['task_type']}")
 
         # Route to appropriate handler
-        if task_analysis['task_type'] == 'create_book':
+        if task_analysis["task_type"] == "create_book":
             async for stream in self._handle_book_creation(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'write_chapter':
+        elif task_analysis["task_type"] == "write_chapter":
             async for stream in self._handle_chapter_writing(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'research_topic':
+        elif task_analysis["task_type"] == "research_topic":
             async for stream in self._handle_research(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'revise_content':
+        elif task_analysis["task_type"] == "revise_content":
             async for stream in self._handle_revision(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'generate_outline':
+        elif task_analysis["task_type"] == "generate_outline":
             async for stream in self._handle_outline_generation(task_analysis, session_id):
                 yield stream
 
@@ -121,7 +135,7 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
             async for stream in self._handle_general_writing(task_analysis, session_id):
                 yield stream
 
-    async def _analyze_writing_task(self, request: str) -> Dict[str, Any]:
+    async def _analyze_writing_task(self, request: str) -> dict[str, Any]:
         """Analyze the writing request to determine task type and parameters"""
 
         analysis_prompt = f"""
@@ -143,7 +157,7 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
         try:
             response = await self.generate_response(analysis_prompt, temperature=0.3)
             # Extract JSON from response
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group(0))
         except Exception as e:
@@ -151,14 +165,22 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
 
         # Fallback analysis with better genre detection
         genre = "non-fiction"
-        if any(keyword in request.lower() for keyword in ["horror", "scary", "thriller", "suspense"]):
+        if any(
+            keyword in request.lower() for keyword in ["horror", "scary", "thriller", "suspense"]
+        ):
             genre = "horror"
-        elif any(keyword in request.lower() for keyword in ["fiction", "novel", "story", "fantasy", "sci-fi", "romance"]):
+        elif any(
+            keyword in request.lower()
+            for keyword in ["fiction", "novel", "story", "fantasy", "sci-fi", "romance"]
+        ):
             genre = "fiction"
 
         # Detect if this is a book creation request
         task_type = "general_writing"
-        if any(phrase in request.lower() for phrase in ["write a book", "create a book", "make a book", "write me a book"]):
+        if any(
+            phrase in request.lower()
+            for phrase in ["write a book", "create a book", "make a book", "write me a book"]
+        ):
             task_type = "create_book"
 
         return {
@@ -170,16 +192,16 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
             "parameters": {},
         }
 
-    async def get_writing_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+    async def get_writing_statistics(self, session_id: str | None = None) -> dict[str, Any]:
         """Get writing statistics and progress"""
 
         # Search memory for writing-related content
         writing_memories = []
         if self.memory_manager:
-            for segment_type in ['BOOK_PROJECT', 'CHAPTER_CONTENT', 'WRITTEN_CONTENT']:
+            for segment_type in ["BOOK_PROJECT", "CHAPTER_CONTENT", "WRITTEN_CONTENT"]:
                 memories = await self.memory_manager.search_memory(
                     segment_type,
-                    filter_dict={'session_id': session_id} if session_id else None,
+                    filter_dict={"session_id": session_id} if session_id else None,
                 )
                 writing_memories.extend(memories)
 
@@ -189,16 +211,16 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
         total_words = 0
 
         for memory in writing_memories:
-            if hasattr(memory, 'metadata') and 'word_count' in memory.metadata:
-                total_words += memory.metadata['word_count']
+            if hasattr(memory, "metadata") and "word_count" in memory.metadata:
+                total_words += memory.metadata["word_count"]
 
         return {
-            'total_books': total_books,
-            'total_chapters': total_chapters,
-            'total_words_written': total_words,
-            'writing_sessions': len(writing_memories),
-            'current_projects': list(self.current_books.keys()),
-            'average_words_per_session': total_words / max(len(writing_memories), 1),
+            "total_books": total_books,
+            "total_chapters": total_chapters,
+            "total_words_written": total_words,
+            "writing_sessions": len(writing_memories),
+            "current_projects": list(self.current_books.keys()),
+            "average_words_per_session": total_words / max(len(writing_memories), 1),
         }
 
 

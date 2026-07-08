@@ -1,11 +1,11 @@
 """Tests for embedding input truncation."""
 
+from core.config import WitsV3Config
 from core.memory_manager import (
     DEFAULT_MAX_EMBEDDING_CHARS,
     resolve_max_embedding_chars,
     truncate_for_embedding,
 )
-from core.config import WitsV3Config
 
 
 def test_truncate_for_embedding_within_limit_unchanged():

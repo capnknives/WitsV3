@@ -4,15 +4,17 @@ This module provides enhanced model selection and reliability tracking.
 """
 
 import asyncio
-import time
 import logging
-from typing import Optional, Dict, Any, AsyncGenerator, List
+import time
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from .llm_interface import OllamaInterface, BaseLLMInterface
 from .config import WitsV3Config
-from .model_reliability import get_model_reliability_manager, ModelReliabilityManager
+from .llm_interface import BaseLLMInterface, OllamaInterface
+from .model_reliability import ModelReliabilityManager, get_model_reliability_manager
 
 logger = logging.getLogger(__name__)
+
 
 class ReliableOllamaInterface(OllamaInterface):
     """
@@ -21,7 +23,7 @@ class ReliableOllamaInterface(OllamaInterface):
 
     def __init__(self, config: WitsV3Config):
         super().__init__(config)
-        self.reliability_manager: Optional[ModelReliabilityManager] = None
+        self.reliability_manager: ModelReliabilityManager | None = None
 
         # Initialize model reliability manager
         try:
@@ -40,7 +42,9 @@ class ReliableOllamaInterface(OllamaInterface):
         except Exception as e:
             logger.warning(f"Failed to start health monitoring: {e}")
 
-    def _get_best_model(self, preferred_model: Optional[str] = None, agent_type: Optional[str] = None) -> str:
+    def _get_best_model(
+        self, preferred_model: str | None = None, agent_type: str | None = None
+    ) -> str:
         """
         Get the best available model considering health and fallbacks.
 
@@ -69,7 +73,9 @@ class ReliableOllamaInterface(OllamaInterface):
             except Exception as e:
                 logger.debug(f"Failed to record success: {e}")
 
-    def _record_failure(self, model_name: str, error: Exception, context: Optional[Dict[str, Any]] = None):
+    def _record_failure(
+        self, model_name: str, error: Exception, context: dict[str, Any] | None = None
+    ):
         """Record failed operation."""
         if self.reliability_manager:
             try:
@@ -80,10 +86,10 @@ class ReliableOllamaInterface(OllamaInterface):
     async def generate_text(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[List[str]] = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop_sequences: list[str] | None = None,
         **kwargs,
     ) -> str:
         """Generate text with model reliability tracking.
@@ -115,19 +121,20 @@ class ReliableOllamaInterface(OllamaInterface):
 
         except Exception as e:
             # Record failure
-            self._record_failure(effective_model, e, {
-                "operation": "generate_text",
-                "prompt_length": len(prompt) if prompt else 0
-            })
+            self._record_failure(
+                effective_model,
+                e,
+                {"operation": "generate_text", "prompt_length": len(prompt) if prompt else 0},
+            )
             raise
 
     async def stream_text(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[List[str]] = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop_sequences: list[str] | None = None,
         **kwargs,
     ) -> AsyncGenerator[str, None]:
         """Stream text with model reliability tracking. Extra kwargs forwarded."""
@@ -155,28 +162,25 @@ class ReliableOllamaInterface(OllamaInterface):
 
         except Exception as e:
             # Record failure
-            self._record_failure(effective_model, e, {
-                "operation": "stream_text",
-                "prompt_length": len(prompt) if prompt else 0,
-                "partial_success": success
-            })
+            self._record_failure(
+                effective_model,
+                e,
+                {
+                    "operation": "stream_text",
+                    "prompt_length": len(prompt) if prompt else 0,
+                    "partial_success": success,
+                },
+            )
             raise
 
-    async def get_embedding(
-        self,
-        text: str,
-        model: Optional[str] = None
-    ) -> List[float]:
+    async def get_embedding(self, text: str, model: str | None = None) -> list[float]:
         """Get embedding with model reliability tracking."""
         # Get the best available model
         effective_model = self._get_best_model(model, "embedding")
         start_time = time.time()
 
         try:
-            result = await super().get_embedding(
-                text=text,
-                model=effective_model
-            )
+            result = await super().get_embedding(text=text, model=effective_model)
 
             # Record success
             response_time = time.time() - start_time
@@ -186,13 +190,14 @@ class ReliableOllamaInterface(OllamaInterface):
 
         except Exception as e:
             # Record failure
-            self._record_failure(effective_model, e, {
-                "operation": "get_embedding",
-                "text_length": len(text) if text else 0
-            })
+            self._record_failure(
+                effective_model,
+                e,
+                {"operation": "get_embedding", "text_length": len(text) if text else 0},
+            )
             raise
 
-    async def get_health_summary(self) -> Dict[str, Any]:
+    async def get_health_summary(self) -> dict[str, Any]:
         """Get model health summary."""
         if self.reliability_manager:
             return self.reliability_manager.get_health_summary()
@@ -212,6 +217,7 @@ class ReliableOllamaInterface(OllamaInterface):
                 logger.warning(f"Failed to stop health monitoring: {e}")
 
         await super().shutdown()
+
 
 def get_enhanced_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
     """
@@ -234,4 +240,5 @@ def get_enhanced_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
     else:
         # Fallback to standard interface
         from .llm_interface import get_llm_interface
+
         return get_llm_interface(config)

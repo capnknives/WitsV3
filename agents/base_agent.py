@@ -4,16 +4,17 @@ Base Agent class for WitsV3.
 All agents inherit from this class to ensure consistent interfaces.
 """
 
-import logging
 import asyncio
+import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, AsyncGenerator, Literal
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
 from core.model_router import ModelRouter
-from core.schemas import StreamData, AgentResponse, ConversationHistory
+from core.schemas import ConversationHistory, StreamData
 
 
 class BaseAgent(ABC):
@@ -29,7 +30,7 @@ class BaseAgent(ABC):
         agent_name: str,
         config: WitsV3Config,
         llm_interface: BaseLLMInterface,
-        memory_manager: Optional[MemoryManager] = None
+        memory_manager: MemoryManager | None = None,
     ):
         """
         Initialize the base agent.
@@ -44,7 +45,7 @@ class BaseAgent(ABC):
         self.config = config
         self.llm_interface = llm_interface
         self.memory_manager = memory_manager
-          # Set up logging
+        # Set up logging
         self.logger = logging.getLogger(f"WitsV3.{self.__class__.__name__}")
 
         # Agent configuration from config
@@ -61,9 +62,9 @@ class BaseAgent(ABC):
     async def run(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory] = None,
-        session_id: Optional[str] = None,
-        **kwargs
+        conversation_history: ConversationHistory | None = None,
+        session_id: str | None = None,
+        **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
         """
         Main execution method for the agent.
@@ -82,10 +83,10 @@ class BaseAgent(ABC):
     async def generate_response(
         self,
         prompt: str,
-        model_name: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        response_format: Optional[str] = None
+        model_name: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        response_format: str | None = None,
     ) -> str:
         """
         Generate a response using the LLM.
@@ -103,7 +104,7 @@ class BaseAgent(ABC):
         try:
             # Only pass format when requested — some BaseLLMInterface
             # implementations (and test fakes) don't accept the kwarg.
-            extra_kwargs: Dict[str, Any] = {}
+            extra_kwargs: dict[str, Any] = {}
             if response_format is not None:
                 extra_kwargs["format"] = response_format
             response = await self.llm_interface.generate_text(
@@ -111,7 +112,7 @@ class BaseAgent(ABC):
                 model=model_name or self.get_model_name(),
                 temperature=temperature or self.temperature,
                 max_tokens=max_tokens,
-                **extra_kwargs
+                **extra_kwargs,
             )
             return response
         except Exception as e:
@@ -119,10 +120,7 @@ class BaseAgent(ABC):
             raise
 
     async def generate_streaming_response(
-        self,
-        prompt: str,
-        model_name: Optional[str] = None,
-        temperature: Optional[float] = None
+        self, prompt: str, model_name: str | None = None, temperature: float | None = None
     ) -> AsyncGenerator[str, None]:
         """
         Generate a streaming response using the LLM.
@@ -139,7 +137,7 @@ class BaseAgent(ABC):
             async for chunk in self.llm_interface.stream_text(
                 prompt=prompt,
                 model=model_name or self.get_model_name(),
-                temperature=temperature or self.temperature
+                temperature=temperature or self.temperature,
             ):
                 yield chunk
         except Exception as e:
@@ -161,8 +159,8 @@ class BaseAgent(ABC):
         content: str,
         segment_type: str = "AGENT_ACTION",
         importance: float = 0.5,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> Optional[str]:
+        metadata: dict[str, Any] | None = None,
+    ) -> str | None:
         """
         Store information in memory if available.
 
@@ -187,9 +185,7 @@ class BaseAgent(ABC):
         )
 
         max_chars = resolve_max_embedding_chars(self.config)
-        content = truncate_for_embedding(
-            content, max_chars, suffix="\n… [truncated for memory]"
-        )
+        content = truncate_for_embedding(content, max_chars, suffix="\n… [truncated for memory]")
 
         try:
 
@@ -198,7 +194,7 @@ class BaseAgent(ABC):
                 source=self.agent_name,
                 content=MemorySegmentContent(text=content),
                 importance=importance,
-                metadata=metadata or {}
+                metadata=metadata or {},
             )
 
             segment_id = await self.memory_manager.add_segment(segment)
@@ -208,11 +204,7 @@ class BaseAgent(ABC):
             self.logger.error(f"Error storing memory: {e}")
             return None
 
-    async def search_memory(
-        self,
-        query: str,
-        limit: int = 5
-    ) -> List[Any]:
+    async def search_memory(self, query: str, limit: int = 5) -> list[Any]:
         """
         Search memory for relevant information.
 
@@ -236,43 +228,24 @@ class BaseAgent(ABC):
 
     def stream_thinking(self, thought: str) -> StreamData:
         """Create a thinking stream data object."""
-        return StreamData(
-            type="thinking",
-            content=thought,
-            source=self.agent_name
-        )
+        return StreamData(type="thinking", content=thought, source=self.agent_name)
 
     def stream_action(self, action: str) -> StreamData:
         """Create an action stream data object."""
-        return StreamData(
-            type="action",
-            content=action,
-            source=self.agent_name
-        )
+        return StreamData(type="action", content=action, source=self.agent_name)
 
     def stream_observation(self, observation: str) -> StreamData:
         """Create an observation stream data object."""
-        return StreamData(
-            type="observation",
-            content=observation,
-            source=self.agent_name
-        )
+        return StreamData(type="observation", content=observation, source=self.agent_name)
 
     def stream_result(self, result: str) -> StreamData:
         """Create a result stream data object."""
-        return StreamData(
-            type="result",
-            content=result,
-            source=self.agent_name
-        )
+        return StreamData(type="result", content=result, source=self.agent_name)
 
-    def stream_error(self, error: str, details: Optional[str] = None) -> StreamData:
+    def stream_error(self, error: str, details: str | None = None) -> StreamData:
         """Create an error stream data object."""
         return StreamData(
-            type="error",
-            content=error,
-            source=self.agent_name,
-            error_details=details
+            type="error", content=error, source=self.agent_name, error_details=details
         )
 
     def __str__(self) -> str:
@@ -298,4 +271,5 @@ async def test_base_agent():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_base_agent())

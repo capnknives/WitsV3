@@ -26,7 +26,7 @@ The registry response schema (2025-09-29) looks like:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
 
@@ -46,7 +46,7 @@ _RUNTIME_FOR_REGISTRY = {
 _DOCKER_BASE_ARGS = ["run", "-i", "--rm"]
 
 
-def _arg_values(args: Optional[List[Dict[str, Any]]]) -> List[str]:
+def _arg_values(args: list[dict[str, Any]] | None) -> list[str]:
     """Flatten a registry runtimeArguments/packageArguments list into argv parts.
 
     Only concrete values are emitted. Arguments that are pure user-supplied
@@ -54,7 +54,7 @@ def _arg_values(args: Optional[List[Dict[str, Any]]]) -> List[str]:
     literal `<PATH>` into the command — the user can edit the command after
     install if such an arg is needed.
     """
-    out: List[str] = []
+    out: list[str] = []
     for arg in args or []:
         if not isinstance(arg, dict):
             continue
@@ -69,7 +69,7 @@ def _arg_values(args: Optional[List[Dict[str, Any]]]) -> List[str]:
     return out
 
 
-def _package_spec(registry_type: str, identifier: str, version: Optional[str]) -> str:
+def _package_spec(registry_type: str, identifier: str, version: str | None) -> str:
     """Build the versioned package token for the runtime (e.g. pkg@1.2.3)."""
     if registry_type == "oci":
         # Image ref may already carry a tag/digest (":" or "@sha256:" after the
@@ -87,7 +87,7 @@ def _package_spec(registry_type: str, identifier: str, version: Optional[str]) -
     return identifier
 
 
-def build_stdio_command(package: Dict[str, Any]) -> Optional[List[str]]:
+def build_stdio_command(package: dict[str, Any]) -> list[str] | None:
     """Derive an argv list that runs `package` as a local stdio MCP server.
 
     Returns None for packages that can't be launched as a local stdio process
@@ -128,7 +128,7 @@ def build_stdio_command(package: Dict[str, Any]) -> Optional[List[str]]:
     return [runtime, *runtime_args, spec, *package_args]
 
 
-def _env_vars(package: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _env_vars(package: dict[str, Any]) -> list[dict[str, Any]]:
     result = []
     for ev in package.get("environmentVariables") or []:
         if not isinstance(ev, dict) or not ev.get("name"):
@@ -145,13 +145,13 @@ def _env_vars(package: Dict[str, Any]) -> List[Dict[str, Any]]:
     return result
 
 
-def normalize_server(raw: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_server(raw: dict[str, Any]) -> dict[str, Any]:
     """Turn one registry entry into WITS's flat, install-ready shape."""
     server = raw.get("server", raw)
     meta = (raw.get("_meta") or {}).get("io.modelcontextprotocol.registry/official", {})
 
     packages = []
-    install: Optional[Dict[str, Any]] = None
+    install: dict[str, Any] | None = None
     for pkg in server.get("packages") or []:
         command = build_stdio_command(pkg)
         entry = {
@@ -184,10 +184,10 @@ def normalize_server(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _dedupe_latest(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _dedupe_latest(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Registries list every published version; keep one card per server name,
     preferring the entry flagged isLatest."""
-    by_name: Dict[str, Dict[str, Any]] = {}
+    by_name: dict[str, dict[str, Any]] = {}
     for entry in entries:
         name = entry["name"]
         current = by_name.get(name)
@@ -200,19 +200,47 @@ def _dedupe_latest(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 # multi-word query ("postgres database") finds nothing while "postgres" works.
 # These common words are dropped when falling back to single keywords.
 _STOPWORDS = {
-    "the", "a", "an", "for", "and", "or", "to", "of", "with", "server", "servers",
-    "mcp", "tool", "tools", "that", "can", "able", "let", "lets", "me", "my",
-    "some", "way", "new", "install", "search", "find", "how", "do",
+    "the",
+    "a",
+    "an",
+    "for",
+    "and",
+    "or",
+    "to",
+    "of",
+    "with",
+    "server",
+    "servers",
+    "mcp",
+    "tool",
+    "tools",
+    "that",
+    "can",
+    "able",
+    "let",
+    "lets",
+    "me",
+    "my",
+    "some",
+    "way",
+    "new",
+    "install",
+    "search",
+    "find",
+    "how",
+    "do",
 }
 
 
-def _keywords(query: str) -> List[str]:
+def _keywords(query: str) -> list[str]:
     """Significant lowercase words from the query (stopwords/short words removed)."""
-    words = [w.lower() for w in "".join(c if c.isalnum() else " " for c in query).split() if len(w) >= 3]
+    words = [
+        w.lower() for w in "".join(c if c.isalnum() else " " for c in query).split() if len(w) >= 3
+    ]
     return [w for w in words if w not in _STOPWORDS] or words
 
 
-def _candidate_queries(query: str) -> List[str]:
+def _candidate_queries(query: str) -> list[str]:
     """Ordered search terms to try: the full phrase first, then the most
     significant individual words (longest-first) as a fallback."""
     query = (query or "").strip()
@@ -223,14 +251,14 @@ def _candidate_queries(query: str) -> List[str]:
     return candidates[:3]
 
 
-def _relevance(entry: Dict[str, Any], keywords: List[str]) -> int:
+def _relevance(entry: dict[str, Any], keywords: list[str]) -> int:
     """How many query keywords appear in the server's name or description."""
     haystack = (entry.get("name", "") + " " + entry.get("description", "")).lower()
     return sum(1 for kw in keywords if kw in haystack)
 
 
-async def _fetch_servers(session, url: str, term: str, limit: int) -> List[Dict[str, Any]]:
-    params: Dict[str, Any] = {"limit": max(1, min(limit * 3, 100))}
+async def _fetch_servers(session, url: str, term: str, limit: int) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {"limit": max(1, min(limit * 3, 100))}
     if term:
         params["search"] = term
     async with session.get(url, params=params) as resp:
@@ -245,7 +273,7 @@ async def search_registry(
     limit: int = 10,
     registry_url: str = DEFAULT_REGISTRY_URL,
     timeout_seconds: float = 12.0,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Search the MCP registry and return normalized, deduped server entries.
 
     Tries the full query first, then falls back to individual keywords if the
@@ -255,7 +283,7 @@ async def search_registry(
     timeout = aiohttp.ClientTimeout(total=timeout_seconds)
 
     candidates = _candidate_queries(query)
-    raw_servers: List[Dict[str, Any]] = []
+    raw_servers: list[dict[str, Any]] = []
     async with aiohttp.ClientSession(timeout=timeout) as session:
         # Try the full phrase first; if it hits, use only those (most relevant).
         raw_servers = await _fetch_servers(session, url, candidates[0], limit)

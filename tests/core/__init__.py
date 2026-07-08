@@ -1,1 +1,1 @@
-# This file makes the tests/core directory a Python package. 
+# This file makes the tests/core directory a Python package.

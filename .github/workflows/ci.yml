@@ -45,7 +45,7 @@ jobs:
             coverage_html/
 
   lint:
-    name: Lint (critical)
+    name: Lint (ruff + black)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,10 +55,12 @@ jobs:
           python-version: "3.10"
           cache: pip
 
-      - name: Install ruff
-        run: python -m pip install --upgrade pip ruff
+      - name: Install ruff and black
+        run: python -m pip install --upgrade pip ruff black
 
-      # Full ruff/black/isort enforcement is via pre-commit locally.
-      # CI gates on undefined names and syntax errors until the legacy baseline is cleaned up.
-      - name: Ruff (critical rules)
-        run: ruff check agents core tools web tests --select F821,E9,E722
+      # Full project lint matches pyproject.toml + local pre-commit (ruff E/F/W/I/UP/B, black).
+      - name: Ruff
+        run: ruff check agents core tools web tests
+
+      - name: Black
+        run: black --check agents core tools web tests

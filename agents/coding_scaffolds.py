@@ -2,14 +2,13 @@
 """Scaffold and file-generation helpers for the advanced coding agent."""
 
 import json
-from typing import List
 
 
 class CodingScaffoldMixin:
     """Mixin providing project scaffold and initial file generation."""
 
     async def _generate_python_web_app(self) -> str:
-        return '''from flask import Flask, render_template, request, jsonify
+        return """from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
 
@@ -23,10 +22,10 @@ def health():
 
 if __name__ == '__main__':
     app.run(debug=True)
-'''
+"""
 
     async def _generate_python_api(self) -> str:
-        return '''from fastapi import FastAPI, HTTPException
+        return """from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 app = FastAPI(title="API Service", version="1.0.0")
@@ -50,10 +49,10 @@ async def read_item(item_id: int):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-'''
+"""
 
     async def _generate_python_cli(self) -> str:
-        return '''import argparse
+        return """import argparse
 import sys
 
 def main():
@@ -72,7 +71,7 @@ def main():
 
 if __name__ == '__main__':
     main()
-'''
+"""
 
     async def _generate_python_main(self) -> str:
         return '''"""
@@ -88,25 +87,25 @@ if __name__ == "__main__":
     main()
 '''
 
-    async def _generate_python_requirements(self, requirements: List[str]) -> str:
+    async def _generate_python_requirements(self, requirements: list[str]) -> str:
         base_reqs = []
 
-        if any('web' in req.lower() for req in requirements):
-            base_reqs.extend(['flask>=2.0.0', 'requests>=2.25.0'])
-        if any('api' in req.lower() for req in requirements):
-            base_reqs.extend(['fastapi>=0.68.0', 'uvicorn>=0.15.0'])
-        if any('test' in req.lower() for req in requirements):
-            base_reqs.extend(['pytest>=6.0.0', 'pytest-cov>=2.12.0'])
-        if any('data' in req.lower() for req in requirements):
-            base_reqs.extend(['pandas>=1.3.0', 'numpy>=1.21.0'])
+        if any("web" in req.lower() for req in requirements):
+            base_reqs.extend(["flask>=2.0.0", "requests>=2.25.0"])
+        if any("api" in req.lower() for req in requirements):
+            base_reqs.extend(["fastapi>=0.68.0", "uvicorn>=0.15.0"])
+        if any("test" in req.lower() for req in requirements):
+            base_reqs.extend(["pytest>=6.0.0", "pytest-cov>=2.12.0"])
+        if any("data" in req.lower() for req in requirements):
+            base_reqs.extend(["pandas>=1.3.0", "numpy>=1.21.0"])
 
         if not base_reqs:
-            base_reqs = ['requests>=2.25.0']
+            base_reqs = ["requests>=2.25.0"]
 
-        return '\n'.join(sorted(set(base_reqs)))
+        return "\n".join(sorted(set(base_reqs)))
 
     async def _generate_python_setup(self) -> str:
-        return '''from setuptools import setup, find_packages
+        return """from setuptools import setup, find_packages
 
 setup(
     name="project",
@@ -128,44 +127,33 @@ setup(
     ],
     python_requires=">=3.8",
 )
-'''
+"""
 
     async def _generate_js_package_json(self, project_type: str) -> str:
         dependencies = {}
 
-        if project_type == 'web_app':
-            dependencies.update({
-                "express": "^4.18.0",
-                "react": "^18.0.0",
-                "react-dom": "^18.0.0"
-            })
-        elif project_type == 'api':
-            dependencies.update({
-                "express": "^4.18.0",
-                "cors": "^2.8.5"
-            })
+        if project_type == "web_app":
+            dependencies.update({"express": "^4.18.0", "react": "^18.0.0", "react-dom": "^18.0.0"})
+        elif project_type == "api":
+            dependencies.update({"express": "^4.18.0", "cors": "^2.8.5"})
 
-        return json.dumps({
-            "name": "project",
-            "version": "1.0.0",
-            "description": "A JavaScript project",
-            "main": "index.js",
-            "scripts": {
-                "start": "node index.js",
-                "dev": "nodemon index.js",
-                "test": "jest"
+        return json.dumps(
+            {
+                "name": "project",
+                "version": "1.0.0",
+                "description": "A JavaScript project",
+                "main": "index.js",
+                "scripts": {"start": "node index.js", "dev": "nodemon index.js", "test": "jest"},
+                "dependencies": dependencies,
+                "devDependencies": {"nodemon": "^2.0.0", "jest": "^28.0.0"},
+                "author": "Your Name",
+                "license": "MIT",
             },
-            "dependencies": dependencies,
-            "devDependencies": {
-                "nodemon": "^2.0.0",
-                "jest": "^28.0.0"
-            },
-            "author": "Your Name",
-            "license": "MIT"
-        }, indent=2)
+            indent=2,
+        )
 
     async def _generate_js_web_app(self) -> str:
-        return '''const express = require('express');
+        return """const express = require('express');
 const path = require('path');
 
 const app = express();
@@ -190,10 +178,10 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-'''
+"""
 
     async def _generate_js_api(self) -> str:
-        return '''const express = require('express');
+        return """const express = require('express');
 const cors = require('cors');
 
 const app = express();
@@ -288,10 +276,10 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
-'''
+"""
 
     async def _generate_js_main(self) -> str:
-        return '''#!/usr/bin/env node
+        return """#!/usr/bin/env node
 
 /**
  * Main application entry point
@@ -349,10 +337,10 @@ if (require.main === module) {
 }
 
 module.exports = { main };
-'''
+"""
 
     async def _generate_js_tests(self) -> str:
-        return '''const request = require('supertest');
+        return """const request = require('supertest');
 const app = require('../index');
 
 describe('Application Tests', () => {
@@ -384,12 +372,12 @@ describe('API Tests', () => {
 });
 
 // Add more tests here
-'''
+"""
 
     async def _generate_readme(
-        self, project_type: str, language: str, requirements: List[str]
+        self, project_type: str, language: str, requirements: list[str]
     ) -> str:
-        return f'''# {project_type.title()} Project
+        return f"""# {project_type.title()} Project
 
 ## Description
 {language.title()} {project_type} implementing: {', '.join(requirements)}
@@ -419,10 +407,10 @@ Please read CONTRIBUTING.md for details on our code of conduct and the process f
 
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details.
-'''
+"""
 
     async def _generate_gitignore(self, language: str) -> str:
-        common = '''# General
+        common = """# General
 .DS_Store
 .env
 .env.local
@@ -433,10 +421,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 logs/
 temp/
 tmp/
-'''
+"""
 
-        if language == 'python':
-            return common + '''
+        if language == "python":
+            return common + """
 # Python
 __pycache__/
 *.py[cod]
@@ -462,9 +450,9 @@ MANIFEST
 .env
 venv/
 ENV/
-'''
-        elif language == 'javascript':
-            return common + '''
+"""
+        elif language == "javascript":
+            return common + """
 # Node.js
 node_modules/
 npm-debug.log*
@@ -472,12 +460,12 @@ yarn-debug.log*
 yarn-error.log*
 .npm
 .eslintcache
-'''
+"""
         else:
             return common
 
     async def _generate_license(self) -> str:
-        return '''MIT License
+        return """MIT License
 
 Copyright (c) 2025 Your Name
 
@@ -498,7 +486,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-'''
+"""
 
     async def _generate_python_tests(self) -> str:
         return '''import pytest

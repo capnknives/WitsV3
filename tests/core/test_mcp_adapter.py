@@ -3,20 +3,19 @@ Test module for the MCP adapter in WitsV3.
 Tests the MCP adapter for connecting to MCP servers and calling tools.
 """
 
-import os
-import json
 import asyncio
+import json
 import logging
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from typing import Dict, Any, List
-
-import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import sys
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from core.mcp_adapter import MCPAdapter, MCPServer, MCPTool, StdioMCPClient
-from core.schemas import ToolCall, ToolResult
+from core.schemas import ToolCall
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -27,11 +26,7 @@ logger = logging.getLogger(__name__)
 def mcp_server_config():
     """Fixture for a mock MCP server configuration"""
     return MCPServer(
-        name="test_server",
-        command=["echo", "test"],
-        args=None,
-        env=None,
-        working_directory=None
+        name="test_server", command=["echo", "test"], args=None, env=None, working_directory=None
     )
 
 
@@ -41,14 +36,16 @@ def mock_mcp_client():
     client = AsyncMock(spec=StdioMCPClient)
     client.connect = AsyncMock(return_value=True)
     client.disconnect = AsyncMock()
-    client.list_tools = AsyncMock(return_value=[
-        MCPTool(
-            name="test_tool",
-            description="A test tool",
-            input_schema={"type": "object", "properties": {"arg1": {"type": "string"}}},
-            server_name="test_server"
-        )
-    ])
+    client.list_tools = AsyncMock(
+        return_value=[
+            MCPTool(
+                name="test_tool",
+                description="A test tool",
+                input_schema={"type": "object", "properties": {"arg1": {"type": "string"}}},
+                server_name="test_server",
+            )
+        ]
+    )
     client.call_tool = AsyncMock(return_value={"result": "success"})
     return client
 
@@ -105,9 +102,7 @@ async def test_call_tool(mcp_adapter, mcp_server_config, mock_mcp_client):
         await mcp_adapter.add_server(mcp_server_config)
 
         tool_call = ToolCall(
-            call_id="test_call_id",
-            tool_name="test_tool",
-            arguments={"arg1": "test_value"}
+            call_id="test_call_id", tool_name="test_tool", arguments={"arg1": "test_value"}
         )
 
         result = await mcp_adapter.call_tool(tool_call)
@@ -115,18 +110,14 @@ async def test_call_tool(mcp_adapter, mcp_server_config, mock_mcp_client):
         assert result.success is True
         assert result.call_id == "test_call_id"
         assert result.error is None
-        mock_mcp_client.call_tool.assert_called_once_with(
-            "test_tool", {"arg1": "test_value"}
-        )
+        mock_mcp_client.call_tool.assert_called_once_with("test_tool", {"arg1": "test_value"})
 
 
 @pytest.mark.asyncio
 async def test_call_nonexistent_tool(mcp_adapter):
     """Test calling a tool that doesn't exist"""
     tool_call = ToolCall(
-        call_id="test_call_id",
-        tool_name="nonexistent_tool",
-        arguments={"arg1": "test_value"}
+        call_id="test_call_id", tool_name="nonexistent_tool", arguments={"arg1": "test_value"}
     )
 
     result = await mcp_adapter.call_tool(tool_call)
@@ -149,8 +140,9 @@ async def test_mcp_adapter_shutdown(mcp_adapter, mcp_server_config, mock_mcp_cli
 
 
 # Integration test with real MCP server - only run if environment variable is set
-@pytest.mark.skipif(not os.environ.get("WITSV3_RUN_INTEGRATION_TESTS"),
-                    reason="Integration tests are disabled")
+@pytest.mark.skipif(
+    not os.environ.get("WITSV3_RUN_INTEGRATION_TESTS"), reason="Integration tests are disabled"
+)
 @pytest.mark.asyncio
 async def test_filesystem_mcp_server_integration():
     """Test integration with the filesystem MCP server"""
@@ -160,7 +152,7 @@ async def test_filesystem_mcp_server_integration():
     if not os.path.exists(config_path):
         pytest.skip(f"MCP configuration file not found: {config_path}")
 
-    with open(config_path, 'r') as f:
+    with open(config_path) as f:
         config = json.load(f)
 
     # Find the filesystem server
@@ -179,9 +171,12 @@ async def test_filesystem_mcp_server_integration():
     # Create server config
     server_config = MCPServer(
         name=filesystem_server["name"],
-        command=filesystem_server["command"] if isinstance(filesystem_server["command"], list)
-                else filesystem_server["command"].split(),
-        working_directory=filesystem_server.get("working_directory")
+        command=(
+            filesystem_server["command"]
+            if isinstance(filesystem_server["command"], list)
+            else filesystem_server["command"].split()
+        ),
+        working_directory=filesystem_server.get("working_directory"),
     )
 
     try:
@@ -207,7 +202,7 @@ async def test_filesystem_mcp_server_integration():
         tool_call = ToolCall(
             call_id="test_read_file",
             tool_name=read_file_tool.name,
-            arguments={"path": config_path}  # Read the mcp_tools.json file
+            arguments={"path": config_path},  # Read the mcp_tools.json file
         )
 
         result = await mcp_adapter.call_tool(tool_call)
@@ -225,6 +220,8 @@ async def test_filesystem_mcp_server_integration():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_mcp_adapter_shutdown(MCPAdapter(),
-                                          MCPServer(name="test", command=["echo", "test"]),
-                                          AsyncMock()))
+    asyncio.run(
+        test_mcp_adapter_shutdown(
+            MCPAdapter(), MCPServer(name="test", command=["echo", "test"]), AsyncMock()
+        )
+    )

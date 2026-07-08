@@ -20,9 +20,9 @@ real progress instead of a single opaque response.
 from __future__ import annotations
 
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from .base_agent import BaseAgent
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
@@ -31,7 +31,9 @@ from core.safe_code_editor import (
     extract_code_from_response,
     extract_file_mention,
 )
-from core.schemas import StreamData, ConversationHistory
+from core.schemas import ConversationHistory, StreamData
+
+from .base_agent import BaseAgent
 
 __all__ = [
     "SelfRepairAgent",
@@ -49,8 +51,8 @@ class SelfRepairAgent(BaseAgent):
         agent_name: str,
         config: WitsV3Config,
         llm_interface: BaseLLMInterface,
-        memory_manager: Optional[MemoryManager] = None,
-        tool_registry: Optional[Any] = None,
+        memory_manager: MemoryManager | None = None,
+        tool_registry: Any | None = None,
         **_: Any,
     ) -> None:
         super().__init__(agent_name, config, llm_interface, memory_manager)
@@ -64,8 +66,8 @@ class SelfRepairAgent(BaseAgent):
     async def run(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory] = None,
-        session_id: Optional[str] = None,
+        conversation_history: ConversationHistory | None = None,
+        session_id: str | None = None,
         **kwargs: Any,
     ) -> AsyncGenerator[StreamData, None]:
         if session_id is None:
@@ -91,16 +93,23 @@ class SelfRepairAgent(BaseAgent):
 
         yield self.stream_thinking("Looking for a specific file to target...")
         mention = extract_file_mention(user_input)
-        issues: List[Dict[str, Any]]
+        issues: list[dict[str, Any]]
         if mention:
             file_path, line = mention
-            issues = [{
-                "actionable": True, "file": file_path, "line": line,
-                "message": user_input, "kind": "user_request",
-            }]
+            issues = [
+                {
+                    "actionable": True,
+                    "file": file_path,
+                    "line": line,
+                    "message": user_input,
+                    "kind": "user_request",
+                }
+            ]
             yield self.stream_observation(f"Targeting {file_path} as requested.")
         elif diagnose_tool is not None:
-            yield self.stream_thinking("No specific file named — scanning logs/witsv3.log for recent errors...")
+            yield self.stream_thinking(
+                "No specific file named — scanning logs/witsv3.log for recent errors..."
+            )
             diag = await diagnose_tool.execute(
                 lines=settings.log_scan_lines, max_issues=settings.max_issues_per_run
             )
@@ -116,13 +125,16 @@ class SelfRepairAgent(BaseAgent):
             # request had no path to actually inspect the codebase at all.
             test_tool = self._tool("run_test_suite")
             if test_tool is not None:
-                yield self.stream_thinking("No log errors either — running the test suite to look for real failures...")
+                yield self.stream_thinking(
+                    "No log errors either — running the test suite to look for real failures..."
+                )
                 test_result = await test_tool.execute(timeout=settings.test_timeout_seconds)
                 if not test_result.get("passed", True):
                     from tools.self_repair_tools import parse_traceback_issues
 
                     issues = [
-                        i for i in parse_traceback_issues(
+                        i
+                        for i in parse_traceback_issues(
                             test_result.get("output", ""), settings.max_issues_per_run
                         )
                         if i.get("actionable")
@@ -131,7 +143,9 @@ class SelfRepairAgent(BaseAgent):
                         f"Test suite failed — found {len(issues)} resolvable issue(s) in the failures."
                     )
                 else:
-                    yield self.stream_observation("Test suite passed — no failing tests to investigate.")
+                    yield self.stream_observation(
+                        "Test suite passed — no failing tests to investigate."
+                    )
 
         if not issues:
             yield self.stream_result(
@@ -163,7 +177,7 @@ class SelfRepairAgent(BaseAgent):
                 yield self.stream_observation(result.get("message", "Restart scheduled."))
 
     async def _repair_one(
-        self, file_path: str, issue: Dict[str, Any], fix_tool: Any
+        self, file_path: str, issue: dict[str, Any], fix_tool: Any
     ) -> AsyncGenerator[StreamData, None]:
         full_path = PROJECT_ROOT / file_path
         if not full_path.exists():
@@ -186,16 +200,24 @@ class SelfRepairAgent(BaseAgent):
         new_content = extract_code_from_response(proposed)
 
         if new_content.strip() == original.strip():
-            yield self.stream_observation("Proposed fix is identical to the current file — nothing to apply.")
+            yield self.stream_observation(
+                "Proposed fix is identical to the current file — nothing to apply."
+            )
             return
 
-        yield self.stream_action(f"Applying candidate fix to {file_path} and verifying with tests...")
+        yield self.stream_action(
+            f"Applying candidate fix to {file_path} and verifying with tests..."
+        )
         result = await fix_tool.execute(
             file_path=file_path, new_content=new_content, reason=issue["message"][:120]
         )
 
         if result["success"]:
-            note = f"committed as {result['commit_sha']}" if result.get("committed") else "applied but not committed"
+            note = (
+                f"committed as {result['commit_sha']}"
+                if result.get("committed")
+                else "applied but not committed"
+            )
             yield self.stream_observation(f"Fix verified — tests passed, {note}.")
             yield self.stream_result(f"Repaired {file_path}: {issue['message'][:200]}")
             await self.store_memory(
@@ -206,7 +228,9 @@ class SelfRepairAgent(BaseAgent):
             )
         else:
             tail = result.get("test_output", "")[-500:]
-            yield self.stream_observation(f"Fix failed verification — reverted to the original file.\n{tail}")
+            yield self.stream_observation(
+                f"Fix failed verification — reverted to the original file.\n{tail}"
+            )
             yield self.stream_result(
                 f"Could not safely repair {file_path} — the candidate fix failed tests "
                 f"and was reverted. No changes were left in place."

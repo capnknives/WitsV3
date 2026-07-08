@@ -11,11 +11,12 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
-Logger = Optional[logging.Logger]
-Validator = Callable[[Dict[str, Any]], Dict[str, Any]]
-FallbackBuilder = Callable[[str, str], Dict[str, Any]]
+Logger = logging.Logger | None
+Validator = Callable[[dict[str, Any]], dict[str, Any]]
+FallbackBuilder = Callable[[str, str], dict[str, Any]]
 
 
 def strip_think_blocks(text: str) -> str:
@@ -29,13 +30,13 @@ def strip_think_blocks(text: str) -> str:
     return re.sub(r"</?think>", "", text, flags=re.IGNORECASE).strip()
 
 
-def balanced_json_objects(text: str) -> List[str]:
+def balanced_json_objects(text: str) -> list[str]:
     """
     Scan for top-level balanced {...} substrings, respecting strings.
 
     Truncated responses get a best-effort completion.
     """
-    objects: List[str] = []
+    objects: list[str] = []
     i = 0
     n = len(text)
 
@@ -83,26 +84,24 @@ def balanced_json_objects(text: str) -> List[str]:
     return objects
 
 
-def extract_json_candidates(response: str) -> List[str]:
+def extract_json_candidates(response: str) -> list[str]:
     """Extract candidate JSON object strings from a raw response, most-likely first."""
     text = strip_think_blocks(response)
     if not text:
         return []
 
-    candidates: List[str] = []
+    candidates: list[str] = []
 
     if text.startswith("{"):
         candidates.append(text)
 
-    for match in re.finditer(
-        r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE
-    ):
+    for match in re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE):
         candidates.append(match.group(1))
 
     candidates.extend(balanced_json_objects(text))
 
     seen = set()
-    unique: List[str] = []
+    unique: list[str] = []
     for candidate in candidates:
         candidate = candidate.strip()
         if candidate and candidate not in seen:
@@ -129,7 +128,7 @@ def parse_json_object(
     *,
     logger: Logger = None,
     fallback: FallbackBuilder,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Parse a JSON object from an LLM response with progressive recovery.
 

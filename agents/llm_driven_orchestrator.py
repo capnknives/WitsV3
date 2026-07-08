@@ -4,22 +4,20 @@ LLM-Driven Orchestrator Agent for WitsV3.
 Implements the ReAct loop with LLM-driven decision making.
 """
 
-import re
-import logging
-from typing import Any, Dict, List, Optional, AsyncGenerator
+from typing import Any
 
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from core.config import WitsV3Config
 from core.json_llm_parser import parse_json_object, strip_think_blocks
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
-from core.schemas import StreamData, ConversationHistory
+from core.schemas import ConversationHistory
 
 
 class LLMDrivenOrchestrator(BaseOrchestratorAgent):
     """
     LLM-Driven Orchestrator that uses the ReAct pattern for goal achievement.
-    
+
     This orchestrator leverages the LLM's reasoning capabilities to:
     1. Break down complex goals into steps
     2. Decide when to use tools vs. provide answers
@@ -29,18 +27,18 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
 
     # Hide WCCA-internal tools from the ReAct tool list (model misuses them for search).
     _ORCHESTRATOR_TOOL_EXCLUDE = frozenset({"intent_analysis", "json_manipulate"})
-    
+
     def __init__(
         self,
         agent_name: str,
         config: WitsV3Config,
         llm_interface: BaseLLMInterface,
-        memory_manager: Optional[MemoryManager] = None,
-        tool_registry: Optional[Any] = None
+        memory_manager: MemoryManager | None = None,
+        tool_registry: Any | None = None,
     ):
         """
         Initialize the LLM-Driven Orchestrator.
-        
+
         Args:
             agent_name: Name of this agent
             config: System configuration
@@ -49,16 +47,18 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
             tool_registry: Optional tool registry
         """
         super().__init__(agent_name, config, llm_interface, memory_manager, tool_registry)
-        
+
         # Available tools (will be populated from tool registry)
         self.available_tools = self._get_available_tools()
-        
-        self.logger.info(f"LLM-Driven Orchestrator initialized with {len(self.available_tools)} tools")
 
-    def _get_available_tools(self) -> List[Dict[str, Any]]:
+        self.logger.info(
+            f"LLM-Driven Orchestrator initialized with {len(self.available_tools)} tools"
+        )
+
+    def _get_available_tools(self) -> list[dict[str, Any]]:
         """
         Get list of available tools from the tool registry.
-        
+
         Returns:
             List of tool descriptions for the LLM
         """
@@ -67,23 +67,20 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
                 {
                     "name": "think",
                     "description": "Think through the problem step by step",
-                    "parameters": {"thought": "string"}
+                    "parameters": {"thought": "string"},
                 },
                 {
                     "name": "answer",
                     "description": "Provide a final answer to the user",
-                    "parameters": {"answer": "string"}
-                }
+                    "parameters": {"answer": "string"},
+                },
             ]
-        
+
         # Get actual tools from tool registry
         tools = []
         try:
             tools = self.tool_registry.get_tools_for_llm()
-            tools = [
-                t for t in tools
-                if t.get("name") not in self._ORCHESTRATOR_TOOL_EXCLUDE
-            ]
+            tools = [t for t in tools if t.get("name") not in self._ORCHESTRATOR_TOOL_EXCLUDE]
             self.logger.info(f"Retrieved {len(tools)} tools from registry")
         except Exception as e:
             self.logger.warning(f"Error getting tools from registry: {e}")
@@ -92,22 +89,22 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
                 {
                     "name": "think",
                     "description": "Think through the problem step by step",
-                    "parameters": {"thought": "string"}
+                    "parameters": {"thought": "string"},
                 },
                 {
                     "name": "answer",
                     "description": "Provide a final answer to the user",
-                    "parameters": {"answer": "string"}
-                }
+                    "parameters": {"answer": "string"},
+                },
             ]
-        
+
         return tools
 
     async def run(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory] = None,
-        session_id: Optional[str] = None,
+        conversation_history: ConversationHistory | None = None,
+        session_id: str | None = None,
         **kwargs,
     ):
         """Run the ReAct loop, refreshing the tool list each session."""
@@ -119,28 +116,30 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
             user_input, conversation_history=conversation_history, session_id=session_id, **kwargs
         ):
             yield stream_data
-    
-    def _build_reasoning_prompt(self, state: Dict[str, Any]) -> str:
+
+    def _build_reasoning_prompt(self, state: dict[str, Any]) -> str:
         """
         Build the reasoning prompt for the ReAct loop.
-        
+
         Args:
             state: Current ReAct state
-            
+
         Returns:
             Formatted prompt for reasoning
         """
         goal = state["goal"]
         context = state["context"]
-        documents_context = state.get("documents_context", "No user documents are currently ingested.")
+        documents_context = state.get(
+            "documents_context", "No user documents are currently ingested."
+        )
         history = state["history"]
         observations = state["observations"]
-        
+
         # Build conversation history
         history_text = ""
         if history:
             history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-3:]])
-        
+
         # Build observations
         observations_text = ""
         if observations:
@@ -154,18 +153,17 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
         ):
             lookup_hint = (
                 f"\nLOOKUP TARGET: Use the user's exact name/title verbatim in web_search "
-                f'query (quote multi-word titles). Do NOT substitute a different product '
+                f"query (quote multi-word titles). Do NOT substitute a different product "
                 f"from the same franchise. Goal wording: {goal}\n"
             )
-        
+
         # Build available tools text
         tools_text = ""
         if self.available_tools:
-            tools_text = "\n".join([
-                f"- {tool['name']}: {tool['description']}" 
-                for tool in self.available_tools
-            ])
-        
+            tools_text = "\n".join(
+                [f"- {tool['name']}: {tool['description']}" for tool in self.available_tools]
+            )
+
         prompt = f"""You are an AI orchestrator using the ReAct (Reason-Act-Observe) pattern to achieve goals.
 
 GOAL: {goal}
@@ -216,10 +214,10 @@ Important:
 - Do not claim you cannot access information a tool could retrieve; call the tool instead.
 
 Respond ONLY with valid JSON."""
-        
+
         return prompt
-    
-    def _parse_reasoning_response(self, response: str) -> Dict[str, Any]:
+
+    def _parse_reasoning_response(self, response: str) -> dict[str, Any]:
         """
         Parse the LLM's reasoning response.
 
@@ -243,7 +241,7 @@ Respond ONLY with valid JSON."""
             fallback=self._fallback_reasoning_parsing,
         )
 
-    def _validate_reasoning(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_reasoning(self, parsed: dict[str, Any]) -> dict[str, Any]:
         """
         Validate a parsed reasoning object and fill safe defaults.
 
@@ -305,20 +303,22 @@ Respond ONLY with valid JSON."""
     }
 
     # Tools the model often emits as action_type even when registry isn't wired (tests).
-    _BUILTIN_TOOL_NAMES = frozenset({
-        "web_search",
-        "document_search",
-        "read_file",
-        "write_file",
-        "list_directory",
-        "read_conversation_history",
-        "analyze_conversation",
-        "ingest_documents",
-        "think",
-        "calculator",
-        "search_mcp_tools",
-        "list_mcp_tools",
-    })
+    _BUILTIN_TOOL_NAMES = frozenset(
+        {
+            "web_search",
+            "document_search",
+            "read_file",
+            "write_file",
+            "list_directory",
+            "read_conversation_history",
+            "analyze_conversation",
+            "ingest_documents",
+            "think",
+            "calculator",
+            "search_mcp_tools",
+            "list_mcp_tools",
+        }
+    )
 
     _HOISTABLE_TOOL_ARG_KEYS = (
         "query",
@@ -330,7 +330,7 @@ Respond ONLY with valid JSON."""
         "path",
     )
 
-    def _coerce_action_type(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+    def _coerce_action_type(self, parsed: dict[str, Any]) -> dict[str, Any]:
         """Fix common qwen3 mistakes: tool name used as action_type, args at top level."""
         action = parsed.get("action_type")
         if action in ("tool_call", "final_answer"):
@@ -368,7 +368,7 @@ Respond ONLY with valid JSON."""
         return parsed
 
     @classmethod
-    def _hoist_tool_args(cls, parsed: Dict[str, Any]) -> Dict[str, Any]:
+    def _hoist_tool_args(cls, parsed: dict[str, Any]) -> dict[str, Any]:
         """Move misplaced parameter keys from the top level into tool_args."""
         if parsed.get("action_type") != "tool_call":
             return parsed
@@ -379,7 +379,7 @@ Respond ONLY with valid JSON."""
                 parsed["tool_args"][key] = parsed.pop(key)
         return parsed
 
-    def _fallback_reasoning_parsing(self, response: str, parse_error: str = "") -> Dict[str, Any]:
+    def _fallback_reasoning_parsing(self, response: str, parse_error: str = "") -> dict[str, Any]:
         """
         Fallback reasoning parsing when JSON parsing fails.
 
@@ -396,18 +396,14 @@ Respond ONLY with valid JSON."""
 
         # Look for action indicators
         if any(word in response_lower for word in ["tool", "use", "call", "search", "analyze"]):
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "thought": text,
                 "action_type": "tool_call",
                 "tool_name": "think",
-                "tool_args": {"thought": text}
+                "tool_args": {"thought": text},
             }
         else:
-            result = {
-                "thought": text,
-                "action_type": "final_answer",
-                "final_answer": text
-            }
+            result = {"thought": text, "action_type": "final_answer", "final_answer": text}
 
         result["_parse_failed"] = True
         result["_parse_error"] = parse_error or "invalid JSON"
@@ -416,17 +412,17 @@ Respond ONLY with valid JSON."""
     async def _handle_tool_failure(self, tool_name: str, error: Exception) -> Any:
         """
         Handle tool execution failures gracefully.
-        
+
         Args:
             tool_name: Name of the tool that failed
             error: The error that occurred
-            
+
         Returns:
             Result to use in place of the failed tool call
         """
         error_msg = str(error)
         self.logger.warning(f"Tool {tool_name} failed: {error_msg}")
-        
+
         # Handle missing parameters
         if "Missing required parameters" in error_msg:
             if tool_name in ["analyze_conversation", "read_conversation_history"]:
@@ -437,7 +433,7 @@ Respond ONLY with valid JSON."""
                     "assistant_messages": 0,
                     "conversation_turns": 0,
                     "last_speaker": None,
-                    "summary": "Starting new conversation"
+                    "summary": "Starting new conversation",
                 }
             elif tool_name == "intent_analysis":
                 # Return default intent analysis
@@ -447,20 +443,17 @@ Respond ONLY with valid JSON."""
                     "goal_statement": None,
                     "direct_response": None,
                     "clarification_question": None,
-                    "reasoning": "Default intent analysis due to missing parameters"
+                    "reasoning": "Default intent analysis due to missing parameters",
                 }
-        
+
         # For other errors, return a generic error message
-        return {
-            "error": f"Tool {tool_name} failed: {error_msg}",
-            "status": "error"
-        }
+        return {"error": f"Tool {tool_name} failed: {error_msg}", "status": "error"}
 
     async def _call_tool(
         self,
         tool_name: str,
-        tool_args: Dict[str, Any],
-        state: Optional[Dict[str, Any]] = None,
+        tool_args: dict[str, Any],
+        state: dict[str, Any] | None = None,
     ) -> Any:
         """
         Call a tool with error handling.
@@ -487,9 +480,7 @@ Respond ONLY with valid JSON."""
             # Handle the error gracefully
             return await self._handle_tool_failure(tool_name, e)
 
-    def _coerce_unknown_action(
-        self, parsed: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+    def _coerce_unknown_action(self, parsed: dict[str, Any]) -> dict[str, Any] | None:
         """Apply action_type coercion for tool-name-as-action_type mistakes."""
         try:
             coerced = self._coerce_action_type(dict(parsed))
@@ -504,47 +495,46 @@ Respond ONLY with valid JSON."""
 async def test_llm_driven_orchestrator():
     """Test the LLMDrivenOrchestrator functionality."""
     print("Testing LLMDrivenOrchestrator...")
-    
+
     # Mock dependencies
     from core.config import load_config
     from core.llm_interface import OllamaInterface
-    
+
     try:
         # Load config
         config = load_config("config.yaml")
-        
+
         # Create LLM interface (will fail without Ollama, but that's ok for structure test)
         llm_interface = OllamaInterface(config=config)
-        
+
         # Create orchestrator
         orchestrator = LLMDrivenOrchestrator(
-            agent_name="TestOrchestrator",
-            config=config,
-            llm_interface=llm_interface
+            agent_name="TestOrchestrator", config=config, llm_interface=llm_interface
         )
-        
+
         print(f"✓ LLMDrivenOrchestrator created: {orchestrator}")
         print(f"✓ Model name: {orchestrator.get_model_name()}")
         print(f"✓ Available tools: {len(orchestrator.available_tools)}")
         print(f"✓ Max iterations: {orchestrator.max_iterations}")
-        
+
         # Test prompt building
         test_state = {
             "goal": "Test goal",
             "context": "Test context",
             "history": [],
-            "observations": []
+            "observations": [],
         }
-        
+
         prompt = orchestrator._build_reasoning_prompt(test_state)
         print(f"✓ Reasoning prompt built (length: {len(prompt)})")
-        
+
     except Exception as e:
         print(f"✓ LLMDrivenOrchestrator structure test passed (expected error: {e})")
-    
+
     print("LLMDrivenOrchestrator tests completed! 🎉")
 
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_llm_driven_orchestrator())

@@ -1,5 +1,6 @@
 """Tests for the real SelfRepairAgent (detect -> diagnose -> fix -> verify loop)."""
-from typing import AsyncGenerator, List, Optional
+
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -17,10 +18,10 @@ from core.schemas import StreamData
 class ScriptedLLM(BaseLLMInterface):
     """Returns scripted responses and records calls."""
 
-    def __init__(self, response: str = "System healthy.", config: Optional[WitsV3Config] = None):
+    def __init__(self, response: str = "System healthy.", config: WitsV3Config | None = None):
         super().__init__(config or WitsV3Config())
         self.response = response
-        self.calls: List[str] = []
+        self.calls: list[str] = []
 
     async def generate_text(self, prompt: str, **kwargs) -> str:
         self.calls.append(prompt)
@@ -29,7 +30,7 @@ class ScriptedLLM(BaseLLMInterface):
     async def stream_text(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         yield self.response
 
-    async def get_embedding(self, text: str, model: Optional[str] = None) -> List[float]:
+    async def get_embedding(self, text: str, model: str | None = None) -> list[float]:
         return [0.0] * 8
 
 
@@ -52,7 +53,7 @@ async def test_falls_back_to_plain_llm_response_without_tool_registry():
     llm = ScriptedLLM("All systems nominal.")
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=None)
 
-    streams: List[StreamData] = []
+    streams: list[StreamData] = []
     async for item in agent.run("check disk space"):
         streams.append(item)
 
@@ -65,7 +66,9 @@ async def test_falls_back_to_plain_llm_response_without_tool_registry():
 async def test_disabled_via_config_short_circuits():
     config = WitsV3Config()
     config.self_repair.enabled = False
-    agent = SelfRepairAgent("TestSelfRepair", config, ScriptedLLM(), tool_registry=_fake_registry({}))
+    agent = SelfRepairAgent(
+        "TestSelfRepair", config, ScriptedLLM(), tool_registry=_fake_registry({})
+    )
 
     streams = [item async for item in agent.run("fix the bug")]
     assert len(streams) == 1
@@ -89,6 +92,7 @@ async def test_falls_back_to_test_suite_when_no_file_named_and_no_log_issues():
     at all. Falls back to running the real test suite and parsing failures
     the same way as a logged traceback (run_pytest's --tb=native output)."""
     import core.safe_code_editor as sce
+
     scratch = sce.PROJECT_ROOT / "tests" / "agents" / "_scratch_target3.py"
     scratch.write_text("def broken():\n    return 1 / 0\n", encoding="utf-8")
 
@@ -100,15 +104,22 @@ async def test_falls_back_to_test_suite_when_no_file_named_and_no_log_issues():
         "ZeroDivisionError: division by zero\n"
     )
     test_suite = AsyncMock(return_value={"passed": False, "output": native_failure_output})
-    fix_execute = AsyncMock(return_value={
-        "success": True, "committed": True, "commit_sha": "def5678",
-        "message": "Edit applied and verified.", "test_output": "1 passed",
-    })
-    registry = _fake_registry({
-        "diagnose_log_errors": MagicMock(execute=diagnose),
-        "run_test_suite": MagicMock(execute=test_suite),
-        "apply_code_fix": MagicMock(execute=fix_execute),
-    })
+    fix_execute = AsyncMock(
+        return_value={
+            "success": True,
+            "committed": True,
+            "commit_sha": "def5678",
+            "message": "Edit applied and verified.",
+            "test_output": "1 passed",
+        }
+    )
+    registry = _fake_registry(
+        {
+            "diagnose_log_errors": MagicMock(execute=diagnose),
+            "run_test_suite": MagicMock(execute=test_suite),
+            "apply_code_fix": MagicMock(execute=fix_execute),
+        }
+    )
     llm = ScriptedLLM("```python\ndef broken():\n    return 0\n```")
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=registry)
 
@@ -126,11 +137,13 @@ async def test_falls_back_to_test_suite_when_no_file_named_and_no_log_issues():
 async def test_reports_nothing_when_test_suite_passes_and_no_other_issues():
     diagnose = AsyncMock(return_value={"issues": [], "message": "No issues."})
     test_suite = AsyncMock(return_value={"passed": True, "output": "5 passed"})
-    registry = _fake_registry({
-        "diagnose_log_errors": MagicMock(execute=diagnose),
-        "run_test_suite": MagicMock(execute=test_suite),
-        "apply_code_fix": MagicMock(execute=AsyncMock()),
-    })
+    registry = _fake_registry(
+        {
+            "diagnose_log_errors": MagicMock(execute=diagnose),
+            "run_test_suite": MagicMock(execute=test_suite),
+            "apply_code_fix": MagicMock(execute=AsyncMock()),
+        }
+    )
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), ScriptedLLM(), tool_registry=registry)
 
     streams = [item async for item in agent.run("find and fix any bugs in the codebase")]
@@ -142,20 +155,27 @@ async def test_reports_nothing_when_test_suite_passes_and_no_other_issues():
 @pytest.mark.asyncio
 async def test_targets_a_file_named_in_the_request(tmp_path, monkeypatch):
     import core.safe_code_editor as sce
+
     scratch = sce.PROJECT_ROOT / "tests" / "agents" / "_scratch_target.py"
     scratch.write_text("def broken():\n    return 1 / 0\n", encoding="utf-8")
 
-    fix_execute = AsyncMock(return_value={
-        "success": True, "committed": True, "commit_sha": "abc1234",
-        "message": "Edit applied and verified.", "test_output": "1 passed",
-    })
+    fix_execute = AsyncMock(
+        return_value={
+            "success": True,
+            "committed": True,
+            "commit_sha": "abc1234",
+            "message": "Edit applied and verified.",
+            "test_output": "1 passed",
+        }
+    )
     registry = _fake_registry({"apply_code_fix": MagicMock(execute=fix_execute)})
     llm = ScriptedLLM("```python\ndef broken():\n    return 0\n```")
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=registry)
 
     try:
         streams = [
-            item async for item in agent.run(
+            item
+            async for item in agent.run(
                 "tests/agents/_scratch_target.py has a ZeroDivisionError, please fix it"
             )
         ]
@@ -172,14 +192,19 @@ async def test_targets_a_file_named_in_the_request(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_reverted_fix_is_reported_as_failure(tmp_path):
     import core.safe_code_editor as sce
+
     scratch = sce.PROJECT_ROOT / "tests" / "agents" / "_scratch_target2.py"
     scratch.write_text("def broken():\n    return 1 / 0\n", encoding="utf-8")
 
-    fix_execute = AsyncMock(return_value={
-        "success": False, "committed": False, "commit_sha": None,
-        "message": "Verification failed; change reverted to the original file.",
-        "test_output": "1 failed",
-    })
+    fix_execute = AsyncMock(
+        return_value={
+            "success": False,
+            "committed": False,
+            "commit_sha": None,
+            "message": "Verification failed; change reverted to the original file.",
+            "test_output": "1 failed",
+        }
+    )
     registry = _fake_registry({"apply_code_fix": MagicMock(execute=fix_execute)})
     llm = ScriptedLLM("```python\nstill broken\n```")
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=registry)
@@ -192,21 +217,32 @@ async def test_reverted_fix_is_reported_as_failure(tmp_path):
         scratch.unlink(missing_ok=True)
 
     assert any(
-        "could not safely repair" in s.content.lower()
-        for s in streams if s.type == "result"
+        "could not safely repair" in s.content.lower() for s in streams if s.type == "result"
     )
 
 
 @pytest.mark.asyncio
 async def test_scans_logs_when_no_file_named_in_request():
-    diagnose = AsyncMock(return_value={
-        "issues": [{"actionable": True, "file": "does/not/exist.py", "line": 1, "message": "boom", "kind": "traceback"}],
-        "message": "Found 1 issue.",
-    })
-    registry = _fake_registry({
-        "diagnose_log_errors": MagicMock(execute=diagnose),
-        "apply_code_fix": MagicMock(execute=AsyncMock()),
-    })
+    diagnose = AsyncMock(
+        return_value={
+            "issues": [
+                {
+                    "actionable": True,
+                    "file": "does/not/exist.py",
+                    "line": 1,
+                    "message": "boom",
+                    "kind": "traceback",
+                }
+            ],
+            "message": "Found 1 issue.",
+        }
+    )
+    registry = _fake_registry(
+        {
+            "diagnose_log_errors": MagicMock(execute=diagnose),
+            "apply_code_fix": MagicMock(execute=AsyncMock()),
+        }
+    )
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), ScriptedLLM(), tool_registry=registry)
 
     streams = [item async for item in agent.run("please run a health check and fix any issues")]
@@ -217,10 +253,20 @@ async def test_scans_logs_when_no_file_named_in_request():
 
 @pytest.mark.asyncio
 async def test_reports_when_fix_tool_unavailable_but_issues_found():
-    diagnose = AsyncMock(return_value={
-        "issues": [{"actionable": True, "file": "does/not/exist.py", "line": 1, "message": "boom", "kind": "traceback"}],
-        "message": "Found 1 issue.",
-    })
+    diagnose = AsyncMock(
+        return_value={
+            "issues": [
+                {
+                    "actionable": True,
+                    "file": "does/not/exist.py",
+                    "line": 1,
+                    "message": "boom",
+                    "kind": "traceback",
+                }
+            ],
+            "message": "Found 1 issue.",
+        }
+    )
     registry = _fake_registry({"diagnose_log_errors": MagicMock(execute=diagnose)})
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), ScriptedLLM(), tool_registry=registry)
 

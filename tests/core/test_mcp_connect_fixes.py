@@ -2,7 +2,11 @@
 
 import pytest
 
-from core.mcp_adapter import NPX_STARTUP_TIMEOUT, DEFAULT_STARTUP_TIMEOUT, startup_timeout_for_command
+from core.mcp_adapter import (
+    DEFAULT_STARTUP_TIMEOUT,
+    NPX_STARTUP_TIMEOUT,
+    startup_timeout_for_command,
+)
 from tools.list_mcp_tools import ListMCPToolsTool
 
 

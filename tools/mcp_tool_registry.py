@@ -3,13 +3,13 @@ MCP Tool Registry for WitsV3.
 Handles loading and registering MCP tools with the main ToolRegistry.
 """
 
-import logging
 import json
+import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from core.mcp_adapter import MCPAdapter, MCPServer
 from core.enhanced_mcp_adapter import EnhancedMCPAdapter
+from core.mcp_adapter import MCPServer
 from core.tool_registry import ToolRegistry
 from tools.mcp_tool import MCPTool
 
@@ -30,9 +30,9 @@ class MCPToolRegistry:
             config_path: Path to MCP tools configuration file
         """
         self.config_path = config_path
-        self.mcp_adapter: Optional[EnhancedMCPAdapter] = None
+        self.mcp_adapter: EnhancedMCPAdapter | None = None
         self.logger = logging.getLogger("WitsV3.MCPToolRegistry")
-        self.config: Dict[str, Any] = {}
+        self.config: dict[str, Any] = {}
 
     async def initialize(self, tool_registry: ToolRegistry) -> bool:
         """
@@ -78,7 +78,7 @@ class MCPToolRegistry:
                 self.logger.error(f"MCP configuration file not found: {self.config_path}")
                 return False
 
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path) as f:
                 self.config = json.load(f)
 
             self.logger.info(f"Loaded MCP configuration from {self.config_path}")
@@ -102,9 +102,17 @@ class MCPToolRegistry:
                 server_name = server_config.get("name", "unknown")
 
                 # Skip servers that don't have the required configurations
-                if not ("command" in server_config or
-                        ("type" in server_config and server_config["type"] == "github" and "clone_url" in server_config)):
-                    self.logger.error(f"Invalid server configuration for {server_name}: missing required fields")
+                if not (
+                    "command" in server_config
+                    or (
+                        "type" in server_config
+                        and server_config["type"] == "github"
+                        and "clone_url" in server_config
+                    )
+                ):
+                    self.logger.error(
+                        f"Invalid server configuration for {server_name}: missing required fields"
+                    )
                     continue
 
                 # Check if working directory exists for command-based configs
@@ -118,9 +126,13 @@ class MCPToolRegistry:
                             abs_path = os.path.join(os.getcwd(), working_dir)
                             if os.path.exists(abs_path):
                                 server_config["working_directory"] = abs_path
-                                self.logger.info(f"Updated working directory to absolute path: {abs_path}")
+                                self.logger.info(
+                                    f"Updated working directory to absolute path: {abs_path}"
+                                )
                             else:
-                                self.logger.error(f"Could not find working directory: {working_dir}")
+                                self.logger.error(
+                                    f"Could not find working directory: {working_dir}"
+                                )
                                 continue
                         else:
                             self.logger.error(f"Working directory not found: {working_dir}")
@@ -141,32 +153,44 @@ class MCPToolRegistry:
                             # Create MCPServer object
                             mcp_server = MCPServer(
                                 name=server_name,
-                                command=server_config["command"].split() if isinstance(server_config["command"], str)
-                                       else server_config["command"],
+                                command=(
+                                    server_config["command"].split()
+                                    if isinstance(server_config["command"], str)
+                                    else server_config["command"]
+                                ),
                                 args=server_config.get("args"),
                                 env=server_config.get("env"),
-                                working_directory=server_config.get("working_directory")
+                                working_directory=server_config.get("working_directory"),
                             )
 
                             # Connect to server
                             direct_success = await self.mcp_adapter.add_server(mcp_server)
                             if direct_success:
-                                self.logger.info(f"Successfully connected to MCP server using direct method: {server_name}")
+                                self.logger.info(
+                                    f"Successfully connected to MCP server using direct method: {server_name}"
+                                )
                             else:
-                                self.logger.warning(f"Failed to connect to MCP server via any method: {server_name}")
+                                self.logger.warning(
+                                    f"Failed to connect to MCP server via any method: {server_name}"
+                                )
                         else:
-                            self.logger.warning(f"Failed to connect to MCP server via GitHub: {server_name}")
+                            self.logger.warning(
+                                f"Failed to connect to MCP server via GitHub: {server_name}"
+                            )
 
                 # Otherwise, use the direct command approach
                 elif "command" in server_config:
                     # Create MCPServer object
                     mcp_server = MCPServer(
                         name=server_name,
-                        command=server_config["command"].split() if isinstance(server_config["command"], str)
-                               else server_config["command"],
+                        command=(
+                            server_config["command"].split()
+                            if isinstance(server_config["command"], str)
+                            else server_config["command"]
+                        ),
                         args=server_config.get("args"),
                         env=server_config.get("env"),
-                        working_directory=server_config.get("working_directory")
+                        working_directory=server_config.get("working_directory"),
                     )
 
                     # Connect to server
@@ -177,7 +201,9 @@ class MCPToolRegistry:
                     else:
                         self.logger.warning(f"Failed to connect to MCP server: {server_name}")
                 else:
-                    self.logger.error(f"Invalid server configuration for {server_name}: missing command or GitHub information")
+                    self.logger.error(
+                        f"Invalid server configuration for {server_name}: missing command or GitHub information"
+                    )
 
             except Exception as e:
                 self.logger.error(f"Error connecting to MCP server: {e}")
@@ -193,13 +219,21 @@ class MCPToolRegistry:
                         # Check for command file
                         if "command" in server_config and isinstance(server_config["command"], str):
                             cmd_parts = server_config["command"].split()
-                            if cmd_parts and os.path.isfile(os.path.join(working_dir, cmd_parts[0])):
+                            if cmd_parts and os.path.isfile(
+                                os.path.join(working_dir, cmd_parts[0])
+                            ):
                                 self.logger.info(f"Command file exists: {cmd_parts[0]}")
                             else:
-                                self.logger.error(f"Command file not found: {cmd_parts[0] if cmd_parts else 'unknown'}")
+                                self.logger.error(
+                                    f"Command file not found: {cmd_parts[0] if cmd_parts else 'unknown'}"
+                                )
 
                                 # List all .js and .ts files to help debugging
-                                js_files = [f for f in os.listdir(working_dir) if f.endswith('.js') or f.endswith('.ts')]
+                                js_files = [
+                                    f
+                                    for f in os.listdir(working_dir)
+                                    if f.endswith(".js") or f.endswith(".ts")
+                                ]
                                 if js_files:
                                     self.logger.info(f"Available JS/TS files: {js_files}")
 
@@ -226,7 +260,7 @@ class MCPToolRegistry:
                     name=f"mcp_{mcp_tool.name}",
                     description=mcp_tool.description,
                     mcp_tool=mcp_tool,
-                    mcp_adapter=self.mcp_adapter
+                    mcp_adapter=self.mcp_adapter,
                 )
 
                 # Register with main tool registry

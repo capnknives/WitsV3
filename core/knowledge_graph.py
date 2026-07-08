@@ -9,10 +9,11 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Dict, List, Optional, Set, Tuple, Any, Union
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from typing import Any
+
 import networkx as nx
 import numpy as np
 
@@ -21,34 +22,39 @@ from .llm_interface import BaseLLMInterface
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class Entity:
     """Represents an entity in the knowledge graph."""
+
     name: str
     entity_type: str  # person, place, thing, concept, event, etc.
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    properties: Dict[str, Any] = field(default_factory=dict)
-    observations: List[str] = field(default_factory=list)
-    embedding: Optional[List[float]] = None
+    properties: dict[str, Any] = field(default_factory=dict)
+    observations: list[str] = field(default_factory=list)
+    embedding: list[float] | None = None
     confidence: float = 1.0
     created_at: datetime = field(default_factory=lambda: datetime.now())
     last_updated: datetime = field(default_factory=lambda: datetime.now())
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass
 class Relation:
     """Represents a relation between entities in the knowledge graph."""
+
     source_id: str
     target_id: str
     relation_type: str  # isA, hasPart, causes, contradicts, etc.
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    properties: Dict[str, Any] = field(default_factory=dict)
+    properties: dict[str, Any] = field(default_factory=dict)
     weight: float = 1.0
     confidence: float = 1.0
     bidirectional: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now())
     last_updated: datetime = field(default_factory=lambda: datetime.now())
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
 
 class KnowledgeGraph:
     """
@@ -69,8 +75,8 @@ class KnowledgeGraph:
 
         # The graph structure
         self.graph = nx.DiGraph()
-        self.entities: Dict[str, Entity] = {}
-        self.relations: Dict[str, Relation] = {}
+        self.entities: dict[str, Entity] = {}
+        self.relations: dict[str, Relation] = {}
 
         # Persistence settings - use a default path
         self.knowledge_file_path = Path("data/knowledge_graph.json")
@@ -86,7 +92,7 @@ class KnowledgeGraph:
                 self.logger.info(f"No knowledge graph file found at {self.knowledge_file_path}")
                 return
 
-            with open(self.knowledge_file_path, 'r', encoding='utf-8') as f:
+            with open(self.knowledge_file_path, encoding="utf-8") as f:
                 data = json.load(f)
 
             # Load entities
@@ -102,23 +108,19 @@ class KnowledgeGraph:
 
                 # Add edges to the graph
                 if relation.source_id in self.entities and relation.target_id in self.entities:
-                    self.graph.add_edge(
-                        relation.source_id,
-                        relation.target_id,
-                        relation=relation
-                    )
+                    self.graph.add_edge(relation.source_id, relation.target_id, relation=relation)
 
                     # Add reverse edge if bidirectional
                     if relation.bidirectional:
                         self.graph.add_edge(
-                            relation.target_id,
-                            relation.source_id,
-                            relation=relation
+                            relation.target_id, relation.source_id, relation=relation
                         )
                 else:
                     self.logger.warning(f"Skipping relation {relation.id}: missing entities")
 
-            self.logger.info(f"Loaded knowledge graph with {len(self.entities)} entities and {len(self.relations)} relations")
+            self.logger.info(
+                f"Loaded knowledge graph with {len(self.entities)} entities and {len(self.relations)} relations"
+            )
 
         except Exception as e:
             self.logger.error(f"Error loading knowledge graph: {e}")
@@ -128,13 +130,15 @@ class KnowledgeGraph:
         try:
             data = {
                 "entities": [asdict(entity) for entity in self.entities.values()],
-                "relations": [asdict(relation) for relation in self.relations.values()]
+                "relations": [asdict(relation) for relation in self.relations.values()],
             }
 
-            with open(self.knowledge_file_path, 'w', encoding='utf-8') as f:
+            with open(self.knowledge_file_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, default=self._json_serializer)
 
-            self.logger.info(f"Saved knowledge graph with {len(self.entities)} entities and {len(self.relations)} relations")
+            self.logger.info(
+                f"Saved knowledge graph with {len(self.entities)} entities and {len(self.relations)} relations"
+            )
 
         except Exception as e:
             self.logger.error(f"Error saving knowledge graph: {e}")
@@ -145,13 +149,15 @@ class KnowledgeGraph:
             return obj.isoformat()
         raise TypeError(f"Type {type(obj)} not serializable")
 
-    async def add_entity(self,
-                         name: str,
-                         entity_type: str,
-                         properties: Optional[Dict[str, Any]] = None,
-                         observations: Optional[List[str]] = None,
-                         confidence: float = 1.0,
-                         metadata: Optional[Dict[str, Any]] = None) -> Entity:
+    async def add_entity(
+        self,
+        name: str,
+        entity_type: str,
+        properties: dict[str, Any] | None = None,
+        observations: list[str] | None = None,
+        confidence: float = 1.0,
+        metadata: dict[str, Any] | None = None,
+    ) -> Entity:
         """Add a new entity to the knowledge graph.
 
         Args:
@@ -172,7 +178,7 @@ class KnowledgeGraph:
             properties=properties or {},
             observations=observations or [],
             confidence=confidence,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Generate embedding if possible
@@ -180,8 +186,7 @@ class KnowledgeGraph:
             text_to_embed = " ".join(observations)
             try:
                 entity.embedding = await self.llm_interface.get_embedding(
-                    text_to_embed,
-                    model=self.config.ollama_settings.embedding_model
+                    text_to_embed, model=self.config.ollama_settings.embedding_model
                 )
             except Exception as e:
                 self.logger.warning(f"Failed to generate embedding for entity {name}: {e}")
@@ -196,15 +201,17 @@ class KnowledgeGraph:
         self.logger.info(f"Added entity: {name} ({entity_type})")
         return entity
 
-    async def add_relation(self,
-                          source_id: str,
-                          target_id: str,
-                          relation_type: str,
-                          properties: Optional[Dict[str, Any]] = None,
-                          weight: float = 1.0,
-                          confidence: float = 1.0,
-                          bidirectional: bool = False,
-                          metadata: Optional[Dict[str, Any]] = None) -> Optional[Relation]:
+    async def add_relation(
+        self,
+        source_id: str,
+        target_id: str,
+        relation_type: str,
+        properties: dict[str, Any] | None = None,
+        weight: float = 1.0,
+        confidence: float = 1.0,
+        bidirectional: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> Relation | None:
         """Add a relation between two entities.
 
         Args:
@@ -222,7 +229,7 @@ class KnowledgeGraph:
         """
         # Check that both entities exist
         if source_id not in self.entities or target_id not in self.entities:
-            self.logger.warning(f"Cannot create relation: one or both entities don't exist")
+            self.logger.warning("Cannot create relation: one or both entities don't exist")
             return None
 
         # Create the relation
@@ -234,7 +241,7 @@ class KnowledgeGraph:
             weight=weight,
             confidence=confidence,
             bidirectional=bidirectional,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Add to collections
@@ -251,7 +258,7 @@ class KnowledgeGraph:
         self.logger.info(f"Added relation: {relation_type} from {source_id} to {target_id}")
         return relation
 
-    async def get_entity(self, entity_id: str) -> Optional[Entity]:
+    async def get_entity(self, entity_id: str) -> Entity | None:
         """Get an entity by ID.
 
         Args:
@@ -262,7 +269,7 @@ class KnowledgeGraph:
         """
         return self.entities.get(entity_id)
 
-    async def find_entities_by_name(self, name: str, exact_match: bool = False) -> List[Entity]:
+    async def find_entities_by_name(self, name: str, exact_match: bool = False) -> list[Entity]:
         """Find entities by name.
 
         Args:
@@ -277,7 +284,7 @@ class KnowledgeGraph:
         else:
             return [e for e in self.entities.values() if name.lower() in e.name.lower()]
 
-    async def find_entities_by_type(self, entity_type: str) -> List[Entity]:
+    async def find_entities_by_type(self, entity_type: str) -> list[Entity]:
         """Find entities by type.
 
         Args:
@@ -288,11 +295,13 @@ class KnowledgeGraph:
         """
         return [e for e in self.entities.values() if e.entity_type == entity_type]
 
-    async def search_entities(self,
-                             query: str,
-                             entity_types: Optional[List[str]] = None,
-                             min_confidence: float = 0.0,
-                             limit: int = 10) -> List[Tuple[Entity, float]]:
+    async def search_entities(
+        self,
+        query: str,
+        entity_types: list[str] | None = None,
+        min_confidence: float = 0.0,
+        limit: int = 10,
+    ) -> list[tuple[Entity, float]]:
         """Search for entities using semantic similarity.
 
         Args:
@@ -307,14 +316,15 @@ class KnowledgeGraph:
         try:
             # Generate query embedding
             query_embedding = await self.llm_interface.get_embedding(
-                query,
-                model=self.config.ollama_settings.embedding_model
+                query, model=self.config.ollama_settings.embedding_model
             )
 
             # Filter entities
             candidate_entities = self.entities.values()
             if entity_types:
-                candidate_entities = [e for e in candidate_entities if e.entity_type in entity_types]
+                candidate_entities = [
+                    e for e in candidate_entities if e.entity_type in entity_types
+                ]
 
             candidate_entities = [e for e in candidate_entities if e.confidence >= min_confidence]
 
@@ -338,7 +348,7 @@ class KnowledgeGraph:
             self.logger.error(f"Error searching entities: {e}")
             return []
 
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two vectors."""
         if len(vec1) != len(vec2):
             raise ValueError(f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}")
@@ -354,10 +364,12 @@ class KnowledgeGraph:
 
         return float(np.dot(vec1_np, vec2_np) / (norm1 * norm2))
 
-    async def find_relations(self,
-                            source_id: Optional[str] = None,
-                            target_id: Optional[str] = None,
-                            relation_type: Optional[str] = None) -> List[Relation]:
+    async def find_relations(
+        self,
+        source_id: str | None = None,
+        target_id: str | None = None,
+        relation_type: str | None = None,
+    ) -> list[Relation]:
         """Find relations matching the given criteria.
 
         Args:
@@ -387,11 +399,13 @@ class KnowledgeGraph:
 
         return results
 
-    async def get_connected_entities(self,
-                                   entity_id: str,
-                                   relation_types: Optional[List[str]] = None,
-                                   max_depth: int = 1,
-                                   direction: str = 'both') -> Dict[str, List[Tuple[Entity, Relation]]]:
+    async def get_connected_entities(
+        self,
+        entity_id: str,
+        relation_types: list[str] | None = None,
+        max_depth: int = 1,
+        direction: str = "both",
+    ) -> dict[str, list[tuple[Entity, Relation]]]:
         """Get entities connected to the given entity.
 
         Args:
@@ -406,7 +420,7 @@ class KnowledgeGraph:
         if entity_id not in self.entities:
             return {}
 
-        results: Dict[str, List[Tuple[Entity, Relation]]] = {}
+        results: dict[str, list[tuple[Entity, Relation]]] = {}
         visited = set([entity_id])
 
         # Initialize queue with (entity_id, depth) tuples
@@ -424,9 +438,9 @@ class KnowledgeGraph:
                 results[depth_key] = []
 
             # Process outgoing relations
-            if direction in ['outgoing', 'both']:
+            if direction in ["outgoing", "both"]:
                 for _, neighbor_id, edge_data in self.graph.out_edges(current_id, data=True):
-                    relation = edge_data.get('relation')
+                    relation = edge_data.get("relation")
 
                     # Skip if relation type doesn't match filter
                     if relation_types and relation.relation_type not in relation_types:
@@ -439,9 +453,9 @@ class KnowledgeGraph:
                         queue.append((neighbor_id, depth + 1))
 
             # Process incoming relations
-            if direction in ['incoming', 'both']:
+            if direction in ["incoming", "both"]:
                 for neighbor_id, _, edge_data in self.graph.in_edges(current_id, data=True):
-                    relation = edge_data.get('relation')
+                    relation = edge_data.get("relation")
 
                     # Skip if relation type doesn't match filter
                     if relation_types and relation.relation_type not in relation_types:
@@ -455,11 +469,13 @@ class KnowledgeGraph:
 
         return results
 
-    async def find_paths(self,
-                        source_id: str,
-                        target_id: str,
-                        max_length: int = 5,
-                        relation_types: Optional[List[str]] = None) -> List[List[Tuple[Entity, Optional[Relation]]]]:
+    async def find_paths(
+        self,
+        source_id: str,
+        target_id: str,
+        max_length: int = 5,
+        relation_types: list[str] | None = None,
+    ) -> list[list[tuple[Entity, Relation | None]]]:
         """Find paths between two entities.
 
         Args:
@@ -485,7 +501,7 @@ class KnowledgeGraph:
 
             # Add only edges with matching relation types
             for source, target, data in self.graph.edges(data=True):
-                relation = data.get('relation')
+                relation = data.get("relation")
                 if relation and relation.relation_type in relation_types:
                     filtered_graph.add_edge(source, target, **data)
 
@@ -493,9 +509,7 @@ class KnowledgeGraph:
 
         try:
             # Find all simple paths up to max_length
-            path_nodes = list(nx.all_simple_paths(
-                graph, source_id, target_id, cutoff=max_length
-            ))
+            path_nodes = list(nx.all_simple_paths(graph, source_id, target_id, cutoff=max_length))
 
             # Convert paths of node IDs to paths of (entity, relation) tuples
             paths = []
@@ -507,14 +521,14 @@ class KnowledgeGraph:
 
                 # Add remaining entities with their incoming relations
                 for i in range(1, len(node_path)):
-                    prev_id = node_path[i-1]
+                    prev_id = node_path[i - 1]
                     curr_id = node_path[i]
 
                     # Get the relation between previous and current entity
                     relation = None
                     for _, _, edge_data in graph.out_edges(prev_id, data=True):
-                        if edge_data.get('relation').target_id == curr_id:
-                            relation = edge_data.get('relation')
+                        if edge_data.get("relation").target_id == curr_id:
+                            relation = edge_data.get("relation")
                             break
 
                     entity_relation_path.append((self.entities[curr_id], relation))
@@ -522,17 +536,21 @@ class KnowledgeGraph:
                 paths.append(entity_relation_path)
 
             # Sort paths by quality (shorter paths first, then by average relation weight)
-            paths.sort(key=lambda p: (len(p), -sum(r.weight if r else 0 for _, r in p[1:]) / (len(p) - 1)))
+            paths.sort(
+                key=lambda p: (len(p), -sum(r.weight if r else 0 for _, r in p[1:]) / (len(p) - 1))
+            )
 
             return paths
 
         except (nx.NetworkXNoPath, nx.NodeNotFound):
             return []
 
-    async def update_entity(self,
-                           entity_id: str,
-                           properties: Optional[Dict[str, Any]] = None,
-                           observations: Optional[List[str]] = None) -> Optional[Entity]:
+    async def update_entity(
+        self,
+        entity_id: str,
+        properties: dict[str, Any] | None = None,
+        observations: list[str] | None = None,
+    ) -> Entity | None:
         """Update an entity's properties and/or observations.
 
         Args:
@@ -562,8 +580,7 @@ class KnowledgeGraph:
                 text_to_embed = " ".join(entity.observations)
                 try:
                     entity.embedding = await self.llm_interface.get_embedding(
-                        text_to_embed,
-                        model=self.config.ollama_settings.embedding_model
+                        text_to_embed, model=self.config.ollama_settings.embedding_model
                     )
                 except Exception as e:
                     self.logger.warning(f"Failed to update embedding for entity {entity.name}: {e}")
@@ -638,10 +655,12 @@ class KnowledgeGraph:
         # Save changes
         await self._save_graph()
 
-        self.logger.info(f"Deleted relation: {relation.relation_type} from {relation.source_id} to {relation.target_id}")
+        self.logger.info(
+            f"Deleted relation: {relation.relation_type} from {relation.source_id} to {relation.target_id}"
+        )
         return True
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """Get knowledge graph statistics.
 
         Returns:
@@ -653,15 +672,24 @@ class KnowledgeGraph:
 
         relation_types = {}
         for relation in self.relations.values():
-            relation_types[relation.relation_type] = relation_types.get(relation.relation_type, 0) + 1
+            relation_types[relation.relation_type] = (
+                relation_types.get(relation.relation_type, 0) + 1
+            )
 
         return {
-            'entity_count': len(self.entities),
-            'relation_count': len(self.relations),
-            'entity_types': entity_types,
-            'relation_types': relation_types,
-            'average_observations_per_entity': sum(len(e.observations) for e in self.entities.values()) / max(1, len(self.entities)),
-            'graph_density': nx.density(self.graph),
-            'connected_components': nx.number_weakly_connected_components(self.graph),
-            'average_path_length': nx.average_shortest_path_length(self.graph) if nx.is_weakly_connected(self.graph) else None
+            "entity_count": len(self.entities),
+            "relation_count": len(self.relations),
+            "entity_types": entity_types,
+            "relation_types": relation_types,
+            "average_observations_per_entity": sum(
+                len(e.observations) for e in self.entities.values()
+            )
+            / max(1, len(self.entities)),
+            "graph_density": nx.density(self.graph),
+            "connected_components": nx.number_weakly_connected_components(self.graph),
+            "average_path_length": (
+                nx.average_shortest_path_length(self.graph)
+                if nx.is_weakly_connected(self.graph)
+                else None
+            ),
         }

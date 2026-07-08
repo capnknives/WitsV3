@@ -8,7 +8,7 @@ Covers the qwen3 malformed-JSON failures from the ReAct loop
 - repair-reparse round trip when parsing still fails
 """
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 
@@ -20,7 +20,9 @@ from core.llm_interface import BaseLLMInterface, OllamaInterface
 class ScriptedLLM(BaseLLMInterface):
     """Returns scripted responses in order and records every call."""
 
-    SAFE_FINAL = '{"thought": "done", "action_type": "final_answer", "final_answer": "scripted default"}'
+    SAFE_FINAL = (
+        '{"thought": "done", "action_type": "final_answer", "final_answer": "scripted default"}'
+    )
 
     def __init__(self, responses=None):
         self.responses = list(responses or [])
@@ -54,6 +56,7 @@ def orchestrator():
 
 # ------------------------------------------------------------ parsing
 
+
 def test_parses_clean_json(orchestrator):
     parsed = orchestrator._parse_reasoning_response(
         '{"thought": "t", "action_type": "tool_call", "tool_name": "document_search", "tool_args": {"query": "audit"}}'
@@ -68,7 +71,7 @@ def test_parses_json_after_think_block(orchestrator):
     # qwen3 emits <think>...</think> before the answer
     response = (
         "<think>The user wants the audit report, I should search.\n"
-        'Some braces in here: {not json}</think>\n'
+        "Some braces in here: {not json}</think>\n"
         '{"thought": "search docs", "action_type": "tool_call", "tool_name": "document_search", "tool_args": {"query": "audit"}}'
     )
     parsed = orchestrator._parse_reasoning_response(response)
@@ -189,6 +192,7 @@ def test_fallback_strips_think_blocks(orchestrator):
 
 # ------------------------------------------------------------ ollama payload
 
+
 @pytest.mark.asyncio
 async def test_prepare_payload_includes_format():
     iface = OllamaInterface(WitsV3Config())
@@ -203,13 +207,16 @@ async def test_prepare_payload_includes_format():
 
 # ------------------------------------------------------------ react loop
 
+
 async def run_to_completion(orchestrator, user_input="Summarize the audit report"):
     return [sd async for sd in orchestrator.run(user_input)]
 
 
 @pytest.mark.asyncio
 async def test_reasoning_call_requests_json_format():
-    llm = ScriptedLLM(['{"thought": "t", "action_type": "final_answer", "final_answer": "all done"}'])
+    llm = ScriptedLLM(
+        ['{"thought": "t", "action_type": "final_answer", "final_answer": "all done"}']
+    )
     orchestrator = make_orchestrator(llm)
 
     stream = await run_to_completion(orchestrator)
@@ -225,10 +232,12 @@ async def test_reasoning_call_requests_json_format():
 async def test_repair_reparse_round_trip():
     # First reasoning response is malformed (the classic "Expecting ',' delimiter"),
     # the repair call returns valid JSON.
-    llm = ScriptedLLM([
-        '{"thought": "broken" "action_type": "final_answer", "final_answer": "bad"}',
-        '{"thought": "fixed", "action_type": "final_answer", "final_answer": "repaired answer"}',
-    ])
+    llm = ScriptedLLM(
+        [
+            '{"thought": "broken" "action_type": "final_answer", "final_answer": "bad"}',
+            '{"thought": "fixed", "action_type": "final_answer", "final_answer": "repaired answer"}',
+        ]
+    )
     orchestrator = make_orchestrator(llm)
 
     stream = await run_to_completion(orchestrator)
@@ -245,10 +254,12 @@ async def test_repair_reparse_round_trip():
 async def test_repair_failure_uses_fallback_without_crashing():
     # Both the reasoning response and the repair attempt are unusable prose;
     # the loop should fall back gracefully and still finish.
-    llm = ScriptedLLM([
-        "just some prose that is definitely not json",
-        "still not json, sorry",
-    ])
+    llm = ScriptedLLM(
+        [
+            "just some prose that is definitely not json",
+            "still not json, sorry",
+        ]
+    )
     orchestrator = make_orchestrator(llm)
 
     stream = await run_to_completion(orchestrator)

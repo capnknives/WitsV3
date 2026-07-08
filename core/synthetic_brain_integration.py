@@ -6,16 +6,13 @@ and the existing WITS system. It handles compatibility issues and provides
 adapters for smooth integration.
 """
 
-import asyncio
 import logging
-import os
-from typing import Any, Dict, List, Optional, Union
 
 from core.synthetic_brain_stubs import (
+    StubKnowledgeGraph,
     StubLLMInterface,
     StubMemoryManager,
     StubWorkingMemory,
-    StubKnowledgeGraph
 )
 
 
@@ -28,6 +25,7 @@ def get_compatible_llm_interface(config=None):
     """
     try:
         from core.enhanced_llm_interface import get_enhanced_llm_interface
+
         return get_enhanced_llm_interface(config)
     except (ImportError, TypeError):
         logging.warning("Could not load enhanced LLM interface, using stub")
@@ -40,6 +38,7 @@ def get_compatible_memory_manager(config=None):
     """
     try:
         from core.memory_manager import MemoryManager
+
         if config:
             return MemoryManager(config=config)
         else:
@@ -55,10 +54,12 @@ def get_compatible_knowledge_graph(config=None, llm_interface=None):
     """
     try:
         from core.knowledge_graph import KnowledgeGraph
+
         return KnowledgeGraph(config=config, llm_interface=llm_interface)
     except (ImportError, TypeError):
         try:
             from core.knowledge_graph import KnowledgeGraph
+
             return KnowledgeGraph()
         except (ImportError, TypeError):
             logging.warning("Could not load knowledge graph, using stub")
@@ -71,6 +72,7 @@ def get_compatible_working_memory(config=None):
     """
     try:
         from core.working_memory import WorkingMemory
+
         if config:
             return WorkingMemory(config=config)
         else:
@@ -86,6 +88,7 @@ async def export_memory_safely(export_path: str) -> None:
     """
     try:
         from core.memory_export import export_memory
+
         await export_memory(export_path)
     except ImportError:
         logging.warning(f"Memory export not available, nothing exported to {export_path}")
@@ -97,6 +100,7 @@ async def summarize_memory_safely(text: str) -> str:
     """
     try:
         from core.memory_summarization import summarize_memory_segment
+
         return await summarize_memory_segment(text)
     except ImportError:
         logging.warning("Memory summarization not available, using simple truncation")

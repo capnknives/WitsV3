@@ -3,23 +3,22 @@ FAISS CPU memory backend for WitsV3.
 Provides vector similarity search capabilities for memory segments.
 """
 
-import os
+import json
 import logging
 import time
-import json
-import numpy as np
-from typing import List, Optional, Dict, Any, Tuple
-from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import faiss
+import numpy as np
 from pydantic import TypeAdapter
 
-from .memory_manager import BaseMemoryBackend, MemorySegment
 from .config import WitsV3Config
 from .llm_interface import BaseLLMInterface
+from .memory_manager import BaseMemoryBackend, MemorySegment
 
 logger = logging.getLogger(__name__)
+
 
 class FaissCPUMemoryBackend(BaseMemoryBackend):
     """
@@ -60,7 +59,9 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
                     self.index = faiss.read_index(str(self.index_path))
                     # Verify index dimension matches configuration
                     if self.index.d != self.vector_dim:
-                        self.logger.warning(f"FAISS index dimension mismatch: index {self.index.d} != config {self.vector_dim}")
+                        self.logger.warning(
+                            f"FAISS index dimension mismatch: index {self.index.d} != config {self.vector_dim}"
+                        )
                         self.logger.warning("Recreating index with correct dimensions")
                         self._create_new_index()
                 except Exception as e:
@@ -89,16 +90,20 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
         """Load memory segments from disk."""
         try:
             if self.memory_file_path.exists():
-                with open(self.memory_file_path, 'r') as f:
+                with open(self.memory_file_path) as f:
                     segments_data = json.load(f)
                     # Support both plain-list and {"segments": [...]} template formats
                     if isinstance(segments_data, dict):
                         segments_data = segments_data.get("segments", [])
-                    self.segments = TypeAdapter(List[MemorySegment]).validate_python(segments_data)
-                    self.logger.info(f"Loaded {len(self.segments)} memory segments from {self.memory_file_path}")
+                    self.segments = TypeAdapter(list[MemorySegment]).validate_python(segments_data)
+                    self.logger.info(
+                        f"Loaded {len(self.segments)} memory segments from {self.memory_file_path}"
+                    )
             else:
                 self.segments = []
-                self.logger.info(f"No memory file found at {self.memory_file_path}, starting with empty memory")
+                self.logger.info(
+                    f"No memory file found at {self.memory_file_path}, starting with empty memory"
+                )
         except Exception as e:
             self.logger.error(f"Error loading memory segments from disk: {e}")
             self.segments = []
@@ -106,14 +111,18 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
     async def _save_to_disk(self):
         """Save memory segments to disk."""
         try:
-            with open(self.memory_file_path, 'w') as f:
-                json.dump([segment.model_dump(mode="json") for segment in self.segments], f, indent=2)
+            with open(self.memory_file_path, "w") as f:
+                json.dump(
+                    [segment.model_dump(mode="json") for segment in self.segments], f, indent=2
+                )
 
             # Save FAISS index if it exists
             if self.index is not None:
                 faiss.write_index(self.index, str(self.index_path))
 
-            self.logger.debug(f"Saved {len(self.segments)} memory segments to {self.memory_file_path}")
+            self.logger.debug(
+                f"Saved {len(self.segments)} memory segments to {self.memory_file_path}"
+            )
         except Exception as e:
             self.logger.error(f"Error saving memory segments to disk: {e}")
             raise
@@ -201,7 +210,7 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
 
         return segment.id
 
-    async def get_segment(self, segment_id: str) -> Optional[MemorySegment]:
+    async def get_segment(self, segment_id: str) -> MemorySegment | None:
         """Get a specific memory segment by ID.
 
         Args:
@@ -224,8 +233,8 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
         query_text: str,
         limit: int = 5,
         min_relevance: float = 0.0,
-        filter_dict: Optional[Dict[str, Any]] = None
-    ) -> List[MemorySegment]:
+        filter_dict: dict[str, Any] | None = None,
+    ) -> list[MemorySegment]:
         """Search memory segments by vector similarity.
 
         Args:
@@ -246,12 +255,13 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
         try:
             # Generate query embedding
             query_embedding = await self.llm_interface.get_embedding(
-                query_text,
-                model=self.config.ollama_settings.embedding_model
+                query_text, model=self.config.ollama_settings.embedding_model
             )
 
             if not query_embedding or len(query_embedding) != self.vector_dim:
-                self.logger.warning(f"Invalid query embedding dimension: {len(query_embedding) if query_embedding else 0}")
+                self.logger.warning(
+                    f"Invalid query embedding dimension: {len(query_embedding) if query_embedding else 0}"
+                )
                 return []
 
             # Prepare query vector
@@ -307,10 +317,8 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
             return []
 
     async def get_recent_segments(
-        self,
-        limit: int = 10,
-        filter_dict: Optional[Dict[str, Any]] = None
-    ) -> List[MemorySegment]:
+        self, limit: int = 10, filter_dict: dict[str, Any] | None = None
+    ) -> list[MemorySegment]:
         """Get most recent memory segments.
 
         Args:
@@ -324,16 +332,13 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
             await self.initialize()
 
         # Sort by timestamp (most recent first)
-        sorted_segments = sorted(
-            self.segments,
-            key=lambda s: s.timestamp,
-            reverse=True
-        )
+        sorted_segments = sorted(self.segments, key=lambda s: s.timestamp, reverse=True)
 
         # Apply filters if provided
         if filter_dict:
             sorted_segments = [
-                s for s in sorted_segments
+                s
+                for s in sorted_segments
                 if all(s.metadata.get(k) == v for k, v in filter_dict.items())
             ]
 
@@ -344,17 +349,17 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
         if len(self.segments) <= self.settings.max_memory_segments:
             return
 
-        self.logger.info(f"Pruning memory: {len(self.segments)} segments exceed limit of {self.settings.max_memory_segments}")
+        self.logger.info(
+            f"Pruning memory: {len(self.segments)} segments exceed limit of {self.settings.max_memory_segments}"
+        )
 
         # Sort by importance and timestamp (keep important and recent)
         sorted_segments = sorted(
-            self.segments,
-            key=lambda s: (s.importance, s.timestamp.timestamp()),
-            reverse=True
+            self.segments, key=lambda s: (s.importance, s.timestamp.timestamp()), reverse=True
         )
 
         # Keep only the top max_memory_segments
-        pruned_segments = sorted_segments[:self.settings.max_memory_segments]
+        pruned_segments = sorted_segments[: self.settings.max_memory_segments]
         num_pruned = len(self.segments) - len(pruned_segments)
         self.segments = pruned_segments
 
@@ -366,6 +371,7 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
         await self._save_to_disk()
 
         self.logger.info(f"Pruned {num_pruned} memory segments")
+
 
 class FaissGPUMemoryBackend(FaissCPUMemoryBackend):
     """

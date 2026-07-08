@@ -2,7 +2,7 @@
 """Data models for the book writing agent."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -10,12 +10,12 @@ class BookStructure:
     """Represents the structure of a book."""
 
     title: str
-    subtitle: Optional[str] = None
+    subtitle: str | None = None
     genre: str = "non-fiction"
     target_length: int = 50000  # words
-    chapters: List[Dict[str, Any]] = field(default_factory=list)
-    style_guide: Dict[str, Any] = field(default_factory=dict)
-    research_notes: List[str] = field(default_factory=list)
+    chapters: list[dict[str, Any]] = field(default_factory=list)
+    style_guide: dict[str, Any] = field(default_factory=dict)
+    research_notes: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if self.chapters is None:
@@ -36,8 +36,8 @@ class Chapter:
     content: str = ""
     word_count: int = 0
     status: str = "planned"  # planned, outlined, drafted, revised, complete
-    dependencies: List[str] = field(default_factory=list)
-    research_requirements: List[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+    research_requirements: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if self.dependencies is None:

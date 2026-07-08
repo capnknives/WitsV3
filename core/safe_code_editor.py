@@ -23,9 +23,8 @@ import asyncio
 import logging
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 logger = logging.getLogger("WitsV3.SafeCodeEditor")
 
@@ -33,13 +32,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 # Matches a project-relative-looking path ending in a common source
 # extension, e.g. "agents/base_agent.py" or "core/config.py:42".
-_FILE_MENTION_RE = re.compile(
-    r"\b([\w./\\-]+\.(?:py|ts|js|json|yaml|yml))\b(?::(\d+))?"
-)
+_FILE_MENTION_RE = re.compile(r"\b([\w./\\-]+\.(?:py|ts|js|json|yaml|yml))\b(?::(\d+))?")
 _FENCE_RE = re.compile(r"```(?:\w+)?\n(.*?)```", re.DOTALL)
 
 
-def extract_file_mention(text: str) -> Optional[Tuple[str, Optional[int]]]:
+def extract_file_mention(text: str) -> tuple[str, int | None] | None:
     """Find the first existing-project-file mention in free text.
 
     Returns (relative_path, line_or_None) or None. Shared by the coding
@@ -72,7 +69,7 @@ class EditResult:
     message: str
     test_output: str = ""
     committed: bool = False
-    commit_sha: Optional[str] = None
+    commit_sha: str | None = None
 
 
 def resolve_within_project(file_path: str) -> Path:
@@ -83,19 +80,21 @@ def resolve_within_project(file_path: str) -> Path:
     "WITS can edit arbitrary files on the machine."
     """
     candidate = Path(file_path)
-    resolved = candidate.resolve() if candidate.is_absolute() else (PROJECT_ROOT / candidate).resolve()
+    resolved = (
+        candidate.resolve() if candidate.is_absolute() else (PROJECT_ROOT / candidate).resolve()
+    )
     try:
         resolved.relative_to(PROJECT_ROOT)
-    except ValueError:
+    except ValueError as err:
         raise PermissionError(
             f"Refusing to edit outside the project directory: {resolved}"
-        )
+        ) from err
     return resolved
 
 
 async def run_pytest(
-    test_paths: Optional[List[str]] = None, timeout: float = 120.0
-) -> Tuple[bool, str]:
+    test_paths: list[str] | None = None, timeout: float = 120.0
+) -> tuple[bool, str]:
     """Run pytest as a trusted subprocess (this is orchestration code, not
     arbitrary agent-authored code — it is not run through the sandboxed
     python_execute tool). Returns (passed, tail_of_combined_output).
@@ -125,11 +124,14 @@ async def run_pytest(
     return proc.returncode == 0, output[-4000:]  # bound size for LLM/UI consumption
 
 
-async def run_py_compile(file_path: Path) -> Tuple[bool, str]:
+async def run_py_compile(file_path: Path) -> tuple[bool, str]:
     """Quick syntax check for a single Python file (cheaper than pytest for
     e.g. freshly-scaffolded project files that have no tests yet)."""
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "py_compile", str(file_path),
+        sys.executable,
+        "-m",
+        "py_compile",
+        str(file_path),
         cwd=str(PROJECT_ROOT),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
@@ -138,9 +140,10 @@ async def run_py_compile(file_path: Path) -> Tuple[bool, str]:
     return proc.returncode == 0, stdout.decode(errors="replace")
 
 
-async def _git(*args: str) -> Tuple[int, str]:
+async def _git(*args: str) -> tuple[int, str]:
     proc = await asyncio.create_subprocess_exec(
-        "git", *args,
+        "git",
+        *args,
         cwd=str(PROJECT_ROOT),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
@@ -154,7 +157,7 @@ async def apply_verified_edit(
     new_content: str,
     *,
     reason: str,
-    test_paths: Optional[List[str]] = None,
+    test_paths: list[str] | None = None,
     timeout: float = 120.0,
     commit: bool = True,
 ) -> EditResult:
@@ -183,9 +186,7 @@ async def apply_verified_edit(
             resolved.write_bytes(original_bytes)
         else:
             resolved.unlink(missing_ok=True)
-        logger.warning(
-            "Verified edit to %s FAILED tests — reverted. reason=%r", file_path, reason
-        )
+        logger.warning("Verified edit to %s FAILED tests — reverted. reason=%r", file_path, reason)
         return EditResult(
             success=False,
             file_path=str(resolved),
@@ -194,13 +195,14 @@ async def apply_verified_edit(
         )
 
     committed = False
-    commit_sha: Optional[str] = None
+    commit_sha: str | None = None
     if commit:
         rel = str(resolved.relative_to(PROJECT_ROOT))
         rc, add_out = await _git("add", rel)
         if rc == 0:
             rc, _commit_out = await _git(
-                "commit", "-m",
+                "commit",
+                "-m",
                 f"self-repair: {reason}\n\nVerified automated edit to {rel} "
                 f"(tests passed before commit).\n\n"
                 f"Co-Authored-By: WITS Self-Repair <noreply@wits.local>",
@@ -214,19 +216,22 @@ async def apply_verified_edit(
 
     logger.info(
         "Verified edit to %s PASSED tests%s. reason=%r",
-        file_path, " and committed " + (commit_sha or "") if committed else " (not committed)", reason,
+        file_path,
+        " and committed " + (commit_sha or "") if committed else " (not committed)",
+        reason,
     )
     return EditResult(
         success=True,
         file_path=str(resolved),
-        message="Edit applied and verified." + (f" Committed as {commit_sha}." if committed else " Not committed."),
+        message="Edit applied and verified."
+        + (f" Committed as {commit_sha}." if committed else " Not committed."),
         test_output=test_output,
         committed=committed,
         commit_sha=commit_sha,
     )
 
 
-def guess_related_tests(file_path: str) -> List[str]:
+def guess_related_tests(file_path: str) -> list[str]:
     """Best-effort guess at which pytest paths cover a given source file, so
     verification doesn't have to run the entire suite for every edit.
 

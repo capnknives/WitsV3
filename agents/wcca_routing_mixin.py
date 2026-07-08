@@ -3,13 +3,13 @@
 
 import re
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
 class OrchestratorRoutingMixin:
     """Document, web-search, and file-write routing for the control center."""
 
-    async def _get_document_inventory(self) -> Dict[str, int]:
+    async def _get_document_inventory(self) -> dict[str, int]:
         """File path -> chunk count for every ingested document (empty if none)."""
         if not self.memory_manager:
             return {}
@@ -20,7 +20,7 @@ class OrchestratorRoutingMixin:
         except Exception as e:
             self.logger.warning(f"Could not list ingested documents: {e}")
             return {}
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         for seg in segments:
             fp = seg.metadata.get("file_path")
             if fp:
@@ -28,7 +28,7 @@ class OrchestratorRoutingMixin:
         return counts
 
     @staticmethod
-    def _documents_context(inventory: Dict[str, int]) -> str:
+    def _documents_context(inventory: dict[str, int]) -> str:
         """Prompt block describing which user documents are searchable."""
         if not inventory:
             return "No user documents are currently ingested."
@@ -43,9 +43,19 @@ class OrchestratorRoutingMixin:
 
     # Phrases in user messages that imply document_search / file access.
     _DOCUMENT_TOOL_HINTS = (
-        "document", "my notes", "my files", "search my", "in my memory",
-        "remember", "ingest", "uploaded", "read the file", "look up",
-        "the file", "attachment", "attached",
+        "document",
+        "my notes",
+        "my files",
+        "search my",
+        "in my memory",
+        "remember",
+        "ingest",
+        "uploaded",
+        "read the file",
+        "look up",
+        "the file",
+        "attachment",
+        "attached",
     )
 
     # Phrases that signal the user wants live/external info fetched. Kept
@@ -53,17 +63,47 @@ class OrchestratorRoutingMixin:
     # to the slow orchestrator — "today"/"current" alone are too weak to trust.
     _WEB_SEARCH_SIGNALS = (
         # explicit "go find this online" commands
-        "look up", "look it up", "look that up", "look this up", "look them up",
-        "search for", "search the web", "web search", "search online", "search it up",
-        "google it", "google for", "find out", "check online", "look online",
-        "on the internet", "on the web", "browse the web",
+        "look up",
+        "look it up",
+        "look that up",
+        "look this up",
+        "look them up",
+        "search for",
+        "search the web",
+        "web search",
+        "search online",
+        "search it up",
+        "google it",
+        "google for",
+        "find out",
+        "check online",
+        "look online",
+        "on the internet",
+        "on the web",
+        "browse the web",
         # real-time / recency signals a local model can't answer from memory
-        "latest", "most recent", "breaking news", "in the news", "news about",
-        "up to date", "up-to-date", "weather", "forecast",
+        "latest",
+        "most recent",
+        "breaking news",
+        "in the news",
+        "news about",
+        "up to date",
+        "up-to-date",
+        "weather",
+        "forecast",
         # common current-fact question patterns
-        "who won", "who died", "who passed away", "who is the current",
-        "who's the current", "what happened to", "price of", "stock price",
-        "exchange rate", "score of", "release date", "when is the next",
+        "who won",
+        "who died",
+        "who passed away",
+        "who is the current",
+        "who's the current",
+        "what happened to",
+        "price of",
+        "stock price",
+        "exchange rate",
+        "score of",
+        "release date",
+        "when is the next",
         "when does the next",
     )
 
@@ -85,15 +125,13 @@ class OrchestratorRoutingMixin:
             return True
         return False
 
-    def _doc_routing_hints(self, doc_inventory: Dict[str, int]) -> set:
+    def _doc_routing_hints(self, doc_inventory: dict[str, int]) -> set:
         """Filename and stem tokens that imply a document/tool request."""
         hints: set = set()
         for path in doc_inventory:
             name = Path(path).name.lower()
             hints.add(name)
-            hints.update(
-                w for w in re.split(r"[\W_]+", Path(path).stem.lower()) if len(w) >= 4
-            )
+            hints.update(w for w in re.split(r"[\W_]+", Path(path).stem.lower()) if len(w) >= 4)
         return hints
 
     # Phrases that signal saving/exporting content to disk.
@@ -129,12 +167,24 @@ class OrchestratorRoutingMixin:
     # signal short-circuits that misclassification the same way
     # _needs_web_search/_needs_file_write already do for their cases.
     _SELF_REPAIR_SIGNALS = (
-        "bugs in your code", "bugs in the code", "bugs in your codebase",
-        "bugs in the codebase", "bug in your code", "bug in the code",
-        "fix any bugs", "find any bugs", "find bugs in", "find and fix",
-        "search for bugs", "look for bugs", "scan for bugs",
-        "fix bugs in", "repair your code", "repair your own code",
-        "analyze your own code", "your own codebase",
+        "bugs in your code",
+        "bugs in the code",
+        "bugs in your codebase",
+        "bugs in the codebase",
+        "bug in your code",
+        "bug in the code",
+        "fix any bugs",
+        "find any bugs",
+        "find bugs in",
+        "find and fix",
+        "search for bugs",
+        "look for bugs",
+        "scan for bugs",
+        "fix bugs in",
+        "repair your code",
+        "repair your own code",
+        "analyze your own code",
+        "your own codebase",
     )
 
     def _needs_self_repair(self, message: str) -> bool:
@@ -155,7 +205,7 @@ class OrchestratorRoutingMixin:
             return True
         return self._needs_web_search(user_input)
 
-    def _normalize_parsed_intent(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_parsed_intent(self, parsed: dict[str, Any]) -> dict[str, Any]:
         """Fill routing metadata so the handler does not rely on loose defaults."""
         intent_type = parsed.get("type", "goal_defined")
         if intent_type == "goal_defined":
@@ -196,12 +246,24 @@ class OrchestratorRoutingMixin:
         # as small talk.
         words = set(re.findall(r"[a-z']+", lowered))
         casual_words = {
-            "hello", "hi", "hey", "thanks", "appreciate",
-            "nice", "cool", "great", "bye", "goodbye",
+            "hello",
+            "hi",
+            "hey",
+            "thanks",
+            "appreciate",
+            "nice",
+            "cool",
+            "great",
+            "bye",
+            "goodbye",
         }
         casual_phrases = (
-            "how are you", "what's up", "how's it going",
-            "thank you", "see you", "talk to you",
+            "how are you",
+            "what's up",
+            "how's it going",
+            "thank you",
+            "see you",
+            "talk to you",
         )
 
         # Short messages are usually casual

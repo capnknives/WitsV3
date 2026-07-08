@@ -4,11 +4,12 @@ Advanced Coding Agent for WitsV3
 Specialized agent for software development, code analysis, and project management
 """
 
-import asyncio
 import ast
+import asyncio
 import json
 import uuid
-from typing import Any, AsyncGenerator, Dict, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.coding_handlers import CodingHandlersMixin
@@ -17,8 +18,8 @@ from agents.coding_scaffolds import CodingScaffoldMixin
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
-from core.schemas import StreamData, ConversationHistory
 from core.neural_web_core import NeuralWeb
+from core.schemas import ConversationHistory, StreamData
 
 
 class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
@@ -31,9 +32,9 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
         agent_name: str,
         config: WitsV3Config,
         llm_interface: BaseLLMInterface,
-        memory_manager: Optional[MemoryManager] = None,
-        neural_web: Optional[NeuralWeb] = None,
-        tool_registry: Optional[Any] = None
+        memory_manager: MemoryManager | None = None,
+        neural_web: NeuralWeb | None = None,
+        tool_registry: Any | None = None,
     ):
         super().__init__(agent_name, config, llm_interface, memory_manager)
 
@@ -41,9 +42,9 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
         self.tool_registry = tool_registry
 
         # Neural web integration for code intelligence
-        self.code_patterns: Dict[str, Any] = {}
-        self.design_patterns_graph: Dict[str, Any] = {}
-        self.dependency_networks: Dict[str, Any] = {}
+        self.code_patterns: dict[str, Any] = {}
+        self.design_patterns_graph: dict[str, Any] = {}
+        self.dependency_networks: dict[str, Any] = {}
 
         # Enhanced coding capabilities
         if self.neural_web:
@@ -54,59 +55,59 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
             self.enable_code_intelligence = False
 
         # Coding specific state
-        self.current_projects: Dict[str, CodeProject] = {}
+        self.current_projects: dict[str, CodeProject] = {}
 
         # Supported languages and frameworks
         self.supported_languages = {
-            'python': {
-                'extensions': ['.py'],
-                'frameworks': ['django', 'flask', 'fastapi', 'pytorch', 'tensorflow'],
-                'testing': ['pytest', 'unittest'],
-                'linting': ['pylint', 'flake8', 'black']
+            "python": {
+                "extensions": [".py"],
+                "frameworks": ["django", "flask", "fastapi", "pytorch", "tensorflow"],
+                "testing": ["pytest", "unittest"],
+                "linting": ["pylint", "flake8", "black"],
             },
-            'javascript': {
-                'extensions': ['.js', '.ts', '.jsx', '.tsx'],
-                'frameworks': ['react', 'vue', 'angular', 'node', 'express'],
-                'testing': ['jest', 'mocha', 'cypress'],
-                'linting': ['eslint', 'prettier']
+            "javascript": {
+                "extensions": [".js", ".ts", ".jsx", ".tsx"],
+                "frameworks": ["react", "vue", "angular", "node", "express"],
+                "testing": ["jest", "mocha", "cypress"],
+                "linting": ["eslint", "prettier"],
             },
-            'java': {
-                'extensions': ['.java'],
-                'frameworks': ['spring', 'springboot', 'hibernate'],
-                'testing': ['junit', 'testng'],
-                'linting': ['checkstyle', 'spotbugs']
+            "java": {
+                "extensions": [".java"],
+                "frameworks": ["spring", "springboot", "hibernate"],
+                "testing": ["junit", "testng"],
+                "linting": ["checkstyle", "spotbugs"],
             },
-            'rust': {
-                'extensions': ['.rs'],
-                'frameworks': ['tokio', 'actix', 'rocket'],
-                'testing': ['cargo test'],
-                'linting': ['clippy', 'rustfmt']
+            "rust": {
+                "extensions": [".rs"],
+                "frameworks": ["tokio", "actix", "rocket"],
+                "testing": ["cargo test"],
+                "linting": ["clippy", "rustfmt"],
             },
-            'go': {
-                'extensions': ['.go'],
-                'frameworks': ['gin', 'echo', 'fiber'],
-                'testing': ['go test'],
-                'linting': ['golint', 'gofmt']
-            }
+            "go": {
+                "extensions": [".go"],
+                "frameworks": ["gin", "echo", "fiber"],
+                "testing": ["go test"],
+                "linting": ["golint", "gofmt"],
+            },
         }
 
         self.project_templates = {
-            'web_app': {
-                'structure': ['src/', 'tests/', 'docs/', 'config/'],
-                'files': ['main.py', 'requirements.txt', 'README.md', '.gitignore']
+            "web_app": {
+                "structure": ["src/", "tests/", "docs/", "config/"],
+                "files": ["main.py", "requirements.txt", "README.md", ".gitignore"],
             },
-            'api': {
-                'structure': ['api/', 'models/', 'tests/', 'docs/'],
-                'files': ['app.py', 'requirements.txt', 'README.md', 'docker-compose.yml']
+            "api": {
+                "structure": ["api/", "models/", "tests/", "docs/"],
+                "files": ["app.py", "requirements.txt", "README.md", "docker-compose.yml"],
             },
-            'cli_tool': {
-                'structure': ['src/', 'tests/', 'docs/'],
-                'files': ['cli.py', 'setup.py', 'README.md', 'requirements.txt']
+            "cli_tool": {
+                "structure": ["src/", "tests/", "docs/"],
+                "files": ["cli.py", "setup.py", "README.md", "requirements.txt"],
             },
-            'library': {
-                'structure': ['src/', 'tests/', 'docs/', 'examples/'],
-                'files': ['__init__.py', 'setup.py', 'README.md', 'requirements.txt']
-            }
+            "library": {
+                "structure": ["src/", "tests/", "docs/", "examples/"],
+                "files": ["__init__.py", "setup.py", "README.md", "requirements.txt"],
+            },
         }
 
         self.logger.info("Advanced Coding Agent initialized")
@@ -114,9 +115,9 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
     async def run(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory] = None,
-        session_id: Optional[str] = None,
-        **kwargs
+        conversation_history: ConversationHistory | None = None,
+        session_id: str | None = None,
+        **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
         """
         Process coding requests
@@ -144,31 +145,31 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
 
         yield self.stream_thinking(f"Identified task: {task_analysis['task_type']}")
 
-        if task_analysis['task_type'] == 'create_project':
+        if task_analysis["task_type"] == "create_project":
             async for stream in self._handle_project_creation(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'write_code':
+        elif task_analysis["task_type"] == "write_code":
             async for stream in self._handle_code_generation(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'analyze_code':
+        elif task_analysis["task_type"] == "analyze_code":
             async for stream in self._handle_code_analysis(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'debug_code':
+        elif task_analysis["task_type"] == "debug_code":
             async for stream in self._handle_debugging(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'optimize_code':
+        elif task_analysis["task_type"] == "optimize_code":
             async for stream in self._handle_optimization(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'write_tests':
+        elif task_analysis["task_type"] == "write_tests":
             async for stream in self._handle_test_generation(task_analysis, session_id):
                 yield stream
 
-        elif task_analysis['task_type'] == 'refactor_code':
+        elif task_analysis["task_type"] == "refactor_code":
             async for stream in self._handle_refactoring(task_analysis, session_id):
                 yield stream
 
@@ -176,7 +177,7 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
             async for stream in self._handle_general_coding(task_analysis, session_id):
                 yield stream
 
-    async def _analyze_coding_task(self, request: str) -> Dict[str, Any]:
+    async def _analyze_coding_task(self, request: str) -> dict[str, Any]:
         """Analyze the coding request to determine task type and parameters"""
 
         analysis_prompt = f"""
@@ -202,7 +203,8 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
         try:
             response = await self.generate_response(analysis_prompt, temperature=0.3)
             import re
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+
+            json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group(0))
         except Exception as e:
@@ -215,16 +217,16 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
             "complexity": "medium",
             "requirements": [request[:100]],
             "frameworks": [],
-            "parameters": {}
+            "parameters": {},
         }
 
-    async def _analyze_code_quality(self, code: str, language: str) -> Optional[CodeAnalysis]:
+    async def _analyze_code_quality(self, code: str, language: str) -> CodeAnalysis | None:
         """Analyze code quality and provide metrics"""
 
         try:
-            if language == 'python':
+            if language == "python":
                 return await self._analyze_python_code(code)
-            elif language == 'javascript':
+            elif language == "javascript":
                 return await self._analyze_js_code(code)
             else:
                 return await self._analyze_generic_code(code, language)
@@ -239,7 +241,7 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
             tree = ast.parse(code)
 
             complexity = self._calculate_cyclomatic_complexity(tree)
-            lines_of_code = len([line for line in code.split('\n') if line.strip()])
+            lines_of_code = len([line for line in code.split("\n") if line.strip()])
 
             maintainability = max(0, 100 - complexity * 2 - max(0, lines_of_code - 100) * 0.1)
 
@@ -248,18 +250,20 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
             style_violations = []
             suggestions = []
 
-            if 'eval(' in code:
+            if "eval(" in code:
                 security_issues.append("Use of eval() detected - security risk")
-            if 'exec(' in code:
+            if "exec(" in code:
                 security_issues.append("Use of exec() detected - security risk")
-            if len([line for line in code.split('\n') if len(line) > 100]) > 0:
+            if len([line for line in code.split("\n") if len(line) > 100]) > 0:
                 style_violations.append("Lines longer than 100 characters detected")
 
-            suggestions.extend([
-                "Add type hints for better code documentation",
-                "Consider adding docstrings to functions",
-                "Use consistent naming conventions"
-            ])
+            suggestions.extend(
+                [
+                    "Add type hints for better code documentation",
+                    "Consider adding docstrings to functions",
+                    "Use consistent naming conventions",
+                ]
+            )
 
             return CodeAnalysis(
                 complexity_score=complexity,
@@ -268,7 +272,7 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
                 security_issues=security_issues,
                 performance_issues=performance_issues,
                 style_violations=style_violations,
-                suggestions=suggestions
+                suggestions=suggestions,
             )
 
         except Exception as e:
@@ -307,30 +311,30 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
             security_issues=[],
             performance_issues=[],
             style_violations=[],
-            suggestions=["Consider adding comprehensive tests", "Add documentation"]
+            suggestions=["Consider adding comprehensive tests", "Add documentation"],
         )
 
-    async def get_project_statistics(self, session_id: Optional[str] = None) -> Dict[str, Any]:
+    async def get_project_statistics(self, session_id: str | None = None) -> dict[str, Any]:
         """Get coding project statistics"""
 
         stats = {
-            'total_projects': len(self.current_projects),
-            'languages_used': set(),
-            'project_types': set(),
-            'total_files': 0,
-            'lines_of_code': 0
+            "total_projects": len(self.current_projects),
+            "languages_used": set(),
+            "project_types": set(),
+            "total_files": 0,
+            "lines_of_code": 0,
         }
 
         for project in self.current_projects.values():
-            stats['languages_used'].add(project.language)
-            stats['project_types'].add(project.project_type)
-            stats['total_files'] += len(project.files)
+            stats["languages_used"].add(project.language)
+            stats["project_types"].add(project.project_type)
+            stats["total_files"] += len(project.files)
 
             for content in project.files.values():
-                stats['lines_of_code'] += len(content.split('\n'))
+                stats["lines_of_code"] += len(content.split("\n"))
 
-        stats['languages_used'] = list(stats['languages_used'])
-        stats['project_types'] = list(stats['project_types'])
+        stats["languages_used"] = list(stats["languages_used"])
+        stats["project_types"] = list(stats["project_types"])
 
         return stats
 
@@ -345,7 +349,7 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
                 ("factory", "Creates objects without specifying exact classes", "pattern"),
                 ("observer", "Defines one-to-many dependency between objects", "pattern"),
                 ("strategy", "Encapsulates algorithms and makes them interchangeable", "pattern"),
-                ("mvc", "Separates application into Model-View-Controller", "pattern")
+                ("mvc", "Separates application into Model-View-Controller", "pattern"),
             ]
 
             for pattern_id, description, concept_type in patterns:
@@ -353,11 +357,15 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
                     concept_id=f"pattern_{pattern_id}",
                     content=description,
                     concept_type=concept_type,
-                    metadata={"domain": "software_engineering", "type": "design_pattern"}
+                    metadata={"domain": "software_engineering", "type": "design_pattern"},
                 )
 
-            await self.neural_web.connect_concepts("pattern_mvc", "pattern_observer", "enables", 0.8)
-            await self.neural_web.connect_concepts("pattern_factory", "pattern_strategy", "similar", 0.6)
+            await self.neural_web.connect_concepts(
+                "pattern_mvc", "pattern_observer", "enables", 0.8
+            )
+            await self.neural_web.connect_concepts(
+                "pattern_factory", "pattern_strategy", "similar", 0.6
+            )
 
             self.logger.info("Coding patterns initialized in neural web")
 
@@ -376,9 +384,7 @@ async def test_advanced_coding_agent():
         llm_interface = OllamaInterface(config=config)
 
         agent = AdvancedCodingAgent(
-            agent_name="AdvancedCoder",
-            config=config,
-            llm_interface=llm_interface
+            agent_name="AdvancedCoder", config=config, llm_interface=llm_interface
         )
 
         print("Testing advanced coding agent...")

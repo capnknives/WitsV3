@@ -3,19 +3,18 @@ Python Code Execution Tool for WitsV3.
 Provides safe execution of Python code in a sandboxed environment.
 """
 
-import logging
 import asyncio
-import tempfile
+import logging
 import os
-from typing import Any, Dict, Optional
-import subprocess
+import tempfile
 from pathlib import Path
+from typing import Any
 
 from core.base_tool import BaseTool
-from core.schemas import ToolCall
 from core.config import load_config
 
 logger = logging.getLogger(__name__)
+
 
 class PythonExecutionTool(BaseTool):
     """Tool for safely executing Python code."""
@@ -24,7 +23,7 @@ class PythonExecutionTool(BaseTool):
         """Initialize the Python execution tool."""
         super().__init__(
             name="python_execute",
-            description="Execute Python code in a sandboxed environment. Returns the output or error."
+            description="Execute Python code in a sandboxed environment. Returns the output or error.",
         )
         self.timeout = 30  # seconds
         self.max_output_size = 1024 * 1024  # 1MB
@@ -48,7 +47,7 @@ class PythonExecutionTool(BaseTool):
 
         if not allow_network:
             # Add network restrictions
-            restrictions.append('''
+            restrictions.append("""
 # Network restriction wrapper
 import socket
 import urllib.request
@@ -82,11 +81,11 @@ socket.getaddrinfo = restricted_gethostbyname
 urllib.request.urlopen = restricted_urlopen
 http.client.HTTPConnection.__init__ = lambda self, *args, **kwargs: (_ for _ in ()).throw(PermissionError("Network access not allowed"))
 http.client.HTTPSConnection.__init__ = lambda self, *args, **kwargs: (_ for _ in ()).throw(PermissionError("Network access not allowed"))
-''')
+""")
 
         if not allow_subprocess:
             # Add subprocess restrictions
-            restrictions.append('''
+            restrictions.append("""
 # Block subprocess for security
 import subprocess
 original_run = subprocess.run
@@ -100,13 +99,13 @@ subprocess.Popen = restricted_subprocess
 subprocess.call = restricted_subprocess
 subprocess.check_call = restricted_subprocess
 subprocess.check_output = restricted_subprocess
-''')
+""")
 
         # Combine restrictions with user code
-        restricted_script = '\n'.join(restrictions) + '\n\n# Execute user code\n' + user_code
+        restricted_script = "\n".join(restrictions) + "\n\n# Execute user code\n" + user_code
         return restricted_script
 
-    async def execute(self, code: str, timeout: Optional[int] = None) -> Dict[str, Any]:
+    async def execute(self, code: str, timeout: int | None = None) -> dict[str, Any]:
         """
         Execute Python code in a sandboxed environment.
 
@@ -135,8 +134,16 @@ subprocess.check_output = restricted_subprocess
                 env["PYTHONIOENCODING"] = "utf-8"  # Force UTF-8 encoding
 
                 # Remove network-related environment variables
-                network_vars = ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-                              "ftp_proxy", "FTP_PROXY", "no_proxy", "NO_PROXY"]
+                network_vars = [
+                    "http_proxy",
+                    "https_proxy",
+                    "HTTP_PROXY",
+                    "HTTPS_PROXY",
+                    "ftp_proxy",
+                    "FTP_PROXY",
+                    "no_proxy",
+                    "NO_PROXY",
+                ]
                 for var in network_vars:
                     env.pop(var, None)
 
@@ -146,7 +153,7 @@ subprocess.check_output = restricted_subprocess
                     "-I",  # Isolated mode - don't add user site directory
                     "-S",  # Don't imply 'import site' on initialization
                     "-s",  # Don't add user site directory to sys.path
-                    str(script_path)
+                    str(script_path),
                 ]
 
                 # Execute code with timeout
@@ -155,49 +162,48 @@ subprocess.check_output = restricted_subprocess
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
-                    cwd=temp_dir
+                    cwd=temp_dir,
                 )
 
                 try:
                     stdout, stderr = await asyncio.wait_for(
-                        process.communicate(),
-                        timeout=timeout or self.timeout
+                        process.communicate(), timeout=timeout or self.timeout
                     )
 
                     # Decode output with UTF-8 and error handling
                     try:
-                        output = stdout.decode('utf-8', errors='replace').strip()
-                        error = stderr.decode('utf-8', errors='replace').strip()
+                        output = stdout.decode("utf-8", errors="replace").strip()
+                        error = stderr.decode("utf-8", errors="replace").strip()
                     except UnicodeDecodeError:
                         # Fallback to latin-1 if UTF-8 fails
-                        output = stdout.decode('latin-1', errors='replace').strip()
-                        error = stderr.decode('latin-1', errors='replace').strip()
+                        output = stdout.decode("latin-1", errors="replace").strip()
+                        error = stderr.decode("latin-1", errors="replace").strip()
 
                     # Check output size and truncate if necessary
-                    if len(output.encode('utf-8')) > self.max_output_size:
+                    if len(output.encode("utf-8")) > self.max_output_size:
                         # Truncate safely without breaking UTF-8
-                        truncated_bytes = output.encode('utf-8')[:self.max_output_size]
+                        truncated_bytes = output.encode("utf-8")[: self.max_output_size]
                         try:
-                            output = truncated_bytes.decode('utf-8')
+                            output = truncated_bytes.decode("utf-8")
                         except UnicodeDecodeError:
                             # Find safe truncation point
-                            for i in range(len(truncated_bytes)-1, -1, -1):
+                            for i in range(len(truncated_bytes) - 1, -1, -1):
                                 try:
-                                    output = truncated_bytes[:i].decode('utf-8')
+                                    output = truncated_bytes[:i].decode("utf-8")
                                     break
                                 except UnicodeDecodeError:
                                     continue
                         output += "\n... (output truncated)"
 
-                    if len(error.encode('utf-8')) > self.max_output_size:
+                    if len(error.encode("utf-8")) > self.max_output_size:
                         # Truncate error message safely
-                        truncated_bytes = error.encode('utf-8')[:self.max_output_size]
+                        truncated_bytes = error.encode("utf-8")[: self.max_output_size]
                         try:
-                            error = truncated_bytes.decode('utf-8')
+                            error = truncated_bytes.decode("utf-8")
                         except UnicodeDecodeError:
-                            for i in range(len(truncated_bytes)-1, -1, -1):
+                            for i in range(len(truncated_bytes) - 1, -1, -1):
                                 try:
-                                    error = truncated_bytes[:i].decode('utf-8')
+                                    error = truncated_bytes[:i].decode("utf-8")
                                     break
                                 except UnicodeDecodeError:
                                     continue
@@ -207,7 +213,7 @@ subprocess.check_output = restricted_subprocess
                         "success": process.returncode == 0,
                         "output": output,
                         "error": error,
-                        "return_code": process.returncode
+                        "return_code": process.returncode,
                     }
 
                 except asyncio.TimeoutError:
@@ -220,7 +226,7 @@ subprocess.check_output = restricted_subprocess
                         "success": False,
                         "output": "",
                         "error": f"Execution timed out after {timeout or self.timeout} seconds",
-                        "return_code": -1
+                        "return_code": -1,
                     }
 
         except UnicodeError as e:
@@ -229,7 +235,7 @@ subprocess.check_output = restricted_subprocess
                 "success": False,
                 "output": "",
                 "error": f"Unicode encoding error: {str(e)}",
-                "return_code": -1
+                "return_code": -1,
             }
         except Exception as e:
             logger.error(f"Error executing Python code: {e}")
@@ -237,15 +243,19 @@ subprocess.check_output = restricted_subprocess
                 "success": False,
                 "output": "",
                 "error": f"Execution error: {str(e)}",
-                "return_code": -1
+                "return_code": -1,
             }
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         """Get the tool's schema for LLM consumption."""
         # Dynamic description based on configuration
         current_config = load_config()
-        network_status = "allowed" if current_config.security.python_execution_network_access else "blocked"
-        subprocess_status = "allowed" if current_config.security.python_execution_subprocess_access else "blocked"
+        network_status = (
+            "allowed" if current_config.security.python_execution_network_access else "blocked"
+        )
+        subprocess_status = (
+            "allowed" if current_config.security.python_execution_subprocess_access else "blocked"
+        )
 
         description = f"Execute Python code in a sandboxed environment (network access: {network_status}, subprocess: {subprocess_status})"
         code_description = f"The Python code to execute (network: {network_status}, subprocess: {subprocess_status})"
@@ -256,16 +266,13 @@ subprocess.check_output = restricted_subprocess
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": code_description
-                    },
+                    "code": {"type": "string", "description": code_description},
                     "timeout": {
                         "type": "integer",
                         "description": "Optional timeout in seconds",
-                        "default": 30
-                    }
+                        "default": 30,
+                    },
                 },
-                "required": ["code"]
-            }
+                "required": ["code"],
+            },
         }

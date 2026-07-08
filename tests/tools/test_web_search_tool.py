@@ -1,6 +1,8 @@
 """Tests for the multi-provider web search tool."""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 from tools.web_search_tool import WebSearchTool
 
@@ -39,18 +41,21 @@ def _routed_session(routes):
     `routes` is a list of (url_substring, response_cm_factory). Returns a
     factory suitable for `patch.object(..., side_effect=...)`.
     """
+
     def make():
         def pick(url, *args, **kwargs):
             for needle, factory in routes:
                 if needle in url:
                     return factory()
             return _response(status=404, text_data="")
+
         session = MagicMock()
         session.get.side_effect = pick
         session.post.side_effect = pick
         session_cm = AsyncMock()
         session_cm.__aenter__.return_value = session
         return session_cm
+
     return make
 
 
@@ -102,19 +107,23 @@ async def test_max_results_is_honored(web_search_tool):
 async def test_falls_through_to_lite_on_202(web_search_tool):
     """A 202 bot-wall on the HTML endpoint should fall through to Lite."""
     lite_markup = (
-        '<html><body><table>'
+        "<html><body><table>"
         '<tr><td><a class="result-link" href="https://example.org/x">Lite Result</a></td></tr>'
         '<tr><td class="result-snippet">Lite snippet text.</td></tr>'
-        '</table></body></html>'
+        "</table></body></html>"
     )
 
-    make = _routed_session([
-        ("html.duckduckgo.com", lambda: _response(status=202, text_data="")),
-        ("lite.duckduckgo.com", lambda: _response(text_data=lite_markup)),
-    ])
+    make = _routed_session(
+        [
+            ("html.duckduckgo.com", lambda: _response(status=202, text_data="")),
+            ("lite.duckduckgo.com", lambda: _response(text_data=lite_markup)),
+        ]
+    )
 
-    with patch.object(web_search_tool, "_session", side_effect=make), \
-         patch("tools.web_search_tool.asyncio.sleep", new=AsyncMock()):
+    with (
+        patch.object(web_search_tool, "_session", side_effect=make),
+        patch("tools.web_search_tool.asyncio.sleep", new=AsyncMock()),
+    ):
         result = await web_search_tool.execute(query="test query")
 
     assert result["success"] is True
@@ -132,9 +141,13 @@ async def test_tavily_used_when_key_present(web_search_tool):
             {"title": "T1", "url": "https://t.example/1", "content": "content one"},
         ],
     }
-    with patch.object(web_search_tool, "_tavily_key", return_value="tvly-abc"), \
-         patch.object(web_search_tool, "_brave_key", return_value=""), \
-         patch.object(web_search_tool, "_session", return_value=_fake_session(json_data=tavily_json)):
+    with (
+        patch.object(web_search_tool, "_tavily_key", return_value="tvly-abc"),
+        patch.object(web_search_tool, "_brave_key", return_value=""),
+        patch.object(
+            web_search_tool, "_session", return_value=_fake_session(json_data=tavily_json)
+        ),
+    ):
         result = await web_search_tool.execute(query="test query")
 
     assert result["success"] is True
@@ -148,6 +161,7 @@ async def test_tavily_uses_configured_search_depth(web_search_tool):
     """The Tavily payload must carry the configured depth (default 'advanced');
     'basic' returned wrong answers for date/fact queries in testing."""
     from types import SimpleNamespace
+
     web_search_tool.config = SimpleNamespace(
         web_search=SimpleNamespace(tavily_search_depth="advanced", provider="tavily")
     )
@@ -167,8 +181,10 @@ async def test_tavily_uses_configured_search_depth(web_search_tool):
     session_cm = AsyncMock()
     session_cm.__aenter__.return_value = session
 
-    with patch.object(web_search_tool, "_tavily_key", return_value="tvly-x"), \
-         patch.object(web_search_tool, "_session", return_value=session_cm):
+    with (
+        patch.object(web_search_tool, "_tavily_key", return_value="tvly-x"),
+        patch.object(web_search_tool, "_session", return_value=session_cm),
+    ):
         result = await web_search_tool.execute(query="who died june 14 2026")
 
     assert result["provider"] == "tavily"
@@ -177,8 +193,14 @@ async def test_tavily_uses_configured_search_depth(web_search_tool):
 
 @pytest.mark.asyncio
 async def test_all_providers_fail_returns_error(web_search_tool):
-    with patch.object(web_search_tool, "_session", return_value=_fake_session(status=202, text_data="", json_data={})), \
-         patch("tools.web_search_tool.asyncio.sleep", new=AsyncMock()):
+    with (
+        patch.object(
+            web_search_tool,
+            "_session",
+            return_value=_fake_session(status=202, text_data="", json_data={}),
+        ),
+        patch("tools.web_search_tool.asyncio.sleep", new=AsyncMock()),
+    ):
         result = await web_search_tool.execute(query="test query")
 
     assert result["success"] is False
@@ -195,7 +217,10 @@ async def test_empty_query_rejected(web_search_tool):
 
 def test_decode_ddg_url_unwraps_redirect():
     decode = WebSearchTool._decode_ddg_url
-    assert decode("//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fp&rut=z") == "https://example.com/p"
+    assert (
+        decode("//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fp&rut=z")
+        == "https://example.com/p"
+    )
     assert decode("https://example.com/direct") == "https://example.com/direct"
     assert decode("//duckduckgo.com/y.js?ad=1") == ""  # internal ad link dropped
 

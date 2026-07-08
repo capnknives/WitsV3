@@ -1,21 +1,19 @@
 """Tests for memory export/import functionality."""
 
-import os
-import pytest
-import asyncio
-import json
 import csv
-from typing import AsyncGenerator, List
-from unittest.mock import MagicMock, patch, AsyncMock
-from pathlib import Path
-import tempfile
+import json
+import os
 import shutil
-from datetime import datetime, timezone
+import tempfile
+from collections.abc import AsyncGenerator
+from unittest.mock import MagicMock
 
-from core.memory_export import MemoryExporter, MemoryImporter
-from core.memory_manager import MemorySegment, MemorySegmentContent, MemoryManager
-from core.config import WitsV3Config
+import pytest
+
 from core.llm_interface import BaseLLMInterface
+from core.memory_export import MemoryExporter, MemoryImporter
+from core.memory_manager import MemoryManager, MemorySegment, MemorySegmentContent
+
 
 class DummyLLM(BaseLLMInterface):
     def __init__(self):
@@ -32,6 +30,7 @@ class DummyLLM(BaseLLMInterface):
     async def get_embedding(self, text, model=None):
         return [0.1] * 384
 
+
 @pytest.fixture
 def temp_dir():
     """Create a temporary directory for test files."""
@@ -40,8 +39,9 @@ def temp_dir():
     # Clean up
     shutil.rmtree(temp_dir)
 
+
 @pytest.fixture
-def test_segments() -> List[MemorySegment]:
+def test_segments() -> list[MemorySegment]:
     """Create a list of test memory segments."""
     return [
         MemorySegment(
@@ -51,10 +51,11 @@ def test_segments() -> List[MemorySegment]:
             content=MemorySegmentContent(text=f"Test content {i}"),
             importance=0.5 + (i / 10.0),
             embedding=[0.1] * 384 if i % 2 == 0 else None,  # Some with embeddings, some without
-            metadata={"index": i, "test": True}
+            metadata={"index": i, "test": True},
         )
         for i in range(5)
     ]
+
 
 @pytest.fixture
 def mock_memory_manager(test_segments):
@@ -77,22 +78,29 @@ def mock_memory_manager(test_segments):
         return segment.id
 
     # Mock add_memory to create a segment
-    async def mock_add_memory(type, source, content_text=None, tool_name=None,
-                           tool_args=None, tool_output=None, importance=0.5, metadata=None):
-        from core.memory_manager import MemorySegment, MemorySegmentContent
+    async def mock_add_memory(
+        type,
+        source,
+        content_text=None,
+        tool_name=None,
+        tool_args=None,
+        tool_output=None,
+        importance=0.5,
+        metadata=None,
+    ):
         import uuid
+
+        from core.memory_manager import MemorySegment, MemorySegmentContent
+
         segment = MemorySegment(
             id=str(uuid.uuid4()),
             type=type,
             source=source,
             content=MemorySegmentContent(
-                text=content_text,
-                tool_name=tool_name,
-                tool_args=tool_args,
-                tool_output=tool_output
+                text=content_text, tool_name=tool_name, tool_args=tool_args, tool_output=tool_output
             ),
             importance=importance,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
         return segment.id
 
@@ -102,6 +110,7 @@ def mock_memory_manager(test_segments):
     manager.add_memory.side_effect = mock_add_memory
 
     return manager
+
 
 @pytest.mark.asyncio
 async def test_export_to_json(mock_memory_manager, temp_dir):
@@ -117,7 +126,7 @@ async def test_export_to_json(mock_memory_manager, temp_dir):
     assert os.path.exists(output_path)
 
     # Check content
-    with open(output_path, 'r') as f:
+    with open(output_path) as f:
         data = json.load(f)
 
     assert "metadata" in data
@@ -130,12 +139,13 @@ async def test_export_to_json(mock_memory_manager, temp_dir):
     count = await exporter.export_to_json(output_path2, include_embeddings=False)
 
     # Check content
-    with open(output_path2, 'r') as f:
+    with open(output_path2) as f:
         data = json.load(f)
 
     # All embeddings should be None
     for segment in data["segments"]:
         assert segment["embedding"] is None
+
 
 @pytest.mark.asyncio
 async def test_export_to_csv(mock_memory_manager, temp_dir):
@@ -150,20 +160,21 @@ async def test_export_to_csv(mock_memory_manager, temp_dir):
     assert os.path.exists(output_path)
 
     # Check content
-    with open(output_path, 'r', newline='') as f:
+    with open(output_path, newline="") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
 
     assert len(rows) == 5
-    assert 'id' in rows[0]
-    assert 'type' in rows[0]
-    assert 'content_text' in rows[0]
-    assert 'metadata' in rows[0]
+    assert "id" in rows[0]
+    assert "type" in rows[0]
+    assert "content_text" in rows[0]
+    assert "metadata" in rows[0]
 
     # Check that metadata is properly JSON encoded
-    metadata = json.loads(rows[0]['metadata'])
-    assert 'test' in metadata
-    assert metadata['test'] is True
+    metadata = json.loads(rows[0]["metadata"])
+    assert "test" in metadata
+    assert metadata["test"] is True
+
 
 @pytest.mark.asyncio
 async def test_export_content_only(mock_memory_manager, temp_dir):
@@ -179,7 +190,7 @@ async def test_export_content_only(mock_memory_manager, temp_dir):
     assert os.path.exists(output_path)
 
     # Check content
-    with open(output_path, 'r') as f:
+    with open(output_path) as f:
         content = f.read()
 
     # Should contain text from all segments, but no metadata headers
@@ -192,12 +203,13 @@ async def test_export_content_only(mock_memory_manager, temp_dir):
     count = await exporter.export_content_only(output_path2, include_metadata=True)
 
     # Check content
-    with open(output_path2, 'r') as f:
+    with open(output_path2) as f:
         content = f.read()
 
     # Should contain both text and metadata headers
     assert "--- Segment" in content
     assert "test/unit-test" in content
+
 
 @pytest.mark.asyncio
 async def test_import_from_json(mock_memory_manager, temp_dir, test_segments):
@@ -225,9 +237,7 @@ async def test_import_from_json(mock_memory_manager, temp_dir, test_segments):
     # Test with regenerate_embeddings=True
     mock_memory_manager.add_segment.reset_mock()
     count = await importer.import_from_json(
-        output_path,
-        skip_existing=False,
-        regenerate_embeddings=True
+        output_path, skip_existing=False, regenerate_embeddings=True
     )
 
     # Verify
@@ -236,6 +246,7 @@ async def test_import_from_json(mock_memory_manager, temp_dir, test_segments):
     for call in mock_memory_manager.add_segment.call_args_list:
         segment = call[0][0]
         assert segment.embedding is None
+
 
 @pytest.mark.asyncio
 async def test_import_from_csv(mock_memory_manager, temp_dir):
@@ -260,12 +271,13 @@ async def test_import_from_csv(mock_memory_manager, temp_dir):
     assert count == 5
     assert mock_memory_manager.add_segment.call_count == 5
 
+
 @pytest.mark.asyncio
 async def test_import_text_as_segments(mock_memory_manager, temp_dir):
     """Test importing text file as memory segments."""
     # Create a test text file
     text_path = os.path.join(temp_dir, "test_content.txt")
-    with open(text_path, 'w') as f:
+    with open(text_path, "w") as f:
         f.write("This is segment 1\n")
         f.write("---\n")
         f.write("This is segment 2\n")
@@ -275,10 +287,7 @@ async def test_import_text_as_segments(mock_memory_manager, temp_dir):
     # Test importing
     importer = MemoryImporter(mock_memory_manager)
     count = await importer.import_text_as_segments(
-        text_path,
-        segment_type="TEXT_IMPORT",
-        source="test",
-        metadata={"test_import": True}
+        text_path, segment_type="TEXT_IMPORT", source="test", metadata={"test_import": True}
     )
 
     # Verify

@@ -1,9 +1,7 @@
 """Tests for the document RAG tools (ingest + search)."""
 
 import hashlib
-import os
-from pathlib import Path
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import numpy as np
 import pytest
@@ -68,6 +66,7 @@ def rag_env(tmp_path, monkeypatch):
 
 # ---------------------------------------------------------------- chunking
 
+
 def test_chunk_text_small_passthrough():
     assert _chunk_text("short text", 200, 40) == ["short text"]
 
@@ -95,6 +94,7 @@ def test_chunk_text_empty():
 
 # ---------------------------------------------------------------- ingest
 
+
 @pytest.mark.asyncio
 async def test_ingest_new_file(rag_env):
     config, memory, ingest, search, docs_dir = rag_env
@@ -109,7 +109,9 @@ async def test_ingest_new_file(rag_env):
     assert result["searchable_files"] == {"notes.md": result["chunks_added"]}
     assert "ingested and searchable" in result["message"]
 
-    segments = await memory.get_recent_memory(limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE})
+    segments = await memory.get_recent_memory(
+        limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
+    )
     assert len(segments) == result["chunks_added"]
     seg = segments[0]
     assert seg.metadata["file_path"] == "notes.md"
@@ -148,7 +150,9 @@ async def test_ingest_modified_file_replaces_chunks(rag_env):
     result = await ingest.execute()
 
     assert result["files_ingested"] == 1
-    segments = await memory.get_recent_memory(limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE})
+    segments = await memory.get_recent_memory(
+        limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
+    )
     texts = [s.content.text for s in segments]
     assert all("beta" in t for t in texts)
     assert not any("alpha" in t for t in texts)
@@ -165,7 +169,9 @@ async def test_ingest_deleted_file_removes_chunks(rag_env):
     result = await ingest.execute()
 
     assert result["files_removed"] == 1
-    segments = await memory.get_recent_memory(limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE})
+    segments = await memory.get_recent_memory(
+        limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
+    )
     assert segments == []
 
 
@@ -178,6 +184,7 @@ async def test_ingest_ignores_unsupported_extensions(rag_env):
 
 
 # ---------------------------------------------------------------- search
+
 
 @pytest.mark.asyncio
 async def test_search_finds_relevant_document(rag_env):
@@ -267,6 +274,7 @@ async def test_search_file_names_alias(rag_env):
 
 # ---------------------------------------------------------------- wiring
 
+
 @pytest.mark.asyncio
 async def test_tools_report_not_ready_without_dependencies():
     ingest = DocumentIngestTool()
@@ -291,6 +299,7 @@ def test_tool_schemas():
 
 # ---------------------------------------------------------------- delete API
 
+
 @pytest.mark.asyncio
 async def test_memory_delete_segments(rag_env):
     config, memory, ingest, search, docs_dir = rag_env
@@ -301,7 +310,9 @@ async def test_memory_delete_segments(rag_env):
     removed = await memory.delete_segments({"type": DOCUMENT_SEGMENT_TYPE, "file_path": "a.md"})
     assert removed >= 1
 
-    remaining = await memory.get_recent_memory(limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE})
+    remaining = await memory.get_recent_memory(
+        limit=100, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
+    )
     assert all(s.metadata["file_path"] == "b.md" for s in remaining)
 
     # Empty filter must refuse to delete everything

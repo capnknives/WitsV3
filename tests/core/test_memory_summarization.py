@@ -1,15 +1,15 @@
 """Tests for memory summarization functionality."""
 
-import pytest
-import asyncio
-from typing import AsyncGenerator, List
-from unittest.mock import MagicMock, patch, AsyncMock
-from datetime import datetime, timezone, timedelta
-import json
+from collections.abc import AsyncGenerator
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from core.memory_summarization import ConversationSummarizer
-from core.memory_manager import MemorySegment, MemorySegmentContent, MemoryManager
+import pytest
+
 from core.llm_interface import BaseLLMInterface
+from core.memory_manager import MemoryManager, MemorySegment, MemorySegmentContent
+from core.memory_summarization import ConversationSummarizer
+
 
 class DummyLLM(BaseLLMInterface):
     def __init__(self):
@@ -32,8 +32,9 @@ class DummyLLM(BaseLLMInterface):
     async def get_embedding(self, text, model=None):
         return [0.1] * 384
 
+
 @pytest.fixture
-def test_segments() -> List[MemorySegment]:
+def test_segments() -> list[MemorySegment]:
     """Create a list of test memory segments for a conversation."""
     now = datetime.now(timezone.utc)
     return [
@@ -44,15 +45,17 @@ def test_segments() -> List[MemorySegment]:
             type="USER_INPUT",
             source="user",
             content=MemorySegmentContent(text="Hello, I need help with my project."),
-            importance=0.7
+            importance=0.7,
         ),
         MemorySegment(
             id="agent-1",
             timestamp=now - timedelta(minutes=29),
             type="AGENT_RESPONSE",
             source="assistant",
-            content=MemorySegmentContent(text="I'd be happy to help with your project. What do you need?"),
-            importance=0.6
+            content=MemorySegmentContent(
+                text="I'd be happy to help with your project. What do you need?"
+            ),
+            importance=0.6,
         ),
         MemorySegment(
             id="user-2",
@@ -60,23 +63,27 @@ def test_segments() -> List[MemorySegment]:
             type="USER_INPUT",
             source="user",
             content=MemorySegmentContent(text="I need to implement a memory system."),
-            importance=0.7
+            importance=0.7,
         ),
         MemorySegment(
             id="agent-2",
             timestamp=now - timedelta(minutes=27),
             type="AGENT_THOUGHT",
             source="assistant",
-            content=MemorySegmentContent(text="User wants to implement a memory system. I should suggest options."),
-            importance=0.5
+            content=MemorySegmentContent(
+                text="User wants to implement a memory system. I should suggest options."
+            ),
+            importance=0.5,
         ),
         MemorySegment(
             id="agent-3",
             timestamp=now - timedelta(minutes=26),
             type="AGENT_RESPONSE",
             source="assistant",
-            content=MemorySegmentContent(text="For a memory system, you could use FAISS for vector storage, or a simple JSON-based solution."),
-            importance=0.8
+            content=MemorySegmentContent(
+                text="For a memory system, you could use FAISS for vector storage, or a simple JSON-based solution."
+            ),
+            importance=0.8,
         ),
         MemorySegment(
             id="tool-1",
@@ -86,9 +93,9 @@ def test_segments() -> List[MemorySegment]:
             content=MemorySegmentContent(
                 text="Looking up documentation",
                 tool_name="search_docs",
-                tool_args={"query": "memory systems"}
+                tool_args={"query": "memory systems"},
             ),
-            importance=0.4
+            importance=0.4,
         ),
         MemorySegment(
             id="tool-response-1",
@@ -98,7 +105,7 @@ def test_segments() -> List[MemorySegment]:
             content=MemorySegmentContent(
                 tool_output="Found 3 relevant documents about memory systems"
             ),
-            importance=0.4
+            importance=0.4,
         ),
         MemorySegment(
             id="user-3",
@@ -106,9 +113,10 @@ def test_segments() -> List[MemorySegment]:
             type="USER_INPUT",
             source="user",
             content=MemorySegmentContent(text="Thanks, I'll try FAISS."),
-            importance=0.6
-        )
+            importance=0.6,
+        ),
     ]
+
 
 @pytest.fixture
 def mock_memory_manager(test_segments):
@@ -138,6 +146,7 @@ def mock_memory_manager(test_segments):
 
     return manager
 
+
 @pytest.mark.asyncio
 async def test_summarize_conversation(mock_memory_manager):
     """Test summarizing a conversation."""
@@ -161,6 +170,7 @@ async def test_summarize_conversation(mock_memory_manager):
     assert "summarized_segments" in call_args["metadata"]
     assert "time_window_minutes" in call_args["metadata"]
 
+
 @pytest.mark.asyncio
 async def test_summarize_agent_interaction(mock_memory_manager):
     """Test summarizing interactions with a specific agent."""
@@ -178,6 +188,7 @@ async def test_summarize_agent_interaction(mock_memory_manager):
     filter_dict = mock_memory_manager.get_recent_memory.call_args[1]["filter_dict"]
     assert filter_dict["source"] == "assistant"
 
+
 @pytest.mark.asyncio
 async def test_summarize_topics(mock_memory_manager):
     """Test summarizing conversation topics."""
@@ -185,8 +196,11 @@ async def test_summarize_topics(mock_memory_manager):
     summarizer = ConversationSummarizer(mock_memory_manager, llm)
 
     # Mock the _identify_topics method to return fixed topics
-    with patch.object(summarizer, '_identify_topics',
-                    new=AsyncMock(return_value=["Memory Systems", "Project Help"])):
+    with patch.object(
+        summarizer,
+        "_identify_topics",
+        new=AsyncMock(return_value=["Memory Systems", "Project Help"]),
+    ):
 
         # Test topic summarization
         topic_summaries, segment_ids = await summarizer.summarize_topics()
@@ -206,6 +220,7 @@ async def test_summarize_topics(mock_memory_manager):
             assert args["source"] == "topic_summarizer"
             assert args["importance"] == 0.7
             assert "topic" in args["metadata"]
+
 
 @pytest.mark.asyncio
 async def test_create_transcript(mock_memory_manager, test_segments):
@@ -227,6 +242,7 @@ async def test_create_transcript(mock_memory_manager, test_segments):
     assert transcript.index("Hello, I need help") < transcript.index("I need to implement")
     assert transcript.index("I need to implement") < transcript.index("Thanks, I'll try FAISS")
 
+
 @pytest.mark.asyncio
 async def test_identify_topics():
     """Test identifying topics in a conversation."""
@@ -239,12 +255,16 @@ async def test_identify_topics():
     assert topics == ["Topic 1", "Topic 2", "Topic 3"]
 
     # Test with non-JSON response that needs manual extraction
-    with patch.object(llm, 'generate_text',
-                    new=AsyncMock(return_value="1. First Topic\n2. Second Topic\n- Third Topic")):
+    with patch.object(
+        llm,
+        "generate_text",
+        new=AsyncMock(return_value="1. First Topic\n2. Second Topic\n- Third Topic"),
+    ):
         topics = await summarizer._identify_topics("Test transcript")
         assert "First Topic" in topics
         assert "Second Topic" in topics
         assert "Third Topic" in topics
+
 
 @pytest.mark.asyncio
 async def test_extract_topics_manually():
@@ -270,7 +290,9 @@ async def test_extract_topics_manually():
     assert topics == ["First", "Second", "Third"]
 
     # Test with limit
-    topics = summarizer._extract_topics_manually("1. First\n2. Second\n3. Third\n4. Fourth", max_topics=2)
+    topics = summarizer._extract_topics_manually(
+        "1. First\n2. Second\n3. Third\n4. Fourth", max_topics=2
+    )
     assert len(topics) == 2
     assert topics == ["First", "Second"]
 

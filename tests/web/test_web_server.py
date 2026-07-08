@@ -10,8 +10,8 @@ from core.config import WitsV3Config
 from core.schemas import StreamData
 from web.server import create_app
 
-
 # ------------------------------------------------------------------ fakes
+
 
 class FakeControlCenter:
     def __init__(self):
@@ -35,7 +35,9 @@ class FakeToolRegistry:
 
         self.tools = {
             "calculator": FakeTool(name="calculator", description="Does math"),
-            "ingest_documents": FakeTool(name="ingest_documents", description="Ingest docs", execute=ingest_execute),
+            "ingest_documents": FakeTool(
+                name="ingest_documents", description="Ingest docs", execute=ingest_execute
+            ),
         }
 
     def get_tool(self, name):
@@ -45,7 +47,8 @@ class FakeToolRegistry:
 class FakeMemoryManager:
     async def search_memory(self, query_text, limit=5, min_relevance=0.0, filter_dict=None):
         seg = SimpleNamespace(
-            type="DOCUMENT_CHUNK", source="notes.md",
+            type="DOCUMENT_CHUNK",
+            source="notes.md",
             content=SimpleNamespace(text=f"match for {query_text}", tool_output=None),
             relevance_score=0.87,
         )
@@ -95,6 +98,7 @@ def _parse_sse(text):
 
 
 # ------------------------------------------------------------------ chat
+
 
 def test_chat_streams_events_and_records_history(client_noauth):
     client, system = client_noauth
@@ -180,6 +184,7 @@ def test_chat_ollama_down_shows_friendly_error(client_noauth):
 
 # ------------------------------------------------------------------ info endpoints
 
+
 def test_status(client_noauth):
     client, _ = client_noauth
     res = client.get("/api/status")
@@ -205,6 +210,7 @@ def test_memory_search(client_noauth):
 
 
 # ------------------------------------------------------------------ documents
+
 
 def test_documents_list_and_upload(client_noauth, tmp_path):
     client, system = client_noauth
@@ -239,6 +245,7 @@ def test_upload_strips_path_traversal(client_noauth, tmp_path):
 
 
 # ------------------------------------------------------------------ auth
+
 
 def test_auth_blocks_api_without_token(client_auth):
     client, _ = client_auth
@@ -303,6 +310,7 @@ def client_personality(tmp_path, monkeypatch):
     yield TestClient(create_app(system)), system, tmp_path
     # POST/DELETE swap the global personality manager - don't leak it
     import core.personality_manager as pm_module
+
     pm_module._personality_manager = None
 
 
@@ -317,12 +325,15 @@ def test_personality_get(client_personality):
 
 def test_personality_save_apply_and_reset(client_personality):
     client, _, tmp_path = client_personality
-    res = client.post("/api/personality", json={
-        "identity_label": "JARVIS",
-        "tone": "wry and unflappable",
-        "humor": "dry",
-        "core_directives": ["Never lose the plot.", "   ", "Serve tea."],
-    })
+    res = client.post(
+        "/api/personality",
+        json={
+            "identity_label": "JARVIS",
+            "tone": "wry and unflappable",
+            "humor": "dry",
+            "core_directives": ["Never lose the plot.", "   ", "Serve tea."],
+        },
+    )
     assert res.status_code == 200
     body = res.json()
     assert body["saved"] is True
@@ -359,6 +370,7 @@ def test_personality_page_public_but_api_protected(client_auth):
 
 # ------------------------------------------------------------------ settings
 
+
 @pytest.fixture
 def client_settings(tmp_path, monkeypatch):
     monkeypatch.delenv("WITSV3_WEB_TOKEN", raising=False)
@@ -382,13 +394,16 @@ def test_settings_get(client_settings):
 
 def test_settings_post_model_routing(client_settings):
     client, system, tmp_path = client_settings
-    res = client.post("/api/settings", json={
-        "routing_enabled": False,
-        "routing_trivial_model": "llama3.2:3b",
-        "routing_code_model": "qwen2.5-coder:7b",
-        "routing_complex_model": "qwen3:8b",
-        "routing_trivial_max_chars": 100,
-    })
+    res = client.post(
+        "/api/settings",
+        json={
+            "routing_enabled": False,
+            "routing_trivial_model": "llama3.2:3b",
+            "routing_code_model": "qwen2.5-coder:7b",
+            "routing_complex_model": "qwen3:8b",
+            "routing_trivial_max_chars": 100,
+        },
+    )
     assert res.status_code == 200
     assert system.config.model_routing.enabled is False
     assert system.config.model_routing.trivial_max_chars == 100
@@ -399,11 +414,14 @@ def test_settings_post_model_routing(client_settings):
 
 def test_settings_post_applies_live_and_persists(client_settings):
     client, system, tmp_path = client_settings
-    res = client.post("/api/settings", json={
-        "history_window": 40,
-        "default_temperature": 0.3,
-        "escalation_max_tokens": 1024,
-    })
+    res = client.post(
+        "/api/settings",
+        json={
+            "history_window": 40,
+            "default_temperature": 0.3,
+            "escalation_max_tokens": 1024,
+        },
+    )
     assert res.status_code == 200
     # Applied live to the running system config
     assert system.config.agents.history_window == 40
@@ -427,16 +445,19 @@ def test_local_overrides_are_loaded(client_settings, monkeypatch):
     client, _, tmp_path = client_settings
     client.post("/api/settings", json={"history_window": 44})
     from core.config import load_config
+
     fresh = load_config()  # cwd is tmp_path; default config + local overrides
     assert fresh.agents.history_window == 44
 
 
 # --------------------------------------------------------------- escalations
 
+
 @pytest.fixture
 def client_escalation(tmp_path, monkeypatch):
     monkeypatch.delenv("WITSV3_WEB_TOKEN", raising=False)
     import core.escalation as escalation_module
+
     escalation_module._manager = None  # fresh queue per test
     system = FakeSystem(tmp_path)
     yield TestClient(create_app(system)), system
@@ -462,6 +483,7 @@ def test_escalation_flow_approve(client_escalation, monkeypatch):
 
     # Approve → fake Claude call runs, answer lands in the session history
     from core.schemas import ConversationHistory
+
     system.session_histories["sess1"] = ConversationHistory(session_id="sess1")
     res = client.post(f"/api/escalations/{request.id}/approve", json={"session_id": "sess1"})
     assert res.status_code == 200
@@ -499,8 +521,9 @@ def test_escalation_deny_spends_nothing(client_escalation, monkeypatch):
 def test_ask_claude_tool_queues_pending(client_escalation, tmp_path, monkeypatch):
     _, _ = client_escalation
     import asyncio
-    from tools.ask_claude_tool import AskClaudeTool
+
     from core.escalation import get_escalation_manager
+    from tools.ask_claude_tool import AskClaudeTool
 
     tool = AskClaudeTool()
     result = asyncio.run(tool.execute(question="What is a monad?", context="haskell"))
@@ -513,15 +536,20 @@ def test_ask_claude_tool_queues_pending(client_escalation, tmp_path, monkeypatch
 
 # ------------------------------------------------------------------ mcp
 
+
 @pytest.fixture
 def client_mcp(tmp_path, monkeypatch):
     monkeypatch.delenv("WITSV3_WEB_TOKEN", raising=False)
     system = FakeSystem(tmp_path)
     mcp_config = tmp_path / "mcp_tools.json"
-    mcp_config.write_text(json.dumps({
-        "auto_connect": True,
-        "servers": [{"name": "demo", "command": "node server.js"}],
-    }))
+    mcp_config.write_text(
+        json.dumps(
+            {
+                "auto_connect": True,
+                "servers": [{"name": "demo", "command": "node server.js"}],
+            }
+        )
+    )
     system.config.tool_system.mcp_tool_definitions_path = str(mcp_config)
     return TestClient(create_app(system)), system, mcp_config
 
@@ -535,18 +563,28 @@ def test_mcp_list_servers(client_mcp):
 
 def test_mcp_add_and_remove_server(client_mcp):
     client, _, mcp_config = client_mcp
-    res = client.post("/api/mcp/servers", json={
-        "name": "memory",
-        "command": "npx -y @modelcontextprotocol/server-memory",
-    })
+    res = client.post(
+        "/api/mcp/servers",
+        json={
+            "name": "memory",
+            "command": "npx -y @modelcontextprotocol/server-memory",
+        },
+    )
     assert res.status_code == 200
     saved = json.loads(mcp_config.read_text())
     assert any(s["name"] == "memory" for s in saved["servers"])
 
     # Duplicate names are rejected
-    assert client.post("/api/mcp/servers", json={
-        "name": "memory", "command": "x",
-    }).status_code == 409
+    assert (
+        client.post(
+            "/api/mcp/servers",
+            json={
+                "name": "memory",
+                "command": "x",
+            },
+        ).status_code
+        == 409
+    )
 
     # Removal updates the config file
     assert client.delete("/api/mcp/servers/memory").status_code == 200

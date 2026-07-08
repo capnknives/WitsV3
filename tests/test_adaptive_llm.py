@@ -4,32 +4,26 @@ Test script for the WitsV3 Adaptive LLM System.
 This script tests the Adaptive LLM System components and their integration.
 """
 
-import asyncio
-import os
 import logging
-import time
-from typing import Dict, List, Any
+import os
 import sys
+import time
 
-import torch
-import numpy as np
 import pytest
 
-from core.config import WitsV3Config
-from core.llm_interface import BaseLLMInterface, get_llm_interface
-from core.complexity_analyzer import ComplexityAnalyzer
-from core.dynamic_module_loader import DynamicModuleLoader
-from core.semantic_cache import SemanticCache
 from core.adaptive_llm_interface import AdaptiveLLMInterface
-from core.adaptive_llm_config import AdaptiveLLMSettings
+from core.complexity_analyzer import ComplexityAnalyzer
+from core.config import WitsV3Config
+from core.dynamic_module_loader import DynamicModuleLoader
+from core.llm_interface import BaseLLMInterface, get_llm_interface
+from core.semantic_cache import SemanticCache
 
 # Add the project root to sys.path for test discovery
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("WitsV3.Test")
 
@@ -39,8 +33,9 @@ TEST_PROMPTS = [
     "Write a Python function to calculate the Fibonacci sequence recursively.",
     "Explain the philosophical implications of quantum mechanics on our understanding of reality.",
     "What is 2+2?",
-    "Write a short story about a robot who discovers emotions."
+    "Write a short story about a robot who discovers emotions.",
 ]
+
 
 async def run_complexity_analyzer(config: WitsV3Config, llm: BaseLLMInterface) -> None:
     """Test the ComplexityAnalyzer component."""
@@ -65,6 +60,7 @@ async def run_complexity_analyzer(config: WitsV3Config, llm: BaseLLMInterface) -
 
     logger.info("ComplexityAnalyzer tests completed!")
 
+
 async def run_dynamic_module_loader(config: WitsV3Config) -> None:
     """Test the DynamicModuleLoader component."""
     logger.info("Testing DynamicModuleLoader...")
@@ -72,10 +68,10 @@ async def run_dynamic_module_loader(config: WitsV3Config) -> None:
     loader = DynamicModuleLoader(config)
 
     # Test loading modules
-    modules = ['base', 'python', 'math']
+    modules = ["base", "python", "math"]
     complexities = [0.2, 0.6, 0.9]
 
-    for module_name, complexity in zip(modules, complexities):
+    for module_name, complexity in zip(modules, complexities, strict=False):
         logger.info(f"Loading module: {module_name} with complexity {complexity:.1f}...")
 
         module = await loader.load_module(module_name, complexity)
@@ -97,6 +93,7 @@ async def run_dynamic_module_loader(config: WitsV3Config) -> None:
 
     logger.info("DynamicModuleLoader tests completed!")
 
+
 async def run_semantic_cache(config: WitsV3Config, llm: BaseLLMInterface) -> None:
     """Test the SemanticCache component."""
     logger.info("Testing SemanticCache...")
@@ -108,16 +105,11 @@ async def run_semantic_cache(config: WitsV3Config, llm: BaseLLMInterface) -> Non
         logger.info(f"Adding pattern for prompt: {prompt[:50]}...")
 
         response = f"This is a test response for prompt {i+1}."
-        module = ['base', 'python', 'creative', 'math', 'chat'][i % 5]
+        module = ["base", "python", "creative", "math", "chat"][i % 5]
         complexity = 0.2 + (i * 0.2)
 
         await cache.add_pattern(
-            prompt,
-            response,
-            module,
-            complexity,
-            0.5,  # generation time
-            0.9   # quality
+            prompt, response, module, complexity, 0.5, 0.9  # generation time  # quality
         )
 
     # Test finding similar patterns
@@ -143,6 +135,7 @@ async def run_semantic_cache(config: WitsV3Config, llm: BaseLLMInterface) -> Non
     await cache.clear_cache()
 
     logger.info("SemanticCache tests completed!")
+
 
 async def run_adaptive_llm_interface(config: WitsV3Config) -> None:
     """Test the AdaptiveLLMInterface component."""
@@ -192,6 +185,7 @@ async def run_adaptive_llm_interface(config: WitsV3Config) -> None:
     await adaptive_llm.shutdown()
 
     logger.info("AdaptiveLLMInterface tests completed!")
+
 
 @pytest.mark.asyncio
 async def test_adaptive_llm():

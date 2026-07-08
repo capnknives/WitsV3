@@ -1,5 +1,6 @@
 """Tests for the daily self-repair scheduling wired into WitsV3System (run.py)."""
-from typing import AsyncGenerator
+
+from collections.abc import AsyncGenerator
 
 import pytest
 
@@ -44,7 +45,9 @@ async def test_run_scheduled_self_repair_noop_without_agent():
 @pytest.mark.asyncio
 async def test_run_scheduled_self_repair_consumes_agent_stream():
     class FakeAgent:
-        async def run(self, user_input, session_id=None, **kwargs) -> AsyncGenerator[StreamData, None]:
+        async def run(
+            self, user_input, session_id=None, **kwargs
+        ) -> AsyncGenerator[StreamData, None]:
             yield StreamData(type="thinking", content="scanning", source="SystemDoctor")
             yield StreamData(type="result", content="Repaired agents/foo.py", source="SystemDoctor")
 
@@ -56,7 +59,9 @@ async def test_run_scheduled_self_repair_consumes_agent_stream():
 @pytest.mark.asyncio
 async def test_run_scheduled_self_repair_never_raises_on_agent_error():
     class FailingAgent:
-        async def run(self, user_input, session_id=None, **kwargs) -> AsyncGenerator[StreamData, None]:
+        async def run(
+            self, user_input, session_id=None, **kwargs
+        ) -> AsyncGenerator[StreamData, None]:
             raise RuntimeError("boom")
             yield  # pragma: no cover — makes this an async generator
 

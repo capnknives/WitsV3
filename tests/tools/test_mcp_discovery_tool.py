@@ -1,6 +1,8 @@
 """Tests for the search_mcp_tools discovery tool."""
+
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 
 from tools.mcp_discovery_tool import SearchMCPToolsTool
 

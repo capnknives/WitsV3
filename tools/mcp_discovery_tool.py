@@ -12,7 +12,7 @@ tells the user what's available and how to add it; it never self-installs.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 from urllib.parse import quote
 
 from core.base_tool import BaseTool
@@ -47,7 +47,7 @@ class SearchMCPToolsTool(BaseTool):
         except Exception:
             return DEFAULT_REGISTRY_URL
 
-    async def execute(self, query: str, max_results: int = 5) -> Dict[str, Any]:
+    async def execute(self, query: str, max_results: int = 5) -> dict[str, Any]:
         query = (query or "").strip()
         if not query:
             return {"success": False, "error": "Provide a capability to search for", "results": []}
@@ -60,7 +60,7 @@ class SearchMCPToolsTool(BaseTool):
             logger.warning("search_mcp_tools failed: %s", e)
             return {"success": False, "error": f"MCP registry search failed: {e}", "results": []}
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for entry in entries:
             install = entry.get("install")
             required_env = [
@@ -100,7 +100,7 @@ class SearchMCPToolsTool(BaseTool):
             ),
         }
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "name": "search_mcp_tools",
             "description": (

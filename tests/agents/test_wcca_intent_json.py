@@ -6,7 +6,7 @@ Mirrors orchestrator JSON repair patterns for intent analysis:
 - repair-reparse round trip when parsing still fails
 """
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 
@@ -126,10 +126,12 @@ def _non_casual_message() -> str:
 
 @pytest.mark.asyncio
 async def test_intent_call_requests_json_format(wcca_plain):
-    llm = ScriptedLLM([
-        '{"type": "direct_response", "confidence": 0.9, '
-        '"reasoning": "explanation", "direct_response": "Hello!"}'
-    ])
+    llm = ScriptedLLM(
+        [
+            '{"type": "direct_response", "confidence": 0.9, '
+            '"reasoning": "explanation", "direct_response": "Hello!"}'
+        ]
+    )
     wcca_plain.llm_interface = llm
 
     intent = await wcca_plain._analyze_user_intent(_non_casual_message(), None)
@@ -143,10 +145,12 @@ async def test_intent_call_requests_json_format(wcca_plain):
 
 @pytest.mark.asyncio
 async def test_intent_repair_reparse_round_trip(wcca_plain):
-    llm = ScriptedLLM([
-        '{"type": "goal_defined" "goal_statement": "broken"}',
-        '{"type": "goal_defined", "confidence": 0.9, "goal_statement": "fixed goal"}',
-    ])
+    llm = ScriptedLLM(
+        [
+            '{"type": "goal_defined" "goal_statement": "broken"}',
+            '{"type": "goal_defined", "confidence": 0.9, "goal_statement": "fixed goal"}',
+        ]
+    )
     wcca_plain.llm_interface = llm
 
     intent = await wcca_plain._analyze_user_intent(
@@ -164,10 +168,12 @@ async def test_intent_repair_reparse_round_trip(wcca_plain):
 
 @pytest.mark.asyncio
 async def test_intent_repair_failure_uses_heuristic_without_crashing(wcca_plain):
-    llm = ScriptedLLM([
-        "not json at all",
-        "still not json",
-    ])
+    llm = ScriptedLLM(
+        [
+            "not json at all",
+            "still not json",
+        ]
+    )
     wcca_plain.llm_interface = llm
 
     intent = await wcca_plain._analyze_user_intent(

@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -23,7 +23,8 @@ def register_personality_routes(app: FastAPI, system) -> None:
         profile = pm.personality_profile or {}
         comm = profile.get("communication", {})
         personas = [
-            r.get("name") for r in profile.get("persona_layers", {}).get("available_roles", [])
+            r.get("name")
+            for r in profile.get("persona_layers", {}).get("available_roles", [])
             if isinstance(r, dict) and r.get("name")
         ]
         return {
@@ -43,12 +44,13 @@ def register_personality_routes(app: FastAPI, system) -> None:
     @app.post("/api/personality")
     async def save_personality(answers: PersonalityAnswers):
         import yaml
+
         from core.personality_manager import PersonalityManager, reload_personality_manager
 
-        overrides: Dict[str, Any] = {}
-        comm: Dict[str, Any] = {}
+        overrides: dict[str, Any] = {}
+        comm: dict[str, Any] = {}
 
-        def clean(value: Optional[str]) -> Optional[str]:
+        def clean(value: str | None) -> str | None:
             return value.strip() if value and value.strip() else None
 
         if clean(answers.identity_label):
@@ -71,15 +73,19 @@ def register_personality_routes(app: FastAPI, system) -> None:
         if not overrides:
             return JSONResponse({"detail": "no answers provided"}, status_code=400)
 
-        overrides_path = Path(PersonalityManager.overrides_path_for(system.config.personality.profile_path))
+        overrides_path = Path(
+            PersonalityManager.overrides_path_for(system.config.personality.profile_path)
+        )
         overrides_path.parent.mkdir(parents=True, exist_ok=True)
         header = (
             "# Written by the WITS web UI personality questionnaire (/personality).\n"
             "# Merged over config/wits_personality.yaml at load - delete this file\n"
             "# to revert to the base profile.\n"
         )
-        overrides_path.write_text(header + yaml.safe_dump(overrides, sort_keys=False, allow_unicode=True),
-                                  encoding="utf-8")
+        overrides_path.write_text(
+            header + yaml.safe_dump(overrides, sort_keys=False, allow_unicode=True),
+            encoding="utf-8",
+        )
 
         # Apply immediately: agents fetch the personality manager per call
         pm = reload_personality_manager(config=system.config)
@@ -90,7 +96,9 @@ def register_personality_routes(app: FastAPI, system) -> None:
     async def reset_personality():
         from core.personality_manager import PersonalityManager, reload_personality_manager
 
-        overrides_path = Path(PersonalityManager.overrides_path_for(system.config.personality.profile_path))
+        overrides_path = Path(
+            PersonalityManager.overrides_path_for(system.config.personality.profile_path)
+        )
         existed = overrides_path.exists()
         if existed:
             overrides_path.unlink()

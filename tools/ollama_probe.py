@@ -1,11 +1,18 @@
-import aiohttp
 import asyncio
-from typing import List, Dict, Optional, Any
 import json
 import sys
 from datetime import datetime
+from typing import Any
 
-async def probe_endpoint(session: aiohttp.ClientSession, url: str, method: str = "GET", json_data: Optional[Dict[str, Any]] = None) -> Dict:
+import aiohttp
+
+
+async def probe_endpoint(
+    session: aiohttp.ClientSession,
+    url: str,
+    method: str = "GET",
+    json_data: dict[str, Any] | None = None,
+) -> dict:
     """Probe a single endpoint and return its status."""
     try:
         async with session.request(method, url, json=json_data) as response:
@@ -15,7 +22,7 @@ async def probe_endpoint(session: aiohttp.ClientSession, url: str, method: str =
                 "status": response.status,
                 "headers": dict(response.headers),
                 "content": await response.text() if response.status < 400 else None,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
     except Exception as e:
         return {
@@ -23,28 +30,30 @@ async def probe_endpoint(session: aiohttp.ClientSession, url: str, method: str =
             "method": method,
             "status": "error",
             "error": str(e),
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
-async def probe_ollama_endpoints(base_url: str = "http://localhost:11434") -> List[Dict]:
+
+async def probe_ollama_endpoints(base_url: str = "http://localhost:11434") -> list[dict]:
     """Probe all known Ollama endpoints."""
     endpoints = [
         # Health check endpoints
         ("/api/health", "GET"),
         ("/api/version", "GET"),
-
         # Model management endpoints
         ("/api/tags", "GET"),
-
         # Core functionality endpoints
         ("/api/generate", "POST", {"model": "llama3", "prompt": "test"}),
-        ("/api/chat", "POST", {"model": "llama3", "messages": [{"role": "user", "content": "test"}]}),
+        (
+            "/api/chat",
+            "POST",
+            {"model": "llama3", "messages": [{"role": "user", "content": "test"}]},
+        ),
         ("/api/embeddings", "POST", {"model": "nomic-embed-text", "prompt": "test"}),
-
         # Alternative health check endpoints
         ("/health", "GET"),
         ("/healthz", "GET"),
-        ("/", "GET")
+        ("/", "GET"),
     ]
 
     async with aiohttp.ClientSession() as session:
@@ -60,7 +69,8 @@ async def probe_ollama_endpoints(base_url: str = "http://localhost:11434") -> Li
         results = await asyncio.gather(*tasks)
         return results
 
-def print_results(results: List[Dict]):
+
+def print_results(results: list[dict]):
     """Print the probe results in a formatted way."""
     print("\nOllama Server Probe Results")
     print("=" * 80)
@@ -86,12 +96,12 @@ def print_results(results: List[Dict]):
             print(f"\nEndpoint: {result['url']}")
             print(f"Method: {result['method']}")
             print(f"Status: {result['status']}")
-            if result.get('content'):
+            if result.get("content"):
                 try:
-                    content = json.loads(result['content'])
+                    content = json.loads(result["content"])
                     print("Content:", json.dumps(content, indent=2))
                 except Exception:
-                    print("Content:", result['content'])
+                    print("Content:", result["content"])
 
     # Print failed endpoints
     if failed:
@@ -101,8 +111,8 @@ def print_results(results: List[Dict]):
             print(f"\nEndpoint: {result['url']}")
             print(f"Method: {result['method']}")
             print(f"Status: {result['status']}")
-            if result.get('content'):
-                print("Error Response:", result['content'])
+            if result.get("content"):
+                print("Error Response:", result["content"])
 
     # Print error endpoints
     if errors:
@@ -115,6 +125,7 @@ def print_results(results: List[Dict]):
 
     print("\n" + "=" * 80)
 
+
 async def main():
     """Main function to run the probe."""
     print("Probing Ollama server endpoints...")
@@ -124,6 +135,7 @@ async def main():
     except Exception as e:
         print(f"Error during probe: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     asyncio.run(main())

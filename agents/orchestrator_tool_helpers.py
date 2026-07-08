@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from core.schemas import ConversationHistory, StreamData
 
@@ -22,18 +23,18 @@ class OrchestratorToolHelpersMixin:
     ORCHESTRATOR_BLOCKED_TOOLS = frozenset({"intent_analysis", "json_manipulate"})
 
     @staticmethod
-    def _has_ingested_documents(state: Dict[str, Any]) -> bool:
+    def _has_ingested_documents(state: dict[str, Any]) -> bool:
         """True when USER DOCUMENTS lists at least one ingested file."""
         ctx = state.get("documents_context", "")
         return bool(ctx) and "No user documents are currently ingested" not in ctx
 
     @staticmethod
-    def _tool_call_signature(tool_name: str, tool_args: Dict[str, Any]) -> str:
+    def _tool_call_signature(tool_name: str, tool_args: dict[str, Any]) -> str:
         return f"{tool_name}:{json.dumps(tool_args, sort_keys=True, default=str)}"
 
     def _preflight_tool_call(
-        self, tool_name: str, tool_args: Dict[str, Any], state: Dict[str, Any]
-    ) -> Optional[str]:
+        self, tool_name: str, tool_args: dict[str, Any], state: dict[str, Any]
+    ) -> str | None:
         """Return a block message to skip doomed/repeat tool calls, or None to proceed."""
         if tool_name in self.ORCHESTRATOR_BLOCKED_TOOLS:
             return (
@@ -108,12 +109,12 @@ class OrchestratorToolHelpersMixin:
         return None
 
     @staticmethod
-    def _has_read_history_observation(observations: List[str]) -> bool:
+    def _has_read_history_observation(observations: list[str]) -> bool:
         prefix = "Tool read_conversation_history result:"
         return any(o.startswith(prefix) for o in observations)
 
     @staticmethod
-    def _save_file_path_from_goal(goal: str) -> Optional[str]:
+    def _save_file_path_from_goal(goal: str) -> str | None:
         """Extract a target path from save/export phrasing (e.g. exports/chat.txt)."""
         if not goal:
             return None
@@ -130,17 +131,15 @@ class OrchestratorToolHelpersMixin:
     async def _auto_write_saved_conversation(
         self,
         file_path: str,
-        state: Dict[str, Any],
-        session_id: Optional[str],
+        state: dict[str, Any],
+        session_id: str | None,
     ) -> AsyncGenerator[StreamData, None]:
         """Write session transcript after read_conversation_history for save goals."""
         yield self.stream_action(
             f"Auto-saving conversation to {file_path} (read_conversation_history complete)"
         )
         try:
-            write_result = await self._call_tool(
-                "write_file", {"file_path": file_path}, state
-            )
+            write_result = await self._call_tool("write_file", {"file_path": file_path}, state)
             write_obs = self._format_tool_observation("write_file", write_result)
         except Exception as e:
             write_obs = f"Tool write_file failed: {e}"
@@ -181,12 +180,13 @@ class OrchestratorToolHelpersMixin:
     def _observation_indicates_failure(observation: str) -> bool:
         lowered = observation.lower()
         return (
-            observation.startswith("Tool ")
-            and " failed:" in observation
-        ) or "(search failed:" in lowered or observation.startswith("Blocked ")
+            (observation.startswith("Tool ") and " failed:" in observation)
+            or "(search failed:" in lowered
+            or observation.startswith("Blocked ")
+        )
 
     def _record_tool_failure(
-        self, tool_name: str, tool_args: Dict[str, Any], state: Dict[str, Any]
+        self, tool_name: str, tool_args: dict[str, Any], state: dict[str, Any]
     ) -> None:
         sig = self._tool_call_signature(tool_name, tool_args)
         repeat = state.setdefault("tool_repeat_failures", {})
@@ -203,7 +203,7 @@ class OrchestratorToolHelpersMixin:
         return f"Tool {tool_name} result: {result}"
 
     @staticmethod
-    def _is_web_search_result(tool_name: str, result: Dict[str, Any]) -> bool:
+    def _is_web_search_result(tool_name: str, result: dict[str, Any]) -> bool:
         """True when *result* is from web_search, not another results-list tool."""
         results = result.get("results")
         if not isinstance(results, list):
@@ -222,7 +222,7 @@ class OrchestratorToolHelpersMixin:
         return False
 
     @staticmethod
-    def _is_document_search_result(tool_name: str, result: Dict[str, Any]) -> bool:
+    def _is_document_search_result(tool_name: str, result: dict[str, Any]) -> bool:
         """True when *result* is from document_search."""
         if tool_name != "document_search" or not isinstance(result, dict):
             return False
@@ -234,7 +234,7 @@ class OrchestratorToolHelpersMixin:
         )
 
     @staticmethod
-    def _format_document_observation(tool_name: str, result: Dict[str, Any]) -> str:
+    def _format_document_observation(tool_name: str, result: dict[str, Any]) -> str:
         lines = [f"{tool_name} results (base your answer on the EXCERPTS below):"]
         if result.get("success") is False:
             lines.append(f"(search failed: {result.get('error', 'unknown error')})")
@@ -257,7 +257,7 @@ class OrchestratorToolHelpersMixin:
         return "\n".join(lines)
 
     @staticmethod
-    def _format_search_observation(tool_name: str, result: Dict[str, Any]) -> str:
+    def _format_search_observation(tool_name: str, result: dict[str, Any]) -> str:
         lines = [f"{tool_name} results (base your answer on the SOURCES below):"]
         answer = result.get("answer")
         if answer:
@@ -301,7 +301,7 @@ class OrchestratorToolHelpersMixin:
     )
 
     @staticmethod
-    def _latest_observation_prefix(observations: List[str], prefix: str) -> Optional[str]:
+    def _latest_observation_prefix(observations: list[str], prefix: str) -> str | None:
         for obs in reversed(observations):
             if prefix in obs:
                 return obs
@@ -311,11 +311,43 @@ class OrchestratorToolHelpersMixin:
     def _significant_terms(text: str, min_len: int = 4) -> set:
         words = re.findall(r"[a-z0-9]+", text.lower())
         stop = {
-            "that", "this", "with", "from", "have", "your", "about", "what",
-            "when", "where", "which", "their", "there", "would", "could",
-            "should", "been", "were", "they", "them", "than", "then", "into",
-            "only", "also", "just", "like", "some", "such", "very", "does",
-            "answer", "using", "below", "results", "search", "document",
+            "that",
+            "this",
+            "with",
+            "from",
+            "have",
+            "your",
+            "about",
+            "what",
+            "when",
+            "where",
+            "which",
+            "their",
+            "there",
+            "would",
+            "could",
+            "should",
+            "been",
+            "were",
+            "they",
+            "them",
+            "than",
+            "then",
+            "into",
+            "only",
+            "also",
+            "just",
+            "like",
+            "some",
+            "such",
+            "very",
+            "does",
+            "answer",
+            "using",
+            "below",
+            "results",
+            "search",
+            "document",
         }
         return {w for w in words if len(w) >= min_len and w not in stop}
 
@@ -323,7 +355,9 @@ class OrchestratorToolHelpersMixin:
         lowered = answer.lower()
         return any(phrase in lowered for phrase in self._REFUSAL_PHRASES)
 
-    def _answer_references_evidence(self, answer: str, evidence_terms: set, min_overlap: int = 2) -> bool:
+    def _answer_references_evidence(
+        self, answer: str, evidence_terms: set, min_overlap: int = 2
+    ) -> bool:
         if not evidence_terms:
             return True
         answer_terms = self._significant_terms(answer)
@@ -348,13 +382,15 @@ class OrchestratorToolHelpersMixin:
         return terms
 
     @classmethod
-    def _extract_web_summary(cls, observation: str) -> Optional[str]:
+    def _extract_web_summary(cls, observation: str) -> str | None:
         for line in observation.splitlines():
             if "summary" in line.lower() and ":" in line:
                 return line.split(":", 1)[1].strip()
         return None
 
-    def _validate_final_answer_synthesis(self, final_answer: str, state: Dict[str, Any]) -> Optional[str]:
+    def _validate_final_answer_synthesis(
+        self, final_answer: str, state: dict[str, Any]
+    ) -> str | None:
         """
         Return a guard message when final_answer ignores usable search observations.
         """
@@ -384,14 +420,18 @@ class OrchestratorToolHelpersMixin:
                     "Use the summary and SOURCES in observations."
                 )
             summary = self._extract_web_summary(web_obs)
-            if summary and len(final_answer.strip()) < 50 and not self._answer_references_evidence(
-                final_answer, self._significant_terms(summary), min_overlap=1
+            if (
+                summary
+                and len(final_answer.strip()) < 50
+                and not self._answer_references_evidence(
+                    final_answer, self._significant_terms(summary), min_overlap=1
+                )
             ):
                 return "Answer is too thin given an available web_search summary."
 
         return None
 
-    def _auto_synthesize_from_observations(self, state: Dict[str, Any]) -> Optional[str]:
+    def _auto_synthesize_from_observations(self, state: dict[str, Any]) -> str | None:
         """Build a grounded answer from the latest search observation when the model won't."""
         observations = state.get("observations", [])
         goal = state.get("goal", "")
@@ -418,7 +458,7 @@ class OrchestratorToolHelpersMixin:
 
         return None
 
-    def _resolve_final_answer(self, final_answer: str, state: Dict[str, Any]) -> tuple:
+    def _resolve_final_answer(self, final_answer: str, state: dict[str, Any]) -> tuple:
         """
         Apply synthesis guard before accepting final_answer.
 
@@ -443,9 +483,9 @@ class OrchestratorToolHelpersMixin:
     async def _prepare_tool_args(
         self,
         tool_name: str,
-        tool_args: Dict[str, Any],
-        state: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        tool_args: dict[str, Any],
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
         """Inject session context and resolve save-to-file bodies before execute."""
         args = dict(tool_args)
         conversation_history = state.get("conversation_history")
@@ -461,17 +501,13 @@ class OrchestratorToolHelpersMixin:
         if tool_name == "write_file":
             content = args.get("content")
             if not content or not str(content).strip():
-                from_obs = self._conversation_text_from_observations(
-                    state.get("observations", [])
-                )
+                from_obs = self._conversation_text_from_observations(state.get("observations", []))
                 if from_obs:
                     args["content"] = from_obs
                 elif conversation_history is not None and self._goal_saves_conversation(
                     state.get("goal", "")
                 ):
-                    args["content"] = self._format_conversation_for_file(
-                        conversation_history
-                    )
+                    args["content"] = self._format_conversation_for_file(conversation_history)
             if not args.get("file_path"):
                 path = self._save_file_path_from_goal(state.get("goal", ""))
                 if path:
@@ -480,7 +516,7 @@ class OrchestratorToolHelpersMixin:
         return args
 
     @staticmethod
-    def _has_web_search_observation(observations: List[str]) -> bool:
+    def _has_web_search_observation(observations: list[str]) -> bool:
         return any("web_search results" in obs for obs in observations)
 
     @staticmethod
@@ -550,7 +586,7 @@ class OrchestratorToolHelpersMixin:
         return "\n\n".join(lines)
 
     @staticmethod
-    def _conversation_text_from_observations(observations: List[str]) -> Optional[str]:
+    def _conversation_text_from_observations(observations: list[str]) -> str | None:
         """Pull formatted transcript from a prior read_conversation_history observation."""
         prefix = "Tool read_conversation_history result:"
         for obs in reversed(observations):
@@ -563,7 +599,7 @@ class OrchestratorToolHelpersMixin:
                     return text
         return None
 
-    async def _get_document_inventory(self) -> Dict[str, int]:
+    async def _get_document_inventory(self) -> dict[str, int]:
         """File path -> chunk count for every ingested document (empty if none)."""
         if not self.memory_manager:
             return {}
@@ -574,7 +610,7 @@ class OrchestratorToolHelpersMixin:
         except Exception as e:
             self.logger.warning(f"Could not list ingested documents: {e}")
             return {}
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         for seg in segments:
             fp = seg.metadata.get("file_path")
             if fp:
@@ -582,7 +618,7 @@ class OrchestratorToolHelpersMixin:
         return counts
 
     @staticmethod
-    def _format_documents_context(inventory: Dict[str, int]) -> str:
+    def _format_documents_context(inventory: dict[str, int]) -> str:
         """Prompt block listing ingested documents the orchestrator can search."""
         if not inventory:
             return "No user documents are currently ingested."

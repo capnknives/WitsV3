@@ -4,7 +4,7 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -20,13 +20,13 @@ def register_mcp_routes(app: FastAPI, system) -> None:
     def _mcp_config_path() -> Path:
         return Path(system.config.tool_system.mcp_tool_definitions_path)
 
-    def _load_mcp_config() -> Dict[str, Any]:
+    def _load_mcp_config() -> dict[str, Any]:
         path = _mcp_config_path()
         if not path.exists():
             return {"auto_connect": True, "servers": []}
         return json.loads(path.read_text(encoding="utf-8"))
 
-    def _save_mcp_config(config: Dict[str, Any]) -> None:
+    def _save_mcp_config(config: dict[str, Any]) -> None:
         path = _mcp_config_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -67,18 +67,21 @@ def register_mcp_routes(app: FastAPI, system) -> None:
         tools = [t for t in adapter.tools.values() if t.server_name == server_name]
         for mcp_tool in tools:
             wrapper_name = f"mcp_{mcp_tool.name}"
-            system.tool_registry.register_tool(MCPToolWrapper(
-                name=wrapper_name,
-                description=mcp_tool.description,
-                mcp_tool=mcp_tool,
-                mcp_adapter=adapter,
-            ))
+            system.tool_registry.register_tool(
+                MCPToolWrapper(
+                    name=wrapper_name,
+                    description=mcp_tool.description,
+                    mcp_tool=mcp_tool,
+                    mcp_adapter=adapter,
+                )
+            )
             registered.append(mcp_tool)
         return registered
 
-    async def _connect_mcp_server_entry(name: str, entry: Dict[str, Any]):
+    async def _connect_mcp_server_entry(name: str, entry: dict[str, Any]):
         """Connect one configured MCP server; returns (ok, tools_or_error)."""
         import asyncio
+
         from core.mcp_adapter import MCPServer, startup_timeout_for_command
 
         if "command" not in entry:
@@ -131,20 +134,22 @@ def register_mcp_routes(app: FastAPI, system) -> None:
     async def mcp_servers():
         adapter = _mcp_adapter()
         connected = set(adapter.clients.keys()) if adapter else set()
-        tools_by_server: Dict[str, int] = {}
+        tools_by_server: dict[str, int] = {}
         if adapter:
             for tool in await adapter.list_available_tools():
                 tools_by_server[tool.server_name] = tools_by_server.get(tool.server_name, 0) + 1
         servers = []
         for entry in _load_mcp_config().get("servers", []):
             name = entry.get("name", "unknown")
-            servers.append({
-                "name": name,
-                "command": entry.get("command"),
-                "working_directory": entry.get("working_directory"),
-                "connected": name in connected,
-                "tool_count": tools_by_server.get(name, 0),
-            })
+            servers.append(
+                {
+                    "name": name,
+                    "command": entry.get("command"),
+                    "working_directory": entry.get("working_directory"),
+                    "connected": name in connected,
+                    "tool_count": tools_by_server.get(name, 0),
+                }
+            )
         return {"servers": servers}
 
     @app.post("/api/mcp/servers")
@@ -158,7 +163,7 @@ def register_mcp_routes(app: FastAPI, system) -> None:
         if any(s.get("name") == name for s in config.get("servers", [])):
             return JSONResponse({"detail": f"server '{name}' already exists"}, status_code=409)
 
-        entry: Dict[str, Any] = {"name": name, "command": command}
+        entry: dict[str, Any] = {"name": name, "command": command}
         if body.working_directory:
             entry["working_directory"] = body.working_directory
         if body.args:
@@ -185,7 +190,9 @@ def register_mcp_routes(app: FastAPI, system) -> None:
 
     @app.post("/api/mcp/servers/{name:path}/connect")
     async def mcp_connect_server(name: str):
-        entry = next((s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None)
+        entry = next(
+            (s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None
+        )
         if entry is None:
             return JSONResponse({"detail": "unknown server"}, status_code=404)
 
@@ -207,7 +214,9 @@ def register_mcp_routes(app: FastAPI, system) -> None:
     @app.post("/api/mcp/servers/{name:path}/reconnect")
     async def mcp_reconnect_server(name: str):
         """Disconnect (if needed) and connect again — fixes stale 0-tool sessions."""
-        entry = next((s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None)
+        entry = next(
+            (s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None
+        )
         if entry is None:
             return JSONResponse({"detail": "unknown server"}, status_code=404)
         adapter = _mcp_adapter()
@@ -287,11 +296,13 @@ def register_mcp_routes(app: FastAPI, system) -> None:
         from core.schemas import ToolCall
 
         try:
-            result = await adapter.call_tool(ToolCall(
-                call_id=f"web_ui_{uuid.uuid4().hex[:8]}",
-                tool_name=bare,
-                arguments=body.arguments,
-            ))
+            result = await adapter.call_tool(
+                ToolCall(
+                    call_id=f"web_ui_{uuid.uuid4().hex[:8]}",
+                    tool_name=bare,
+                    arguments=body.arguments,
+                )
+            )
         except Exception as e:
             return JSONResponse({"detail": str(e)}, status_code=502)
 
@@ -305,7 +316,8 @@ def register_mcp_routes(app: FastAPI, system) -> None:
 
         try:
             entries = await search_registry(
-                q, limit=max(1, min(limit, 25)),
+                q,
+                limit=max(1, min(limit, 25)),
                 registry_url=system.config.tool_system.mcp_registry_url,
             )
         except Exception as e:
@@ -327,7 +339,7 @@ def register_mcp_routes(app: FastAPI, system) -> None:
         if any(s.get("name") == name for s in config.get("servers", [])):
             return JSONResponse({"detail": f"server '{name}' already exists"}, status_code=409)
 
-        entry: Dict[str, Any] = {"name": name, "command": body.command, "source": "registry"}
+        entry: dict[str, Any] = {"name": name, "command": body.command, "source": "registry"}
         if body.working_directory:
             entry["working_directory"] = body.working_directory
         if body.env:

@@ -5,10 +5,10 @@ This module contains the base class that all tools must inherit from.
 """
 
 import logging
-from typing import Any, Dict, Optional
 from abc import ABC, abstractmethod
+from typing import Any
 
-from .schemas import ToolSchema, ToolParameter, ToolValidationResult, ToolResult
+from .schemas import ToolParameter, ToolResult, ToolSchema, ToolValidationResult
 
 __all__ = ["BaseTool", "ToolResult"]
 
@@ -29,7 +29,7 @@ class BaseTool(ABC):
         self.name = name
         self.description = description
         self.logger = logging.getLogger(f"WitsV3.Tool.{name}")
-        self._tool_schema: Optional[ToolSchema] = None
+        self._tool_schema: ToolSchema | None = None
 
     @abstractmethod
     async def execute(self, **kwargs) -> Any:
@@ -45,7 +45,7 @@ class BaseTool(ABC):
         pass
 
     @abstractmethod
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         """
         Get the tool's schema for LLM consumption.
 
@@ -81,19 +81,17 @@ class BaseTool(ABC):
                     max_value=prop_def.get("maximum"),
                     min_length=prop_def.get("minLength"),
                     max_length=prop_def.get("maxLength"),
-                    pattern=prop_def.get("pattern")
+                    pattern=prop_def.get("pattern"),
                 )
                 parameters.append(param)
 
             self._tool_schema = ToolSchema(
-                name=self.name,
-                description=self.description,
-                parameters=parameters
+                name=self.name, description=self.description, parameters=parameters
             )
 
         return self._tool_schema
 
-    def validate_arguments(self, arguments: Dict[str, Any]) -> ToolValidationResult:
+    def validate_arguments(self, arguments: dict[str, Any]) -> ToolValidationResult:
         """
         Validate tool arguments using enhanced schema.
 
@@ -106,15 +104,11 @@ class BaseTool(ABC):
         schema = self.get_enhanced_schema()
         return schema.validate_arguments(arguments)
 
-    def get_llm_description(self) -> Dict[str, Any]:
+    def get_llm_description(self) -> dict[str, Any]:
         """
         Get tool description for LLM.
 
         Returns:
             Tool description for LLM
         """
-        return {
-            "name": self.name,
-            "description": self.description,
-            "schema": self.get_schema()
-        }
+        return {"name": self.name, "description": self.description, "schema": self.get_schema()}

@@ -18,8 +18,7 @@ def _harness() -> _GuardHarness:
 def _state_with_docs():
     return {
         "documents_context": (
-            "These user documents are ALREADY ingested:\n"
-            "- report.md (5 chunks)"
+            "These user documents are ALREADY ingested:\n" "- report.md (5 chunks)"
         ),
         "tool_repeat_failures": {},
         "tool_total_failures": {},

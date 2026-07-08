@@ -5,18 +5,17 @@ This module provides utilities for exporting memory segments to different format
 and importing them back.
 """
 
-import json
 import csv
+import json
 import logging
-import os
-from typing import List, Dict, Any, Optional, Union, TextIO
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from .memory_manager import MemorySegment, MemoryManager
-from .config import WitsV3Config
+from .memory_manager import MemoryManager, MemorySegment
 
 logger = logging.getLogger(__name__)
+
 
 class MemoryExporter:
     """Utility for exporting memory segments to different formats."""
@@ -32,10 +31,10 @@ class MemoryExporter:
 
     async def export_to_json(
         self,
-        output_path: Union[str, Path],
+        output_path: str | Path,
         limit: int = 0,
-        filter_dict: Optional[Dict[str, Any]] = None,
-        include_embeddings: bool = True
+        filter_dict: dict[str, Any] | None = None,
+        include_embeddings: bool = True,
     ) -> int:
         """Export memory segments to a JSON file.
 
@@ -52,7 +51,7 @@ class MemoryExporter:
             # Retrieve segments
             segments = await self.memory_manager.get_recent_memory(
                 limit=limit if limit > 0 else 100000,  # Large number to get all
-                filter_dict=filter_dict
+                filter_dict=filter_dict,
             )
 
             if not include_embeddings:
@@ -67,15 +66,19 @@ class MemoryExporter:
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Write to file
-            with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "metadata": {
-                        "export_date": datetime.now().isoformat(),
-                        "segment_count": len(segments),
-                        "format_version": "1.0"
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "metadata": {
+                            "export_date": datetime.now().isoformat(),
+                            "segment_count": len(segments),
+                            "format_version": "1.0",
+                        },
+                        "segments": segments_data,
                     },
-                    "segments": segments_data
-                }, f, indent=2)
+                    f,
+                    indent=2,
+                )
 
             self.logger.info(f"Exported {len(segments)} segments to {output_path}")
             return len(segments)
@@ -86,9 +89,9 @@ class MemoryExporter:
 
     async def export_to_csv(
         self,
-        output_path: Union[str, Path],
+        output_path: str | Path,
         limit: int = 0,
-        filter_dict: Optional[Dict[str, Any]] = None
+        filter_dict: dict[str, Any] | None = None,
     ) -> int:
         """Export memory segments to a CSV file.
 
@@ -104,7 +107,7 @@ class MemoryExporter:
             # Retrieve segments
             segments = await self.memory_manager.get_recent_memory(
                 limit=limit if limit > 0 else 100000,  # Large number to get all
-                filter_dict=filter_dict
+                filter_dict=filter_dict,
             )
 
             # Ensure the output directory exists
@@ -113,28 +116,34 @@ class MemoryExporter:
 
             # Define CSV fields
             fields = [
-                'id', 'timestamp', 'type', 'source',
-                'content_text', 'content_tool_name', 'content_tool_output',
-                'importance', 'metadata'
+                "id",
+                "timestamp",
+                "type",
+                "source",
+                "content_text",
+                "content_tool_name",
+                "content_tool_output",
+                "importance",
+                "metadata",
             ]
 
             # Write to file
-            with open(output_path, 'w', newline='', encoding='utf-8') as f:
+            with open(output_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=fields)
                 writer.writeheader()
 
                 for segment in segments:
                     # Flatten the structure for CSV
                     row = {
-                        'id': segment.id,
-                        'timestamp': segment.timestamp.isoformat(),
-                        'type': segment.type,
-                        'source': segment.source,
-                        'content_text': segment.content.text,
-                        'content_tool_name': segment.content.tool_name,
-                        'content_tool_output': segment.content.tool_output,
-                        'importance': segment.importance,
-                        'metadata': json.dumps(segment.metadata)
+                        "id": segment.id,
+                        "timestamp": segment.timestamp.isoformat(),
+                        "type": segment.type,
+                        "source": segment.source,
+                        "content_text": segment.content.text,
+                        "content_tool_name": segment.content.tool_name,
+                        "content_tool_output": segment.content.tool_output,
+                        "importance": segment.importance,
+                        "metadata": json.dumps(segment.metadata),
                     }
                     writer.writerow(row)
 
@@ -147,10 +156,10 @@ class MemoryExporter:
 
     async def export_content_only(
         self,
-        output_path: Union[str, Path],
+        output_path: str | Path,
         limit: int = 0,
-        filter_dict: Optional[Dict[str, Any]] = None,
-        include_metadata: bool = False
+        filter_dict: dict[str, Any] | None = None,
+        include_metadata: bool = False,
     ) -> int:
         """Export only the text content of memory segments to a text file.
 
@@ -167,7 +176,7 @@ class MemoryExporter:
             # Retrieve segments
             segments = await self.memory_manager.get_recent_memory(
                 limit=limit if limit > 0 else 100000,  # Large number to get all
-                filter_dict=filter_dict
+                filter_dict=filter_dict,
             )
 
             # Ensure the output directory exists
@@ -175,7 +184,7 @@ class MemoryExporter:
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Write to file
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 for segment in segments:
                     if include_metadata:
                         f.write(f"--- Segment {segment.id} ({segment.type}/{segment.source}) ---\n")
@@ -198,6 +207,7 @@ class MemoryExporter:
             self.logger.error(f"Error exporting memory content: {e}")
             raise
 
+
 class MemoryImporter:
     """Utility for importing memory segments from different formats."""
 
@@ -212,9 +222,9 @@ class MemoryImporter:
 
     async def import_from_json(
         self,
-        input_path: Union[str, Path],
+        input_path: str | Path,
         skip_existing: bool = True,
-        regenerate_embeddings: bool = False
+        regenerate_embeddings: bool = False,
     ) -> int:
         """Import memory segments from a JSON file.
 
@@ -233,7 +243,7 @@ class MemoryImporter:
                 self.logger.error(f"Input file not found: {input_path}")
                 return 0
 
-            with open(input_path, 'r', encoding='utf-8') as f:
+            with open(input_path, encoding="utf-8") as f:
                 data = json.load(f)
 
             # Handle both formats: direct list or nested structure
@@ -274,11 +284,7 @@ class MemoryImporter:
             self.logger.error(f"Error importing memory from JSON: {e}")
             raise
 
-    async def import_from_csv(
-        self,
-        input_path: Union[str, Path],
-        skip_existing: bool = True
-    ) -> int:
+    async def import_from_csv(self, input_path: str | Path, skip_existing: bool = True) -> int:
         """Import memory segments from a CSV file.
 
         Args:
@@ -297,31 +303,31 @@ class MemoryImporter:
 
             # Import segments
             count = 0
-            with open(input_path, 'r', newline='', encoding='utf-8') as f:
+            with open(input_path, newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
 
                 for row in reader:
                     # Check for required fields
-                    if not all(field in row for field in ['id', 'type', 'source']):
-                        self.logger.warning(f"Skipping row with missing required fields")
+                    if not all(field in row for field in ["id", "type", "source"]):
+                        self.logger.warning("Skipping row with missing required fields")
                         continue
 
                     # Check if segment already exists
                     if skip_existing:
-                        existing = await self.memory_manager.get_memory(row['id'])
+                        existing = await self.memory_manager.get_memory(row["id"])
                         if existing:
                             self.logger.debug(f"Skipping existing segment: {row['id']}")
                             continue
 
                     # Parse timestamp
                     try:
-                        timestamp = datetime.fromisoformat(row['timestamp'])
+                        timestamp = datetime.fromisoformat(row["timestamp"])
                     except (ValueError, KeyError):
                         timestamp = datetime.now()
 
                     # Parse metadata
                     try:
-                        metadata = json.loads(row.get('metadata', '{}'))
+                        metadata = json.loads(row.get("metadata", "{}"))
                     except json.JSONDecodeError:
                         metadata = {}
 
@@ -329,17 +335,17 @@ class MemoryImporter:
                     from .memory_manager import MemorySegmentContent
 
                     segment = MemorySegment(
-                        id=row['id'],
+                        id=row["id"],
                         timestamp=timestamp,
-                        type=row['type'],
-                        source=row['source'],
+                        type=row["type"],
+                        source=row["source"],
                         content=MemorySegmentContent(
-                            text=row.get('content_text'),
-                            tool_name=row.get('content_tool_name'),
-                            tool_output=row.get('content_tool_output')
+                            text=row.get("content_text"),
+                            tool_name=row.get("content_tool_name"),
+                            tool_output=row.get("content_tool_output"),
                         ),
-                        importance=float(row.get('importance', 0.5)),
-                        metadata=metadata
+                        importance=float(row.get("importance", 0.5)),
+                        metadata=metadata,
                     )
 
                     # Add to memory manager
@@ -355,12 +361,12 @@ class MemoryImporter:
 
     async def import_text_as_segments(
         self,
-        input_path: Union[str, Path],
+        input_path: str | Path,
         segment_type: str = "IMPORTED",
         source: str = "import_utility",
         delimiter: str = "---",
         importance: float = 0.5,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """Import a text file as multiple memory segments.
 
@@ -383,7 +389,7 @@ class MemoryImporter:
                 return 0
 
             # Read the entire file
-            with open(input_path, 'r', encoding='utf-8') as f:
+            with open(input_path, encoding="utf-8") as f:
                 content = f.read()
 
             # Split by delimiter
@@ -399,7 +405,7 @@ class MemoryImporter:
                 # Create metadata with source file info
                 segment_metadata = {
                     "source_file": str(input_path),
-                    "import_timestamp": datetime.now().isoformat()
+                    "import_timestamp": datetime.now().isoformat(),
                 }
 
                 # Add custom metadata
@@ -412,7 +418,7 @@ class MemoryImporter:
                     source=source,
                     content_text=text,
                     importance=importance,
-                    metadata=segment_metadata
+                    metadata=segment_metadata,
                 )
                 count += 1
 

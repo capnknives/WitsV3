@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from .llm_interface import BaseLLMInterface
 from .memory_manager import MemoryManager, MemorySegment
@@ -24,13 +24,13 @@ class ConversationSummarizer:
 
     async def summarize_conversation(
         self,
-        time_window_minutes: Optional[int] = None,
-        segment_count: Optional[int] = None,
-        filter_dict: Optional[Dict[str, Any]] = None,
+        time_window_minutes: int | None = None,
+        segment_count: int | None = None,
+        filter_dict: dict[str, Any] | None = None,
         summary_type: str = "CONVERSATION_SUMMARY",
         max_tokens: int = 2000,
-        model: Optional[str] = None,
-    ) -> Tuple[str, str]:
+        model: str | None = None,
+    ) -> tuple[str, str]:
         """Summarize recent conversation segments and store the summary.
 
         Returns:
@@ -40,8 +40,7 @@ class ConversationSummarizer:
         transcript = await self._create_transcript(segments)
         summary = await self.llm_interface.generate_text(
             prompt=(
-                "Please provide a concise summary of the following conversation:\n"
-                f"{transcript}"
+                "Please provide a concise summary of the following conversation:\n" f"{transcript}"
             ),
             model=model,
             max_tokens=max_tokens,
@@ -62,12 +61,12 @@ class ConversationSummarizer:
     async def summarize_agent_interaction(
         self,
         agent_name: str,
-        time_window_minutes: Optional[int] = None,
-        segment_count: Optional[int] = None,
+        time_window_minutes: int | None = None,
+        segment_count: int | None = None,
         summary_type: str = "AGENT_INTERACTION_SUMMARY",
         max_tokens: int = 2000,
-        model: Optional[str] = None,
-    ) -> Tuple[str, str]:
+        model: str | None = None,
+    ) -> tuple[str, str]:
         """Summarize interactions with a specific agent.
 
         Args:
@@ -103,19 +102,19 @@ class ConversationSummarizer:
 
     async def summarize_topics(
         self,
-        time_window_minutes: Optional[int] = None,
-        segment_count: Optional[int] = None,
-        filter_dict: Optional[Dict[str, Any]] = None,
+        time_window_minutes: int | None = None,
+        segment_count: int | None = None,
+        filter_dict: dict[str, Any] | None = None,
         summary_type: str = "TOPIC_SUMMARY",
         max_topics: int = 5,
-        model: Optional[str] = None,
-    ) -> Tuple[Dict[str, str], List[str]]:
+        model: str | None = None,
+    ) -> tuple[dict[str, str], list[str]]:
         """Create topic summaries for recent conversation."""
         segments = await self._get_recent_segments(time_window_minutes, segment_count, filter_dict)
         transcript = await self._create_transcript(segments)
         topics = await self._identify_topics(transcript, max_topics, model)
-        summaries: Dict[str, str] = {}
-        ids: List[str] = []
+        summaries: dict[str, str] = {}
+        ids: list[str] = []
         for topic in topics:
             summary = await self.llm_interface.generate_text(
                 prompt=f"Summarize topic '{topic}':\n{transcript}",
@@ -135,13 +134,15 @@ class ConversationSummarizer:
 
     async def _get_recent_segments(
         self,
-        time_window_minutes: Optional[int],
-        segment_count: Optional[int],
-        filter_dict: Optional[Dict[str, Any]],
-    ) -> List[MemorySegment]:
+        time_window_minutes: int | None,
+        segment_count: int | None,
+        filter_dict: dict[str, Any] | None,
+    ) -> list[MemorySegment]:
         if time_window_minutes is not None:
             cutoff = datetime.now(timezone.utc) - timedelta(minutes=time_window_minutes)
-            segments = await self.memory_manager.get_recent_memory(limit=1000, filter_dict=filter_dict)
+            segments = await self.memory_manager.get_recent_memory(
+                limit=1000, filter_dict=filter_dict
+            )
             recent = []
             for s in segments:
                 ts = s.timestamp
@@ -154,7 +155,7 @@ class ConversationSummarizer:
         count = segment_count if segment_count is not None else 100
         return await self.memory_manager.get_recent_memory(limit=count, filter_dict=filter_dict)
 
-    async def _create_transcript(self, segments: List[MemorySegment]) -> str:
+    async def _create_transcript(self, segments: list[MemorySegment]) -> str:
         """Create a human-readable transcript from memory segments."""
         lines = []
         for seg in sorted(segments, key=lambda s: s.timestamp):
@@ -179,11 +180,13 @@ class ConversationSummarizer:
         self,
         transcript: str,
         max_topics: int = 5,
-        model: Optional[str] = None,
-    ) -> List[str]:
+        model: str | None = None,
+    ) -> list[str]:
         """Identify the key topics discussed in a transcript."""
         prompt = f"Identify up to {max_topics} key topics as a JSON list:\n{transcript}"
-        response = await self.llm_interface.generate_text(prompt=prompt, model=model, max_tokens=200)
+        response = await self.llm_interface.generate_text(
+            prompt=prompt, model=model, max_tokens=200
+        )
         try:
             topics = json.loads(response)
             if isinstance(topics, list):
@@ -193,14 +196,14 @@ class ConversationSummarizer:
         # Fall back to manual extraction for non-JSON responses
         return self._extract_topics_manually(response, max_topics=max_topics)
 
-    def _extract_topics_manually(self, text: str, max_topics: int = 5) -> List[str]:
+    def _extract_topics_manually(self, text: str, max_topics: int = 5) -> list[str]:
         """Extract topics from a free-form LLM response.
 
         Handles numbered lists ("1. Topic"), dashed lists ("- Topic") and
         quoted strings ('"Topic"'). Falls back to ["Conversation"] when no
         recognizable format is found.
         """
-        topics: List[str] = []
+        topics: list[str] = []
 
         for line in text.splitlines():
             line = line.strip()

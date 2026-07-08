@@ -1,20 +1,20 @@
 """Tests for the FAISS memory backends."""
 
 import os
-import pytest
-import asyncio
-import numpy as np
-from typing import AsyncGenerator
-from unittest.mock import MagicMock, patch, AsyncMock
-from pathlib import Path
-import tempfile
 import shutil
-import faiss
+import tempfile
+from collections.abc import AsyncGenerator
+from unittest.mock import MagicMock, patch
 
-from core.faiss_memory_backend import FaissCPUMemoryBackend, FaissGPUMemoryBackend
-from core.memory_manager import MemorySegment, MemorySegmentContent
+import faiss
+import numpy as np
+import pytest
+
 from core.config import WitsV3Config
+from core.faiss_memory_backend import FaissCPUMemoryBackend, FaissGPUMemoryBackend
 from core.llm_interface import BaseLLMInterface
+from core.memory_manager import MemorySegment, MemorySegmentContent
+
 
 class DummyLLM(BaseLLMInterface):
     def __init__(self):
@@ -44,6 +44,7 @@ class DummyLLM(BaseLLMInterface):
             embedding = embedding / norm
         return embedding.tolist()
 
+
 @pytest.fixture
 def temp_dir():
     """Create a temporary directory for test files."""
@@ -51,6 +52,7 @@ def temp_dir():
     yield temp_dir
     # Clean up
     shutil.rmtree(temp_dir)
+
 
 @pytest.fixture
 def mock_config(temp_dir):
@@ -70,6 +72,7 @@ def mock_config(temp_dir):
 
     return config
 
+
 @pytest.mark.asyncio
 async def test_faiss_cpu_backend_initialize(mock_config):
     """Test initializing the FAISS CPU backend."""
@@ -82,6 +85,7 @@ async def test_faiss_cpu_backend_initialize(mock_config):
     assert backend.index is not None
     assert backend.index.d == mock_config.memory_manager.vector_dim
     assert isinstance(backend.index, faiss.IndexFlatL2)
+
 
 @pytest.mark.asyncio
 async def test_faiss_add_and_get_segment(mock_config):
@@ -96,7 +100,7 @@ async def test_faiss_add_and_get_segment(mock_config):
         type="test",
         source="unit-test",
         content=MemorySegmentContent(text="Test content for search"),
-        metadata={"test": True}
+        metadata={"test": True},
     )
 
     # Test adding the segment
@@ -110,6 +114,7 @@ async def test_faiss_add_and_get_segment(mock_config):
     assert retrieved.content.text == "Test content for search"
     assert retrieved.metadata["test"] is True
     assert retrieved.embedding is not None
+
 
 @pytest.mark.asyncio
 async def test_faiss_search_segments(mock_config):
@@ -125,7 +130,7 @@ async def test_faiss_search_segments(mock_config):
             type="test",
             source="unit-test",
             content=MemorySegmentContent(text=f"Memory content about {topic}"),
-            metadata={"topic": topic}
+            metadata={"topic": topic},
         )
         for i, topic in enumerate(["python", "javascript", "rust", "python advanced", "typescript"])
     ]
@@ -143,13 +148,12 @@ async def test_faiss_search_segments(mock_config):
 
     # Test with filters
     filtered_results = await backend.search_segments(
-        "programming language",
-        limit=3,
-        filter_dict={"topic": "javascript"}
+        "programming language", limit=3, filter_dict={"topic": "javascript"}
     )
 
     assert len(filtered_results) > 0
     assert all(r.metadata.get("topic") == "javascript" for r in filtered_results)
+
 
 @pytest.mark.asyncio
 async def test_faiss_get_recent_segments(mock_config):
@@ -165,7 +169,7 @@ async def test_faiss_get_recent_segments(mock_config):
             type="test",
             source="unit-test",
             content=MemorySegmentContent(text=f"Memory content {i}"),
-            metadata={"index": i}
+            metadata={"index": i},
         )
         await backend.add_segment(segment)
 
@@ -179,13 +183,11 @@ async def test_faiss_get_recent_segments(mock_config):
     assert indices == sorted(indices, reverse=True)
 
     # Test with filters
-    filtered_recent = await backend.get_recent_segments(
-        limit=3,
-        filter_dict={"index": 5}
-    )
+    filtered_recent = await backend.get_recent_segments(limit=3, filter_dict={"index": 5})
 
     assert len(filtered_recent) == 1
     assert filtered_recent[0].metadata["index"] == 5
+
 
 @pytest.mark.asyncio
 async def test_faiss_prune_memory(mock_config):
@@ -206,7 +208,7 @@ async def test_faiss_prune_memory(mock_config):
             source="unit-test",
             content=MemorySegmentContent(text=f"Memory content {i}"),
             # Set varying importance to test pruning logic
-            importance=i/10.0
+            importance=i / 10.0,
         )
         await backend.add_segment(segment)
 
@@ -219,6 +221,7 @@ async def test_faiss_prune_memory(mock_config):
     # The highest importance segments should be kept
     importances = [s.importance for s in backend.segments]
     assert all(imp >= 0.5 for imp in importances)
+
 
 @pytest.mark.asyncio
 async def test_faiss_persistence(mock_config):
@@ -250,6 +253,7 @@ async def test_faiss_persistence(mock_config):
     results = await backend2.search_segments("Memory content", limit=3)
     assert len(results) > 0
 
+
 @pytest.mark.asyncio
 async def test_faiss_gpu_backend_fallback(mock_config):
     """Test that GPU backend falls back to CPU if GPU is not available."""
@@ -257,7 +261,9 @@ async def test_faiss_gpu_backend_fallback(mock_config):
 
     # Mock that GPU resources are not available (create=True because faiss-cpu
     # doesn't define StandardGpuResources at all)
-    with patch('faiss.StandardGpuResources', create=True, side_effect=Exception("GPU not available")):
+    with patch(
+        "faiss.StandardGpuResources", create=True, side_effect=Exception("GPU not available")
+    ):
         backend = FaissGPUMemoryBackend(mock_config, llm)
         await backend.initialize()
 

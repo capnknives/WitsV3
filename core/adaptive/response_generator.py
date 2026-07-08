@@ -4,10 +4,12 @@ Response generator module for the Adaptive LLM System.
 This module handles response generation and streaming.
 """
 
-import logging
 import asyncio
+import logging
+from collections.abc import AsyncGenerator
+from typing import Any
+
 import torch
-from typing import Any, AsyncGenerator, Optional
 
 from .tokenizer import AdaptiveTokenizer
 
@@ -26,12 +28,7 @@ class ResponseGenerator:
         self.logger = logging.getLogger("WitsV3.ResponseGenerator")
 
     async def generate_response(
-        self,
-        module: Any,
-        input_ids: torch.Tensor,
-        max_tokens: int,
-        temperature: float,
-        **kwargs
+        self, module: Any, input_ids: torch.Tensor, max_tokens: int, temperature: float, **kwargs
     ) -> str:
         """
         Generate a response using the given module.
@@ -53,11 +50,11 @@ class ResponseGenerator:
                 max_length=input_ids.shape[1] + max_tokens,
                 temperature=temperature,
                 do_sample=temperature > 0.0,
-                **kwargs
+                **kwargs,
             )
 
             # Decode response
-            response = await self.tokenizer.decode(output_ids[0, input_ids.shape[1]:])
+            response = await self.tokenizer.decode(output_ids[0, input_ids.shape[1] :])
 
             return response
 
@@ -66,12 +63,7 @@ class ResponseGenerator:
             raise
 
     async def stream_response(
-        self,
-        module: Any,
-        input_ids: torch.Tensor,
-        max_tokens: int,
-        temperature: float,
-        **kwargs
+        self, module: Any, input_ids: torch.Tensor, max_tokens: int, temperature: float, **kwargs
     ) -> AsyncGenerator[str, None]:
         """
         Stream a response using the given module.
@@ -90,12 +82,14 @@ class ResponseGenerator:
             # First try to generate the full response
             response = ""
             try:
-                response = await self.generate_response(module, input_ids, max_tokens, temperature, **kwargs)
+                response = await self.generate_response(
+                    module, input_ids, max_tokens, temperature, **kwargs
+                )
             except Exception as e:
                 self.logger.error(f"Error generating response with module: {e}")
                 # Instead of re-raising, we'll handle this by yielding an error message
                 # This prevents the entire streaming process from crashing
-                yield f"Error: Could not generate response with specialized module. "
+                yield "Error: Could not generate response with specialized module. "
                 # Exit this method after yielding the error
                 return
 
@@ -106,7 +100,7 @@ class ResponseGenerator:
             # If we have a response, stream it in chunks
             chunk_size = 10
             for i in range(0, len(response), chunk_size):
-                yield response[i:i+chunk_size]
+                yield response[i : i + chunk_size]
                 await asyncio.sleep(0.05)  # Reduced delay for faster streaming
 
         except Exception as e:
@@ -114,7 +108,9 @@ class ResponseGenerator:
             # Yield a generic error message to prevent the entire streaming process from crashing
             yield f"Error during streaming: {str(e)}"
 
-    async def stream_cached_response(self, response: str, chunk_size: int = 10) -> AsyncGenerator[str, None]:
+    async def stream_cached_response(
+        self, response: str, chunk_size: int = 10
+    ) -> AsyncGenerator[str, None]:
         """
         Stream a cached response.
 
@@ -127,7 +123,7 @@ class ResponseGenerator:
         """
         # Split response into chunks
         for i in range(0, len(response), chunk_size):
-            yield response[i:i+chunk_size]
+            yield response[i : i + chunk_size]
             await asyncio.sleep(0.1)  # Simulate delay
 
     async def generate_with_fallback(
@@ -138,7 +134,7 @@ class ResponseGenerator:
         max_tokens: int,
         temperature: float,
         stream: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """
         Generate response with fallback option.
@@ -166,25 +162,19 @@ class ResponseGenerator:
                 async def fallback_stream_wrapper():
                     try:
                         async for chunk in fallback_generator.stream_text(
-                            prompt,
-                            max_tokens=max_tokens,
-                            temperature=temperature,
-                            **kwargs
+                            prompt, max_tokens=max_tokens, temperature=temperature, **kwargs
                         ):
                             yield chunk
                     except Exception as stream_error:
                         self.logger.error(f"Fallback streaming failed: {stream_error}")
-                        yield f"Error: Both primary and fallback generation failed."
+                        yield "Error: Both primary and fallback generation failed."
 
                 # Return the async generator
                 return fallback_stream_wrapper()
             else:
                 # For non-streaming, await the result
                 return await fallback_generator.generate_text(
-                    prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    **kwargs
+                    prompt, max_tokens=max_tokens, temperature=temperature, **kwargs
                 )
 
     def prepare_generation_kwargs(self, **kwargs) -> dict:
@@ -202,11 +192,11 @@ class ResponseGenerator:
 
         # Set defaults
         defaults = {
-            'top_p': 0.95,
-            'top_k': 50,
-            'repetition_penalty': 1.1,
-            'length_penalty': 1.0,
-            'num_beams': 1,
+            "top_p": 0.95,
+            "top_k": 50,
+            "repetition_penalty": 1.1,
+            "length_penalty": 1.0,
+            "num_beams": 1,
         }
 
         for key, value in defaults.items():

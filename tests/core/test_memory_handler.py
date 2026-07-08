@@ -5,20 +5,20 @@ These tests verify the functionality of the memory handler's integration with
 various memory systems and its unified interface for memory operations.
 """
 
-import asyncio
-import pytest
 import os
-import json
-import time
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
 
 # Ensure we can import from the root
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import time
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 # Import the classes directly - avoid import before patching
-from core.memory_handler import MemorySegment, MemoryContext
+from core.memory_handler import MemoryContext, MemorySegment
 
 # MemoryHandler will be imported after patching dependencies
 
@@ -27,28 +27,30 @@ from core.memory_handler import MemorySegment, MemoryContext
 def memory_handler():
     """Fixture for a memory handler instance with mocked dependencies."""
     # First patch the dependencies
-    with patch('core.memory_handler.MemoryManager', return_value=AsyncMock()) as mock_memory_manager, \
-         patch('core.memory_handler.WorkingMemory', return_value=MagicMock()) as mock_working_memory, \
-         patch('core.memory_handler.KnowledgeGraph', return_value=MagicMock()) as mock_knowledge_graph:
+    with (
+        patch("core.memory_handler.MemoryManager", return_value=AsyncMock()),
+        patch("core.memory_handler.WorkingMemory", return_value=MagicMock()),
+        patch("core.memory_handler.KnowledgeGraph", return_value=MagicMock()),
+    ):
 
         # Now import the MemoryHandler class after the dependencies are patched
         from core.memory_handler import MemoryHandler
 
         # Create temp directory for episodes
-        os.makedirs('./temp_episodes', exist_ok=True)
+        os.makedirs("./temp_episodes", exist_ok=True)
 
         # Override _load_config method
         MemoryHandler._load_config = MagicMock(return_value={})
 
         # Configure memory handler with test settings
         handler = MemoryHandler()
-        handler.episodic_path = Path('./temp_episodes')
+        handler.episodic_path = Path("./temp_episodes")
 
         # Configure mocks
         handler.memory_manager.store = AsyncMock()
-        handler.memory_manager.search = AsyncMock(return_value=[
-            {"key": "episodic:123", "content": "Test memory", "relevance": 0.9}
-        ])
+        handler.memory_manager.search = AsyncMock(
+            return_value=[{"key": "episodic:123", "content": "Test memory", "relevance": 0.9}]
+        )
 
         handler.working_memory.get_snapshot = MagicMock(return_value={"key": "value"})
         handler.knowledge_graph.get_active_concepts = MagicMock(return_value=["test_concept"])
@@ -56,9 +58,10 @@ def memory_handler():
         yield handler
 
         # Cleanup
-        if os.path.exists('./temp_episodes'):
+        if os.path.exists("./temp_episodes"):
             import shutil
-            shutil.rmtree('./temp_episodes')
+
+            shutil.rmtree("./temp_episodes")
 
 
 @pytest.mark.asyncio
@@ -66,9 +69,7 @@ async def test_remember_episodic(memory_handler):
     """Test storing an episodic memory."""
     # Store a test memory
     memory_id = await memory_handler.remember(
-        content="Test episodic memory",
-        memory_type="episodic",
-        metadata={"source": "test"}
+        content="Test episodic memory", memory_type="episodic", metadata={"source": "test"}
     )
 
     # Verify memory manager was called
@@ -94,7 +95,7 @@ async def test_recall(memory_handler):
             "key": "episodic:123",
             "content": "Test memory content",
             "metadata": {"source": "test"},
-            "relevance": 0.9
+            "relevance": 0.9,
         }
     ]
 
@@ -142,7 +143,7 @@ async def test_memory_segment_model():
         metadata={"source": "test"},
         timestamp=time.time(),
         importance=0.7,
-        memory_type="episodic"
+        memory_type="episodic",
     )
 
     # Verify attributes
@@ -163,7 +164,7 @@ async def test_memory_context_model():
         active_concepts={"concept1", "concept2"},
         recent_memories=["id1", "id2"],
         context_id="test-context",
-        creation_time=time.time()
+        creation_time=time.time(),
     )
 
     # Verify attributes

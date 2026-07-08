@@ -1,6 +1,6 @@
 """Smoke tests for agents that previously had no dedicated pytest coverage."""
 
-from typing import AsyncGenerator, List, Optional
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,7 +14,7 @@ from core.schemas import StreamData
 
 
 class MinimalLLM(BaseLLMInterface):
-    def __init__(self, config: Optional[WitsV3Config] = None):
+    def __init__(self, config: WitsV3Config | None = None):
         super().__init__(config or WitsV3Config())
 
     async def generate_text(self, prompt: str, **kwargs) -> str:
@@ -23,7 +23,7 @@ class MinimalLLM(BaseLLMInterface):
     async def stream_text(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         yield '{"task_type": "general_writing"}'
 
-    async def get_embedding(self, text: str, model: Optional[str] = None) -> List[float]:
+    async def get_embedding(self, text: str, model: str | None = None) -> list[float]:
         return [0.0] * 8
 
 
@@ -47,12 +47,14 @@ async def test_book_writing_agent_general_path_yields_result(config: WitsV3Confi
         "length": 100,
     }
 
-    with patch.object(
-        agent, "_analyze_writing_task", new=AsyncMock(return_value=analysis)
-    ), patch.object(
-        agent, "generate_response", new=AsyncMock(return_value="Sample essay content.")
-    ), patch.object(agent, "store_memory", new=AsyncMock()):
-        streams: List[StreamData] = []
+    with (
+        patch.object(agent, "_analyze_writing_task", new=AsyncMock(return_value=analysis)),
+        patch.object(
+            agent, "generate_response", new=AsyncMock(return_value="Sample essay content.")
+        ),
+        patch.object(agent, "store_memory", new=AsyncMock()),
+    ):
+        streams: list[StreamData] = []
         async for item in agent.run("Write a short essay about testing"):
             streams.append(item)
 
@@ -82,19 +84,15 @@ async def test_neural_orchestrator_injects_neural_context(config: WitsV3Config):
         return
         yield  # pragma: no cover — makes this an async generator
 
-    with patch.object(
-        agent, "_get_neural_insights", new=AsyncMock(return_value=mock_insights)
-    ), patch.object(
-        LLMDrivenOrchestrator, "_execute_react_loop", new=noop_parent_loop
+    with (
+        patch.object(agent, "_get_neural_insights", new=AsyncMock(return_value=mock_insights)),
+        patch.object(LLMDrivenOrchestrator, "_execute_react_loop", new=noop_parent_loop),
     ):
-        streams: List[StreamData] = []
+        streams: list[StreamData] = []
         async for item in agent._execute_react_loop(state, "sess-1"):
             streams.append(item)
 
     assert state.get("neural_context") == mock_insights
     thinking_streams = [s for s in streams if s.type == "thinking"]
     assert thinking_streams, "neural layer should yield before parent loop"
-    assert any(
-        "biology" in s.content or "concepts" in s.content.lower()
-        for s in thinking_streams
-    )
+    assert any("biology" in s.content or "concepts" in s.content.lower() for s in thinking_streams)

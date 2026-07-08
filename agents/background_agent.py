@@ -6,24 +6,27 @@ Handles scheduled tasks and system maintenance
 import asyncio
 import logging
 import os
-import yaml
-import psutil
-import aiohttp
-from aiohttp import web
+from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Any, Optional, List, AsyncGenerator, cast
+from typing import Any, cast
+
+import aiohttp
+import psutil
+import yaml
+from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
 from apscheduler.triggers.cron import CronTrigger  # type: ignore
 
 from agents.base_agent import BaseAgent
 from core.config import WitsV3Config
 from core.llm_interface import OllamaInterface
-from core.memory_manager import MemoryManager, BasicMemoryBackend
-from core.tool_registry import ToolRegistry
-from core.schemas import StreamData
+from core.memory_manager import MemoryManager
 from core.metrics import MetricsManager
+from core.schemas import StreamData
+from core.tool_registry import ToolRegistry
 
 logger = logging.getLogger("WitsV3.BackgroundAgent")
+
 
 class BackgroundAgent(BaseAgent):
     """
@@ -36,8 +39,8 @@ class BackgroundAgent(BaseAgent):
         agent_name: str,
         config: WitsV3Config,
         llm_interface: OllamaInterface,
-        memory_manager: Optional[MemoryManager] = None,
-        tool_registry: Optional[ToolRegistry] = None
+        memory_manager: MemoryManager | None = None,
+        tool_registry: ToolRegistry | None = None,
     ):
         super().__init__(agent_name, config, llm_interface, memory_manager)
 
@@ -45,16 +48,12 @@ class BackgroundAgent(BaseAgent):
         self.scheduler = AsyncIOScheduler()
         self.metrics = MetricsManager()
         self.tasks_config = self._load_tasks_config()
-        self.active_tasks: Dict[str, asyncio.Task] = {}
+        self.active_tasks: dict[str, asyncio.Task] = {}
         self.running = False
 
         logger.info("Background agent initialized")
 
-    async def run(
-        self,
-        task: str,
-        **kwargs
-    ) -> AsyncGenerator[StreamData, None]:
+    async def run(self, task: str, **kwargs) -> AsyncGenerator[StreamData, None]:
         """
         Execute a task in the background agent.
 
@@ -82,11 +81,11 @@ class BackgroundAgent(BaseAgent):
             logger.error(f"Error in task {task}: {e}")
             yield self.stream_error(f"Task failed: {str(e)}")
 
-    def _load_tasks_config(self) -> Dict[str, Any]:
+    def _load_tasks_config(self) -> dict[str, Any]:
         """Load background agent configuration"""
         config_path = os.path.join("config", "background_agent.yaml")
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 return yaml.safe_load(f)
         except Exception as e:
             logger.error(f"Failed to load background agent config: {e}")
@@ -108,7 +107,7 @@ class BackgroundAgent(BaseAgent):
                     CronTrigger.from_crontab(task_config["schedule"]),
                     args=[task_name],
                     id=task_name,
-                    replace_existing=True
+                    replace_existing=True,
                 )
                 logger.info(f"Scheduled task: {task_name}")
 
@@ -135,7 +134,7 @@ class BackgroundAgent(BaseAgent):
             self._execute_task(task_name, task_config)
         )
 
-    async def _execute_task(self, task_name: str, task_config: Dict[str, Any]):
+    async def _execute_task(self, task_name: str, task_config: dict[str, Any]):
         """Execute a specific task with its configuration"""
         try:
             logger.info(f"Starting task: {task_name}")
@@ -160,15 +159,13 @@ class BackgroundAgent(BaseAgent):
             if task_name in self.active_tasks:
                 del self.active_tasks[task_name]
 
-    async def _maintain_memory(self, settings: Dict[str, Any]):
+    async def _maintain_memory(self, settings: dict[str, Any]):
         """Maintain memory by pruning old and low-importance segments."""
         if not self.memory_manager:
             return
 
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=settings["max_age_days"])
-        segments = await self.memory_manager.get_recent_memory(
-            limit=settings["batch_size"]
-        )
+        segments = await self.memory_manager.get_recent_memory(limit=settings["batch_size"])
 
         removed = 0
         for segment in segments:
@@ -182,10 +179,12 @@ class BackgroundAgent(BaseAgent):
 
         logger.info(
             "Memory maintenance: removed %d segment(s) (older than %dd or importance < %.2f)",
-            removed, settings["max_age_days"], settings["min_importance_threshold"],
+            removed,
+            settings["max_age_days"],
+            settings["min_importance_threshold"],
         )
 
-    async def _optimize_semantic_cache(self, settings: Dict[str, Any]):
+    async def _optimize_semantic_cache(self, settings: dict[str, Any]):
         """Not implemented — the semantic cache belongs to the deprecated
         adaptive-LLM stack (see planning/archive/adaptive_llm/README.md).
         Disabled by default in config/background_agent.yaml; logs rather
@@ -195,13 +194,13 @@ class BackgroundAgent(BaseAgent):
             "is deprecated in favor of core/model_router.py) — skipping"
         )
 
-    async def _monitor_system(self, settings: Dict[str, Any]):
+    async def _monitor_system(self, settings: dict[str, Any]):
         """Monitor system resources and Ollama health"""
         try:
             # Check system resources
             cpu_percent = psutil.cpu_percent()
             memory = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            disk = psutil.disk_usage("/")
 
             # Store metrics
             self.metrics.record_metric(
@@ -209,8 +208,8 @@ class BackgroundAgent(BaseAgent):
                 {
                     "cpu_percent": cpu_percent,
                     "memory_percent": memory.percent,
-                    "disk_percent": disk.percent
-                }
+                    "disk_percent": disk.percent,
+                },
             )
 
             # Check Ollama health
@@ -218,16 +217,14 @@ class BackgroundAgent(BaseAgent):
                 ollama_interface = cast(OllamaInterface, self.llm_interface)
                 start_time = datetime.now()
                 async with session.get(f"{ollama_interface.ollama_settings.url}/") as response:
-                    is_healthy = response.status == 200 and "Ollama is running" in await response.text()
+                    is_healthy = (
+                        response.status == 200 and "Ollama is running" in await response.text()
+                    )
                     response_time = (datetime.now() - start_time).total_seconds()
 
                     # Store Ollama metrics
                     self.metrics.record_metric(
-                        "llm",
-                        {
-                            "status": is_healthy,
-                            "response_time": response_time
-                        }
+                        "llm", {"status": is_healthy, "response_time": response_time}
                     )
 
                     if not is_healthy:
@@ -238,7 +235,7 @@ class BackgroundAgent(BaseAgent):
             logger.error(f"Error checking Ollama health: {e}")
             self.metrics.record_error("system_monitoring")
 
-    async def _build_knowledge_graph(self, settings: Dict[str, Any]):
+    async def _build_knowledge_graph(self, settings: dict[str, Any]):
         """Not implemented — knowledge graph construction belongs to the
         dormant neural-web stack (only active when memory_manager.backend:
         neural). Disabled by default in config/background_agent.yaml; logs
@@ -248,7 +245,7 @@ class BackgroundAgent(BaseAgent):
             "is dormant unless memory_manager.backend: neural) — skipping"
         )
 
-    async def _run_self_repair(self, settings: Dict[str, Any]):
+    async def _run_self_repair(self, settings: dict[str, Any]):
         """Run the self-repair agent's autonomous scan-and-fix (Docker-deployment
         parity for the same job WitsV3System schedules in-process — see
         run.py's _run_scheduled_self_repair)."""
@@ -282,18 +279,23 @@ class BackgroundAgent(BaseAgent):
                 logger.error(f"Error in system monitoring loop: {e}")
                 await asyncio.sleep(60)  # Wait before retrying
 
-_BACKGROUND_AGENT_KEY: web.AppKey["BackgroundAgent"] = web.AppKey("background_agent", BackgroundAgent)
+
+_BACKGROUND_AGENT_KEY: web.AppKey["BackgroundAgent"] = web.AppKey(
+    "background_agent", BackgroundAgent
+)
 
 
 async def _health_handler(request):
     """Real /health endpoint for the docker-compose healthcheck — previously
     nothing listened on port 8000 at all, so the healthcheck failed forever."""
-    agent: "BackgroundAgent" = request.app[_BACKGROUND_AGENT_KEY]
-    return web.json_response({
-        "status": "ok",
-        "running": agent.running,
-        "active_tasks": list(agent.active_tasks.keys()),
-    })
+    agent: BackgroundAgent = request.app[_BACKGROUND_AGENT_KEY]
+    return web.json_response(
+        {
+            "status": "ok",
+            "running": agent.running,
+            "active_tasks": list(agent.active_tasks.keys()),
+        }
+    )
 
 
 async def _start_health_server(agent: "BackgroundAgent", host: str = "0.0.0.0", port: int = 8000):
@@ -325,10 +327,14 @@ async def main():
     tool_registry = ToolRegistry()
     for tool in tool_registry.tools.values():
         if hasattr(tool, "set_dependencies"):
-            tool.set_dependencies(app_config, llm_interface, memory_manager, tool_registry=tool_registry)
+            tool.set_dependencies(
+                app_config, llm_interface, memory_manager, tool_registry=tool_registry
+            )
 
     # Create and start background agent
-    agent = BackgroundAgent("background", app_config, llm_interface, memory_manager, tool_registry=tool_registry)
+    agent = BackgroundAgent(
+        "background", app_config, llm_interface, memory_manager, tool_registry=tool_registry
+    )
     await agent.start()
     health_runner = await _start_health_server(agent)
 
@@ -341,6 +347,7 @@ async def main():
     finally:
         await agent.stop()
         await health_runner.cleanup()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

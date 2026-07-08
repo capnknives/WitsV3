@@ -1,9 +1,12 @@
 """Test configuration and common fixtures."""
-import pytest
+
 import asyncio
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
+
+import pytest
+
 
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
@@ -12,11 +15,13 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     yield loop
     loop.close()
 
+
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for test files."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         yield Path(tmp_dir)
+
 
 @pytest.fixture
 def sample_data() -> dict:
@@ -24,15 +29,14 @@ def sample_data() -> dict:
     return {
         "numbers": [1, 2, 3, 4, 5],
         "text": "Hello, World!",
-        "nested": {
-            "key": "value",
-            "array": [{"id": 1}, {"id": 2}]
-        }
+        "nested": {"key": "value", "array": [{"id": 1}, {"id": 2}]},
     }
+
 
 @pytest.fixture
 def mock_httpx_response():
     """Mock httpx response for testing."""
+
     class MockResponse:
         def __init__(self, json_data, status_code=200):
             self._json = json_data
@@ -43,9 +47,11 @@ def mock_httpx_response():
 
     return MockResponse
 
+
 @pytest.fixture
 def mock_async_client():
     """Mock async HTTP client for testing."""
+
     class MockAsyncClient:
         def __init__(self, response_data=None, status_code=200):
             self.response_data = response_data
@@ -68,4 +74,4 @@ def mock_async_client():
 
             return MockResponse(self.response_data, self.status_code)
 
-    return MockAsyncClient 
+    return MockAsyncClient

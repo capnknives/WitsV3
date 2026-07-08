@@ -9,7 +9,7 @@ instantiated. See planning/roadmap/composer-orchestrator-search-quality-2026-07.
 Tier 3 #9.
 """
 
-from typing import AsyncGenerator, List
+from collections.abc import AsyncGenerator
 
 import pytest
 
@@ -35,7 +35,7 @@ class DummyLLM(BaseLLMInterface):
     async def stream_text(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         yield ""
 
-    async def get_embedding(self, text, model=None) -> List[float]:
+    async def get_embedding(self, text, model=None) -> list[float]:
         return [0.0] * 8
 
     async def generate_response(self, messages) -> LLMResponse:
@@ -97,7 +97,9 @@ async def test_set_dependencies_resolves_live_neural_web(config):
 @pytest.mark.asyncio
 async def test_set_dependencies_without_neural_backend_leaves_neural_web_none(config):
     config.memory_manager.backend = "basic"
-    config.memory_manager.memory_file_path = str(config.memory_manager.neural_web_path) + ".basic.json"
+    config.memory_manager.memory_file_path = (
+        str(config.memory_manager.neural_web_path) + ".basic.json"
+    )
     llm = DummyLLM()
     memory = MemoryManager(config=config, llm_interface=llm)
     await memory.initialize()

@@ -4,9 +4,9 @@ Base Orchestrator Agent for WitsV3.
 Implements ReAct (Reason-Act-Observe) loop functionality.
 """
 
-import logging
-from typing import Any, Dict, List, Optional, AsyncGenerator
 from abc import abstractmethod
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.orchestrator_tool_helpers import OrchestratorToolHelpersMixin
@@ -14,13 +14,13 @@ from core.config import WitsV3Config
 from core.json_llm_parser import build_json_repair_prompt
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
-from core.schemas import StreamData, ConversationHistory
+from core.schemas import ConversationHistory, StreamData
 
 
 class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
     """
     Base class for orchestrator agents that implement ReAct loops.
-    
+
     This agent follows the ReAct pattern:
     - Reason: Think about the goal and plan next steps
     - Act: Take an action (use tool, call agent, or provide answer)
@@ -38,12 +38,12 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         agent_name: str,
         config: WitsV3Config,
         llm_interface: BaseLLMInterface,
-        memory_manager: Optional[MemoryManager] = None,
-        tool_registry: Optional[Any] = None
+        memory_manager: MemoryManager | None = None,
+        tool_registry: Any | None = None,
     ):
         """
         Initialize the orchestrator agent.
-        
+
         Args:
             agent_name: Name of this agent
             config: System configuration
@@ -53,33 +53,35 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         """
         super().__init__(agent_name, config, llm_interface, memory_manager)
         self.tool_registry = tool_registry
-        
+
         # ReAct loop configuration
         self.max_iterations = config.agents.max_iterations
         self.current_iteration = 0
-        
-        self.logger.info(f"Initialized {self.__class__.__name__} with max_iterations: {self.max_iterations}")
-    
+
+        self.logger.info(
+            f"Initialized {self.__class__.__name__} with max_iterations: {self.max_iterations}"
+        )
+
     def get_model_name(self) -> str:
         """Get the model name for orchestrator agents."""
         return self.config.ollama_settings.orchestrator_model
-    
+
     async def run(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory] = None,
-        session_id: Optional[str] = None,
-        **kwargs
+        conversation_history: ConversationHistory | None = None,
+        session_id: str | None = None,
+        **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
         """
         Execute the ReAct loop to achieve the given goal.
-        
+
         Args:
             user_input: The goal or user request to achieve
             conversation_history: Optional conversation context
             session_id: Optional session identifier
             **kwargs: Additional parameters
-            
+
         Yields:
             StreamData objects showing the reasoning and action process
         """
@@ -98,15 +100,15 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
 
         # Initial setup
         yield self.stream_thinking(f"Starting orchestration for goal: {goal}")
-        
+
         # Store the goal in memory
         await self.store_memory(
             content=f"Goal: {goal}",
             segment_type="GOAL",
             importance=0.9,
-            metadata={"session_id": session_id}
+            metadata={"session_id": session_id},
         )
-        
+
         # Get relevant context from memory
         relevant_memories = await self.search_memory(goal, limit=5)
         context = self._build_context_from_memories(relevant_memories)
@@ -127,49 +129,48 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "lookup_search_done": False,
             "synthesis_guard_retries": 0,
         }
-        
+
         try:
             # Execute ReAct loop
             async for stream_data in self._execute_react_loop(react_state, session_id):
                 yield stream_data
-                
+
         except Exception as e:
             self.logger.error(f"Error in orchestrator ReAct loop: {e}")
             yield self.stream_error(
-                f"An error occurred during orchestration: {str(e)}",
-                details=str(e)
+                f"An error occurred during orchestration: {str(e)}", details=str(e)
             )
-    
+
     async def _execute_react_loop(
-        self,
-        state: Dict[str, Any],
-        session_id: Optional[str]
+        self, state: dict[str, Any], session_id: str | None
     ) -> AsyncGenerator[StreamData, None]:
         """
         Execute the main ReAct loop.
-        
+
         Args:
             state: Current ReAct state
             session_id: Session identifier
-            
+
         Yields:
             StreamData from each step of the loop
         """
         while not state["completed"] and self.current_iteration < self.max_iterations:
             self.current_iteration += 1
-            
-            yield self.stream_thinking(f"ReAct iteration {self.current_iteration}/{self.max_iterations}")
-            
+
+            yield self.stream_thinking(
+                f"ReAct iteration {self.current_iteration}/{self.max_iterations}"
+            )
+
             # REASON: Generate thoughts and plan
             reasoning_prompt = self._build_reasoning_prompt(state)
-            
+
             yield self.stream_thinking("Analyzing the situation and planning next steps...")
-            
+
             reasoning_response = await self.generate_response(
                 reasoning_prompt,
                 model_name=getattr(self, "_session_model", None),
                 temperature=self.REASONING_TEMPERATURE,
-                response_format="json"
+                response_format="json",
             )
             parsed_reasoning = self._parse_reasoning_response(reasoning_response)
 
@@ -177,13 +178,15 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             # once to rewrite its own output as valid JSON before falling back.
             if parsed_reasoning.pop("_parse_failed", False):
                 parse_error = parsed_reasoning.pop("_parse_error", "invalid JSON")
-                yield self.stream_thinking("Reasoning response was malformed; attempting JSON repair...")
+                yield self.stream_thinking(
+                    "Reasoning response was malformed; attempting JSON repair..."
+                )
                 try:
                     repaired_response = await self.generate_response(
                         self._build_json_repair_prompt(reasoning_response, parse_error),
                         model_name=getattr(self, "_session_model", None),
                         temperature=self.REASONING_TEMPERATURE,
-                        response_format="json"
+                        response_format="json",
                     )
                     reparsed = self._parse_reasoning_response(repaired_response)
                     if not reparsed.pop("_parse_failed", False):
@@ -191,30 +194,36 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                         parsed_reasoning = reparsed
                         reasoning_response = repaired_response
                     else:
-                        self.logger.warning("JSON repair attempt also failed to parse; using fallback reasoning")
+                        self.logger.warning(
+                            "JSON repair attempt also failed to parse; using fallback reasoning"
+                        )
                 except Exception as e:
-                    self.logger.warning(f"JSON repair attempt errored: {e}; using fallback reasoning")
-            
+                    self.logger.warning(
+                        f"JSON repair attempt errored: {e}; using fallback reasoning"
+                    )
+
             # Stream the reasoning
             if parsed_reasoning.get("thought"):
                 yield self.stream_thinking(f"Thought: {parsed_reasoning['thought']}")
-            
+
             # Store reasoning in memory
             await self.store_memory(
                 content=f"Reasoning: {reasoning_response}",
                 segment_type="REASONING",
                 importance=0.7,
-                metadata={"iteration": self.current_iteration, "session_id": session_id}
+                metadata={"iteration": self.current_iteration, "session_id": session_id},
             )
-            
+
             # ACT: Decide on action
             action_type = parsed_reasoning.get("action_type", "final_answer")
-            
+
             if action_type == "tool_call":
                 # Execute tool call
-                async for stream_data in self._execute_tool_action(parsed_reasoning, state, session_id):
+                async for stream_data in self._execute_tool_action(
+                    parsed_reasoning, state, session_id
+                ):
                     yield stream_data
-                    
+
             elif action_type == "final_answer":
                 final_answer = parsed_reasoning.get("final_answer", "I've completed the task.")
                 final_answer, done = self._resolve_final_answer(final_answer, state)
@@ -264,36 +273,33 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                 )
                 yield self.stream_error(observation)
                 state["observations"].append(observation)
-        
+
         if self.current_iteration >= self.max_iterations and not state["completed"]:
             yield self.stream_error(
                 f"Reached maximum iterations ({self.max_iterations}) without completing the goal."
             )
-    
+
     async def _execute_tool_action(
-        self,
-        reasoning: Dict[str, Any],
-        state: Dict[str, Any],
-        session_id: Optional[str]
+        self, reasoning: dict[str, Any], state: dict[str, Any], session_id: str | None
     ) -> AsyncGenerator[StreamData, None]:
         """
         Execute a tool action and observe the results.
-        
+
         Args:
             reasoning: Parsed reasoning containing tool call details
             state: Current ReAct state
             session_id: Session identifier
-            
+
         Yields:
             StreamData from tool execution
         """
         tool_name = reasoning.get("tool_name")
         tool_args = reasoning.get("tool_args", {})
-        
+
         if not tool_name:
             yield self.stream_error("Tool name not specified in reasoning")
             return
-        
+
         block_reason = self._preflight_tool_call(tool_name, tool_args, state)
         if block_reason:
             observation = block_reason
@@ -345,7 +351,10 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             and self._goal_saves_conversation(state.get("goal", ""))
             and not self._observation_indicates_failure(observation)
         ):
-            file_path = self._save_file_path_from_goal(state.get("goal", "")) or "exports/conversation_log.txt"
+            file_path = (
+                self._save_file_path_from_goal(state.get("goal", ""))
+                or "exports/conversation_log.txt"
+            )
             if file_path:
                 async for stream_data in self._auto_write_saved_conversation(
                     file_path, state, session_id
@@ -363,8 +372,8 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
     async def _call_tool(
         self,
         tool_name: str,
-        tool_args: Dict[str, Any],
-        state: Optional[Dict[str, Any]] = None,
+        tool_args: dict[str, Any],
+        state: dict[str, Any] | None = None,
     ) -> Any:
         """
         Call a tool through the tool registry.
@@ -389,12 +398,10 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
 
         return await tool.execute(**tool_args)
 
-    def _coerce_unknown_action(
-        self, parsed: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+    def _coerce_unknown_action(self, parsed: dict[str, Any]) -> dict[str, Any] | None:
         """Last-chance fix when action_type is a tool name. Override in subclasses."""
         return None
-    
+
     def _build_json_repair_prompt(self, raw_response: str, parse_error: str) -> str:
         """
         Build a prompt asking the model to rewrite its malformed reasoning
@@ -414,49 +421,49 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         )
 
     @abstractmethod
-    def _build_reasoning_prompt(self, state: Dict[str, Any]) -> str:
+    def _build_reasoning_prompt(self, state: dict[str, Any]) -> str:
         """
         Build the prompt for the reasoning step.
-        
+
         Args:
             state: Current ReAct state
-            
+
         Returns:
             Prompt for reasoning
         """
         pass
-    
+
     @abstractmethod
-    def _parse_reasoning_response(self, response: str) -> Dict[str, Any]:
+    def _parse_reasoning_response(self, response: str) -> dict[str, Any]:
         """
         Parse the LLM's reasoning response.
-        
+
         Args:
             response: Raw LLM response
-            
+
         Returns:
             Parsed reasoning components
         """
         pass
-    
-    def _build_context_from_memories(self, memories: List[Any]) -> str:
+
+    def _build_context_from_memories(self, memories: list[Any]) -> str:
         """
         Build context string from memory search results.
-        
+
         Args:
             memories: List of memory segments
-            
+
         Returns:
             Context string
         """
         if not memories:
             return "No relevant context found."
-        
+
         context_parts = []
         for memory in memories:
-            if hasattr(memory, 'content') and hasattr(memory.content, 'text'):
+            if hasattr(memory, "content") and hasattr(memory.content, "text"):
                 context_parts.append(f"- {memory.content.text}")
-        
+
         return "\n".join(context_parts) if context_parts else "No relevant context found."
 
 
@@ -464,16 +471,17 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
 async def test_base_orchestrator():
     """Test the BaseOrchestratorAgent functionality."""
     print("Testing BaseOrchestratorAgent...")
-    
+
     # Note: This is a mock test since BaseOrchestratorAgent is abstract
     print("✓ BaseOrchestratorAgent is properly defined as abstract class")
     print("✓ ReAct loop structure is implemented")
     print("✓ Tool integration hooks are available")
     print("✓ Memory integration is included")
-    
+
     print("BaseOrchestratorAgent tests completed! 🎉")
 
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_base_orchestrator())

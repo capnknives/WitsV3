@@ -10,17 +10,17 @@ import asyncio
 import logging
 import time
 import uuid
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 import yaml
 from pydantic import BaseModel
 
-from core.memory_handler import MemoryHandler
 from core.enhanced_llm_interface import get_enhanced_llm_interface
-from core.tool_registry import ToolRegistry
 from core.knowledge_graph import KnowledgeGraph
+from core.memory_handler import MemoryHandler
 from core.schemas import StreamData
+from core.tool_registry import ToolRegistry
 
 logger = logging.getLogger("WitsV3.CognitiveArchitecture")
 
@@ -28,13 +28,14 @@ logger = logging.getLogger("WitsV3.CognitiveArchitecture")
 # Define the model at module level for proper imports
 class CognitiveState(BaseModel):
     """Model representing the current cognitive state."""
+
     state_id: str
     timestamp: float
-    identity: Dict[str, Any] = {}
-    active_goals: List[Dict[str, Any]] = []
-    current_context: Dict[str, Any] = {}
+    identity: dict[str, Any] = {}
+    active_goals: list[dict[str, Any]] = []
+    current_context: dict[str, Any] = {}
     reasoning_pathway: str = "default"
-    attention_focus: Dict[str, Any] = {}
+    attention_focus: dict[str, Any] = {}
 
 
 class CognitiveArchitecture:
@@ -60,7 +61,7 @@ class CognitiveArchitecture:
         self.state = CognitiveState(
             state_id=str(uuid.uuid4()),
             timestamp=time.time(),
-            identity=self.config.get("identity", {})
+            identity=self.config.get("identity", {}),
         )
 
         # LLM interface for reasoning
@@ -81,18 +82,19 @@ class CognitiveArchitecture:
 
         self.logger.info("Cognitive architecture initialized")
 
-    def _load_config(self, config_path: str) -> Dict[str, Any]:
+    def _load_config(self, config_path: str) -> dict[str, Any]:
         """Load configuration from wits_core.yaml"""
         try:
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 config = yaml.safe_load(f)
                 return config
         except Exception as e:
             self.logger.error(f"Failed to load configuration from {config_path}: {e}")
             return {}
 
-    async def process(self, input_data: str,
-                     context: Optional[Dict[str, Any]] = None) -> AsyncGenerator[StreamData, None]:
+    async def process(
+        self, input_data: str, context: dict[str, Any] | None = None
+    ) -> AsyncGenerator[StreamData, None]:
         """
         Process input through the cognitive architecture.
 
@@ -121,7 +123,7 @@ class CognitiveArchitecture:
             yield StreamData(
                 type="thinking",
                 content="Processing input through perception modules...",
-                source="cognitive_architecture"
+                source="cognitive_architecture",
             )
 
             perception_result = await self._run_perception(input_data, process_id)
@@ -130,18 +132,18 @@ class CognitiveArchitecture:
             yield StreamData(
                 type="thinking",
                 content="Integrating with memory and knowledge systems...",
-                source="cognitive_architecture"
+                source="cognitive_architecture",
             )
 
             # Store input in episodic memory
-            memory_id = await self.memory_handler.remember(
+            await self.memory_handler.remember(
                 content=input_data,
                 memory_type="episodic",
                 metadata={
                     "process_id": process_id,
                     "type": "user_input",
-                    "perception": perception_result
-                }
+                    "perception": perception_result,
+                },
             )
 
             # Retrieve relevant memories
@@ -151,44 +153,31 @@ class CognitiveArchitecture:
             yield StreamData(
                 type="thinking",
                 content="Applying reasoning modules based on input and context...",
-                source="cognitive_architecture"
+                source="cognitive_architecture",
             )
 
             reasoning_result = await self._run_reasoning(
-                input_data,
-                perception_result,
-                memory_context,
-                process_id
+                input_data, perception_result, memory_context, process_id
             )
 
             # 4. Response generation
             yield StreamData(
                 type="thinking",
                 content="Generating response based on reasoning and goals...",
-                source="cognitive_architecture"
+                source="cognitive_architecture",
             )
 
             response = await self._generate_response(
-                reasoning_result,
-                perception_result,
-                process_id
+                reasoning_result, perception_result, process_id
             )
 
             # 5. Update state and memory
             await self._update_state_and_memory(
-                input_data,
-                perception_result,
-                reasoning_result,
-                response,
-                process_id
+                input_data, perception_result, reasoning_result, response, process_id
             )
 
             # 6. Return final result
-            yield StreamData(
-                type="result",
-                content=response,
-                source="cognitive_architecture"
-            )
+            yield StreamData(type="result", content=response, source="cognitive_architecture")
 
         except Exception as e:
             self.logger.error(f"Error in cognitive processing: {e}")
@@ -199,10 +188,10 @@ class CognitiveArchitecture:
                 error_code="COGNITIVE_ERROR",
                 error_category="execution",  # Changed from "processing" to match schema
                 severity="high",
-                trace_id=process_id
+                trace_id=process_id,
             )
 
-    async def _run_perception(self, input_data: str, process_id: str) -> Dict[str, Any]:
+    async def _run_perception(self, input_data: str, process_id: str) -> dict[str, Any]:
         """Run perception modules on input"""
         perception_results = {}
 
@@ -251,8 +240,9 @@ class CognitiveArchitecture:
         self.active_modules.add("perception")
         return perception_results
 
-    async def _build_memory_context(self, input_data: str,
-                                   perception_result: Dict[str, Any]) -> Dict[str, Any]:
+    async def _build_memory_context(
+        self, input_data: str, perception_result: dict[str, Any]
+    ) -> dict[str, Any]:
         """Build memory context by retrieving relevant information"""
         # Retrieve relevant memories
         query = input_data
@@ -270,8 +260,13 @@ class CognitiveArchitecture:
 
         return memory_context
 
-    async def _run_reasoning(self, input_data: str, perception_result: Dict[str, Any],
-                            memory_context: Dict[str, Any], process_id: str) -> Dict[str, Any]:
+    async def _run_reasoning(
+        self,
+        input_data: str,
+        perception_result: dict[str, Any],
+        memory_context: dict[str, Any],
+        process_id: str,
+    ) -> dict[str, Any]:
         """Apply reasoning modules to the input and context"""
         reasoning_config = self.cognitive_modules.get("reasoning", {})
         if not reasoning_config.get("enabled", False):
@@ -289,10 +284,7 @@ class CognitiveArchitecture:
 
         # Prepare prompt for reasoning
         prompt = self._create_reasoning_prompt(
-            input_data,
-            perception_result,
-            memory_context,
-            reasoning_modules
+            input_data, perception_result, memory_context, reasoning_modules
         )
 
         # Generate reasoning using LLM
@@ -305,7 +297,7 @@ class CognitiveArchitecture:
             "reasoning_modules": reasoning_modules,
             "input_analysis": perception_result,
             "conclusion": response,
-            "confidence": 0.85  # Placeholder, would be calculated
+            "confidence": 0.85,  # Placeholder, would be calculated
         }
 
         # Add any enhancement module effects
@@ -320,11 +312,17 @@ class CognitiveArchitecture:
         self.active_modules.add("reasoning")
         return reasoning_result
 
-    def _create_reasoning_prompt(self, input_data: str, perception_result: Dict[str, Any],
-                                memory_context: Dict[str, Any],
-                                reasoning_modules: List[str]) -> str:
+    def _create_reasoning_prompt(
+        self,
+        input_data: str,
+        perception_result: dict[str, Any],
+        memory_context: dict[str, Any],
+        reasoning_modules: list[str],
+    ) -> str:
         """Create a prompt for reasoning based on available context"""
-        prompt = f"I need to provide a thoughtful response to the following input:\n\n{input_data}\n\n"
+        prompt = (
+            f"I need to provide a thoughtful response to the following input:\n\n{input_data}\n\n"
+        )
 
         # Add perception analysis
         prompt += "Analysis of the input:\n"
@@ -346,7 +344,9 @@ class CognitiveArchitecture:
         # Specify reasoning approaches to use
         prompt += "\nReasoning approaches to apply:\n"
         if "deductive_reasoning" in reasoning_modules:
-            prompt += "- Use deductive reasoning (from general principles to specific conclusions)\n"
+            prompt += (
+                "- Use deductive reasoning (from general principles to specific conclusions)\n"
+            )
         if "inductive_reasoning" in reasoning_modules:
             prompt += "- Use inductive reasoning (from specific observations to general patterns)\n"
         if "analogical_reasoning" in reasoning_modules:
@@ -359,8 +359,9 @@ class CognitiveArchitecture:
 
         return prompt
 
-    async def _generate_response(self, reasoning_result: Dict[str, Any],
-                               perception_result: Dict[str, Any], process_id: str) -> str:
+    async def _generate_response(
+        self, reasoning_result: dict[str, Any], perception_result: dict[str, Any], process_id: str
+    ) -> str:
         """Generate a response based on reasoning results"""
         # In a full implementation, this would be more sophisticated
         # For now, we'll use the reasoning conclusion as the response
@@ -373,22 +374,29 @@ class CognitiveArchitecture:
             metadata={
                 "process_id": process_id,
                 "type": "system_response",
-                "reasoning": reasoning_result
-            }
+                "reasoning": reasoning_result,
+            },
         )
 
         return conclusion
 
-    async def _update_state_and_memory(self, input_data: str, perception_result: Dict[str, Any],
-                                      reasoning_result: Dict[str, Any], response: str,
-                                      process_id: str) -> None:
+    async def _update_state_and_memory(
+        self,
+        input_data: str,
+        perception_result: dict[str, Any],
+        reasoning_result: dict[str, Any],
+        response: str,
+        process_id: str,
+    ) -> None:
         """Update cognitive state and memory after processing"""
         # Update module history
-        self.module_history.append({
-            "timestamp": time.time(),
-            "process_id": process_id,
-            "active_modules": list(self.active_modules)
-        })
+        self.module_history.append(
+            {
+                "timestamp": time.time(),
+                "process_id": process_id,
+                "active_modules": list(self.active_modules),
+            }
+        )
 
         # Reset active modules for next processing
         self.active_modules.clear()
@@ -399,12 +407,18 @@ class CognitiveArchitecture:
         # If metacognition is enabled, trigger reflection
         metacognition_config = self.cognitive_modules.get("metacognition", {})
         if metacognition_config.get("enabled", False):
-            await self._run_reflection(input_data, perception_result,
-                                     reasoning_result, response, process_id)
+            await self._run_reflection(
+                input_data, perception_result, reasoning_result, response, process_id
+            )
 
-    async def _run_reflection(self, input_data: str, perception_result: Dict[str, Any],
-                            reasoning_result: Dict[str, Any], response: str,
-                            process_id: str) -> None:
+    async def _run_reflection(
+        self,
+        input_data: str,
+        perception_result: dict[str, Any],
+        reasoning_result: dict[str, Any],
+        response: str,
+        process_id: str,
+    ) -> None:
         """Run metacognitive reflection on the processing"""
         self.logger.debug("Running metacognitive reflection")
 
@@ -414,7 +428,7 @@ class CognitiveArchitecture:
             "input": input_data,
             "response": response,
             "effectiveness": 0.8,  # Would be calculated
-            "improvement_areas": ["More context integration", "Better memory recall"]
+            "improvement_areas": ["More context integration", "Better memory recall"],
         }
 
         # Store reflection in memory
@@ -424,9 +438,9 @@ class CognitiveArchitecture:
             metadata={
                 "process_id": process_id,
                 "type": "reflection",
-                "reflection_data": reflection_data
+                "reflection_data": reflection_data,
             },
-            importance=0.6
+            importance=0.6,
         )
 
         self.active_modules.add("metacognition")

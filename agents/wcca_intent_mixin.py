@@ -1,7 +1,7 @@
 # agents/wcca_intent_mixin.py
 """Intent analysis helpers for WitsControlCenterAgent."""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from core.json_llm_parser import build_json_repair_prompt, parse_json_object
 from core.schemas import ConversationHistory
@@ -13,8 +13,8 @@ class WCCAIntentMixin:
     async def _analyze_user_intent(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory],
-    ) -> Dict[str, Any]:
+        conversation_history: ConversationHistory | None,
+    ) -> dict[str, Any]:
         """
         Analyze user input to determine intent and appropriate response strategy.
 
@@ -35,7 +35,9 @@ class WCCAIntentMixin:
             elif needs_web:
                 notes = "Needs current/external info or an explicit lookup - routing to orchestrator for web_search."
             else:
-                notes = "References user documents/files/memory - routing to orchestrator for tool use."
+                notes = (
+                    "References user documents/files/memory - routing to orchestrator for tool use."
+                )
             return {
                 "type": "task",
                 "complexity": "moderate",
@@ -74,7 +76,11 @@ class WCCAIntentMixin:
                     "required_capabilities": problem_space.required_capabilities,
                     "estimated_steps": problem_space.estimated_steps,
                     "confidence": problem_space.confidence,
-                    "suggested_response": "orchestrator" if problem_space.complexity.value in ["complex", "research"] else "direct",
+                    "suggested_response": (
+                        "orchestrator"
+                        if problem_space.complexity.value in ["complex", "research"]
+                        else "direct"
+                    ),
                     "notes": f"Task analyzed with meta-reasoning: {problem_space.complexity.value} complexity.",
                 }
             except Exception as e:
@@ -85,9 +91,7 @@ class WCCAIntentMixin:
             recent_messages = conversation_history.get_recent_messages(
                 min(10, self.config.agents.history_window)
             )
-            history_context = "\n".join([
-                f"{msg.role}: {msg.content}" for msg in recent_messages
-            ])
+            history_context = "\n".join([f"{msg.role}: {msg.content}" for msg in recent_messages])
 
         prompt = self._build_intent_analysis_prompt(
             user_input, history_context, self._documents_context(doc_inventory)
@@ -150,6 +154,7 @@ class WCCAIntentMixin:
             Formatted prompt for intent analysis
         """
         from core.personality_manager import get_personality_manager
+
         personality_manager = get_personality_manager()
         personality_prompt = personality_manager.get_system_prompt()
 
@@ -189,13 +194,13 @@ Respond ONLY with valid JSON."""
 
         return prompt
 
-    def _validate_intent(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_intent(self, parsed: dict[str, Any]) -> dict[str, Any]:
         """Validate a parsed intent object and apply routing metadata."""
         if "type" not in parsed:
             raise ValueError("Missing 'type' field")
         return self._normalize_parsed_intent(parsed)
 
-    def _parse_intent_response(self, response: str) -> Dict[str, Any]:
+    def _parse_intent_response(self, response: str) -> dict[str, Any]:
         """
         Parse the LLM's intent analysis response.
 
@@ -226,7 +231,7 @@ Respond ONLY with valid JSON."""
             ),
         )
 
-    def _fallback_intent_parsing(self, response: str, parse_error: str = "") -> Dict[str, Any]:
+    def _fallback_intent_parsing(self, response: str, parse_error: str = "") -> dict[str, Any]:
         """
         Fallback intent parsing when JSON parsing fails.
 
@@ -239,40 +244,49 @@ Respond ONLY with valid JSON."""
         """
         response_lower = response.lower()
 
-        if any(word in response_lower for word in ["unclear", "clarify", "question", "what do you mean"]):
+        if any(
+            word in response_lower
+            for word in ["unclear", "clarify", "question", "what do you mean"]
+        ):
             return self._flag_intent_parse_failure(
-                self._normalize_parsed_intent({
-                    "type": "clarification_question",
-                    "confidence": 0.6,
-                    "reasoning": "Response suggests need for clarification",
-                    "clarification_question": "Could you please provide more details about what you'd like me to help you with?",
-                }),
+                self._normalize_parsed_intent(
+                    {
+                        "type": "clarification_question",
+                        "confidence": 0.6,
+                        "reasoning": "Response suggests need for clarification",
+                        "clarification_question": "Could you please provide more details about what you'd like me to help you with?",
+                    }
+                ),
                 parse_error,
             )
-        if any(word in response_lower for word in ["hello", "hi", "how are you", "what can you do"]):
+        if any(
+            word in response_lower for word in ["hello", "hi", "how are you", "what can you do"]
+        ):
             return self._flag_intent_parse_failure(
-                self._normalize_parsed_intent({
-                    "type": "direct_response",
-                    "confidence": 0.8,
-                    "reasoning": "Greeting or general question",
-                    "direct_response": "Hello! I'm WITS, your AI assistant. I can help you with various tasks and questions.",
-                }),
+                self._normalize_parsed_intent(
+                    {
+                        "type": "direct_response",
+                        "confidence": 0.8,
+                        "reasoning": "Greeting or general question",
+                        "direct_response": "Hello! I'm WITS, your AI assistant. I can help you with various tasks and questions.",
+                    }
+                ),
                 parse_error,
             )
         return self._flag_intent_parse_failure(
-            self._normalize_parsed_intent({
-                "type": "goal_defined",
-                "confidence": 0.5,
-                "reasoning": "Defaulting to task delegation",
-                "goal_statement": response,
-            }),
+            self._normalize_parsed_intent(
+                {
+                    "type": "goal_defined",
+                    "confidence": 0.5,
+                    "reasoning": "Defaulting to task delegation",
+                    "goal_statement": response,
+                }
+            ),
             parse_error,
         )
 
     @staticmethod
-    def _flag_intent_parse_failure(
-        result: Dict[str, Any], parse_error: str
-    ) -> Dict[str, Any]:
+    def _flag_intent_parse_failure(result: dict[str, Any], parse_error: str) -> dict[str, Any]:
         if parse_error:
             result["_parse_failed"] = True
             result["_parse_error"] = parse_error

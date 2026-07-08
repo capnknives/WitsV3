@@ -4,18 +4,19 @@ Conversation Handler for WitsV3
 Handles casual conversation while integrating with enhanced task capabilities.
 """
 
-import logging
 import asyncio
-from typing import Dict, List, Optional, Any, AsyncGenerator
+import logging
+from collections.abc import AsyncGenerator
 
+from core.concrete_meta_reasoning import WitsV3MetaReasoningEngine
 from core.config import WitsV3Config
-from core.schemas import StreamData
 from core.llm_interface import OllamaInterface
 from core.memory_manager import MemoryManager
-from core.concrete_meta_reasoning import WitsV3MetaReasoningEngine
+from core.schemas import StreamData
 from core.tool_composition import IntelligentToolComposer
 
 logger = logging.getLogger(__name__)
+
 
 class ConversationHandler:
     """
@@ -29,9 +30,9 @@ class ConversationHandler:
         self,
         config: WitsV3Config,
         llm_interface: OllamaInterface,
-        memory_manager: Optional[MemoryManager] = None,
-        meta_reasoning: Optional[WitsV3MetaReasoningEngine] = None,
-        tool_composer: Optional[IntelligentToolComposer] = None
+        memory_manager: MemoryManager | None = None,
+        meta_reasoning: WitsV3MetaReasoningEngine | None = None,
+        tool_composer: IntelligentToolComposer | None = None,
     ):
         self.config = config
         self.llm_interface = llm_interface
@@ -44,12 +45,9 @@ class ConversationHandler:
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
 
         # Conversation state
-        self.conversation_history: List[Dict[str, str]] = []
+        self.conversation_history: list[dict[str, str]] = []
 
-    async def handle_message(
-        self,
-        user_message: str
-    ) -> AsyncGenerator[StreamData, None]:
+    async def handle_message(self, user_message: str) -> AsyncGenerator[StreamData, None]:
         """
         Handle a user message, whether casual or task-oriented.
 
@@ -69,7 +67,9 @@ class ConversationHandler:
 
         if is_task:
             # Handle as a task using enhanced capabilities
-            yield StreamData(thinking="Detected task-oriented request. Using enhanced capabilities.")
+            yield StreamData(
+                thinking="Detected task-oriented request. Using enhanced capabilities."
+            )
             async for data in self._handle_task(user_message):
                 yield data
         else:
@@ -90,9 +90,21 @@ class ConversationHandler:
         """
         # Simple heuristic based on verbs and complexity
         task_indicators = [
-            "create", "make", "build", "analyze", "find", "search",
-            "calculate", "compute", "implement", "develop", "generate",
-            "summarize", "extract", "convert", "transform"
+            "create",
+            "make",
+            "build",
+            "analyze",
+            "find",
+            "search",
+            "calculate",
+            "compute",
+            "implement",
+            "develop",
+            "generate",
+            "summarize",
+            "extract",
+            "convert",
+            "transform",
         ]
 
         question_indicators = ["?", "what", "how", "why", "when", "where", "who"]
@@ -106,7 +118,10 @@ class ConversationHandler:
             return True
 
         # Short questions are usually casual
-        if any(indicator in message.lower() for indicator in question_indicators) and len(message.split()) < 10:
+        if (
+            any(indicator in message.lower() for indicator in question_indicators)
+            and len(message.split()) < 10
+        ):
             return False
 
         # Default to casual for short messages
@@ -123,7 +138,9 @@ class ConversationHandler:
             StreamData objects with the response
         """
         if not self.meta_reasoning:
-            yield StreamData(thinking="Meta-reasoning engine not available, falling back to basic processing.")
+            yield StreamData(
+                thinking="Meta-reasoning engine not available, falling back to basic processing."
+            )
             # Fall back to conversation handling
             async for data in self._handle_conversation(task):
                 yield data
@@ -134,7 +151,9 @@ class ConversationHandler:
             context = {"source": "conversation"}
             problem_space = await self.meta_reasoning.analyze_problem_space(task, context)
 
-            yield StreamData(thinking=f"Analyzed task as {problem_space.complexity.value} complexity.")
+            yield StreamData(
+                thinking=f"Analyzed task as {problem_space.complexity.value} complexity."
+            )
 
             # For now, just provide the analysis
             yield StreamData(thinking="Planning task execution...")
@@ -175,10 +194,12 @@ class ConversationHandler:
         """
         try:
             # Prepare conversation history for the LLM
-            formatted_history = "\n".join([
-                f"{msg['role'].upper()}: {msg['content']}"
-                for msg in self.conversation_history[-5:]  # Last 5 messages
-            ])
+            formatted_history = "\n".join(
+                [
+                    f"{msg['role'].upper()}: {msg['content']}"
+                    for msg in self.conversation_history[-5:]  # Last 5 messages
+                ]
+            )
 
             # Create a prompt for the LLM
             prompt = (
@@ -189,9 +210,7 @@ class ConversationHandler:
 
             # Generate a response
             response = await self.llm_interface.generate_text(
-                prompt=prompt,
-                max_tokens=1024,
-                temperature=0.7
+                prompt=prompt, max_tokens=1024, temperature=0.7
             )
 
             # Add to conversation history
@@ -203,13 +222,14 @@ class ConversationHandler:
             self.logger.error(f"Error in conversation handling: {e}")
             yield StreamData(error=f"I encountered an error while responding: {e}")
 
+
 async def test_conversation_handler():
     """Test the conversation handler"""
     from core.config import WitsV3Config
     from core.llm_interface import OllamaInterface
 
     # Load config
-    config = WitsV3Config.from_yaml('config.yaml')
+    config = WitsV3Config.from_yaml("config.yaml")
 
     # Create components
     llm_interface = OllamaInterface(config)
@@ -238,6 +258,7 @@ async def test_conversation_handler():
             print(f"[Thinking] {data.thinking}")
         if data.content:
             print(f"ASSISTANT: {data.content}")
+
 
 if __name__ == "__main__":
     asyncio.run(test_conversation_handler())

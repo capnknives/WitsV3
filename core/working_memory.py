@@ -7,26 +7,26 @@ for reasoning and decision-making.
 """
 
 import asyncio
-import json
 import logging
 import uuid
-from typing import Dict, List, Optional, Set, Tuple, Any, Union, AsyncIterator
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
-from dataclasses import dataclass, field, asdict
-import heapq
+from typing import Any
 
 from .config import WitsV3Config
+from .knowledge_graph import KnowledgeGraph
 from .llm_interface import BaseLLMInterface
-from .knowledge_graph import KnowledgeGraph, Entity, Relation
-from .neural_web_core import NeuralWeb, ConceptNode, Connection
+from .neural_web_core import NeuralWeb
 from .schemas import StreamData
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class MemoryItem:
     """Represents an item in working memory."""
+
     content: str
     item_type: str  # 'entity', 'fact', 'goal', 'task', etc.
     source: str  # where this item came from: 'user', 'agent', 'knowledge_graph', 'neural_web', etc.
@@ -36,11 +36,11 @@ class MemoryItem:
     created_at: datetime = field(default_factory=lambda: datetime.now())
     last_accessed: datetime = field(default_factory=lambda: datetime.now())
     access_count: int = 0
-    ttl: Optional[timedelta] = None  # time-to-live
-    related_items: List[str] = field(default_factory=list)  # IDs of related memory items
-    entity_id: Optional[str] = None  # ID of related knowledge graph entity if applicable
-    concept_id: Optional[str] = None  # ID of related neural web concept if applicable
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    ttl: timedelta | None = None  # time-to-live
+    related_items: list[str] = field(default_factory=list)  # IDs of related memory items
+    entity_id: str | None = None  # ID of related knowledge graph entity if applicable
+    concept_id: str | None = None  # ID of related neural web concept if applicable
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def activate(self, amount: float = 0.2):
         """Increase activation level and update access metrics."""
@@ -69,6 +69,7 @@ class MemoryItem:
         # Calculate combined score
         return self.activation * self.importance * recency_factor
 
+
 class WorkingMemory:
     """
     Working Memory system that maintains the active context for an agent.
@@ -80,11 +81,13 @@ class WorkingMemory:
     4. Providing fast retrieval of immediately relevant information
     """
 
-    def __init__(self,
-                 config: WitsV3Config,
-                 llm_interface: BaseLLMInterface,
-                 knowledge_graph: Optional[KnowledgeGraph] = None,
-                 neural_web: Optional[NeuralWeb] = None):
+    def __init__(
+        self,
+        config: WitsV3Config,
+        llm_interface: BaseLLMInterface,
+        knowledge_graph: KnowledgeGraph | None = None,
+        neural_web: NeuralWeb | None = None,
+    ):
         """Initialize working memory.
 
         Args:
@@ -100,7 +103,7 @@ class WorkingMemory:
         self.logger = logging.getLogger(__name__)
 
         # Working memory storage
-        self.items: Dict[str, MemoryItem] = {}
+        self.items: dict[str, MemoryItem] = {}
 
         # Working memory capacity limits - using default values
         self.max_items = 50
@@ -111,12 +114,18 @@ class WorkingMemory:
 
         # Try to load from config if available
         try:
-            if hasattr(config, 'working_memory'):
-                self.max_items = getattr(config.working_memory, 'max_items', self.max_items)
-                self.activation_threshold = getattr(config.working_memory, 'activation_threshold', self.activation_threshold)
-                self.decay_rate = getattr(config.working_memory, 'decay_rate', self.decay_rate)
-                self.default_ttl = timedelta(seconds=getattr(config.working_memory, 'default_ttl_seconds', 3600))
-                self.decay_interval_seconds = getattr(config.working_memory, 'decay_interval_seconds', self.decay_interval_seconds)
+            if hasattr(config, "working_memory"):
+                self.max_items = getattr(config.working_memory, "max_items", self.max_items)
+                self.activation_threshold = getattr(
+                    config.working_memory, "activation_threshold", self.activation_threshold
+                )
+                self.decay_rate = getattr(config.working_memory, "decay_rate", self.decay_rate)
+                self.default_ttl = timedelta(
+                    seconds=getattr(config.working_memory, "default_ttl_seconds", 3600)
+                )
+                self.decay_interval_seconds = getattr(
+                    config.working_memory, "decay_interval_seconds", self.decay_interval_seconds
+                )
         except Exception as e:
             self.logger.warning(f"Error loading working memory configuration: {e}. Using defaults.")
 
@@ -126,6 +135,7 @@ class WorkingMemory:
 
     def _start_decay_task(self):
         """Start the periodic decay task."""
+
         async def decay_loop():
             while True:
                 await self.decay_items()
@@ -133,15 +143,17 @@ class WorkingMemory:
 
         self._decay_task = asyncio.create_task(decay_loop())
 
-    async def add_item(self,
-                      content: str,
-                      item_type: str,
-                      source: str,
-                      importance: float = 1.0,
-                      ttl: Optional[timedelta] = None,
-                      entity_id: Optional[str] = None,
-                      concept_id: Optional[str] = None,
-                      metadata: Optional[Dict[str, Any]] = None) -> MemoryItem:
+    async def add_item(
+        self,
+        content: str,
+        item_type: str,
+        source: str,
+        importance: float = 1.0,
+        ttl: timedelta | None = None,
+        entity_id: str | None = None,
+        concept_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> MemoryItem:
         """Add a new item to working memory.
 
         Args:
@@ -166,7 +178,7 @@ class WorkingMemory:
             ttl=ttl or self.default_ttl,
             entity_id=entity_id,
             concept_id=concept_id,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Add to storage
@@ -183,7 +195,7 @@ class WorkingMemory:
         self.logger.debug(f"Added item to working memory: {content[:50]}...")
         return item
 
-    async def get_item(self, item_id: str) -> Optional[MemoryItem]:
+    async def get_item(self, item_id: str) -> MemoryItem | None:
         """Get a memory item by ID and activate it.
 
         Args:
@@ -232,10 +244,9 @@ class WorkingMemory:
         if item_id1 not in item2.related_items:
             item2.related_items.append(item_id1)
 
-    async def get_active_items(self,
-                              min_activation: float = 0.0,
-                              item_types: Optional[List[str]] = None,
-                              limit: int = 10) -> List[MemoryItem]:
+    async def get_active_items(
+        self, min_activation: float = 0.0, item_types: list[str] | None = None, limit: int = 10
+    ) -> list[MemoryItem]:
         """Get active memory items filtered by activation level and type.
 
         Args:
@@ -268,11 +279,13 @@ class WorkingMemory:
 
         return filtered_items[:limit]
 
-    async def search_items(self,
-                          query: str,
-                          item_types: Optional[List[str]] = None,
-                          min_relevance: float = 0.0,
-                          limit: int = 10) -> List[Tuple[MemoryItem, float]]:
+    async def search_items(
+        self,
+        query: str,
+        item_types: list[str] | None = None,
+        min_relevance: float = 0.0,
+        limit: int = 10,
+    ) -> list[tuple[MemoryItem, float]]:
         """Search memory items based on content similarity.
 
         Args:
@@ -294,8 +307,7 @@ class WorkingMemory:
         try:
             # Generate query embedding if LLM interface is available
             query_embedding = await self.llm_interface.get_embedding(
-                query,
-                model=self.config.ollama_settings.embedding_model
+                query, model=self.config.ollama_settings.embedding_model
             )
         except Exception as e:
             self.logger.warning(f"Failed to generate embedding for query: {e}")
@@ -312,8 +324,7 @@ class WorkingMemory:
             if query_embedding is not None:
                 try:
                     item_embedding = await self.llm_interface.get_embedding(
-                        item.content,
-                        model=self.config.ollama_settings.embedding_model
+                        item.content, model=self.config.ollama_settings.embedding_model
                     )
                     semantic_score = self._cosine_similarity(query_embedding, item_embedding)
                 except Exception as e:
@@ -345,7 +356,7 @@ class WorkingMemory:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:limit]
 
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+    def _cosine_similarity(self, vec1: list[float], vec2: list[float]) -> float:
         """Calculate cosine similarity between two vectors."""
         import numpy as np
 
@@ -370,14 +381,19 @@ class WorkingMemory:
             item.decay(self.decay_rate)
 
         # Remove expired items
-        expired_ids = [item_id for item_id, item in self.items.items()
-                      if item.is_expired or item.activation <= 0.01]
+        expired_ids = [
+            item_id
+            for item_id, item in self.items.items()
+            if item.is_expired or item.activation <= 0.01
+        ]
 
         for item_id in expired_ids:
             del self.items[item_id]
 
         if expired_ids:
-            self.logger.debug(f"Removed {len(expired_ids)} expired/inactive items from working memory")
+            self.logger.debug(
+                f"Removed {len(expired_ids)} expired/inactive items from working memory"
+            )
 
     async def _prune_items(self):
         """Remove least relevant items when over capacity."""
@@ -444,7 +460,7 @@ class WorkingMemory:
             yield StreamData(
                 type="thinking",
                 content="No active context in working memory.",
-                source="working_memory"
+                source="working_memory",
             )
             return
 
@@ -457,16 +473,12 @@ class WorkingMemory:
 
         # Stream summary
         yield StreamData(
-            type="thinking",
-            content="Current working memory context:",
-            source="working_memory"
+            type="thinking", content="Current working memory context:", source="working_memory"
         )
 
         for item_type, items in items_by_type.items():
             yield StreamData(
-                type="thinking",
-                content=f"\n## {item_type.capitalize()}",
-                source="working_memory"
+                type="thinking", content=f"\n## {item_type.capitalize()}", source="working_memory"
             )
 
             for item in items:
@@ -474,7 +486,7 @@ class WorkingMemory:
                     type="thinking",
                     content=f"- {item.content} (relevance: {item.relevance_score:.2f})",
                     source="working_memory",
-                    metadata={"item_id": item.id}
+                    metadata={"item_id": item.id},
                 )
 
                 # Add connections if item relates to knowledge graph or neural web
@@ -485,7 +497,7 @@ class WorkingMemory:
                             type="thinking",
                             content=f"  Related to entity: {entity.name} ({entity.entity_type})",
                             source="working_memory",
-                            metadata={"entity_id": entity.id}
+                            metadata={"entity_id": entity.id},
                         )
 
                 if item.concept_id and self.neural_web:
@@ -495,7 +507,7 @@ class WorkingMemory:
                             type="thinking",
                             content=f"  Related to concept: {concept.content} ({concept.concept_type})",
                             source="working_memory",
-                            metadata={"concept_id": concept.id}
+                            metadata={"concept_id": concept.id},
                         )
 
     async def connect_to_knowledge_graph(self, item_id: str, entity_id: str) -> bool:
@@ -549,7 +561,7 @@ class WorkingMemory:
         self.logger.debug(f"Connected memory item {item_id} to concept {concept_id}")
         return True
 
-    async def get_statistics(self) -> Dict[str, Any]:
+    async def get_statistics(self) -> dict[str, Any]:
         """Get working memory statistics.
 
         Returns:
@@ -563,17 +575,19 @@ class WorkingMemory:
             items_by_type[item.item_type] += 1
 
         # Calculate average activation
-        avg_activation = sum(item.activation for item in self.items.values()) / max(1, len(self.items))
+        avg_activation = sum(item.activation for item in self.items.values()) / max(
+            1, len(self.items)
+        )
 
         # Count connections
         kg_connections = sum(1 for item in self.items.values() if item.entity_id)
         nw_connections = sum(1 for item in self.items.values() if item.concept_id)
 
         return {
-            'total_items': len(self.items),
-            'items_by_type': items_by_type,
-            'average_activation': avg_activation,
-            'knowledge_graph_connections': kg_connections,
-            'neural_web_connections': nw_connections,
-            'capacity_used': len(self.items) / self.max_items
+            "total_items": len(self.items),
+            "items_by_type": items_by_type,
+            "average_activation": avg_activation,
+            "knowledge_graph_connections": kg_connections,
+            "neural_web_connections": nw_connections,
+            "capacity_used": len(self.items) / self.max_items,
         }

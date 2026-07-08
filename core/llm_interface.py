@@ -1,18 +1,20 @@
 # c:\\WITS\\WitsV3\\core\\llm_interface.py
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, AsyncGenerator, List, TypeVar, Callable, Awaitable
-import httpx
-import json
-import os
-from unittest.mock import AsyncMock  # Add this import for test compatibility
-import logging
 import asyncio
+import json
+import logging
+import os
+from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any, TypeVar
+
+import httpx
 
 # Import AppConfig and relevant settings models from core.config
-from .config import WitsV3Config, OllamaSettings
+from .config import OllamaSettings, WitsV3Config
 
 logger = logging.getLogger(__name__)
+
 
 # Simple message/response structures used in tests
 @dataclass
@@ -25,8 +27,10 @@ class LLMMessage:
 class LLMResponse:
     content: str
 
+
 # Define a generic type for the retry function
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 class BaseLLMInterface(ABC):
     def __init__(self, config: WitsV3Config):
@@ -36,11 +40,11 @@ class BaseLLMInterface(ABC):
     async def generate_text(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[List[str]] = None,
-        format: Optional[str] = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop_sequences: list[str] | None = None,
+        format: str | None = None,
     ) -> str:
         """Generate text from the LLM. format="json" constrains output to valid JSON (Ollama structured output)."""
         pass
@@ -49,22 +53,19 @@ class BaseLLMInterface(ABC):
     async def stream_text(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[List[str]] = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop_sequences: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream text from the LLM."""
         pass
 
     @abstractmethod
-    async def get_embedding(
-        self,
-        text: str,
-        model: Optional[str] = None
-    ) -> List[float]:
+    async def get_embedding(self, text: str, model: str | None = None) -> list[float]:
         """Get an embedding for the given text."""
         pass
+
 
 class OllamaInterface(BaseLLMInterface):
     def __init__(self, config: WitsV3Config):
@@ -77,33 +78,32 @@ class OllamaInterface(BaseLLMInterface):
     async def _prepare_payload(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[List[str]] = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop_sequences: list[str] | None = None,
         stream: bool = False,
-        format: Optional[str] = None
-    ) -> Dict[str, Any]:
+        format: str | None = None,
+    ) -> dict[str, Any]:
         effective_model = model or self.ollama_settings.default_model
-        options: Dict[str, Any] = {
-            "temperature": temperature if temperature is not None else self.config.agents.default_temperature
+        options: dict[str, Any] = {
+            "temperature": (
+                temperature if temperature is not None else self.config.agents.default_temperature
+            )
         }
         if max_tokens is not None:
             options["num_predict"] = max_tokens
         if stop_sequences is not None:
             options["stop"] = stop_sequences
 
-        payload = {
-            "model": effective_model,
-            "prompt": prompt,
-            "stream": stream,
-            "options": options
-        }
+        payload = {"model": effective_model, "prompt": prompt, "stream": stream, "options": options}
         if format is not None:
             payload["format"] = format
         return payload
 
-    async def _execute_with_retry(self, operation_name: str, func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
+    async def _execute_with_retry(
+        self, operation_name: str, func: Callable[..., Awaitable[T]], *args, **kwargs
+    ) -> T:
         """Execute a function with retry logic on failure."""
         max_attempts = self.ollama_settings.retry_attempts
         base_delay = self.ollama_settings.retry_delay
@@ -118,7 +118,9 @@ class OllamaInterface(BaseLLMInterface):
                 # Service unavailable (503) or too many requests (429) - retry
                 if e.response.status_code in (429, 503, 502, 504) and attempt < max_attempts:
                     # Get retry delay - use exponential backoff if configured
-                    delay = base_delay * (2 ** (attempt - 1)) if use_exponential_backoff else base_delay
+                    delay = (
+                        base_delay * (2 ** (attempt - 1)) if use_exponential_backoff else base_delay
+                    )
 
                     self.logger.warning(f"{error_msg}. Retrying in {delay:.2f} seconds...")
                     await asyncio.sleep(delay)
@@ -127,7 +129,9 @@ class OllamaInterface(BaseLLMInterface):
                 # Process specific error codes
                 if e.response.status_code == 404:
                     self.logger.error(f"{error_msg}. Model not found.")
-                    raise ValueError(f"Model not found. Check if the model is available in Ollama.") from e
+                    raise ValueError(
+                        "Model not found. Check if the model is available in Ollama."
+                    ) from e
                 elif e.response.status_code == 400:
                     self.logger.error(f"{error_msg}. Bad request: {e.response.text}")
                     raise ValueError(f"Bad request to Ollama API: {e.response.text}") from e
@@ -140,16 +144,24 @@ class OllamaInterface(BaseLLMInterface):
                 raise
 
             except httpx.RequestError as e:
-                error_msg = f"{operation_name} failed (Attempt {attempt}/{max_attempts}): Connection error"
+                error_msg = (
+                    f"{operation_name} failed (Attempt {attempt}/{max_attempts}): Connection error"
+                )
 
                 if attempt < max_attempts:
-                    delay = base_delay * (2 ** (attempt - 1)) if use_exponential_backoff else base_delay
+                    delay = (
+                        base_delay * (2 ** (attempt - 1)) if use_exponential_backoff else base_delay
+                    )
                     self.logger.warning(f"{error_msg}. Retrying in {delay:.2f} seconds...")
                     await asyncio.sleep(delay)
                     continue
 
-                self.logger.error(f"{error_msg}. Ollama service may be unavailable at {self.ollama_settings.url}.")
-                raise ValueError(f"Failed to connect to Ollama at {self.ollama_settings.url}. Please ensure Ollama is running.") from e
+                self.logger.error(
+                    f"{error_msg}. Ollama service may be unavailable at {self.ollama_settings.url}."
+                )
+                raise ValueError(
+                    f"Failed to connect to Ollama at {self.ollama_settings.url}. Please ensure Ollama is running."
+                ) from e
 
             except Exception as e:
                 self.logger.error(f"{operation_name} failed with unexpected error: {str(e)}")
@@ -161,13 +173,15 @@ class OllamaInterface(BaseLLMInterface):
     async def generate_text(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[List[str]] = None,
-        format: Optional[str] = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop_sequences: list[str] | None = None,
+        format: str | None = None,
     ) -> str:
-        payload = await self._prepare_payload(prompt, model, temperature, max_tokens, stop_sequences, stream=False, format=format)
+        payload = await self._prepare_payload(
+            prompt, model, temperature, max_tokens, stop_sequences, stream=False, format=format
+        )
 
         async def _generate() -> str:
             response = await self.http_client.post(
@@ -183,10 +197,10 @@ class OllamaInterface(BaseLLMInterface):
     async def stream_text(
         self,
         prompt: str,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stop_sequences: Optional[List[str]] = None,
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stop_sequences: list[str] | None = None,
     ) -> AsyncGenerator[str, None]:
         """
         Stream text from the LLM.
@@ -201,7 +215,9 @@ class OllamaInterface(BaseLLMInterface):
         Yields:
             Text chunks from the LLM
         """
-        payload = await self._prepare_payload(prompt, model, temperature, max_tokens, stop_sequences, stream=True)
+        payload = await self._prepare_payload(
+            prompt, model, temperature, max_tokens, stop_sequences, stream=True
+        )
         url = f"{self.ollama_settings.url}/api/generate"
 
         # Initialize counters for retry logic
@@ -215,10 +231,7 @@ class OllamaInterface(BaseLLMInterface):
             try:
                 # This properly handles streaming in httpx
                 async with self.http_client.stream(
-                    "POST",
-                    url,
-                    json=payload,
-                    timeout=self.ollama_settings.request_timeout
+                    "POST", url, json=payload, timeout=self.ollama_settings.request_timeout
                 ) as response:
                     response.raise_for_status()
                     # Process streaming response line by line
@@ -244,7 +257,9 @@ class OllamaInterface(BaseLLMInterface):
 
                 # Only retry for certain status codes and if we have attempts left
                 if e.response.status_code in (429, 503, 502, 504) and attempt < max_attempts:
-                    delay = base_delay * (2 ** (attempt - 1)) if use_exponential_backoff else base_delay
+                    delay = (
+                        base_delay * (2 ** (attempt - 1)) if use_exponential_backoff else base_delay
+                    )
                     self.logger.warning(f"{error_msg}. Retrying in {delay:.2f} seconds...")
                     await asyncio.sleep(delay)
                     continue
@@ -252,7 +267,7 @@ class OllamaInterface(BaseLLMInterface):
                 # Handle specific error codes
                 if e.response.status_code == 404:
                     self.logger.error(f"{error_msg}. Model not found.")
-                    yield f"\n\nError: Model not found. Please check if the model is available in Ollama.\n"
+                    yield "\n\nError: Model not found. Please check if the model is available in Ollama.\n"
                 elif e.response.status_code == 400:
                     self.logger.error(f"{error_msg}. Bad request: {e.response.text}")
                     yield f"\n\nError: Invalid request to Ollama API: {e.response.text}\n"
@@ -261,36 +276,35 @@ class OllamaInterface(BaseLLMInterface):
                     yield f"\n\nError: Ollama API error ({e.response.status_code}). Please check logs for details.\n"
                 break
 
-            except httpx.RequestError as e:
-                error_msg = f"Stream generation failed (Attempt {attempt}/{max_attempts}): Connection error"
+            except httpx.RequestError:
+                error_msg = (
+                    f"Stream generation failed (Attempt {attempt}/{max_attempts}): Connection error"
+                )
 
                 if attempt < max_attempts:
-                    delay = base_delay * (2 ** (attempt - 1)) if use_exponential_backoff else base_delay
+                    delay = (
+                        base_delay * (2 ** (attempt - 1)) if use_exponential_backoff else base_delay
+                    )
                     self.logger.warning(f"{error_msg}. Retrying in {delay:.2f} seconds...")
                     await asyncio.sleep(delay)
                     continue
 
-                self.logger.error(f"{error_msg}. Ollama service may be unavailable at {self.ollama_settings.url}.")
+                self.logger.error(
+                    f"{error_msg}. Ollama service may be unavailable at {self.ollama_settings.url}."
+                )
                 yield f"\n\nError: Failed to connect to Ollama at {self.ollama_settings.url}. Please ensure Ollama is running.\n"
                 break
 
             except Exception as e:
                 self.logger.error(f"Stream generation failed with unexpected error: {str(e)}")
-                yield f"\n\nError: An unexpected error occurred. Please check logs for details.\n"
+                yield "\n\nError: An unexpected error occurred. Please check logs for details.\n"
                 break
 
-    async def get_embedding(
-        self,
-        text: str,
-        model: Optional[str] = None
-    ) -> List[float]:
+    async def get_embedding(self, text: str, model: str | None = None) -> list[float]:
         effective_model = model or self.ollama_settings.embedding_model
-        payload = {
-            "model": effective_model,
-            "prompt": text
-        }
+        payload = {"model": effective_model, "prompt": text}
 
-        async def _get_embedding() -> List[float]:
+        async def _get_embedding() -> list[float]:
             response = await self.http_client.post(
                 f"{self.ollama_settings.url}/api/embeddings",
                 json=payload,
@@ -311,7 +325,7 @@ class OllamaInterface(BaseLLMInterface):
         try:
             response = await self.http_client.get(
                 f"{self.ollama_settings.url}/api/tags",
-                timeout=5.0  # Short timeout for availability check
+                timeout=5.0,  # Short timeout for availability check
             )
             response.raise_for_status()
             return True
@@ -329,10 +343,11 @@ class OllamaInterface(BaseLLMInterface):
 class LLMInterface(OllamaInterface):
     """Backward compatible alias used in some modules."""
 
-    async def generate_response(self, messages: List[LLMMessage]) -> LLMResponse:
+    async def generate_response(self, messages: list[LLMMessage]) -> LLMResponse:
         prompt = "\n".join(m.content for m in messages)
         text = await self.generate_text(prompt)
         return LLMResponse(content=text)
+
 
 def get_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
     if config.llm_interface.default_provider == "adaptive":
@@ -354,15 +369,17 @@ def get_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
     else:
         raise ValueError(f"Unsupported LLM provider: {config.llm_interface.default_provider}")
 
+
 # Example usage (for testing this file directly)
 if __name__ == "__main__":
     import asyncio
-    from .config import WitsV3Config # Relative import for testing
+
+    from .config import WitsV3Config  # Relative import for testing
 
     async def main_test():
         # Construct the path to config.yaml relative to this script's location
         current_script_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root_dir = os.path.dirname(current_script_dir) # Moves from core to WitsV3
+        project_root_dir = os.path.dirname(current_script_dir)  # Moves from core to WitsV3
         config_file_path = os.path.join(project_root_dir, "config.yaml")
 
         print(f"Attempting to load configuration from: {config_file_path}")
@@ -395,7 +412,7 @@ if __name__ == "__main__":
             print("\n--- Non-Streaming Generation Test ---")
             response = await llm_interface.generate_text(
                 prompt="Why is the sky blue? Explain briefly.",
-                model=app_config.ollama_settings.default_model # Explicitly pass model for clarity
+                model=app_config.ollama_settings.default_model,  # Explicitly pass model for clarity
             )
             print(f"Full Response:\n{response}")
 
@@ -404,7 +421,7 @@ if __name__ == "__main__":
             print("Streamed Response:")
             async for chunk in llm_interface.stream_text(
                 prompt="Tell me a very short story about a curious robot.",
-                model=app_config.ollama_settings.default_model
+                model=app_config.ollama_settings.default_model,
             ):
                 print(chunk, end="", flush=True)
             print("\n--- End of Stream ---")
@@ -412,8 +429,7 @@ if __name__ == "__main__":
             # Test embedding generation
             print("\n--- Embedding Generation Test ---")
             embedding = await llm_interface.get_embedding(
-                text="Hello WitsV3!",
-                model=app_config.ollama_settings.embedding_model
+                text="Hello WitsV3!", model=app_config.ollama_settings.embedding_model
             )
             if embedding:
                 print(f"Generated embedding with {len(embedding)} dimensions.")
@@ -424,7 +440,9 @@ if __name__ == "__main__":
         except ValueError as e:
             print(f"\n⚠️ {e}")
         except httpx.RequestError:
-            print(f"\n⚠️ Connection Error: Could not connect to Ollama at {app_config.ollama_settings.url}.")
+            print(
+                f"\n⚠️ Connection Error: Could not connect to Ollama at {app_config.ollama_settings.url}."
+            )
             print("Please ensure Ollama is running and accessible.")
         except Exception as e:
             print(f"\n⚠️ An unexpected error occurred during LLM interface tests: {e}")

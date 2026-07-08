@@ -1,6 +1,8 @@
 """Tests for the MCP registry search / command-derivation logic."""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 from core import mcp_registry_search as reg
 
@@ -97,7 +99,15 @@ def test_build_command_oci_forwards_declared_env_vars():
     }
     # docker's `-e` flags are OPTIONS and must precede the image reference.
     assert reg.build_stdio_command(pkg) == [
-        "docker", "run", "-i", "--rm", "-e", "DB_URL", "-e", "DB_DEBUG", "mcp/db:1.0.0",
+        "docker",
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "DB_URL",
+        "-e",
+        "DB_DEBUG",
+        "mcp/db:1.0.0",
     ]
 
 
@@ -116,7 +126,13 @@ def test_build_command_oci_does_not_duplicate_base_flags():
         ],
     }
     assert reg.build_stdio_command(pkg) == [
-        "docker", "run", "-i", "--rm", "--pull", "always", "mcp/db:1.0.0",
+        "docker",
+        "run",
+        "-i",
+        "--rm",
+        "--pull",
+        "always",
+        "mcp/db:1.0.0",
     ]
 
 
@@ -191,17 +207,23 @@ async def test_search_registry_normalizes_and_orders_installable_first():
                 "server": {
                     "name": "local/thing",
                     "description": "local",
-                    "packages": [{
-                        "registryType": "npm", "identifier": "local-thing",
-                        "version": "1.0.0", "runtimeHint": "npx",
-                        "transport": {"type": "stdio"},
-                    }],
+                    "packages": [
+                        {
+                            "registryType": "npm",
+                            "identifier": "local-thing",
+                            "version": "1.0.0",
+                            "runtimeHint": "npx",
+                            "transport": {"type": "stdio"},
+                        }
+                    ],
                 },
                 "_meta": {"io.modelcontextprotocol.registry/official": {"isLatest": True}},
             },
         ]
     }
-    with patch("core.mcp_registry_search.aiohttp.ClientSession", return_value=_fake_session(payload)):
+    with patch(
+        "core.mcp_registry_search.aiohttp.ClientSession", return_value=_fake_session(payload)
+    ):
         results = await reg.search_registry("thing", limit=10)
 
     assert [r["name"] for r in results] == ["local/thing", "remote/thing"]
@@ -211,27 +233,33 @@ async def test_search_registry_normalizes_and_orders_installable_first():
 
 def test_candidate_queries_falls_back_to_keywords():
     cands = reg._candidate_queries("send a slack message")
-    assert cands[0] == "send a slack message"      # full phrase first
+    assert cands[0] == "send a slack message"  # full phrase first
     assert "message" in cands and "slack" in cands  # significant words follow
-    assert "a" not in cands                         # stopword/short dropped
+    assert "a" not in cands  # stopword/short dropped
 
 
 @pytest.mark.asyncio
 async def test_search_registry_uses_keyword_when_phrase_empty():
     """Full phrase returns nothing → falls back to a single keyword that hits."""
     hit = {
-        "servers": [{
-            "server": {
-                "name": "com.example/slack",
-                "description": "Slack integration",
-                "packages": [{
-                    "registryType": "npm", "identifier": "slack-mcp",
-                    "version": "1.0.0", "runtimeHint": "npx",
-                    "transport": {"type": "stdio"},
-                }],
-            },
-            "_meta": {"io.modelcontextprotocol.registry/official": {"isLatest": True}},
-        }]
+        "servers": [
+            {
+                "server": {
+                    "name": "com.example/slack",
+                    "description": "Slack integration",
+                    "packages": [
+                        {
+                            "registryType": "npm",
+                            "identifier": "slack-mcp",
+                            "version": "1.0.0",
+                            "runtimeHint": "npx",
+                            "transport": {"type": "stdio"},
+                        }
+                    ],
+                },
+                "_meta": {"io.modelcontextprotocol.registry/official": {"isLatest": True}},
+            }
+        ]
     }
 
     def response_for(url, *, params=None, **kwargs):

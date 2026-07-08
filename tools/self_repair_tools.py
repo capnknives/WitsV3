@@ -24,7 +24,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from core.base_tool import BaseTool
 from core.safe_code_editor import (
@@ -61,7 +61,7 @@ _PROJECT_PATH_MARKERS = (
 )
 
 
-def _candidate_project_rel(path_str: str) -> Optional[str]:
+def _candidate_project_rel(path_str: str) -> str | None:
     """Best-effort package-relative path from an absolute or relative frame."""
     normalized = path_str.replace("\\", "/")
     lower = normalized.lower()
@@ -75,7 +75,7 @@ def _candidate_project_rel(path_str: str) -> Optional[str]:
     return None
 
 
-def _relative_to_project(path_str: str) -> Optional[str]:
+def _relative_to_project(path_str: str) -> str | None:
     """Return path relative to PROJECT_ROOT if it maps to a real project file.
 
     Prefers an absolute path under this checkout. If the frame came from a
@@ -102,7 +102,7 @@ def _relative_to_project(path_str: str) -> Optional[str]:
     return Path(candidate_rel).as_posix() if local.is_file() else None
 
 
-def parse_traceback_issues(log_text: str, max_issues: int) -> List[Dict[str, Any]]:
+def parse_traceback_issues(log_text: str, max_issues: int) -> list[dict[str, Any]]:
     """Extract distinct tracebacks (preferred, file/line-resolvable) and bare
     ERROR/CRITICAL lines (message-only, not auto-fixable) from log text.
 
@@ -113,7 +113,7 @@ def parse_traceback_issues(log_text: str, max_issues: int) -> List[Dict[str, Any
     SelfRepairAgent's whole-codebase fallback (no file named, no log issues
     -> run the test suite and parse failures the same way).
     """
-    issues: List[Dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
     seen_messages = set()
 
     for match in _TRACEBACK_RE.finditer(log_text):
@@ -127,13 +127,15 @@ def parse_traceback_issues(log_text: str, max_issues: int) -> List[Dict[str, Any
             if rel:
                 file_line = (rel, int(fm.group("line")))  # keep the last (innermost) project frame
         if file_line:
-            issues.append({
-                "actionable": True,
-                "file": file_line[0],
-                "line": file_line[1],
-                "message": exc_line,
-                "kind": "traceback",
-            })
+            issues.append(
+                {
+                    "actionable": True,
+                    "file": file_line[0],
+                    "line": file_line[1],
+                    "message": exc_line,
+                    "kind": "traceback",
+                }
+            )
             seen_messages.add(exc_line)
 
     if len(issues) < max_issues:
@@ -144,13 +146,15 @@ def parse_traceback_issues(log_text: str, max_issues: int) -> List[Dict[str, Any
             msg = m.group("msg").strip()
             if msg in seen_messages or any(i["message"] == msg for i in issues):
                 continue
-            issues.append({
-                "actionable": False,
-                "file": None,
-                "line": None,
-                "message": msg,
-                "kind": "log_line",
-            })
+            issues.append(
+                {
+                    "actionable": False,
+                    "file": None,
+                    "line": None,
+                    "message": msg,
+                    "kind": "log_line",
+                }
+            )
             seen_messages.add(msg)
             if len(issues) >= max_issues * 3:  # keep a bounded pool before truncation below
                 break
@@ -175,12 +179,16 @@ class DiagnoseLogErrorsTool(BaseTool):
         )
         self.log_path = PROJECT_ROOT / "logs" / "witsv3.log"
 
-    async def execute(self, lines: int = 2000, max_issues: int = 5) -> Dict[str, Any]:
+    async def execute(self, lines: int = 2000, max_issues: int = 5) -> dict[str, Any]:
         if not self.log_path.exists():
-            return {"success": True, "issues": [], "message": "No log file found — nothing to scan."}
+            return {
+                "success": True,
+                "issues": [],
+                "message": "No log file found — nothing to scan.",
+            }
 
-        with open(self.log_path, "r", encoding="utf-8", errors="replace") as f:
-            tail = f.readlines()[-max(1, int(lines)):]
+        with open(self.log_path, encoding="utf-8", errors="replace") as f:
+            tail = f.readlines()[-max(1, int(lines)) :]
         text = "".join(tail)
 
         issues = parse_traceback_issues(text, max(1, int(max_issues)))
@@ -195,12 +203,20 @@ class DiagnoseLogErrorsTool(BaseTool):
             ),
         }
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
-                "lines": {"type": "integer", "description": "Trailing log lines to scan", "default": 2000},
-                "max_issues": {"type": "integer", "description": "Maximum distinct issues to return", "default": 5},
+                "lines": {
+                    "type": "integer",
+                    "description": "Trailing log lines to scan",
+                    "default": 2000,
+                },
+                "max_issues": {
+                    "type": "integer",
+                    "description": "Maximum distinct issues to return",
+                    "default": 5,
+                },
             },
         }
 
@@ -218,7 +234,7 @@ class RunTestSuiteTool(BaseTool):
             ),
         )
 
-    async def execute(self, test_path: str = "", timeout: float = 120.0) -> Dict[str, Any]:
+    async def execute(self, test_path: str = "", timeout: float = 120.0) -> dict[str, Any]:
         paths = [test_path] if test_path else None
         passed, output = await run_pytest(paths, timeout=float(timeout))
         return {
@@ -228,12 +244,20 @@ class RunTestSuiteTool(BaseTool):
             "message": "All tests passed." if passed else "Tests failed — see output.",
         }
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
-                "test_path": {"type": "string", "description": "Specific test file/dir to run (default: whole suite)", "default": ""},
-                "timeout": {"type": "number", "description": "Timeout in seconds", "default": 120.0},
+                "test_path": {
+                    "type": "string",
+                    "description": "Specific test file/dir to run (default: whole suite)",
+                    "default": "",
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Timeout in seconds",
+                    "default": 120.0,
+                },
             },
         }
 
@@ -261,7 +285,7 @@ class ApplyCodeFixTool(BaseTool):
         reason: str,
         test_path: str = "",
         commit: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         test_paths = [test_path] if test_path else (guess_related_tests(file_path) or None)
         result = await apply_verified_edit(
             file_path, new_content, reason=reason, test_paths=test_paths, commit=commit
@@ -275,15 +299,26 @@ class ApplyCodeFixTool(BaseTool):
             "test_output": result.test_output[-1500:],
         }
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
                 "file_path": {"type": "string", "description": "Project-relative path to write"},
                 "new_content": {"type": "string", "description": "Full new file content"},
-                "reason": {"type": "string", "description": "Short description of what/why, used as the commit message"},
-                "test_path": {"type": "string", "description": "Specific test file/dir to verify with (default: best-guess, else whole suite)", "default": ""},
-                "commit": {"type": "boolean", "description": "Commit to git on success", "default": True},
+                "reason": {
+                    "type": "string",
+                    "description": "Short description of what/why, used as the commit message",
+                },
+                "test_path": {
+                    "type": "string",
+                    "description": "Specific test file/dir to verify with (default: best-guess, else whole suite)",
+                    "default": "",
+                },
+                "commit": {
+                    "type": "boolean",
+                    "description": "Commit to git on success",
+                    "default": True,
+                },
             },
             "required": ["file_path", "new_content", "reason"],
         }
@@ -313,7 +348,7 @@ class RestartAppTool(BaseTool):
             ),
         )
 
-    async def execute(self, delay_seconds: float = 2.0, reason: str = "") -> Dict[str, Any]:
+    async def execute(self, delay_seconds: float = 2.0, reason: str = "") -> dict[str, Any]:
         delay = max(0.5, min(float(delay_seconds), 30.0))
         loop = asyncio.get_event_loop()
         loop.call_later(delay, _relaunch, reason)
@@ -322,11 +357,19 @@ class RestartAppTool(BaseTool):
             "message": f"Restart scheduled in {delay:.0f}s ({reason or 'manual restart'}).",
         }
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
-                "delay_seconds": {"type": "number", "description": "Seconds to wait before relaunching", "default": 2.0},
-                "reason": {"type": "string", "description": "Why the restart is happening", "default": ""},
+                "delay_seconds": {
+                    "type": "number",
+                    "description": "Seconds to wait before relaunching",
+                    "default": 2.0,
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Why the restart is happening",
+                    "default": "",
+                },
             },
         }

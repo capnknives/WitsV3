@@ -7,7 +7,8 @@ The main entry point that handles user input and determines response strategy.
 import json
 import re
 import uuid
-from typing import Any, Dict, List, Optional, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.wcca_intent_mixin import WCCAIntentMixin
@@ -15,7 +16,7 @@ from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
-from core.schemas import StreamData, ConversationHistory
+from core.schemas import ConversationHistory, StreamData
 
 
 class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgent):
@@ -38,9 +39,9 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         agent_name: str,
         config: WitsV3Config,
         llm_interface: BaseLLMInterface,
-        memory_manager: Optional[MemoryManager] = None,
-        orchestrator_agent: Optional[Any] = None,
-        specialized_agents: Optional[Dict[str, Any]] = None,
+        memory_manager: MemoryManager | None = None,
+        orchestrator_agent: Any | None = None,
+        specialized_agents: dict[str, Any] | None = None,
     ):
         """
         Initialize the Control Center Agent.
@@ -69,7 +70,9 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
             self.meta_reasoning = WitsV3MetaReasoningEngine(config)
             self.tool_composer = IntelligentToolComposer(config)
             self.has_enhanced_capabilities = True
-            self.logger.info("Enhanced meta-reasoning and tool composition capabilities initialized")
+            self.logger.info(
+                "Enhanced meta-reasoning and tool composition capabilities initialized"
+            )
         except Exception as e:
             self.logger.warning(f"Enhanced capabilities not available: {e}")
             self.meta_reasoning = None
@@ -86,8 +89,8 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
     async def run(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory] = None,
-        session_id: Optional[str] = None,
+        conversation_history: ConversationHistory | None = None,
+        session_id: str | None = None,
         **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
         """
@@ -115,7 +118,9 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
                 metadata={"source": "user", "session_id": session_id},
             )
             yield self.stream_result("I've stored that in my memory for future conversations.")
-            self.logger.info("Handled remember intent, exiting early. No further orchestration will occur.")
+            self.logger.info(
+                "Handled remember intent, exiting early. No further orchestration will occur."
+            )
             return
 
         try:
@@ -131,11 +136,15 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
             )
 
             # Special handling for creator recognition
-            if any(phrase in user_input.lower() for phrase in ["richard elliot", "creator of wits", "i am the creator"]):
+            if any(
+                phrase in user_input.lower()
+                for phrase in ["richard elliot", "creator of wits", "i am the creator"]
+            ):
                 yield self.stream_thinking("Recognizing the creator...")
 
                 # Get personality-based response
                 from core.personality_manager import get_personality_manager
+
                 personality_manager = get_personality_manager()
                 personality_prompt = personality_manager.get_system_prompt()
 
@@ -160,7 +169,9 @@ User input: {user_input}
                     return
                 except Exception as e:
                     self.logger.error(f"Error generating creator recognition response: {e}")
-                    yield self.stream_result("Hello Richard! I recognize you as my creator. How may I assist you today?")
+                    yield self.stream_result(
+                        "Hello Richard! I recognize you as my creator. How may I assist you today?"
+                    )
                     return
 
             # Analyze user intent
@@ -191,9 +202,9 @@ User input: {user_input}
 
     async def _handle_intent_response(
         self,
-        intent_analysis: Dict[str, Any],
+        intent_analysis: dict[str, Any],
         user_input: str,
-        conversation_history: Optional[ConversationHistory],
+        conversation_history: ConversationHistory | None,
         session_id: str,
     ) -> AsyncGenerator[StreamData, None]:
         """
@@ -225,7 +236,9 @@ User input: {user_input}
             requires_tools = True
             suggested_response = "specialized"
 
-        yield self.stream_thinking(f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}")
+        yield self.stream_thinking(
+            f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}"
+        )
 
         # LLM-classified direct_response: use the intent JSON text, not a second
         # casual-chat call — unless tools are required (misclassification guard).
@@ -249,9 +262,7 @@ User input: {user_input}
         if intent_type == "clarification_question":
             question = (intent_analysis.get("clarification_question") or "").strip()
             if not question:
-                question = (
-                    "Could you please provide more details about what you'd like me to help you with?"
-                )
+                question = "Could you please provide more details about what you'd like me to help you with?"
             yield self.stream_result(question)
             return
 
@@ -270,7 +281,10 @@ User input: {user_input}
             specialized_agent = await self._select_specialized_agent(user_input)
 
             if specialized_agent:
-                agent_type = next((k for k, v in self.specialized_agents.items() if v == specialized_agent), "specialized")
+                agent_type = next(
+                    (k for k, v in self.specialized_agents.items() if v == specialized_agent),
+                    "specialized",
+                )
                 yield self.stream_thinking(f"Using {agent_type} agent for: {user_input}")
 
                 async for stream_data in specialized_agent.run(
@@ -282,13 +296,19 @@ User input: {user_input}
                 return
 
         # For complex tasks, use enhanced capabilities if available
-        if self.has_enhanced_capabilities and requires_tools and complexity in ["moderate", "complex", "research"]:
+        if (
+            self.has_enhanced_capabilities
+            and requires_tools
+            and complexity in ["moderate", "complex", "research"]
+        ):
             yield self.stream_thinking("Using enhanced capabilities for complex task...")
 
             if self.meta_reasoning and self.tool_composer:
                 try:
                     # Get capabilities from intent analysis
-                    required_capabilities = intent_analysis.get("required_capabilities", ["general_processing"])
+                    required_capabilities = intent_analysis.get(
+                        "required_capabilities", ["general_processing"]
+                    )
 
                     # Map capabilities to available tools
                     available_tools = []
@@ -313,7 +333,9 @@ User input: {user_input}
                         constraints={"source": "user_interaction"},
                     )
 
-                    yield self.stream_thinking(f"Created workflow with {len(workflow.nodes)} steps using {workflow.strategy.value} strategy.")
+                    yield self.stream_thinking(
+                        f"Created workflow with {len(workflow.nodes)} steps using {workflow.strategy.value} strategy."
+                    )
 
                     # For now, delegate to orchestrator as we're not fully implementing workflow execution
                     if self.orchestrator_agent:
@@ -341,7 +363,9 @@ User input: {user_input}
             return
 
         # Fallback: generate a direct response
-        yield self.stream_thinking("No specialized handling available, generating direct response...")
+        yield self.stream_thinking(
+            "No specialized handling available, generating direct response..."
+        )
         response = await self.generate_response(
             f"You are a helpful assistant. Respond to this user query: {user_input}",
             model_name=self.model_router.route(user_input, default=self.get_model_name()),
@@ -352,21 +376,24 @@ User input: {user_input}
     async def _stream_casual_chat_response(
         self,
         user_input: str,
-        conversation_history: Optional[ConversationHistory],
+        conversation_history: ConversationHistory | None,
     ) -> AsyncGenerator[StreamData, None]:
         """Generate a friendly chat reply (heuristic conversation path only)."""
         yield self.stream_thinking("Generating direct response...")
 
         from core.personality_manager import get_personality_manager
+
         personality_manager = get_personality_manager()
 
         if conversation_history and conversation_history.messages:
-            history_text = "\n".join([
-                f"{msg.role.upper()}: {msg.content}"
-                for msg in conversation_history.get_recent_messages(
-                    self.config.agents.history_window
-                )
-            ])
+            history_text = "\n".join(
+                [
+                    f"{msg.role.upper()}: {msg.content}"
+                    for msg in conversation_history.get_recent_messages(
+                        self.config.agents.history_window
+                    )
+                ]
+            )
         else:
             history_text = ""
 
@@ -398,7 +425,7 @@ ASSISTANT:"""
                 details=str(e),
             )
 
-    async def _select_specialized_agent(self, goal_statement: str) -> Optional[Any]:
+    async def _select_specialized_agent(self, goal_statement: str) -> Any | None:
         """
         Select the appropriate specialized agent based on the goal statement.
 
@@ -418,7 +445,7 @@ ASSISTANT:"""
         # Convert goal to lowercase for easier matching
         goal_lower = goal_statement.lower()
 
-        def _matches(keywords: List[str]) -> bool:
+        def _matches(keywords: list[str]) -> bool:
             """Whole-word match — plain substring `in` checks false-positive
             constantly (e.g. "codebase" contains "code", "description"
             contains "script"), which is exactly what misrouted a live "find
@@ -430,14 +457,27 @@ ASSISTANT:"""
         # "write me a" alone — it's a substring of any "write me a <thing>"
         # request (e.g. "write me a python script"), which misrouted plain
         # coding requests to the book-writing agent before this fix.
-        story_keywords = ["write a story", "write a book", "story about",
-                          "write me a story", "write me a novel", "write me a poem",
-                          "create a story", "tell a story",
-                          "novel", "fiction", "narrative", "tale"]
+        story_keywords = [
+            "write a story",
+            "write a book",
+            "story about",
+            "write me a story",
+            "write me a novel",
+            "write me a poem",
+            "create a story",
+            "tell a story",
+            "novel",
+            "fiction",
+            "narrative",
+            "tale",
+        ]
 
         if _matches(story_keywords):
             self.logger.info("Story writing task detected with keyword match")
-            if "book_writing" in self.specialized_agents and self.specialized_agents["book_writing"]:
+            if (
+                "book_writing" in self.specialized_agents
+                and self.specialized_agents["book_writing"]
+            ):
                 self.logger.info("Selected book writing agent for task")
                 return self.specialized_agents["book_writing"]
             else:
@@ -447,8 +487,18 @@ ASSISTANT:"""
         # "bug", etc. are a much stronger and more specific signal than the
         # broad coding keyword list below, so a message like "find and fix
         # bugs in the codebase" should land on self-repair, not coding.
-        repair_keywords = ["fix", "repair", "diagnose", "troubleshoot",
-                           "error", "issue", "problem", "bug", "bugs", "crash"]
+        repair_keywords = [
+            "fix",
+            "repair",
+            "diagnose",
+            "troubleshoot",
+            "error",
+            "issue",
+            "problem",
+            "bug",
+            "bugs",
+            "crash",
+        ]
 
         if _matches(repair_keywords):
             self.logger.info("System repair task detected with keyword match")
@@ -459,9 +509,20 @@ ASSISTANT:"""
                 self.logger.warning("Self-repair agent requested but not available")
 
         # Check for coding related tasks
-        coding_keywords = ["code", "program", "develop", "script",
-                           "function", "class", "module", "api",
-                           "software", "application", "app", "website"]
+        coding_keywords = [
+            "code",
+            "program",
+            "develop",
+            "script",
+            "function",
+            "class",
+            "module",
+            "api",
+            "software",
+            "application",
+            "app",
+            "website",
+        ]
 
         if _matches(coding_keywords):
             self.logger.info("Coding task detected with keyword match")
@@ -513,4 +574,5 @@ async def test_wits_control_center():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_wits_control_center())

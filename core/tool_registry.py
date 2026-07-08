@@ -4,25 +4,27 @@ Tool Registry for WitsV3.
 Manages registration, discovery, and execution of tools.
 """
 
-import logging
 import importlib.util
 import inspect
+import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any
 
 from core.base_tool import BaseTool
 
 # Type alias for tool types - using BaseTool as base type
 ToolType = BaseTool
 
+
 class ToolRegistry:
     """
     Registry for managing tools in WitsV3.
     """
+
     def __init__(self):
         """Initialize the tool registry."""
-        self.tools: Dict[str, ToolType] = {}
+        self.tools: dict[str, ToolType] = {}
         self.logger = logging.getLogger("WitsV3.ToolRegistry")
 
         # Register built-in tools
@@ -62,7 +64,7 @@ class ToolRegistry:
             return True
         return False
 
-    def get_tool(self, tool_name: str) -> Optional[ToolType]:
+    def get_tool(self, tool_name: str) -> ToolType | None:
         """
         Get a tool by name.
 
@@ -74,7 +76,7 @@ class ToolRegistry:
         """
         return self.tools.get(tool_name)
 
-    def get_all_tools(self) -> Dict[str, ToolType]:
+    def get_all_tools(self) -> dict[str, ToolType]:
         """
         Get all registered tools.
 
@@ -83,7 +85,7 @@ class ToolRegistry:
         """
         return self.tools.copy()
 
-    def list_tool_names(self) -> List[str]:
+    def list_tool_names(self) -> list[str]:
         """
         Get list of all tool names.
 
@@ -92,7 +94,7 @@ class ToolRegistry:
         """
         return list(self.tools.keys())
 
-    def get_tools_for_llm(self) -> List[Dict[str, Any]]:
+    def get_tools_for_llm(self) -> list[dict[str, Any]]:
         """
         Get all tools formatted for LLM consumption.
 
@@ -134,9 +136,7 @@ class ToolRegistry:
         exec_kwargs = self._filter_tool_kwargs(tool, kwargs)
 
         try:
-            self.logger.debug(
-                f"Executing tool {tool_name} with validated args: {exec_kwargs}"
-            )
+            self.logger.debug(f"Executing tool {tool_name} with validated args: {exec_kwargs}")
             result = await tool.execute(**exec_kwargs)
             self.logger.debug(f"Tool {tool_name} completed successfully")
             return result
@@ -159,7 +159,7 @@ class ToolRegistry:
             This is the enhanced version that returns EnhancedToolResult instead of raw results.
             Use this for better error handling and validation feedback.
         """
-        from .schemas import ToolExecutionContext, EnhancedToolResult
+        from .schemas import EnhancedToolResult, ToolExecutionContext
 
         start_time = time.time()
 
@@ -173,18 +173,15 @@ class ToolRegistry:
                 error=error_msg,
                 result=None,
                 validation_errors=[error_msg],
-                execution_time=time.time() - start_time
+                execution_time=time.time() - start_time,
             )
 
         # Create execution context
-        execution_context = ToolExecutionContext(
-            tool_name=tool_name,
-            arguments=kwargs
-        )
+        execution_context = ToolExecutionContext(tool_name=tool_name, arguments=kwargs)
 
         try:
             # Use enhanced validation if available, otherwise fall back to legacy
-            if hasattr(tool, 'validate_arguments'):
+            if hasattr(tool, "validate_arguments"):
                 validation_result = tool.validate_arguments(kwargs)
                 execution_context.validation_result = validation_result
 
@@ -198,7 +195,7 @@ class ToolRegistry:
                         validation_errors=validation_result.errors,
                         warnings=validation_result.warnings,
                         execution_context=execution_context,
-                        execution_time=time.time() - start_time
+                        execution_time=time.time() - start_time,
                     )
 
                 # Log any warnings
@@ -208,7 +205,9 @@ class ToolRegistry:
 
                 # Use validated arguments for execution
                 validated_args = validation_result.validated_arguments
-                self.logger.debug(f"Executing tool {tool_name} with validated args: {validated_args}")
+                self.logger.debug(
+                    f"Executing tool {tool_name} with validated args: {validated_args}"
+                )
 
                 result = await tool.execute(**validated_args)
 
@@ -217,23 +216,25 @@ class ToolRegistry:
                     result=result,
                     execution_context=execution_context,
                     execution_time=time.time() - start_time,
-                    warnings=validation_result.warnings
+                    warnings=validation_result.warnings,
                 )
             else:
                 # Fall back to legacy validation
                 validation = self.validate_tool_call(tool_name, **kwargs)
 
                 if not validation["valid"]:
-                    error_msg = f"Tool '{tool_name}' validation failed: {', '.join(validation['errors'])}"
+                    error_msg = (
+                        f"Tool '{tool_name}' validation failed: {', '.join(validation['errors'])}"
+                    )
                     self.logger.error(error_msg)
                     return EnhancedToolResult(
                         success=False,
                         error=error_msg,
                         result=None,
-                        validation_errors=validation['errors'],
-                        warnings=validation.get('warnings', []),
+                        validation_errors=validation["errors"],
+                        warnings=validation.get("warnings", []),
                         execution_context=execution_context,
-                        execution_time=time.time() - start_time
+                        execution_time=time.time() - start_time,
                     )
 
                 # Log any warnings
@@ -249,7 +250,7 @@ class ToolRegistry:
                     result=result,
                     execution_context=execution_context,
                     execution_time=time.time() - start_time,
-                    warnings=validation.get('warnings', [])
+                    warnings=validation.get("warnings", []),
                 )
 
         except Exception as e:
@@ -262,10 +263,10 @@ class ToolRegistry:
                 error=error_msg,
                 result=None,
                 execution_context=execution_context,
-                execution_time=execution_time
+                execution_time=execution_time,
             )
 
-    def validate_tool_call(self, tool_name: str, **kwargs) -> Dict[str, Any]:
+    def validate_tool_call(self, tool_name: str, **kwargs) -> dict[str, Any]:
         """
         Validate a tool call before execution.
 
@@ -278,12 +279,7 @@ class ToolRegistry:
         """
         kwargs = self._normalize_tool_kwargs(tool_name, kwargs)
 
-        validation_result = {
-            "valid": False,
-            "errors": [],
-            "warnings": [],
-            "tool": None
-        }
+        validation_result = {"valid": False, "errors": [], "warnings": [], "tool": None}
 
         # Check if tool exists
         tool = self.get_tool(tool_name)
@@ -342,7 +338,7 @@ class ToolRegistry:
         return validation_result
 
     @staticmethod
-    def _normalize_tool_kwargs(tool_name: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_tool_kwargs(tool_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Map common LLM arg aliases before validation/execute."""
         args = {
             k: v
@@ -384,13 +380,9 @@ class ToolRegistry:
         return args
 
     @staticmethod
-    def _filter_tool_kwargs(tool: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+    def _filter_tool_kwargs(tool: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
         """Drop LLM hallucinations and keep only schema-declared parameters."""
-        cleaned = {
-            k: v
-            for k, v in kwargs.items()
-            if k not in ("tool_name", "name")
-        }
+        cleaned = {k: v for k, v in kwargs.items() if k not in ("tool_name", "name")}
         try:
             schema = tool.get_schema()
             if "parameters" in schema and isinstance(schema["parameters"], dict):
@@ -411,11 +403,12 @@ class ToolRegistry:
         # Register file tools using lazy import
         try:
             from tools.file_tools import (
+                DateTimeTool,
                 FileReadTool,
                 FileWriteTool,
                 ListDirectoryTool,
-                DateTimeTool
             )
+
             self.register_tool(FileReadTool())
             self.register_tool(FileWriteTool())
             self.register_tool(ListDirectoryTool())
@@ -449,23 +442,26 @@ class ToolRegistry:
 
                     # Find all BaseTool subclasses in the module
                     for name, obj in inspect.getmembers(module):
-                        if (inspect.isclass(obj) and
-                            issubclass(obj, BaseTool) and
-                            obj != BaseTool):
+                        if inspect.isclass(obj) and issubclass(obj, BaseTool) and obj != BaseTool:
                             try:
                                 # Try to instantiate the tool - some may need no args
                                 # Most tools should handle their own instantiation
-                                if hasattr(obj, '__init__'):
+                                if hasattr(obj, "__init__"):
                                     # Check if the constructor needs parameters
                                     sig = inspect.signature(obj.__init__)
-                                    params = [p for p in sig.parameters.values()
-                                             if p.name != 'self' and p.default == inspect.Parameter.empty]
+                                    params = [
+                                        p
+                                        for p in sig.parameters.values()
+                                        if p.name != "self" and p.default == inspect.Parameter.empty
+                                    ]
 
                                     if not params:  # No required parameters
                                         tool_instance = obj()
                                         self.register_tool(tool_instance)
                                     else:
-                                        self.logger.debug(f"Skipping tool {name} - requires parameters: {[p.name for p in params]}")
+                                        self.logger.debug(
+                                            f"Skipping tool {name} - requires parameters: {[p.name for p in params]}"
+                                        )
                                 else:
                                     tool_instance = obj()
                                     self.register_tool(tool_instance)
@@ -487,8 +483,7 @@ class ThinkTool(BaseTool):
 
     def __init__(self):
         super().__init__(
-            name="think",
-            description="Think through a problem or situation step by step"
+            name="think", description="Think through a problem or situation step by step"
         )
 
     async def execute(self, thought: str = "") -> str:
@@ -496,7 +491,7 @@ class ThinkTool(BaseTool):
         self.logger.debug(f"Thinking: {thought}")
         return f"Thought: {thought}"
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         """Get tool schema."""
         return {
             "type": "object",
@@ -504,10 +499,10 @@ class ThinkTool(BaseTool):
                 "thought": {
                     "type": "string",
                     "description": "The thought or reasoning to process",
-                    "default": ""
+                    "default": "",
                 }
             },
-            "required": []  # Make thought optional
+            "required": [],  # Make thought optional
         }
 
 
@@ -515,20 +510,17 @@ class CalculatorTool(BaseTool):
     """Simple calculator tool."""
 
     def __init__(self):
-        super().__init__(
-            name="calculator",
-            description="Perform basic mathematical calculations"
-        )
+        super().__init__(name="calculator", description="Perform basic mathematical calculations")
 
     async def execute(self, expression: str) -> str:
         """Execute calculation."""
         try:
             # Basic safety check
-            if any(char in expression for char in ['import', 'exec', 'eval', '__']):
+            if any(char in expression for char in ["import", "exec", "eval", "__"]):
                 raise ValueError("Invalid expression")
 
             # Only allow basic math operations
-            allowed_chars = set('0123456789+-*/().,_ ')
+            allowed_chars = set("0123456789+-*/().,_ ")
             if not all(c in allowed_chars for c in expression):
                 raise ValueError("Expression contains invalid characters")
 
@@ -540,17 +532,17 @@ class CalculatorTool(BaseTool):
             self.logger.warning(f"Calculation error: {e}")
             return f"Error: {str(e)}"
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         """Get tool schema."""
         return {
             "type": "object",
             "properties": {
                 "expression": {
                     "type": "string",
-                    "description": "Mathematical expression to evaluate (e.g., '2 + 2', '10 * 5')"
+                    "description": "Mathematical expression to evaluate (e.g., '2 + 2', '10 * 5')",
                 }
             },
-            "required": ["expression"]
+            "required": ["expression"],
         }
 
 
@@ -589,4 +581,5 @@ async def test_tool_registry():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(test_tool_registry())

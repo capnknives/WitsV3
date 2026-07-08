@@ -3,7 +3,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 
 @dataclass
@@ -15,10 +15,10 @@ class CodeProject:
     description: str
     language: str
     project_type: str  # web_app, cli_tool, library, api, etc.
-    structure: Dict[str, Any]
-    dependencies: List[str]
-    files: Dict[str, str]  # filename -> content
-    tests: Dict[str, str]  # test_filename -> content
+    structure: dict[str, Any]
+    dependencies: list[str]
+    files: dict[str, str]  # filename -> content
+    tests: dict[str, str]  # test_filename -> content
     documentation: str
     status: str = "planning"  # planning, development, testing, complete
     created_at: datetime = field(default_factory=datetime.now)
@@ -35,7 +35,7 @@ class CodeAnalysis:
     complexity_score: float
     maintainability_index: float
     test_coverage: float
-    security_issues: List[str]
-    performance_issues: List[str]
-    style_violations: List[str]
-    suggestions: List[str]
+    security_issues: list[str]
+    performance_issues: list[str]
+    style_violations: list[str]
+    suggestions: list[str]

@@ -5,31 +5,31 @@ Provides visualization capabilities for the Neural Web knowledge networks
 including static graphs and interactive HTML visualizations.
 """
 
-import logging
 import json
-import asyncio
-from pathlib import Path
+import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any, Tuple
-import matplotlib.pyplot as plt
+from pathlib import Path
+from typing import Any
+
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 
 from core.base_tool import BaseTool, ToolResult
 from core.config import WitsV3Config
 from core.neural_web_core import NeuralWeb
-from core.memory_manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_neural_web(memory_manager) -> Optional[NeuralWeb]:
+def _resolve_neural_web(memory_manager) -> NeuralWeb | None:
     """Pull the live NeuralWeb out of memory_manager when the neural backend is active."""
     if memory_manager is None:
         return None
     try:
         from core.neural_memory_backend import NeuralMemoryBackend
+
         backend = getattr(memory_manager, "backend", None)
         if isinstance(backend, NeuralMemoryBackend):
             return backend.neural_web
@@ -46,12 +46,14 @@ class NeuralWebVisualizer:
         self.config = config
         self.logger = logging.getLogger(__name__)
 
-    async def generate_network_graph(self,
-                                   format: str = "png",
-                                   include_weights: bool = True,
-                                   filter_threshold: float = 0.2,
-                                   max_nodes: int = 100,
-                                   include_domains: bool = True) -> str:
+    async def generate_network_graph(
+        self,
+        format: str = "png",
+        include_weights: bool = True,
+        filter_threshold: float = 0.2,
+        max_nodes: int = 100,
+        include_domains: bool = True,
+    ) -> str:
         """
         Generate a visualization of the neural web network.
 
@@ -82,11 +84,13 @@ class NeuralWebVisualizer:
             domain_color_map = {}
             color_palette = plt.cm.Set3(np.linspace(0, 1, 12))  # 12 distinct colors
 
-            for i, (concept_id, concept) in enumerate(concept_items):
+            for _i, (concept_id, concept) in enumerate(concept_items):
                 viz_graph.add_node(concept_id)
 
                 # Create label (truncate if too long)
-                label = concept.content[:20] + "..." if len(concept.content) > 20 else concept.content
+                label = (
+                    concept.content[:20] + "..." if len(concept.content) > 20 else concept.content
+                )
                 node_labels[concept_id] = label
 
                 # Color by domain if enabled
@@ -104,9 +108,11 @@ class NeuralWebVisualizer:
             # Add edges with filtering
             edge_weights = []
             for (source_id, target_id), connection in self.neural_web.connections.items():
-                if (source_id in viz_graph.nodes and
-                    target_id in viz_graph.nodes and
-                    connection.strength >= filter_threshold):
+                if (
+                    source_id in viz_graph.nodes
+                    and target_id in viz_graph.nodes
+                    and connection.strength >= filter_threshold
+                ):
 
                     viz_graph.add_edge(source_id, target_id)
                     edge_weights.append(connection.strength * 5)  # Scale for visibility
@@ -122,52 +128,46 @@ class NeuralWebVisualizer:
                 pos = nx.circular_layout(viz_graph)
 
             # Draw the graph
-            nx.draw_networkx_nodes(
-                viz_graph, pos,
-                node_color=node_colors,
-                node_size=500,
-                alpha=0.8
-            )
+            nx.draw_networkx_nodes(viz_graph, pos, node_color=node_colors, node_size=500, alpha=0.8)
 
             # Draw edges with varying thickness if weights included
             if include_weights and edge_weights:
                 nx.draw_networkx_edges(
-                    viz_graph, pos,
+                    viz_graph,
+                    pos,
                     width=edge_weights,
                     alpha=0.6,
-                    edge_color='gray',
+                    edge_color="gray",
                     arrows=True,
-                    arrowsize=20
+                    arrowsize=20,
                 )
             else:
                 nx.draw_networkx_edges(
-                    viz_graph, pos,
-                    alpha=0.6,
-                    edge_color='gray',
-                    arrows=True,
-                    arrowsize=20
+                    viz_graph, pos, alpha=0.6, edge_color="gray", arrows=True, arrowsize=20
                 )
 
             # Add labels
             nx.draw_networkx_labels(
-                viz_graph, pos,
-                labels=node_labels,
-                font_size=8,
-                font_weight='bold'
+                viz_graph, pos, labels=node_labels, font_size=8, font_weight="bold"
             )
 
             # Add title
-            plt.title(f"Neural Web Knowledge Network\n{len(viz_graph.nodes)} concepts, {len(viz_graph.edges)} connections",
-                     fontsize=16, fontweight='bold')
+            plt.title(
+                f"Neural Web Knowledge Network\n{len(viz_graph.nodes)} concepts, {len(viz_graph.edges)} connections",
+                fontsize=16,
+                fontweight="bold",
+            )
 
             # Add legend for domains if enabled
             if include_domains and domain_color_map:
-                patches = [mpatches.Patch(color=color, label=domain)
-                          for domain, color in domain_color_map.items()]
-                plt.legend(handles=patches, loc='upper right', bbox_to_anchor=(1.0, 1.0))
+                patches = [
+                    mpatches.Patch(color=color, label=domain)
+                    for domain, color in domain_color_map.items()
+                ]
+                plt.legend(handles=patches, loc="upper right", bbox_to_anchor=(1.0, 1.0))
 
             # Remove axes
-            plt.axis('off')
+            plt.axis("off")
 
             # Save visualization
             output_dir = Path("data/visualizations")
@@ -176,7 +176,7 @@ class NeuralWebVisualizer:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = output_dir / f"neural_web_{timestamp}.{format}"
 
-            plt.savefig(output_path, format=format, dpi=300, bbox_inches='tight')
+            plt.savefig(output_path, format=format, dpi=300, bbox_inches="tight")
             plt.close()
 
             self.logger.info(f"Generated neural web visualization: {output_path}")
@@ -186,10 +186,9 @@ class NeuralWebVisualizer:
             self.logger.error(f"Error generating network graph: {e}")
             raise
 
-    async def generate_interactive_visualization(self,
-                                               max_nodes: int = 100,
-                                               include_domains: bool = True,
-                                               include_weights: bool = True) -> str:
+    async def generate_interactive_visualization(
+        self, max_nodes: int = 100, include_domains: bool = True, include_weights: bool = True
+    ) -> str:
         """
         Generate an interactive HTML visualization of the neural web.
 
@@ -218,10 +217,14 @@ class NeuralWebVisualizer:
             for concept_id, concept in concept_items:
                 node_data = {
                     "id": concept_id,
-                    "label": concept.content[:30] + "..." if len(concept.content) > 30 else concept.content,
+                    "label": (
+                        concept.content[:30] + "..."
+                        if len(concept.content) > 30
+                        else concept.content
+                    ),
                     "activation": concept.activation_level,
                     "type": concept.concept_type,
-                    "content": concept.content
+                    "content": concept.content,
                 }
 
                 if include_domains and "domain" in concept.metadata:
@@ -237,7 +240,7 @@ class NeuralWebVisualizer:
                         "target": target_id,
                         "relationship": connection.relationship_type,
                         "strength": connection.strength,
-                        "confidence": connection.confidence
+                        "confidence": connection.confidence,
                     }
 
                     if include_weights:
@@ -255,7 +258,7 @@ class NeuralWebVisualizer:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = output_dir / f"neural_web_interactive_{timestamp}.html"
 
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 f.write(html_content)
 
             self.logger.info(f"Generated interactive neural web visualization: {output_path}")
@@ -265,7 +268,9 @@ class NeuralWebVisualizer:
             self.logger.error(f"Error generating interactive visualization: {e}")
             raise
 
-    def _create_interactive_html(self, nodes: List[Dict], links: List[Dict], include_domains: bool) -> str:
+    def _create_interactive_html(
+        self, nodes: list[dict], links: list[dict], include_domains: bool
+    ) -> str:
         """Create HTML content for interactive visualization."""
 
         nodes_json = json.dumps(nodes, indent=2)
@@ -603,15 +608,17 @@ class NeuralWebVisualizationTool(BaseTool):
             name="neural_web_visualize",
             description="Generate visualizations of the Neural Web knowledge network",
         )
-        self.config: Optional[WitsV3Config] = None
-        self._neural_web: Optional[NeuralWeb] = None
+        self.config: WitsV3Config | None = None
+        self._neural_web: NeuralWeb | None = None
 
-    def set_dependencies(self, config: WitsV3Config, llm_interface=None, memory_manager=None, **kwargs) -> None:
+    def set_dependencies(
+        self, config: WitsV3Config, llm_interface=None, memory_manager=None, **kwargs
+    ) -> None:
         """Wire in shared system dependencies (called by WitsV3System startup)."""
         self.config = config
         self._neural_web = _resolve_neural_web(memory_manager)
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -621,27 +628,27 @@ class NeuralWebVisualizationTool(BaseTool):
                     "format": {
                         "type": "string",
                         "enum": ["png", "svg", "pdf", "html"],
-                        "description": "Output format for the visualization"
+                        "description": "Output format for the visualization",
                     },
                     "include_weights": {
                         "type": "boolean",
-                        "description": "Whether to include connection weights"
+                        "description": "Whether to include connection weights",
                     },
                     "filter_threshold": {
                         "type": "number",
-                        "description": "Minimum connection strength to include"
+                        "description": "Minimum connection strength to include",
                     },
                     "max_nodes": {
                         "type": "integer",
-                        "description": "Maximum number of nodes to include"
+                        "description": "Maximum number of nodes to include",
                     },
                     "include_domains": {
                         "type": "boolean",
-                        "description": "Whether to include domain information"
-                    }
+                        "description": "Whether to include domain information",
+                    },
                 },
-                "required": ["format"]
-            }
+                "required": ["format"],
+            },
         }
 
     async def execute(self, **kwargs) -> ToolResult:
@@ -650,17 +657,14 @@ class NeuralWebVisualizationTool(BaseTool):
                 return ToolResult(
                     success=False,
                     result=None,
-                    error="neural_web_visualize tool has no dependencies wired (set_dependencies was never called)"
+                    error="neural_web_visualize tool has no dependencies wired (set_dependencies was never called)",
                 )
 
             # Get Neural Web instance
             neural_web = await self._get_neural_web()
 
             if not neural_web:
-                return ToolResult(
-                    success=False,
-                    error="Neural Web not available or empty"
-                )
+                return ToolResult(success=False, error="Neural Web not available or empty")
 
             # Create visualizer
             visualizer = NeuralWebVisualizer(neural_web, self.config)
@@ -676,7 +680,7 @@ class NeuralWebVisualizationTool(BaseTool):
                 output_path = await visualizer.generate_interactive_visualization(
                     max_nodes=max_nodes,
                     include_domains=include_domains,
-                    include_weights=include_weights
+                    include_weights=include_weights,
                 )
             else:
                 include_weights = kwargs.get("include_weights", True)
@@ -689,7 +693,7 @@ class NeuralWebVisualizationTool(BaseTool):
                     include_weights=include_weights,
                     filter_threshold=filter_threshold,
                     max_nodes=max_nodes,
-                    include_domains=include_domains
+                    include_domains=include_domains,
                 )
 
             return ToolResult(
@@ -699,18 +703,15 @@ class NeuralWebVisualizationTool(BaseTool):
                     "path": output_path,
                     "format": format,
                     "node_count": len(neural_web.concepts),
-                    "connection_count": len(neural_web.connections)
-                }
+                    "connection_count": len(neural_web.connections),
+                },
             )
 
         except Exception as e:
             logger.error(f"Error creating neural web visualization: {e}")
-            return ToolResult(
-                success=False,
-                error=f"Error creating visualization: {str(e)}"
-            )
+            return ToolResult(success=False, error=f"Error creating visualization: {str(e)}")
 
-    async def _get_neural_web(self) -> Optional[NeuralWeb]:
+    async def _get_neural_web(self) -> NeuralWeb | None:
         """Get the Neural Web instance from the system."""
         try:
             if self._neural_web is not None:
@@ -733,10 +734,25 @@ class NeuralWebVisualizationTool(BaseTool):
         try:
             # Add test concepts
             test_concepts = [
-                ("python", "Python programming language", "technology", {"domain": "computer_science"}),
+                (
+                    "python",
+                    "Python programming language",
+                    "technology",
+                    {"domain": "computer_science"},
+                ),
                 ("ai", "Artificial Intelligence", "technology", {"domain": "computer_science"}),
-                ("machine_learning", "Machine Learning algorithms", "technology", {"domain": "computer_science"}),
-                ("creativity", "Human creativity and innovation", "concept", {"domain": "psychology"}),
+                (
+                    "machine_learning",
+                    "Machine Learning algorithms",
+                    "technology",
+                    {"domain": "computer_science"},
+                ),
+                (
+                    "creativity",
+                    "Human creativity and innovation",
+                    "concept",
+                    {"domain": "psychology"},
+                ),
                 ("art", "Artistic expression and creation", "concept", {"domain": "arts"}),
                 ("music", "Musical composition and performance", "concept", {"domain": "arts"}),
                 ("physics", "Laws of physics and matter", "science", {"domain": "physics"}),

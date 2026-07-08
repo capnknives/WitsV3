@@ -1,11 +1,13 @@
-import pytest
-import asyncio
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 from unittest.mock import MagicMock, patch
-from core.supabase_backend import SupabaseMemoryBackend
-from core.memory_manager import MemorySegment, MemorySegmentContent
+
+import pytest
+
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
+from core.memory_manager import MemorySegment, MemorySegmentContent
+from core.supabase_backend import SupabaseMemoryBackend
+
 
 class DummyLLM(BaseLLMInterface):
     def __init__(self):
@@ -22,12 +24,13 @@ class DummyLLM(BaseLLMInterface):
     async def get_embedding(self, text, model=None):
         return [0.1] * 384
 
+
 @pytest.mark.asyncio
 async def test_supabase_add_and_get_segment():
     """Test adding and retrieving memory segments with mocked Supabase."""
 
     # Create a mocked Supabase client
-    with patch('core.supabase_backend.create_client') as mock_create_client:
+    with patch("core.supabase_backend.create_client") as mock_create_client:
         mock_supabase = MagicMock()
         mock_create_client.return_value = mock_supabase
 
@@ -40,22 +43,26 @@ async def test_supabase_add_and_get_segment():
         mock_table.insert.return_value = mock_insert
         mock_insert.execute.return_value = MagicMock(data=[{"id": "test-id"}])
 
-                # Mock select operation for get_recent_segments
+        # Mock select operation for get_recent_segments
         mock_select = MagicMock()
         mock_table.select.return_value = mock_select
         mock_order = MagicMock()
         mock_select.order.return_value = mock_order
         mock_limit = MagicMock()
         mock_order.limit.return_value = mock_limit
-        mock_limit.execute.return_value = MagicMock(data=[{
-            "id": "test-id",
-            "type": "test",
-            "source": "unit-test",
-            "content": {"text": "Test content"},
-            "metadata": {"test": True},
-            "importance": 0.5,
-            "embedding": [0.1] * 384
-        }])
+        mock_limit.execute.return_value = MagicMock(
+            data=[
+                {
+                    "id": "test-id",
+                    "type": "test",
+                    "source": "unit-test",
+                    "content": {"text": "Test content"},
+                    "metadata": {"test": True},
+                    "importance": 0.5,
+                    "embedding": [0.1] * 384,
+                }
+            ]
+        )
 
         # Create config and LLM
         config = WitsV3Config()
@@ -73,7 +80,7 @@ async def test_supabase_add_and_get_segment():
             type="test",
             source="unit-test",
             content=MemorySegmentContent(text="Test content"),
-            metadata={"test": True}
+            metadata={"test": True},
         )
 
         # Test adding the segment

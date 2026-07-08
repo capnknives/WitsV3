@@ -6,7 +6,7 @@ retries) into actionable copy.
 """
 
 import re
-from typing import Any, Dict
+from typing import Any
 
 _OLLAMA_UNAVAILABLE = (
     re.compile(r"failed to connect to ollama", re.I),
@@ -25,7 +25,9 @@ def is_ollama_unavailable(text: str) -> bool:
     return any(p.search(text) for p in _OLLAMA_UNAVAILABLE)
 
 
-def format_chat_error(exc_or_text: Any, ollama_url: str = "http://localhost:11434") -> Dict[str, str]:
+def format_chat_error(
+    exc_or_text: Any, ollama_url: str = "http://localhost:11434"
+) -> dict[str, str]:
     """
     Build a structured user-facing error from an exception or message string.
 

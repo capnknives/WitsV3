@@ -20,16 +20,12 @@ def test_normalize_read_file_path_alias(registry):
 
 
 def test_normalize_list_directory_alias(registry):
-    args = registry._normalize_tool_kwargs(
-        "list_directory", {"directory": "./documents"}
-    )
+    args = registry._normalize_tool_kwargs("list_directory", {"directory": "./documents"})
     assert args == {"directory_path": "./documents"}
 
 
 def test_normalize_document_search_top_k(registry):
-    args = registry._normalize_tool_kwargs(
-        "document_search", {"query": "cats", "top_k": 3}
-    )
+    args = registry._normalize_tool_kwargs("document_search", {"query": "cats", "top_k": 3})
     assert args == {"query": "cats", "max_results": 3}
 
 
@@ -65,7 +61,5 @@ def test_normalize_write_file_aliases(registry):
 
 
 def test_validate_write_file_accepts_path_and_text_aliases(registry):
-    validation = registry.validate_tool_call(
-        "write_file", path="notes.txt", body="line one"
-    )
+    validation = registry.validate_tool_call("write_file", path="notes.txt", body="line one")
     assert validation["valid"] is True

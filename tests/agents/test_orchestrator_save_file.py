@@ -50,9 +50,7 @@ async def test_prepare_write_file_fills_content_from_session():
         "conversation_history": _conversation(),
         "observations": [],
     }
-    args = await h._prepare_tool_args(
-        "write_file", {"file_path": "exports/chat.txt"}, state
-    )
+    args = await h._prepare_tool_args("write_file", {"file_path": "exports/chat.txt"}, state)
     assert "USER: Tell me a story" in args["content"]
     assert "ASSISTANT: Once upon a time" in args["content"]
 
@@ -63,13 +61,9 @@ async def test_prepare_write_file_prefers_read_history_observation():
     state = {
         "goal": "Save this conversation to a file",
         "conversation_history": _conversation(),
-        "observations": [
-            "Tool read_conversation_history result: USER: hi\n\nASSISTANT: hello"
-        ],
+        "observations": ["Tool read_conversation_history result: USER: hi\n\nASSISTANT: hello"],
     }
-    args = await h._prepare_tool_args(
-        "write_file", {"file_path": "out.txt"}, state
-    )
+    args = await h._prepare_tool_args("write_file", {"file_path": "out.txt"}, state)
     assert args["content"] == "USER: hi\n\nASSISTANT: hello"
 
 

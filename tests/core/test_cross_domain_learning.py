@@ -2,13 +2,14 @@
 Tests for the cross-domain learning functionality in the Neural Web system.
 """
 
-import pytest
 import asyncio
 from unittest.mock import MagicMock, patch
 
-from core.cross_domain_learning import CrossDomainLearning, DomainClassifier
-from core.neural_web_core import NeuralWeb, ConceptNode
+import pytest
+
 from core.config import WitsV3Config
+from core.cross_domain_learning import CrossDomainLearning, DomainClassifier
+from core.neural_web_core import NeuralWeb
 
 
 @pytest.fixture
@@ -26,7 +27,12 @@ async def neural_web():
     concepts = [
         ("c1", "Gravity", "physics", "The force that attracts objects with mass"),
         ("c2", "Democracy", "politics", "A system of government by the whole population"),
-        ("c3", "Photosynthesis", "biology", "Process by which plants use sunlight to create energy"),
+        (
+            "c3",
+            "Photosynthesis",
+            "biology",
+            "Process by which plants use sunlight to create energy",
+        ),
         ("c4", "Algorithm", "computer_science", "A step-by-step procedure for calculations"),
         ("c5", "Symphony", "music", "An elaborate musical composition for orchestra"),
     ]
@@ -36,10 +42,7 @@ async def neural_web():
             concept_id=c_id,
             content=concept,
             concept_type="fact",
-            metadata={
-                "domain": domain,
-                "description": desc
-            }
+            metadata={"domain": domain, "description": desc},
         )
 
     # Add some connections

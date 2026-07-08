@@ -3,48 +3,53 @@ Personality and Ethics Management System for WitsV3
 Handles personality profiles, ethics overlay, and behavioral adaptation
 """
 
-import yaml
 import logging
 import os
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
-from pydantic import BaseModel
+from datetime import datetime
+from typing import Any
+
+import yaml
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class PersonalityProfile:
     """Represents a loaded personality profile"""
+
     name: str
     version: str
     profile_id: str
     author: str
-    core_directives: List[str]
-    communication: Dict[str, Any]
-    cognitive_model: Dict[str, Any]
-    execution_logic: Dict[str, Any]
-    memory_management: Dict[str, Any]
-    persona_layers: Dict[str, Any]
-    trust_protocols: Dict[str, Any]
-    backend_interface: Dict[str, Any]
-    audit: Dict[str, Any]
-    ethics_overlay: Dict[str, Any]
+    core_directives: list[str]
+    communication: dict[str, Any]
+    cognitive_model: dict[str, Any]
+    execution_logic: dict[str, Any]
+    memory_management: dict[str, Any]
+    persona_layers: dict[str, Any]
+    trust_protocols: dict[str, Any]
+    backend_interface: dict[str, Any]
+    audit: dict[str, Any]
+    ethics_overlay: dict[str, Any]
+
 
 @dataclass
 class EthicsFramework:
     """Represents a loaded ethics framework"""
+
     name: str
     version: str
     author: str
-    core_principles: Dict[str, Any]
-    decision_framework: Dict[str, Any]
-    operational_guidelines: Dict[str, Any]
-    safety_protocols: Dict[str, Any]
-    testing_framework: Dict[str, Any]
-    compliance: Dict[str, Any]
-    improvement_mechanisms: Dict[str, Any]
-    implementation: Dict[str, Any]
+    core_principles: dict[str, Any]
+    decision_framework: dict[str, Any]
+    operational_guidelines: dict[str, Any]
+    safety_protocols: dict[str, Any]
+    testing_framework: dict[str, Any]
+    compliance: dict[str, Any]
+    improvement_mechanisms: dict[str, Any]
+    implementation: dict[str, Any]
+
 
 class PersonalityManager:
     """
@@ -54,6 +59,7 @@ class PersonalityManager:
     def __init__(self, config=None):
         """Initialize the personality manager"""
         from core.config import load_config
+
         self.config = config or load_config()
         self.personality_profile = None
         self.ethics_framework = None
@@ -65,7 +71,7 @@ class PersonalityManager:
         self._load_personality()
         self._load_ethics()
 
-        logger.info(f"PersonalityManager initialized")
+        logger.info("PersonalityManager initialized")
 
     @staticmethod
     def overrides_path_for(profile_path: str) -> str:
@@ -73,7 +79,7 @@ class PersonalityManager:
         return os.path.join(os.path.dirname(profile_path) or ".", "personality_overrides.yaml")
 
     @staticmethod
-    def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    def _deep_merge(base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
         """Merge overrides into base: dicts merge recursively, everything else replaces."""
         merged = dict(base)
         for key, value in overrides.items():
@@ -96,14 +102,14 @@ class PersonalityManager:
                 logger.error(f"Personality profile not found: {profile_path}")
                 return False
 
-            with open(profile_path, 'r', encoding='utf-8') as f:
+            with open(profile_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
-            if 'wits_personality' not in data:
+            if "wits_personality" not in data:
                 logger.error("Invalid personality profile format")
                 return False
 
-            self.personality_profile = data['wits_personality']
+            self.personality_profile = data["wits_personality"]
 
             # Apply questionnaire overrides (written by the web UI's
             # /personality page) on top of the hand-written base profile,
@@ -111,15 +117,19 @@ class PersonalityManager:
             overrides_path = self.overrides_path_for(profile_path)
             if os.path.exists(overrides_path):
                 try:
-                    with open(overrides_path, 'r', encoding='utf-8') as f:
+                    with open(overrides_path, encoding="utf-8") as f:
                         overrides = yaml.safe_load(f) or {}
                     if isinstance(overrides, dict) and overrides:
-                        self.personality_profile = self._deep_merge(self.personality_profile, overrides)
+                        self.personality_profile = self._deep_merge(
+                            self.personality_profile, overrides
+                        )
                         logger.info(f"Applied personality overrides from {overrides_path}")
                 except Exception as e:
                     logger.error(f"Ignoring bad personality overrides ({overrides_path}): {e}")
 
-            logger.info(f"Loaded personality profile: {self.personality_profile.get('name', 'Unknown')}")
+            logger.info(
+                f"Loaded personality profile: {self.personality_profile.get('name', 'Unknown')}"
+            )
             return True
 
         except Exception as e:
@@ -139,14 +149,14 @@ class PersonalityManager:
                 logger.error(f"Ethics framework not found: {ethics_path}")
                 return False
 
-            with open(ethics_path, 'r', encoding='utf-8') as f:
+            with open(ethics_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
-            if 'ethics_overlay' not in data:
+            if "ethics_overlay" not in data:
                 logger.error("Invalid ethics framework format")
                 return False
 
-            self.ethics_framework = data['ethics_overlay']
+            self.ethics_framework = data["ethics_overlay"]
             logger.info(f"Loaded ethics framework: {self.ethics_framework.get('name', 'Unknown')}")
             return True
 
@@ -154,7 +164,7 @@ class PersonalityManager:
             logger.error(f"Error loading ethics framework: {e}")
             return False
 
-    def get_system_prompt(self, context: Optional[Dict[str, Any]] = None) -> str:
+    def get_system_prompt(self, context: dict[str, Any] | None = None) -> str:
         """Generate system prompt based on current personality and ethics"""
         if not self.personality_profile:
             return "You are WitsV3, an AI assistant."
@@ -162,50 +172,58 @@ class PersonalityManager:
         prompt_parts = []
 
         # Identity and role
-        name = self.personality_profile.get('identity_label') or self.personality_profile.get('name', 'WitsV3')
-        role = self.personality_profile.get('default_role', '')
+        name = self.personality_profile.get("identity_label") or self.personality_profile.get(
+            "name", "WitsV3"
+        )
+        role = self.personality_profile.get("default_role", "")
         identity = f"You are {name}"
         if role:
             identity += f" — {role}"
         prompt_parts.append(identity)
 
         # Core directives
-        core_directives = self.personality_profile.get('core_directives', [])
+        core_directives = self.personality_profile.get("core_directives", [])
         if core_directives:
             prompt_parts.append("\nCore Directives:")
             for directive in core_directives:
                 prompt_parts.append(f"- {directive}")
 
         # Communication style
-        comm = self.personality_profile.get('communication', {})
+        comm = self.personality_profile.get("communication", {})
         if comm:
-            prompt_parts.append(f"\nCommunication Style:")
+            prompt_parts.append("\nCommunication Style:")
             prompt_parts.append(f"- Tone: {comm.get('tone', 'professional')}")
             prompt_parts.append(f"- Language Level: {comm.get('language_level', 'clear')}")
-            prompt_parts.append(f"- Structure Preference: {comm.get('structure_preference', 'organized')}")
-            if comm.get('verbosity'):
+            prompt_parts.append(
+                f"- Structure Preference: {comm.get('structure_preference', 'organized')}"
+            )
+            if comm.get("verbosity"):
                 prompt_parts.append(f"- Verbosity: {comm['verbosity']}")
-            if comm.get('humor'):
+            if comm.get("humor"):
                 prompt_parts.append(f"- Humor: {comm['humor']}")
 
         # Active persona
-        persona = self.personality_profile.get('persona_layers', {}).get('default_persona', '')
+        persona = self.personality_profile.get("persona_layers", {}).get("default_persona", "")
         if persona:
             prompt_parts.append(f"\nActive Persona: {persona}")
 
         # Ethics considerations
         if self.ethics_framework and self._is_ethics_active():
             prompt_parts.append("\nEthics Framework Active:")
-            principles = self.ethics_framework.get('core_principles', {})
+            principles = self.ethics_framework.get("core_principles", {})
             for principle_name, principle_data in principles.items():
                 if isinstance(principle_data, dict):
-                    priority = principle_data.get('priority', 99)
-                    desc = principle_data.get('description', '')
-                    prompt_parts.append(f"- {principle_name.replace('_', ' ').title()} (Priority {priority}): {desc}")
+                    priority = principle_data.get("priority", 99)
+                    desc = principle_data.get("description", "")
+                    prompt_parts.append(
+                        f"- {principle_name.replace('_', ' ').title()} (Priority {priority}): {desc}"
+                    )
 
         return "\n".join(prompt_parts)
 
-    def evaluate_ethics(self, action: str, context: Optional[Dict[str, Any]] = None) -> Tuple[bool, str, List[str]]:
+    def evaluate_ethics(
+        self, action: str, context: dict[str, Any] | None = None
+    ) -> tuple[bool, str, list[str]]:
         """Evaluate an action against the ethics framework"""
         if not self.ethics_framework or not self._is_ethics_active():
             return True, "Ethics framework not active", []
@@ -213,21 +231,25 @@ class PersonalityManager:
         # Simple ethics check
         action_lower = action.lower()
 
-                # Check for harmful keywords
-        harmful_keywords = ['harm', 'hurt', 'damage', 'attack', 'destroy', 'kill']
+        # Check for harmful keywords
+        harmful_keywords = ["harm", "hurt", "damage", "attack", "destroy", "kill"]
         if any(keyword in action_lower for keyword in harmful_keywords):
             return False, "Action potentially harmful", ["Consider safer alternatives"]
 
         return True, "Action passes ethics evaluation", []
 
-    def enable_ethics_override(self, user_id: str, override_type: str, duration_minutes: int = 60, auth_token: str = "") -> bool:
+    def enable_ethics_override(
+        self, user_id: str, override_type: str, duration_minutes: int = 60, auth_token: str = ""
+    ) -> bool:
         """Enable ethics override for testing (authorized users only)"""
         from core.auth_manager import verify_auth
 
         # Check authorization with both user ID and token
         is_authorized, auth_message = verify_auth(user_id, auth_token, "ethics_override")
         if not is_authorized:
-            logger.warning(f"Unauthorized ethics override attempt by user: {user_id} - {auth_message}")
+            logger.warning(
+                f"Unauthorized ethics override attempt by user: {user_id} - {auth_message}"
+            )
             return False
 
         from datetime import timedelta
@@ -236,12 +258,14 @@ class PersonalityManager:
             "enabled": True,
             "authorized_by": user_id,
             "timestamp": datetime.now(),
-            "duration_minutes": duration_minutes
+            "duration_minutes": duration_minutes,
         }
 
         self.override_expiry = datetime.now() + timedelta(minutes=duration_minutes)
 
-        logger.warning(f"Ethics override '{override_type}' enabled by {user_id} for {duration_minutes} minutes")
+        logger.warning(
+            f"Ethics override '{override_type}' enabled by {user_id} for {duration_minutes} minutes"
+        )
         return True
 
     def _check_override_authorization(self, user_id: str) -> bool:
@@ -249,7 +273,9 @@ class PersonalityManager:
         if not self.ethics_framework:
             return False
 
-        authorized_user = self.ethics_framework.get('testing_framework', {}).get('authorized_override_user', '')
+        authorized_user = self.ethics_framework.get("testing_framework", {}).get(
+            "authorized_override_user", ""
+        )
         return user_id == authorized_user
 
     def _is_ethics_active(self) -> bool:
@@ -261,10 +287,12 @@ class PersonalityManager:
             logger.info("Ethics overrides expired and have been cleared")
 
         # Ethics is active unless completely overridden
-        return not self.ethics_overrides.get('complete_disable', {}).get('enabled', False)
+        return not self.ethics_overrides.get("complete_disable", {}).get("enabled", False)
+
 
 # Global instance for easy access
 _personality_manager = None
+
 
 def get_personality_manager():
     """Get global personality manager instance"""
@@ -272,6 +300,7 @@ def get_personality_manager():
     if _personality_manager is None:
         _personality_manager = PersonalityManager()
     return _personality_manager
+
 
 def reload_personality_manager(config=None):
     """Reload the global personality manager"""

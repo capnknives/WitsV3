@@ -1,18 +1,30 @@
+import os
+from unittest.mock import mock_open, patch
+
 import pytest
 import yaml
-import os
-from unittest.mock import patch, mock_open
-
-from core.config import WitsV3Config, OllamaSettings, LLMInterfaceSettings, AgentSettings, MemoryManagerSettings, ToolSystemSettings, CLISettings, NeuralWebSettings
 from pydantic import ValidationError
+
+from core.config import (
+    AgentSettings,
+    CLISettings,
+    LLMInterfaceSettings,
+    MemoryManagerSettings,
+    NeuralWebSettings,
+    OllamaSettings,
+    ToolSystemSettings,
+    WitsV3Config,
+)
+
 
 # Helper function to get project root
 def get_project_root():
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
 
+
 def test_load_default_config():
     """Test that WitsV3Config loads with default values when no file is provided or found."""
-    with patch('builtins.open', mock_open(read_data="")) as mock_file:
+    with patch("builtins.open", mock_open(read_data="")) as mock_file:
         mock_file.side_effect = FileNotFoundError  # Simulate file not found
         config = WitsV3Config.from_yaml("non_existent_config.yaml")
 
@@ -48,7 +60,9 @@ def test_load_default_config():
     assert config.memory_manager.max_results_per_search == 5
     assert config.memory_manager.pruning_interval_seconds == 3600
     assert config.memory_manager.max_memory_segments == 10000
-    assert isinstance(config.memory_manager.neural_web_settings, NeuralWebSettings) # Added assertion for neural_web_settings
+    assert isinstance(
+        config.memory_manager.neural_web_settings, NeuralWebSettings
+    )  # Added assertion for neural_web_settings
 
     assert isinstance(config.tool_system, ToolSystemSettings)
     assert config.tool_system.enable_mcp_tools is True
@@ -57,6 +71,7 @@ def test_load_default_config():
     assert isinstance(config.cli, CLISettings)
     assert config.cli.show_thoughts is True
     assert config.cli.show_tool_calls is True
+
 
 def test_load_from_existing_config_yaml():
     """Test loading configuration from the actual config.yaml file if it exists."""
@@ -71,7 +86,7 @@ def test_load_from_existing_config_yaml():
     # Check a few key values that might differ from defaults
     # We don't assert all values, as they can be user-defined
     assert isinstance(config, WitsV3Config)
-    assert config.project_name is not None # Should have a value
+    assert config.project_name is not None  # Should have a value
 
     # Check that nested models are loaded
     assert isinstance(config.ollama_settings, OllamaSettings)
@@ -84,11 +99,13 @@ def test_load_from_existing_config_yaml():
 
 def test_load_from_empty_yaml_file():
     """Test that loading from an empty YAML file results in default values."""
-    with patch('builtins.open', mock_open(read_data="")) as mocked_file, \
-         patch('yaml.safe_load', return_value=None) as mocked_safe_load:
+    with (
+        patch("builtins.open", mock_open(read_data="")) as mocked_file,
+        patch("yaml.safe_load", return_value=None) as mocked_safe_load,
+    ):
         config = WitsV3Config.from_yaml("empty_config.yaml")
 
-    mocked_file.assert_called_once_with("empty_config.yaml", 'r')
+    mocked_file.assert_called_once_with("empty_config.yaml")
     mocked_safe_load.assert_called_once()
 
     # Assertions are same as test_load_default_config
@@ -99,12 +116,16 @@ def test_load_from_empty_yaml_file():
 
 def test_load_from_invalid_yaml_file():
     """Test that loading from an invalid YAML file results in default values."""
-    invalid_yaml_content = ": invalid_yaml" # This is not valid YAML
-    with patch('builtins.open', mock_open(read_data=invalid_yaml_content)) as mocked_file, \
-         patch('yaml.safe_load', side_effect=yaml.YAMLError("Mocked YAML Error")) as mocked_safe_load:
+    invalid_yaml_content = ": invalid_yaml"  # This is not valid YAML
+    with (
+        patch("builtins.open", mock_open(read_data=invalid_yaml_content)) as mocked_file,
+        patch(
+            "yaml.safe_load", side_effect=yaml.YAMLError("Mocked YAML Error")
+        ) as mocked_safe_load,
+    ):
         config = WitsV3Config.from_yaml("invalid_config.yaml")
 
-    mocked_file.assert_called_once_with("invalid_config.yaml", 'r')
+    mocked_file.assert_called_once_with("invalid_config.yaml")
     mocked_safe_load.assert_called_once()
 
     # Assertions are same as test_load_default_config
@@ -121,7 +142,7 @@ def test_agent_settings_validation():
     assert agent_settings.max_iterations == 10
 
     # Invalid temperature (too low)
-    with pytest.raises(ValueError): # Pydantic raises ValueError for validation errors
+    with pytest.raises(ValueError):  # Pydantic raises ValueError for validation errors
         AgentSettings(default_temperature=-0.5, max_iterations=10)
 
     # Invalid temperature (too high)
@@ -151,7 +172,12 @@ def test_ollama_settings_defaults():
 def test_neural_web_settings_validation():
     """Test Pydantic validation for NeuralWebSettings."""
     # Valid settings
-    settings = NeuralWebSettings(activation_threshold=0.5, decay_rate=0.05, max_concept_connections=30, connection_strength_threshold=0.3)
+    settings = NeuralWebSettings(
+        activation_threshold=0.5,
+        decay_rate=0.05,
+        max_concept_connections=30,
+        connection_strength_threshold=0.3,
+    )
     assert settings.activation_threshold == 0.5
     assert settings.decay_rate == 0.05
     assert settings.max_concept_connections == 30
@@ -181,10 +207,13 @@ def test_neural_web_settings_validation():
     with pytest.raises(ValueError):
         NeuralWebSettings(connection_strength_threshold=-0.3)
 
+
 def test_witsv3config_assignment_validation():
     """Test that assignments to WitsV3Config fields are validated."""
     config = WitsV3Config()
-    with pytest.raises(ValidationError): # Pydantic raises ValidationError with validate_assignment = True
+    with pytest.raises(
+        ValidationError
+    ):  # Pydantic raises ValidationError with validate_assignment = True
         config.agents.default_temperature = -0.5
 
     with pytest.raises(ValidationError):

@@ -2,12 +2,12 @@
 """Task handlers and helpers for BookWritingAgent."""
 
 import uuid
-from typing import Any, AsyncGenerator, Dict, List
-
-from core.schemas import StreamData
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from agents.book_writing_helpers import BookWritingHelpersMixin
 from agents.book_writing_models import BookStructure, Chapter
+from core.schemas import StreamData
 
 
 class BookWritingHandlersMixin(BookWritingHelpersMixin):
@@ -15,7 +15,7 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
 
     async def _handle_book_creation(
         self,
-        task_analysis: Dict[str, Any],
+        task_analysis: dict[str, Any],
         session_id: str,
     ) -> AsyncGenerator[StreamData, None]:
         """Handle creation of a new book project."""
@@ -45,8 +45,8 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         # Create book structure object
         book_structure = BookStructure(
             title=f"Book about {task_analysis['topic']}",  # Will be refined
-            genre=task_analysis['genre'],
-            target_length=task_analysis.get('length', 50000),
+            genre=task_analysis["genre"],
+            target_length=task_analysis.get("length", 50000),
         )
 
         # Parse structure response to create chapters
@@ -63,17 +63,19 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
             metadata={"book_id": book_id, "session_id": session_id},
         )
 
-        yield self.stream_result(f"Created book project '{book_structure.title}' with {len(chapters)} chapters")
+        yield self.stream_result(
+            f"Created book project '{book_structure.title}' with {len(chapters)} chapters"
+        )
 
         # Generate first chapter outline
         if chapters:
             yield self.stream_action("Generating outline for first chapter...")
-            async for stream in self._generate_chapter_outline(book_id, chapters[0]['id']):
+            async for stream in self._generate_chapter_outline(book_id, chapters[0]["id"]):
                 yield stream
 
     async def _handle_chapter_writing(
         self,
-        task_analysis: Dict[str, Any],
+        task_analysis: dict[str, Any],
         session_id: str,
     ) -> AsyncGenerator[StreamData, None]:
         """Handle writing of a specific chapter."""
@@ -128,18 +130,20 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         yield self.stream_result(f"Completed chapter: {chapter.word_count} words written")
 
         # Offer to continue with related chapters
-        yield self.stream_action("Would you like me to suggest related chapters or continue this story?")
+        yield self.stream_action(
+            "Would you like me to suggest related chapters or continue this story?"
+        )
 
     async def _handle_research(
         self,
-        task_analysis: Dict[str, Any],
+        task_analysis: dict[str, Any],
         session_id: str,
     ) -> AsyncGenerator[StreamData, None]:
         """Handle research for book topics."""
 
         yield self.stream_action("Conducting research...")
 
-        topic = task_analysis['topic']
+        topic = task_analysis["topic"]
 
         # Use neural web to find related concepts
         if self.neural_web:
@@ -156,7 +160,9 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
             related_concepts = await self.neural_web.activate_concept(topic.replace(" ", "_"))
 
             if related_concepts:
-                yield self.stream_observation(f"Found {len(related_concepts)} related concepts in knowledge network")
+                yield self.stream_observation(
+                    f"Found {len(related_concepts)} related concepts in knowledge network"
+                )
 
         # Use tools for web research if available
         research_results = []
@@ -222,7 +228,7 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
 
     async def _handle_revision(
         self,
-        task_analysis: Dict[str, Any],
+        task_analysis: dict[str, Any],
         session_id: str,
     ) -> AsyncGenerator[StreamData, None]:
         """Handle content revision and improvement."""
@@ -256,12 +262,12 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
             content=f"Revision guidelines for {task_analysis['topic']}: {revision_guidelines}",
             segment_type="REVISION_GUIDELINES",
             importance=0.7,
-            metadata={"topic": task_analysis['topic'], "session_id": session_id},
+            metadata={"topic": task_analysis["topic"], "session_id": session_id},
         )
 
     async def _handle_outline_generation(
         self,
-        task_analysis: Dict[str, Any],
+        task_analysis: dict[str, Any],
         session_id: str,
     ) -> AsyncGenerator[StreamData, None]:
         """Handle generation of book or chapter outlines."""
@@ -296,7 +302,7 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
             segment_type="CONTENT_OUTLINE",
             importance=0.8,
             metadata={
-                "topic": task_analysis['topic'],
+                "topic": task_analysis["topic"],
                 "session_id": session_id,
                 "structure": outline_structure,
             },
@@ -306,11 +312,13 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         yield self.stream_result(outline_content)
 
         # Offer to start writing based on outline
-        yield self.stream_action("Would you like me to start writing content based on this outline?")
+        yield self.stream_action(
+            "Would you like me to start writing content based on this outline?"
+        )
 
     async def _handle_general_writing(
         self,
-        task_analysis: Dict[str, Any],
+        task_analysis: dict[str, Any],
         session_id: str,
     ) -> AsyncGenerator[StreamData, None]:
         """Handle general writing requests."""
@@ -347,7 +355,7 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
             segment_type="WRITTEN_CONTENT",
             importance=0.7,
             metadata={
-                "topic": task_analysis['topic'],
+                "topic": task_analysis["topic"],
                 "word_count": len(content.split()),
                 "session_id": session_id,
             },
@@ -356,4 +364,3 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         word_count = len(content.split())
         yield self.stream_result(f"Content completed: {word_count} words")
         yield self.stream_result(content)
-

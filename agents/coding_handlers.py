@@ -2,12 +2,12 @@
 """Task handler mixins for the advanced coding agent."""
 
 import uuid
-from typing import Any, AsyncGenerator, Dict, List
-
-from core.schemas import StreamData
-from core.safe_code_editor import PROJECT_ROOT, extract_code_from_response
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from agents.coding_models import CodeProject
+from core.safe_code_editor import PROJECT_ROOT, extract_code_from_response
+from core.schemas import StreamData
 
 
 class CodingHandlersMixin:
@@ -49,34 +49,48 @@ class CodingHandlersMixin:
         new_content = extract_code_from_response(proposed)
 
         if new_content.strip() == original.strip():
-            yield self.stream_result("No change was needed — the file already satisfies the request.")
+            yield self.stream_result(
+                "No change was needed — the file already satisfies the request."
+            )
             return
 
-        yield self.stream_action(f"Applying candidate change to {file_path} and verifying with tests...")
+        yield self.stream_action(
+            f"Applying candidate change to {file_path} and verifying with tests..."
+        )
         result = await fix_tool.execute(
             file_path=file_path, new_content=new_content, reason=user_input[:120]
         )
 
         if result["success"]:
-            note = f"committed as {result['commit_sha']}" if result.get("committed") else "applied but not committed"
+            note = (
+                f"committed as {result['commit_sha']}"
+                if result.get("committed")
+                else "applied but not committed"
+            )
             yield self.stream_observation(f"Change verified — tests passed, {note}.")
             yield self.stream_result(f"Updated {file_path} as requested.")
             await self.store_memory(
                 content=f"Coding agent edited {file_path}: {user_input[:200]}",
                 segment_type="CODE_EDIT",
                 importance=0.7,
-                metadata={"file": file_path, "commit_sha": result.get("commit_sha"), "session_id": session_id},
+                metadata={
+                    "file": file_path,
+                    "commit_sha": result.get("commit_sha"),
+                    "session_id": session_id,
+                },
             )
         else:
             tail = result.get("test_output", "")[-500:]
-            yield self.stream_observation(f"Candidate change failed verification — reverted.\n{tail}")
+            yield self.stream_observation(
+                f"Candidate change failed verification — reverted.\n{tail}"
+            )
             yield self.stream_result(
                 f"Could not safely apply that change to {file_path} — it failed tests and was reverted."
             )
 
     async def _write_project_files(
-        self, project: "CodeProject", files: Dict[str, str]
-    ) -> List[str]:
+        self, project: "CodeProject", files: dict[str, str]
+    ) -> list[str]:
         """Write generated project files to workspace/<project.name>/ and
         syntax-check each .py file with py_compile, so a broken scaffold is
         reported immediately instead of silently sitting in memory as text.
@@ -98,24 +112,24 @@ class CodingHandlersMixin:
             if resolved.suffix == ".py":
                 ok, output = await run_py_compile(resolved)
                 status = "✓" if ok else "✗ syntax error"
-                results.append(f"  {status} {rel_name}" + ("" if ok else f": {output.strip()[-300:]}"))
+                results.append(
+                    f"  {status} {rel_name}" + ("" if ok else f": {output.strip()[-300:]}")
+                )
             else:
                 results.append(f"  ✓ {rel_name}")
         return results
 
     async def _handle_project_creation(
-        self,
-        task_analysis: Dict[str, Any],
-        session_id: str
+        self, task_analysis: dict[str, Any], session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle creation of new coding projects"""
 
         yield self.stream_action("Creating new coding project...")
 
         project_id = str(uuid.uuid4())
-        language = task_analysis.get('language', 'python')
-        project_type = task_analysis.get('project_type', 'web_app')
-        requirements = task_analysis.get('requirements', [])
+        language = task_analysis.get("language", "python")
+        project_type = task_analysis.get("project_type", "web_app")
+        requirements = task_analysis.get("requirements", [])
 
         architecture_prompt = f"""
         Design a {language} {project_type} project architecture for:
@@ -149,14 +163,14 @@ class CodingHandlersMixin:
         project = CodeProject(
             id=project_id,
             name=f"{project_type}_{language}_project",
-            description=' '.join(requirements),
+            description=" ".join(requirements),
             language=language,
             project_type=project_type,
             structure=project_structure,
-            dependencies=task_analysis.get('frameworks', []),
+            dependencies=task_analysis.get("frameworks", []),
             files=initial_files,
             tests={},
-            documentation=architecture_response
+            documentation=architecture_response,
         )
 
         self.current_projects[project_id] = project
@@ -176,14 +190,12 @@ class CodingHandlersMixin:
                 "project_type": project_type,
                 "session_id": session_id,
                 "workspace_path": f"workspace/{project.name}",
-            }
+            },
         )
 
         if self.neural_web:
             await self.neural_web.add_concept(
-                f"project_{project_id}",
-                f"{language} {project_type} project",
-                "code_project"
+                f"project_{project_id}", f"{language} {project_type} project", "code_project"
             )
 
             await self.neural_web.add_concept(
@@ -205,17 +217,15 @@ class CodingHandlersMixin:
             yield self.stream_action(f"  - {filename}")
 
     async def _handle_code_generation(
-        self,
-        task_analysis: Dict[str, Any],
-        session_id: str
+        self, task_analysis: dict[str, Any], session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code generation requests"""
 
         yield self.stream_action("Generating code...")
 
-        language = task_analysis.get('language', 'python')
-        requirements = task_analysis.get('requirements', [])
-        complexity = task_analysis.get('complexity', 'medium')
+        language = task_analysis.get("language", "python")
+        requirements = task_analysis.get("requirements", [])
+        complexity = task_analysis.get("complexity", "medium")
 
         code_prompt = f"""
         Write {complexity} {language} code to implement:
@@ -239,7 +249,7 @@ class CodingHandlersMixin:
         content_length = len(generated_code)
         for i in range(0, content_length, 500):
             if i > 0:
-                lines = generated_code[:i].count('\n')
+                lines = generated_code[:i].count("\n")
                 yield self.stream_action(f"Generated {lines} lines of code...")
 
         analysis = await self._analyze_code_quality(generated_code, language)
@@ -250,10 +260,10 @@ class CodingHandlersMixin:
             importance=0.8,
             metadata={
                 "language": language,
-                "lines_of_code": generated_code.count('\n'),
+                "lines_of_code": generated_code.count("\n"),
                 "complexity": complexity,
-                "session_id": session_id
-            }
+                "session_id": session_id,
+            },
         )
 
         yield self.stream_result("Generated Code:")
@@ -269,15 +279,13 @@ class CodingHandlersMixin:
                     yield self.stream_observation(f"  - {suggestion}")
 
     async def _handle_code_analysis(
-        self,
-        task_analysis: Dict[str, Any],
-        session_id: str
+        self, task_analysis: dict[str, Any], session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code analysis requests"""
 
         yield self.stream_action("Analyzing code...")
 
-        language = task_analysis.get('language', 'python')
+        language = task_analysis.get("language", "python")
 
         analysis_prompt = f"""
         Provide a comprehensive code analysis framework for {language} projects.
@@ -303,23 +311,17 @@ class CodingHandlersMixin:
             content=f"{language} code analysis framework: {analysis_result}",
             segment_type="CODE_ANALYSIS",
             importance=0.8,
-            metadata={
-                "language": language,
-                "analysis_type": "framework",
-                "session_id": session_id
-            }
+            metadata={"language": language, "analysis_type": "framework", "session_id": session_id},
         )
 
     async def _handle_debugging(
-        self,
-        task_analysis: Dict[str, Any],
-        session_id: str
+        self, task_analysis: dict[str, Any], session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle debugging requests"""
 
         yield self.stream_action("Analyzing debugging approach...")
 
-        language = task_analysis.get('language', 'python')
+        language = task_analysis.get("language", "python")
 
         debug_prompt = f"""
         Create a comprehensive debugging guide for {language} applications.
@@ -345,22 +347,17 @@ class CodingHandlersMixin:
             content=f"{language} debugging guide: {debug_guide}",
             segment_type="DEBUG_GUIDE",
             importance=0.7,
-            metadata={
-                "language": language,
-                "session_id": session_id
-            }
+            metadata={"language": language, "session_id": session_id},
         )
 
     async def _handle_optimization(
-        self,
-        task_analysis: Dict[str, Any],
-        session_id: str
+        self, task_analysis: dict[str, Any], session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code optimization requests"""
 
         yield self.stream_action("Generating optimization strategies...")
 
-        language = task_analysis.get('language', 'python')
+        language = task_analysis.get("language", "python")
 
         optimization_prompt = f"""
         Provide comprehensive code optimization strategies for {language}.
@@ -387,23 +384,18 @@ class CodingHandlersMixin:
             content=f"{language} optimization guide: {optimization_guide}",
             segment_type="OPTIMIZATION_GUIDE",
             importance=0.8,
-            metadata={
-                "language": language,
-                "session_id": session_id
-            }
+            metadata={"language": language, "session_id": session_id},
         )
 
     async def _handle_test_generation(
-        self,
-        task_analysis: Dict[str, Any],
-        session_id: str
+        self, task_analysis: dict[str, Any], session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle test generation requests"""
 
         yield self.stream_action("Generating test suite...")
 
-        language = task_analysis.get('language', 'python')
-        requirements = task_analysis.get('requirements', [])
+        language = task_analysis.get("language", "python")
+        requirements = task_analysis.get("requirements", [])
 
         test_prompt = f"""
         Generate comprehensive tests for {language} code that implements:
@@ -445,23 +437,17 @@ class CodingHandlersMixin:
             content=f"{language} test suite: {test_code}",
             segment_type="TEST_CODE",
             importance=0.8,
-            metadata={
-                "language": language,
-                "test_type": "comprehensive",
-                "session_id": session_id
-            }
+            metadata={"language": language, "test_type": "comprehensive", "session_id": session_id},
         )
 
     async def _handle_refactoring(
-        self,
-        task_analysis: Dict[str, Any],
-        session_id: str
+        self, task_analysis: dict[str, Any], session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code refactoring requests"""
 
         yield self.stream_action("Planning refactoring approach...")
 
-        language = task_analysis.get('language', 'python')
+        language = task_analysis.get("language", "python")
 
         refactor_prompt = f"""
         Create a comprehensive refactoring guide for {language} code.
@@ -487,23 +473,18 @@ class CodingHandlersMixin:
             content=f"{language} refactoring guide: {refactor_guide}",
             segment_type="REFACTOR_GUIDE",
             importance=0.7,
-            metadata={
-                "language": language,
-                "session_id": session_id
-            }
+            metadata={"language": language, "session_id": session_id},
         )
 
     async def _handle_general_coding(
-        self,
-        task_analysis: Dict[str, Any],
-        session_id: str
+        self, task_analysis: dict[str, Any], session_id: str
     ) -> AsyncGenerator[StreamData, None]:
         """Handle general coding requests"""
 
         yield self.stream_action("Processing coding request...")
 
-        language = task_analysis.get('language', 'python')
-        requirements = task_analysis.get('requirements', [])
+        language = task_analysis.get("language", "python")
+        requirements = task_analysis.get("requirements", [])
 
         general_prompt = f"""
         Provide comprehensive guidance for {language} development addressing:
@@ -527,96 +508,82 @@ class CodingHandlersMixin:
             content=f"{language} coding guidance: {guidance}",
             segment_type="CODING_GUIDANCE",
             importance=0.6,
-            metadata={
-                "language": language,
-                "session_id": session_id
-            }
+            metadata={"language": language, "session_id": session_id},
         )
 
     async def _generate_project_structure(
-        self,
-        project_type: str,
-        language: str,
-        requirements: List[str]
-    ) -> Dict[str, Any]:
+        self, project_type: str, language: str, requirements: list[str]
+    ) -> dict[str, Any]:
         """Generate project directory structure"""
 
-        base_structure = self.project_templates.get(project_type, self.project_templates['web_app'])
+        base_structure = self.project_templates.get(project_type, self.project_templates["web_app"])
 
         structure = {
-            'directories': base_structure['structure'].copy(),
-            'files': base_structure['files'].copy(),
-            'config_files': []
+            "directories": base_structure["structure"].copy(),
+            "files": base_structure["files"].copy(),
+            "config_files": [],
         }
 
-        if language == 'python':
-            structure['config_files'].extend([
-                'pyproject.toml', 'setup.cfg', '.pre-commit-config.yaml'
-            ])
-        elif language == 'javascript':
-            structure['config_files'].extend([
-                'package.json', 'tsconfig.json', '.eslintrc.js', '.prettierrc'
-            ])
-        elif language == 'java':
-            structure['config_files'].extend([
-                'pom.xml', 'build.gradle', 'application.properties'
-            ])
-        elif language == 'rust':
-            structure['config_files'].extend([
-                'Cargo.toml', 'rust-toolchain.toml'
-            ])
+        if language == "python":
+            structure["config_files"].extend(
+                ["pyproject.toml", "setup.cfg", ".pre-commit-config.yaml"]
+            )
+        elif language == "javascript":
+            structure["config_files"].extend(
+                ["package.json", "tsconfig.json", ".eslintrc.js", ".prettierrc"]
+            )
+        elif language == "java":
+            structure["config_files"].extend(["pom.xml", "build.gradle", "application.properties"])
+        elif language == "rust":
+            structure["config_files"].extend(["Cargo.toml", "rust-toolchain.toml"])
 
-        if 'api' in requirements or 'rest' in requirements:
-            structure['directories'].extend(['middleware/', 'routes/'])
+        if "api" in requirements or "rest" in requirements:
+            structure["directories"].extend(["middleware/", "routes/"])
 
-        if 'database' in requirements or 'db' in requirements:
-            structure['directories'].extend(['migrations/', 'models/'])
+        if "database" in requirements or "db" in requirements:
+            structure["directories"].extend(["migrations/", "models/"])
 
-        if 'frontend' in requirements or 'ui' in requirements:
-            structure['directories'].extend(['static/', 'templates/', 'components/'])
+        if "frontend" in requirements or "ui" in requirements:
+            structure["directories"].extend(["static/", "templates/", "components/"])
 
         return structure
 
     async def _generate_initial_files(
-        self,
-        structure: Dict[str, Any],
-        language: str,
-        project_type: str,
-        requirements: List[str]
-    ) -> Dict[str, str]:
+        self, structure: dict[str, Any], language: str, project_type: str, requirements: list[str]
+    ) -> dict[str, str]:
         """Generate initial file content"""
 
         files = {}
 
-        if language == 'python':
-            if project_type == 'web_app':
-                files['app.py'] = await self._generate_python_web_app()
-            elif project_type == 'api':
-                files['main.py'] = await self._generate_python_api()
-            elif project_type == 'cli_tool':
-                files['cli.py'] = await self._generate_python_cli()
+        if language == "python":
+            if project_type == "web_app":
+                files["app.py"] = await self._generate_python_web_app()
+            elif project_type == "api":
+                files["main.py"] = await self._generate_python_api()
+            elif project_type == "cli_tool":
+                files["cli.py"] = await self._generate_python_cli()
             else:
-                files['main.py'] = await self._generate_python_main()
+                files["main.py"] = await self._generate_python_main()
 
-            files['requirements.txt'] = await self._generate_python_requirements(requirements)
-            files['setup.py'] = await self._generate_python_setup()
+            files["requirements.txt"] = await self._generate_python_requirements(requirements)
+            files["setup.py"] = await self._generate_python_setup()
 
-        elif language == 'javascript':
-            files['package.json'] = await self._generate_js_package_json(project_type)
-            if project_type == 'web_app':
-                files['index.js'] = await self._generate_js_web_app()
-            elif project_type == 'api':
-                files['server.js'] = await self._generate_js_api()
+        elif language == "javascript":
+            files["package.json"] = await self._generate_js_package_json(project_type)
+            if project_type == "web_app":
+                files["index.js"] = await self._generate_js_web_app()
+            elif project_type == "api":
+                files["server.js"] = await self._generate_js_api()
             else:
-                files['index.js'] = await self._generate_js_main()
+                files["index.js"] = await self._generate_js_main()
 
-        files['README.md'] = await self._generate_readme(project_type, language, requirements)
-        files['.gitignore'] = await self._generate_gitignore(language)
-        files['LICENSE'] = await self._generate_license()
+        files["README.md"] = await self._generate_readme(project_type, language, requirements)
+        files[".gitignore"] = await self._generate_gitignore(language)
+        files["LICENSE"] = await self._generate_license()
 
-        if language == 'python':
-            files['tests/test_main.py'] = await self._generate_python_tests()
-        elif language == 'javascript':
-            files['tests/test.js'] = await self._generate_js_tests()
+        if language == "python":
+            files["tests/test_main.py"] = await self._generate_python_tests()
+        elif language == "javascript":
+            files["tests/test.js"] = await self._generate_js_tests()
 
         return files

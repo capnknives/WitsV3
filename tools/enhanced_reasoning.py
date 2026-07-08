@@ -5,33 +5,38 @@ Public entry: EnhancedReasoningTool (auto-discovered by tool_registry).
 """
 
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 from core.base_tool import BaseTool, ToolResult
 from core.config import WitsV3Config
-from core.neural_web_core import NeuralWeb
-from core.llm_interface import BaseLLMInterface, LLMMessage
 from core.cross_domain_learning import CrossDomainLearning
-
+from core.llm_interface import BaseLLMInterface, LLMMessage
+from core.neural_web_core import NeuralWeb
 from tools.enhanced_reasoning_models import (
-    ReasoningType,
     ReasoningContext,
     ReasoningResult,
+    ReasoningType,
     _resolve_neural_web,
 )
 from tools.enhanced_reasoning_patterns import (
+    AnalogicalReasoning,
     DeductiveReasoning,
     InductiveReasoning,
-    AnalogicalReasoning,
 )
 
 logger = logging.getLogger(__name__)
 
+
 class EnhancedReasoningEngine:
     """Main engine for enhanced reasoning patterns."""
 
-    def __init__(self, config: WitsV3Config, neural_web: NeuralWeb,
-                 llm_interface: BaseLLMInterface, cross_domain_learning: Optional[CrossDomainLearning] = None):
+    def __init__(
+        self,
+        config: WitsV3Config,
+        neural_web: NeuralWeb,
+        llm_interface: BaseLLMInterface,
+        cross_domain_learning: CrossDomainLearning | None = None,
+    ):
         self.config = config
         self.neural_web = neural_web
         self.llm_interface = llm_interface
@@ -45,9 +50,13 @@ class EnhancedReasoningEngine:
             ReasoningType.ANALOGICAL: AnalogicalReasoning(config, neural_web, llm_interface),
         }
 
-    async def reason(self, goal: str, domain: str,
-                   reasoning_types: Optional[List[ReasoningType]] = None,
-                   **kwargs) -> List[ReasoningResult]:
+    async def reason(
+        self,
+        goal: str,
+        domain: str,
+        reasoning_types: list[ReasoningType] | None = None,
+        **kwargs,
+    ) -> list[ReasoningResult]:
         """
         Execute enhanced reasoning using multiple patterns.
 
@@ -65,10 +74,10 @@ class EnhancedReasoningEngine:
             context = ReasoningContext(
                 domain=domain,
                 goal=goal,
-                constraints=kwargs.get('constraints', []),
-                available_concepts=kwargs.get('available_concepts', []),
-                confidence_threshold=kwargs.get('confidence_threshold', 0.5),
-                reasoning_depth=kwargs.get('reasoning_depth', 3)
+                constraints=kwargs.get("constraints", []),
+                available_concepts=kwargs.get("available_concepts", []),
+                confidence_threshold=kwargs.get("confidence_threshold", 0.5),
+                reasoning_depth=kwargs.get("reasoning_depth", 3),
             )
 
             # Determine which reasoning patterns to use
@@ -96,7 +105,7 @@ class EnhancedReasoningEngine:
             self.logger.error(f"Error in enhanced reasoning: {e}")
             return []
 
-    async def synthesize_reasoning_results(self, results: List[ReasoningResult], goal: str) -> str:
+    async def synthesize_reasoning_results(self, results: list[ReasoningResult], goal: str) -> str:
         """Synthesize multiple reasoning results into a unified conclusion."""
         if not results:
             return f"No valid reasoning results found for: {goal}"
@@ -139,17 +148,19 @@ class EnhancedReasoningTool(BaseTool):
             name="enhanced_reasoning",
             description="Apply enhanced reasoning patterns with domain-specific knowledge",
         )
-        self.config: Optional[WitsV3Config] = None
-        self.llm_interface: Optional[BaseLLMInterface] = None
-        self._neural_web: Optional[NeuralWeb] = None
+        self.config: WitsV3Config | None = None
+        self.llm_interface: BaseLLMInterface | None = None
+        self._neural_web: NeuralWeb | None = None
 
-    def set_dependencies(self, config: WitsV3Config, llm_interface=None, memory_manager=None, **kwargs) -> None:
+    def set_dependencies(
+        self, config: WitsV3Config, llm_interface=None, memory_manager=None, **kwargs
+    ) -> None:
         """Wire in shared system dependencies (called by WitsV3System startup)."""
         self.config = config
         self.llm_interface = llm_interface
         self._neural_web = _resolve_neural_web(memory_manager)
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "description": self.description,
@@ -158,31 +169,31 @@ class EnhancedReasoningTool(BaseTool):
                 "properties": {
                     "goal": {
                         "type": "string",
-                        "description": "The reasoning goal or question to address"
+                        "description": "The reasoning goal or question to address",
                     },
                     "domain": {
                         "type": "string",
-                        "description": "The knowledge domain (e.g., 'technology', 'science', 'business')"
+                        "description": "The knowledge domain (e.g., 'technology', 'science', 'business')",
                     },
                     "reasoning_types": {
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["deductive", "inductive", "analogical", "causal", "creative"]
+                            "enum": ["deductive", "inductive", "analogical", "causal", "creative"],
                         },
-                        "description": "Specific reasoning types to apply"
+                        "description": "Specific reasoning types to apply",
                     },
                     "confidence_threshold": {
                         "type": "number",
-                        "description": "Minimum confidence threshold for results (0.0-1.0)"
+                        "description": "Minimum confidence threshold for results (0.0-1.0)",
                     },
                     "synthesize_results": {
                         "type": "boolean",
-                        "description": "Whether to synthesize multiple reasoning results"
-                    }
+                        "description": "Whether to synthesize multiple reasoning results",
+                    },
                 },
-                "required": ["goal", "domain"]
-            }
+                "required": ["goal", "domain"],
+            },
         }
 
     async def execute(self, **kwargs) -> ToolResult:
@@ -191,7 +202,7 @@ class EnhancedReasoningTool(BaseTool):
                 return ToolResult(
                     success=False,
                     result=None,
-                    error="enhanced_reasoning tool has no dependencies wired (set_dependencies was never called)"
+                    error="enhanced_reasoning tool has no dependencies wired (set_dependencies was never called)",
                 )
 
             goal = kwargs.get("goal", "")
@@ -201,10 +212,7 @@ class EnhancedReasoningTool(BaseTool):
             synthesize_results = kwargs.get("synthesize_results", True)
 
             if not goal.strip():
-                return ToolResult(
-                    success=False,
-                    error="No reasoning goal provided"
-                )
+                return ToolResult(success=False, error="No reasoning goal provided")
 
             # Convert reasoning type names to enums
             reasoning_types = []
@@ -218,16 +226,14 @@ class EnhancedReasoningTool(BaseTool):
             # is active; otherwise fall back to a scratch instance so the
             # tool still works for one-off reasoning over the given goal.
             neural_web = self._neural_web if self._neural_web is not None else NeuralWeb()
-            reasoning_engine = EnhancedReasoningEngine(
-                self.config, neural_web, self.llm_interface
-            )
+            reasoning_engine = EnhancedReasoningEngine(self.config, neural_web, self.llm_interface)
 
             # Execute reasoning
             results = await reasoning_engine.reason(
                 goal=goal,
                 domain=domain,
                 reasoning_types=reasoning_types if reasoning_types else None,
-                confidence_threshold=confidence_threshold
+                confidence_threshold=confidence_threshold,
             )
 
             # Prepare response
@@ -235,7 +241,7 @@ class EnhancedReasoningTool(BaseTool):
                 return ToolResult(
                     success=True,
                     result="No reasoning results met the confidence threshold",
-                    metadata={"goal": goal, "domain": domain, "threshold": confidence_threshold}
+                    metadata={"goal": goal, "domain": domain, "threshold": confidence_threshold},
                 )
 
             # Synthesize results if requested
@@ -253,12 +259,12 @@ class EnhancedReasoningTool(BaseTool):
                                 "type": r.reasoning_type.value,
                                 "conclusion": r.conclusion,
                                 "confidence": round(r.confidence, 3),
-                                "supporting_evidence": len(r.supporting_evidence)
+                                "supporting_evidence": len(r.supporting_evidence),
                             }
                             for r in results
                         ],
-                        "synthesis": synthesis
-                    }
+                        "synthesis": synthesis,
+                    },
                 )
             else:
                 # Return best single result
@@ -272,13 +278,10 @@ class EnhancedReasoningTool(BaseTool):
                         "reasoning_type": best_result.reasoning_type.value,
                         "confidence": round(best_result.confidence, 3),
                         "reasoning_path": best_result.reasoning_path,
-                        "supporting_evidence": best_result.supporting_evidence
-                    }
+                        "supporting_evidence": best_result.supporting_evidence,
+                    },
                 )
 
         except Exception as e:
             logger.error(f"Error in enhanced reasoning tool: {e}")
-            return ToolResult(
-                success=False,
-                error=f"Error during enhanced reasoning: {str(e)}"
-            )
+            return ToolResult(success=False, error=f"Error during enhanced reasoning: {str(e)}")
