@@ -245,7 +245,7 @@ Do **not** ship guest chat without tool/route locks.
 
 ### Phase 4 — Owner admin & polish (~1 session)
 
-- [ ] Settings panel: enable guest access, regenerate invite, guest list, revoke
+- [x] Settings panel: guest list, age tier, profile view, **revoke** + **merge duplicates**
 - [x] Startup banner: guest join URL + QR **without owner token** (July 8 security fix)
 - [ ] README + `.env.example` docs
 - [x] Guest audit log: `data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl` + `scripts/guest_smoke_test.py`

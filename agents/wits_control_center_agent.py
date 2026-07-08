@@ -245,6 +245,20 @@ User input: {user_input}
             requires_tools = True
             suggested_response = "specialized"
 
+        # Guest interest/profile queries use saved JSON facts only — never web search.
+        if (
+            getattr(self, "_request_user_role", "owner") == "owner"
+            and self._needs_guest_profile_review(user_input)
+        ):
+            yield self.stream_thinking("Loading saved guest profile (no web search)...")
+            from tools.guest_profile_tool import GuestUserProfileSummaryTool
+
+            tool = GuestUserProfileSummaryTool()
+            display_name = self._extract_guest_name_for_profile_query(user_input)
+            report = await tool.execute(display_name=display_name, user_role="owner")
+            yield self.stream_result(report)
+            return
+
         yield self.stream_thinking(
             f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}"
         )

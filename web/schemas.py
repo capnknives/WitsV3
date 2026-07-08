@@ -23,6 +23,15 @@ class GuestSetAgeBandRequest(BaseModel):
     display_name: str | None = None
 
 
+class GuestRevokeRequest(BaseModel):
+    guest_id: str
+
+
+class GuestMergeRequest(BaseModel):
+    target_guest_id: str
+    source_guest_id: str
+
+
 class ExportRequest(BaseModel):
     session_id: str | None = None
     file_path: str | None = None

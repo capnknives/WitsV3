@@ -19,7 +19,12 @@ from core.guest_access import (
 from core.guest_audit import GuestAuditLog
 from core.guest_user_profile import GuestUserProfileStore
 from web.access_log import owner_display_name
-from web.schemas import GuestRegisterRequest, GuestSetAgeBandRequest
+from web.schemas import (
+    GuestMergeRequest,
+    GuestRegisterRequest,
+    GuestRevokeRequest,
+    GuestSetAgeBandRequest,
+)
 
 logger = logging.getLogger("WitsV3.WebUI")
 
@@ -168,15 +173,18 @@ def register_guest_routes(
                 status_code=403,
             )
         store = GuestUserProfileStore()
-        profile_by_id = {p["guest_id"]: p for p in store.list_profile_summaries()}
+        summaries = store.list_profile_summaries(guest_registry)
+        summary_by_name = {p["display_name"].lower(): p for p in summaries}
         guests = []
         for acct in guest_registry.list_active_guests():
             gid = acct["guest_id"]
-            prof = profile_by_id.get(gid, {})
+            name = acct.get("display_name", "Guest")
+            prof = summary_by_name.get(name.lower(), {})
+            dupes = guest_registry.find_all_by_display_name(name)
             guests.append(
                 {
                     "guest_id": gid,
-                    "display_name": acct.get("display_name", "Guest"),
+                    "display_name": name,
                     "age_band": acct.get("age_band", "teen"),
                     "first_seen": acct.get("first_seen"),
                     "last_seen": acct.get("last_seen"),
@@ -185,12 +193,19 @@ def register_guest_routes(
                     "top_interests": prof.get("top_interests", []),
                     "fact_count": prof.get("fact_count", 0),
                     "profile_updated_at": prof.get("updated_at"),
+                    "duplicate_name": len(dupes) > 1,
+                    "merge_candidates": [
+                        {"guest_id": g["guest_id"], "last_seen": g.get("last_seen")}
+                        for g in dupes
+                        if g["guest_id"] != gid
+                    ],
                 }
             )
         return {
             "enabled": guest_access_enabled(system.config),
             "invite_configured": bool(guest_invite_configured()),
             "owner_display_name": owner_display_name(system.config),
+            "duplicate_names": list(guest_registry.duplicate_display_names().keys()),
             "guests": guests,
         }
 
@@ -210,17 +225,91 @@ def register_guest_routes(
         if not acct:
             return JSONResponse({"detail": "Guest not found."}, status_code=404)
         store = GuestUserProfileStore()
-        profile = store.load(acct["guest_id"], acct.get("display_name", "Guest"))
+        profile = store.load_merged_for_display_name(
+            acct.get("display_name", "Guest"), guest_registry
+        ) or store.load(acct["guest_id"], acct.get("display_name", "Guest"))
         return {
             "account": {
                 "guest_id": acct["guest_id"],
                 "display_name": acct.get("display_name"),
                 "age_band": acct.get("age_band", "teen"),
                 "last_seen": acct.get("last_seen"),
+                "duplicate_accounts": len(
+                    guest_registry.find_all_by_display_name(acct.get("display_name", ""))
+                ),
             },
             "profile": profile,
             "summary": store.format_owner_summary(
-                guest_id=acct["guest_id"],
+                display_name=acct.get("display_name"),
                 registry=guest_registry,
             ),
+        }
+
+    @app.delete("/api/guest/admin/account")
+    async def owner_revoke_guest(body: GuestRevokeRequest, request: Request):
+        """Owner-only: revoke a guest account and remove its profile file."""
+        if getattr(request.state, "auth_role", None) != "owner":
+            return JSONResponse(
+                {"detail": "Only the owner can revoke guest accounts."},
+                status_code=403,
+            )
+        guest_id = body.guest_id.strip()
+        acct = guest_registry.get(guest_id)
+        if not acct:
+            return JSONResponse({"detail": "Guest not found."}, status_code=404)
+        name = acct.get("display_name", "Guest")
+        if not guest_registry.revoke(guest_id):
+            return JSONResponse({"detail": "Guest not found."}, status_code=404)
+        store = GuestUserProfileStore()
+        remaining = guest_registry.find_all_by_display_name(name)
+        if len(remaining) <= 1:
+            store.delete_profile(guest_id)
+            if remaining:
+                store.consolidate_for_display_name(guest_registry, name)
+        else:
+            store.delete_profile(guest_id)
+        guest_audit.log(
+            guest_id=guest_id,
+            event_type="revoked",
+            display_name=name,
+            meta={"revoked_by": "owner"},
+        )
+        logger.info("Owner revoked guest %s (%s)", name, guest_id[:8])
+        return {"revoked": True, "guest_id": guest_id, "display_name": name}
+
+    @app.post("/api/guest/admin/merge")
+    async def owner_merge_guests(body: GuestMergeRequest, request: Request):
+        """Owner-only: merge duplicate guest accounts into one."""
+        if getattr(request.state, "auth_role", None) != "owner":
+            return JSONResponse(
+                {"detail": "Only the owner can merge guest accounts."},
+                status_code=403,
+            )
+        target_id = body.target_guest_id.strip()
+        source_id = body.source_guest_id.strip()
+        merged_acct = guest_registry.merge_guests(
+            target_guest_id=target_id, source_guest_id=source_id
+        )
+        if not merged_acct:
+            return JSONResponse({"detail": "Could not merge guests."}, status_code=400)
+        store = GuestUserProfileStore()
+        name = merged_acct.get("display_name", "Guest")
+        store.merge_profiles(
+            target_guest_id=target_id,
+            source_guest_id=source_id,
+            display_name=name,
+        )
+        store.consolidate_for_display_name(guest_registry, name)
+        guest_audit.log(
+            guest_id=target_id,
+            event_type="accounts_merged",
+            display_name=name,
+            meta={"merged_from": source_id},
+        )
+        logger.info("Owner merged guest %s into %s", source_id[:8], target_id[:8])
+        return {
+            "merged": True,
+            "guest_id": target_id,
+            "display_name": name,
+            "device_count": len(merged_acct.get("device_ids") or []),
         }
