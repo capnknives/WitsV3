@@ -27,6 +27,8 @@ _GUEST_EXACT_PATHS = frozenset(
 
 
 def guest_may_call(path: str) -> bool:
+    if path.startswith("/api/guest/admin/"):
+        return False
     if path in _GUEST_EXACT_PATHS:
         return True
     if path.startswith("/api/guest/"):

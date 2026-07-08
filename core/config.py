@@ -204,6 +204,14 @@ class GuestAccessSettings(BaseModel):
     content_policy_enabled: bool = Field(
         default=True, description="Block inappropriate guest input/output (family-friendly)"
     )
+    default_guest_age_band: str = Field(
+        default="teen",
+        description="Age tier assigned to new /join guests (owner can change later). Guests cannot self-promote.",
+    )
+    adult_allow_document_search: bool = Field(
+        default=True,
+        description="Owner-assigned adult guests may use document_search on ingested docs",
+    )
 
 
 class WebUISettings(BaseModel):

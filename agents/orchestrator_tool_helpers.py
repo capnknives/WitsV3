@@ -23,14 +23,11 @@ class OrchestratorToolHelpersMixin:
     ORCHESTRATOR_BLOCKED_TOOLS = frozenset({"intent_analysis", "json_manipulate"})
 
     def _guest_allowed_tools(self) -> frozenset[str]:
-        from core.guest_access import GUEST_ALLOWED_TOOLS
+        from core.guest_access import guest_tools_for_age_band
 
-        allowed = set(GUEST_ALLOWED_TOOLS)
-        cfg = getattr(self, "config", None)
-        guest_cfg = getattr(getattr(cfg, "web_ui", None), "guest_access", None)
-        if guest_cfg is not None and getattr(guest_cfg, "allow_document_search", False):
-            allowed.add("document_search")
-        return frozenset(allowed)
+        state = getattr(self, "_react_state_for_tools", None) or {}
+        age_band = state.get("guest_age_band", "teen")
+        return guest_tools_for_age_band(age_band, getattr(self, "config", None))
 
     @staticmethod
     def _has_ingested_documents(state: dict[str, Any]) -> bool:
@@ -529,7 +526,7 @@ class OrchestratorToolHelpersMixin:
                 if path:
                     args["file_path"] = path
 
-        if tool_name in ("guest_audit_summary", "guest_accounts_list"):
+        if tool_name in ("guest_audit_summary", "guest_accounts_list", "guest_set_age_band"):
             args.setdefault("user_role", state.get("user_role", "owner"))
 
         return args

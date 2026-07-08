@@ -89,7 +89,7 @@ def main() -> int:
     events_bad = _parse_sse(chat_bad.text)
     final_bad = events_bad[-1][1].get("final", "")
     print(f"OK blocked reply={final_bad!r}")
-    if "family-friendly" not in final_bad.lower():
+    if "family-friendly" not in final_bad.lower() and "content limits" not in final_bad.lower():
         print("FAIL expected family-friendly refusal")
         return 1
     if len(system.control_center.calls) != calls_before:

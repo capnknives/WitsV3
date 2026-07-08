@@ -14,9 +14,10 @@ from core.guest_access import (
     invites_match,
     is_private_lan_ip,
     issue_guest_token,
+    normalize_age_band,
 )
 from core.guest_audit import GuestAuditLog
-from web.schemas import GuestRegisterRequest
+from web.schemas import GuestRegisterRequest, GuestSetAgeBandRequest
 
 logger = logging.getLogger("WitsV3.WebUI")
 
@@ -60,12 +61,14 @@ def register_guest_routes(
         if len(name) < 1:
             return JSONResponse({"detail": "display_name is required."}, status_code=400)
 
-        age_band = (body.age_band or "teen").strip().lower()
-        if age_band not in ("teen", "child", "adult"):
-            age_band = "teen"
+        default_band = normalize_age_band(
+            guest_cfg.default_guest_age_band, default="teen"
+        )
 
         profile = guest_registry.register_or_update(
-            display_name=name, device_id=device_id, age_band=age_band
+            display_name=name,
+            device_id=device_id,
+            default_age_band=default_band,
         )
         request.state.caller_label = profile["display_name"]
         request.state.auth_role = "guest"
@@ -112,4 +115,44 @@ def register_guest_routes(
             "display_name": profile["display_name"],
             "age_band": profile.get("age_band", "teen"),
             "device_id": guest.get("device_id"),
+        }
+
+    @app.patch("/api/guest/admin/age-band")
+    async def owner_set_guest_age_band(body: GuestSetAgeBandRequest, request: Request):
+        """Owner-only: assign child / teen / adult protection tier for a guest."""
+        if getattr(request.state, "auth_role", None) != "owner":
+            return JSONResponse(
+                {"detail": "Only the owner can change guest age bands."},
+                status_code=403,
+            )
+        if not body.guest_id and not body.display_name:
+            return JSONResponse(
+                {"detail": "guest_id or display_name is required."},
+                status_code=400,
+            )
+        band = normalize_age_band(body.age_band)
+        if body.guest_id:
+            profile = guest_registry.set_age_band(body.guest_id.strip(), band)
+        else:
+            profile = guest_registry.set_age_band_by_name(
+                (body.display_name or "").strip(), band
+            )
+        if not profile:
+            return JSONResponse({"detail": "Guest not found."}, status_code=404)
+
+        guest_audit.log(
+            guest_id=profile["guest_id"],
+            event_type="age_band_set",
+            display_name=profile.get("display_name"),
+            meta={"age_band": band, "set_by": "owner"},
+        )
+        logger.info(
+            "Owner set guest %s age_band=%s",
+            profile.get("display_name"),
+            band,
+        )
+        return {
+            "guest_id": profile["guest_id"],
+            "display_name": profile["display_name"],
+            "age_band": profile.get("age_band", band),
         }
