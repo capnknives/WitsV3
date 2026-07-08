@@ -127,7 +127,7 @@ config consolidation by the Cursor session; doc truth pass + neural-web-tools
 wiring + dead-code archival/deletion by Claude — see the **"Codebase audit —
 obviously missing / suggested additions"** section in
 `planning/roadmap/composer-orchestrator-search-quality-2026-07.md` for the
-full list). **Tier 4 (partial, July 7 2026):** orchestrator mixin split
-(`orchestrator_tool_helpers.py`), agent pytest coverage, supabase-mcp removed from
-default vendoring. Remaining: other 500-line violations, optional full MCP
-on-demand-only migration.
+full list). **Tier 4 complete (July 7 2026):** orchestrator/WCCA/book/coding/web
+500-line splits, agent pytest coverage, MCP on-demand-only (all submodules removed
+from git). Optional follow-up: other large core/tools modules not in the original
+Tier 4 worst-offender list.

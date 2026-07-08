@@ -1,6 +1,0 @@
-[submodule "mcp_servers/Ollama-mcp"]
-	path = mcp_servers/Ollama-mcp
-	url = https://github.com/NightTrek/Ollama-mcp.git
-[submodule "mcp_servers/servers"]
-	path = mcp_servers/servers
-	url = https://github.com/modelcontextprotocol/servers.git

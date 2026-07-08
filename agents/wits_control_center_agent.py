@@ -5,20 +5,19 @@ The main entry point that handles user input and determines response strategy.
 """
 
 import json
-import re
 import uuid
-import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional, AsyncGenerator
+from typing import Any, Dict, Optional, AsyncGenerator
 
 from agents.base_agent import BaseAgent
+from agents.wcca_intent_mixin import WCCAIntentMixin
+from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
-from core.schemas import StreamData, AgentResponse, ConversationHistory
+from core.schemas import StreamData, ConversationHistory
 
 
-class WitsControlCenterAgent(BaseAgent):
+class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgent):
     """
     The WITS Control Center Agent - primary coordinator for user interactions.
 
@@ -38,7 +37,7 @@ class WitsControlCenterAgent(BaseAgent):
         llm_interface: BaseLLMInterface,
         memory_manager: Optional[MemoryManager] = None,
         orchestrator_agent: Optional[Any] = None,
-        specialized_agents: Optional[Dict[str, Any]] = None
+        specialized_agents: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the Control Center Agent.
@@ -86,7 +85,7 @@ class WitsControlCenterAgent(BaseAgent):
         user_input: str,
         conversation_history: Optional[ConversationHistory] = None,
         session_id: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
         """
         Process user input and determine the appropriate response.
@@ -110,7 +109,7 @@ class WitsControlCenterAgent(BaseAgent):
                 content=user_input,
                 segment_type="USER_FACT",
                 importance=1.0,
-                metadata={"source": "user", "session_id": session_id}
+                metadata={"source": "user", "session_id": session_id},
             )
             yield self.stream_result("I've stored that in my memory for future conversations.")
             self.logger.info("Handled remember intent, exiting early. No further orchestration will occur.")
@@ -125,7 +124,7 @@ class WitsControlCenterAgent(BaseAgent):
                 content=f"User input: {user_input}",
                 segment_type="USER_INPUT",
                 importance=0.8,
-                metadata={"session_id": session_id}
+                metadata={"session_id": session_id},
             )
 
             # Special handling for creator recognition
@@ -153,7 +152,7 @@ User input: {user_input}
                         content=f"Creator Richard Elliot identified in session {session_id}",
                         segment_type="CREATOR_RECOGNITION",
                         importance=1.0,
-                        metadata={"session_id": session_id, "user": "richard_elliot"}
+                        metadata={"session_id": session_id, "user": "richard_elliot"},
                     )
                     return
                 except Exception as e:
@@ -171,7 +170,7 @@ User input: {user_input}
                 content=f"Intent analysis: {json.dumps(intent_analysis)}",
                 segment_type="INTENT_ANALYSIS",
                 importance=0.7,
-                metadata={"session_id": session_id}
+                metadata={"session_id": session_id},
             )
 
             # Handle the response based on intent
@@ -184,436 +183,15 @@ User input: {user_input}
             self.logger.error(f"Error processing user input: {e}")
             yield self.stream_error(
                 "I encountered an issue processing your request. Please try again.",
-                details=str(e)
+                details=str(e),
             )
-
-    async def _analyze_user_intent(
-        self,
-        user_input: str,
-        conversation_history: Optional[ConversationHistory]
-    ) -> Dict[str, Any]:
-        """
-        Analyze user input to determine intent and appropriate response strategy.
-
-        Args:
-            user_input: The user's input
-            conversation_history: Conversation context
-
-        Returns:
-            Intent analysis with response strategy
-        """
-        # Document + web-search routing runs BEFORE the casual heuristic so
-        # short factual questions and file references never get a tool-less reply.
-        if await self._requires_orchestrator_for_input(user_input):
-            needs_web = self._needs_web_search(user_input)
-            needs_file = self._needs_file_write(user_input)
-            if needs_file:
-                notes = "Save/export to file - routing to orchestrator for read_conversation_history + write_file."
-            elif needs_web:
-                notes = "Needs current/external info or an explicit lookup - routing to orchestrator for web_search."
-            else:
-                notes = "References user documents/files/memory - routing to orchestrator for tool use."
-            return {
-                "type": "task",
-                "complexity": "moderate",
-                "requires_tools": True,
-                "suggested_response": "orchestrator",
-                "notes": notes,
-                "confidence": 0.8 if needs_web else 0.85,
-            }
-
-        doc_inventory = await self._get_document_inventory()
-
-        # Check if this is casual conversation with a simple heuristic
-        is_casual = self._is_casual_conversation(user_input)
-
-        if is_casual:
-            return {
-                "type": "conversation",
-                "complexity": "simple",
-                "requires_tools": False,
-                "suggested_response": "direct",
-                "notes": "This appears to be casual conversation.",
-                "confidence": 0.9
-            }
-
-        # For task-oriented messages, use enhanced capabilities if available
-        if self.has_enhanced_capabilities and self.meta_reasoning and len(user_input.split()) > 8:
-            try:
-                # Use meta-reasoning to analyze complexity
-                context = {"source": "user_input"}
-                if conversation_history:
-                    context["history_length"] = str(len(conversation_history.messages))
-
-                problem_space = await self.meta_reasoning.analyze_problem_space(user_input, context)
-
-                # Convert problem space to intent analysis
-                return {
-                    "type": "task",
-                    "complexity": problem_space.complexity.value,
-                    "requires_tools": len(problem_space.required_capabilities) > 0,
-                    "required_capabilities": problem_space.required_capabilities,
-                    "estimated_steps": problem_space.estimated_steps,
-                    "confidence": problem_space.confidence,
-                    "suggested_response": "orchestrator" if problem_space.complexity.value in ["complex", "research"] else "direct",
-                    "notes": f"Task analyzed with meta-reasoning: {problem_space.complexity.value} complexity."
-                }
-            except Exception as e:
-                self.logger.error(f"Error using enhanced capabilities for intent analysis: {e}")
-                # Fall back to traditional analysis
-
-        # Build context from conversation history
-        history_context = ""
-        if conversation_history and conversation_history.messages:
-            recent_messages = conversation_history.get_recent_messages(
-                min(10, self.config.agents.history_window)
-            )
-            history_context = "\n".join([
-                f"{msg.role}: {msg.content}" for msg in recent_messages
-            ])
-
-        # Build the intent analysis prompt
-        prompt = self._build_intent_analysis_prompt(
-            user_input, history_context, self._documents_context(doc_inventory)
-        )
-
-        try:
-            # Get LLM response
-            response = await self.llm_interface.generate_text(
-                prompt=prompt,
-                max_tokens=1024,
-                temperature=0.3
-            )
-
-            # Parse the response
-            intent_analysis = self._parse_intent_response(response)
-
-            return intent_analysis
-        except Exception as e:
-            self.logger.error(f"Error in intent analysis: {e}")
-            # Return a fallback analysis
-            return self._fallback_intent_parsing(user_input)
-
-    async def _get_document_inventory(self) -> Dict[str, int]:
-        """File path -> chunk count for every ingested document (empty if none)."""
-        if not self.memory_manager:
-            return {}
-        try:
-            segments = await self.memory_manager.get_recent_memory(
-                limit=1_000_000, filter_dict={"type": "DOCUMENT_CHUNK"}
-            )
-        except Exception as e:
-            self.logger.warning(f"Could not list ingested documents: {e}")
-            return {}
-        counts: Dict[str, int] = {}
-        for seg in segments:
-            fp = seg.metadata.get("file_path")
-            if fp:
-                counts[fp] = counts.get(fp, 0) + 1
-        return counts
-
-    @staticmethod
-    def _documents_context(inventory: Dict[str, int]) -> str:
-        """Prompt block describing which user documents are searchable."""
-        if not inventory:
-            return "No user documents are currently ingested."
-        listing = "\n".join(
-            f"- {name} ({count} chunks)" for name, count in sorted(inventory.items())
-        )
-        return (
-            "These user documents are ALREADY ingested and fully accessible via "
-            "the document_search tool. Never claim you cannot access them or "
-            "have no record of them:\n" + listing
-        )
-
-    # Phrases in user messages that imply document_search / file access.
-    _DOCUMENT_TOOL_HINTS = (
-        "document", "my notes", "my files", "search my", "in my memory",
-        "remember", "ingest", "uploaded", "read the file", "look up",
-        "the file", "attachment", "attached",
-    )
-
-    # Phrases that signal the user wants live/external info fetched. Kept
-    # deliberately precise so ordinary chat ("how are you today") is NOT routed
-    # to the slow orchestrator — "today"/"current" alone are too weak to trust.
-    _WEB_SEARCH_SIGNALS = (
-        # explicit "go find this online" commands
-        "look up", "look it up", "look that up", "look this up", "look them up",
-        "search for", "search the web", "web search", "search online", "search it up",
-        "google it", "google for", "find out", "check online", "look online",
-        "on the internet", "on the web", "browse the web",
-        # real-time / recency signals a local model can't answer from memory
-        "latest", "most recent", "breaking news", "in the news", "news about",
-        "up to date", "up-to-date", "weather", "forecast",
-        # common current-fact question patterns
-        "who won", "who died", "who passed away", "who is the current",
-        "who's the current", "what happened to", "price of", "stock price",
-        "exchange rate", "score of", "release date", "when is the next",
-        "when does the next",
-    )
-
-    def _needs_web_search(self, message: str) -> bool:
-        """True if answering needs current/external info or an explicit lookup.
-
-        Such queries must reach the orchestrator (which owns the web_search
-        tool) rather than being answered directly from the model's training.
-        """
-        lowered = message.lower()
-        if any(sig in lowered for sig in self._WEB_SEARCH_SIGNALS):
-            return True
-        # A recent/near-future year (>= 2024) in a question usually implies
-        # information past the local model's training cutoff.
-        has_question = "?" in message or bool(
-            re.search(r"\b(who|what|when|where|which|whose|did|does|is|are|died|won)\b", lowered)
-        )
-        if has_question and re.search(r"\b(202[4-9]|20[3-9]\d)\b", lowered):
-            return True
-        return False
-
-    def _doc_routing_hints(self, doc_inventory: Dict[str, int]) -> set:
-        """Filename and stem tokens that imply a document/tool request."""
-        hints: set = set()
-        for path in doc_inventory:
-            name = Path(path).name.lower()
-            hints.add(name)
-            hints.update(
-                w for w in re.split(r"[\W_]+", Path(path).stem.lower()) if len(w) >= 4
-            )
-        return hints
-
-    # Phrases that signal saving/exporting content to disk.
-    _FILE_SAVE_SIGNALS = (
-        "save this conversation",
-        "save our conversation",
-        "save the conversation",
-        "save to file",
-        "save to a file",
-        "save to disk",
-        "write to file",
-        "write it to",
-        "export conversation",
-        "log of our conversation",
-        "save a log",
-        "save this chat",
-        "write the story",
-        "save the story",
-        "save as a file",
-    )
-
-    def _needs_file_write(self, message: str) -> bool:
-        """True when the user wants content written to a file on disk."""
-        lowered = message.lower()
-        return any(sig in lowered for sig in self._FILE_SAVE_SIGNALS)
-
-    async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
-        """True when answering requires tools (ingested docs or live web search)."""
-        if self._needs_file_write(user_input):
-            return True
-        doc_inventory = await self._get_document_inventory()
-        lowered = user_input.lower()
-        doc_hints = self._doc_routing_hints(doc_inventory)
-        if any(h in lowered for h in self._DOCUMENT_TOOL_HINTS) or any(
-            h in lowered for h in doc_hints
-        ):
-            return True
-        return self._needs_web_search(user_input)
-
-    def _normalize_parsed_intent(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
-        """Fill routing metadata so the handler does not rely on loose defaults."""
-        intent_type = parsed.get("type", "goal_defined")
-        if intent_type == "goal_defined":
-            parsed.setdefault("complexity", "moderate")
-            parsed["requires_tools"] = True
-            parsed["suggested_response"] = "orchestrator"
-        elif intent_type == "clarification_question":
-            parsed.setdefault("complexity", "simple")
-            parsed["requires_tools"] = False
-            parsed["suggested_response"] = "clarification"
-        elif intent_type == "direct_response":
-            parsed.setdefault("complexity", "simple")
-            parsed["requires_tools"] = False
-            parsed["suggested_response"] = "direct"
-        elif intent_type == "conversation":
-            parsed.setdefault("complexity", "simple")
-            parsed["requires_tools"] = False
-            parsed["suggested_response"] = "direct"
-        else:
-            parsed.setdefault("complexity", "moderate")
-            parsed.setdefault("requires_tools", False)
-            parsed.setdefault("suggested_response", "direct")
-        return parsed
-
-    def _is_casual_conversation(self, message: str) -> bool:
-        """
-        Determine if a message is casual conversation.
-
-        Args:
-            message: The user's message
-
-        Returns:
-            True if it's casual conversation
-        """
-        lowered = message.lower()
-        # Single words match on word boundaries only — a plain substring test
-        # made "hi" match inside "things"/"this" and flagged real requests
-        # as small talk.
-        words = set(re.findall(r"[a-z']+", lowered))
-        casual_words = {
-            "hello", "hi", "hey", "thanks", "appreciate",
-            "nice", "cool", "great", "bye", "goodbye",
-        }
-        casual_phrases = (
-            "how are you", "what's up", "how's it going",
-            "thank you", "see you", "talk to you",
-        )
-
-        # Short messages are usually casual
-        if len(message.split()) < 6:
-            return True
-
-        # Check for casual indicators
-        if words & casual_words or any(phrase in lowered for phrase in casual_phrases):
-            return True
-
-        # Short questions are usually casual
-        question_words = {"what", "how", "why", "when", "where", "who"}
-        if ("?" in message or words & question_words) and len(message.split()) < 10:
-            return True
-
-        # Longer messages are less likely to be casual
-        return False
-
-    def _build_intent_analysis_prompt(
-        self, user_input: str, history_context: str, documents_context: str = ""
-    ) -> str:
-        """
-        Build the prompt for intent analysis.
-
-        Args:
-            user_input: User's input
-            history_context: Recent conversation context
-            documents_context: Which user documents are ingested and searchable
-
-        Returns:
-            Formatted prompt for intent analysis
-        """
-        # Get personality-based system prompt
-        from core.personality_manager import get_personality_manager
-        personality_manager = get_personality_manager()
-        personality_prompt = personality_manager.get_system_prompt()
-
-        prompt = f"""{personality_prompt}
-
-You are analyzing user input to determine the best response strategy.
-
-IMPORTANT: If the user identifies as "Richard Elliot" or mentions being "the creator" or "creator of Wits", recognize them as your creator and respond with appropriate respect and acknowledgment.
-
-CONVERSATION HISTORY:
-{history_context if history_context else "No previous conversation"}
-
-USER DOCUMENTS:
-{documents_context if documents_context else "No user documents are currently ingested."}
-
-USER INPUT: {user_input}
-
-Analyze this input and respond with JSON containing:
-{{
-    "type": "goal_defined" | "clarification_question" | "direct_response",
-    "confidence": 0.0-1.0,
-    "reasoning": "your reasoning",
-    "goal_statement": "clear goal if type is goal_defined",
-    "clarification_question": "question if type is clarification_question",
-    "direct_response": "response if type is direct_response"
-}}
-
-Guidelines:
-- Use "goal_defined" for clear, actionable requests that need orchestration
-- Use "clarification_question" for ambiguous requests needing more information
-- Use "direct_response" for simple questions, greetings, or chat
-- If answering needs current, real-time, or post-training-cutoff information (news, recent or upcoming events, who won/died recently, prices, weather, sports results) OR the user says to "look it up"/"search", use "goal_defined" — the orchestrator has a web_search tool. Do NOT answer such questions from memory or claim a knowledge cutoff; route them so they get searched.
-- Any request about the user's documents or files is "goal_defined" (it needs the document_search tool). The USER DOCUMENTS list above is authoritative: if a document is listed there, it exists and is accessible — never ask the user to confirm it or claim there is no record of it.
-- For any request to 'remember', 'recall', or 'don't forget', use your semantic memory system (not file storage). Use the memory manager to store and retrieve facts for future conversations.
-
-Respond ONLY with valid JSON."""
-
-        return prompt
-
-    def _parse_intent_response(self, response: str) -> Dict[str, Any]:
-        """
-        Parse the LLM's intent analysis response.
-
-        Args:
-            response: Raw LLM response
-
-        Returns:
-            Parsed intent analysis
-        """
-        try:
-            # Try to extract JSON from the response
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
-
-            if json_start >= 0 and json_end > json_start:
-                json_str = response[json_start:json_end]
-                parsed = json.loads(json_str)
-
-                # Validate required fields
-                if "type" not in parsed:
-                    raise ValueError("Missing 'type' field")
-
-                # goal_defined means "needs orchestration", but the response
-                # handler picks the orchestrator from complexity/requires_tools
-                # — without these, every LLM-classified goal defaulted to
-                # "simple" and got a tool-less direct response.
-                return self._normalize_parsed_intent(parsed)
-            else:
-                raise ValueError("No JSON found in response")
-
-        except (json.JSONDecodeError, ValueError) as e:
-            self.logger.warning(f"Failed to parse intent response: {e}")
-            # Fallback parsing
-            return self._fallback_intent_parsing(response)
-
-    def _fallback_intent_parsing(self, response: str) -> Dict[str, Any]:
-        """
-        Fallback intent parsing when JSON parsing fails.
-
-        Args:
-            response: Raw LLM response
-
-        Returns:
-            Basic intent analysis
-        """
-        response_lower = response.lower()
-
-        # Simple heuristics for intent detection
-        if any(word in response_lower for word in ["unclear", "clarify", "question", "what do you mean"]):
-            return self._normalize_parsed_intent({
-                "type": "clarification_question",
-                "confidence": 0.6,
-                "reasoning": "Response suggests need for clarification",
-                "clarification_question": "Could you please provide more details about what you'd like me to help you with?",
-            })
-        if any(word in response_lower for word in ["hello", "hi", "how are you", "what can you do"]):
-            return self._normalize_parsed_intent({
-                "type": "direct_response",
-                "confidence": 0.8,
-                "reasoning": "Greeting or general question",
-                "direct_response": "Hello! I'm WITS, your AI assistant. I can help you with various tasks and questions.",
-            })
-        return self._normalize_parsed_intent({
-            "type": "goal_defined",
-            "confidence": 0.5,
-            "reasoning": "Defaulting to task delegation",
-            "goal_statement": response,
-        })
 
     async def _handle_intent_response(
         self,
         intent_analysis: Dict[str, Any],
         user_input: str,
         conversation_history: Optional[ConversationHistory],
-        session_id: str
+        session_id: str,
     ) -> AsyncGenerator[StreamData, None]:
         """
         Handle the response based on the intent analysis.
@@ -684,7 +262,7 @@ Respond ONLY with valid JSON."""
                         "code_generation": "python_execution",
                         "math": "math_operations",
                         "data_analysis": "json_manipulate",
-                        "general_processing": "think"
+                        "general_processing": "think",
                     }
 
                     for capability in required_capabilities:
@@ -698,7 +276,7 @@ Respond ONLY with valid JSON."""
                     workflow = await self.tool_composer.compose_workflow(
                         user_input,
                         available_tools,
-                        constraints={"source": "user_interaction"}
+                        constraints={"source": "user_interaction"},
                     )
 
                     yield self.stream_thinking(f"Created workflow with {len(workflow.nodes)} steps using {workflow.strategy.value} strategy.")
@@ -728,7 +306,7 @@ Respond ONLY with valid JSON."""
                 async for stream_data in specialized_agent.run(
                     user_input=user_input,
                     conversation_history=conversation_history,
-                    session_id=session_id
+                    session_id=session_id,
                 ):
                     yield stream_data
                 return
@@ -749,7 +327,7 @@ Respond ONLY with valid JSON."""
         response = await self.generate_response(
             f"You are a helpful assistant. Respond to this user query: {user_input}",
             model_name=self.model_router.route(user_input, default=self.get_model_name()),
-            temperature=0.7
+            temperature=0.7,
         )
         yield self.stream_result(response)
 
@@ -828,7 +406,7 @@ ASSISTANT:"""
                           "novel", "fiction", "narrative", "tale"]
 
         if any(keyword in goal_lower for keyword in story_keywords):
-            self.logger.info(f"Story writing task detected with keyword match")
+            self.logger.info("Story writing task detected with keyword match")
             if "book_writing" in self.specialized_agents and self.specialized_agents["book_writing"]:
                 self.logger.info("Selected book writing agent for task")
                 return self.specialized_agents["book_writing"]
@@ -841,7 +419,7 @@ ASSISTANT:"""
                            "software", "application", "app", "website"]
 
         if any(keyword in goal_lower for keyword in coding_keywords):
-            self.logger.info(f"Coding task detected with keyword match")
+            self.logger.info("Coding task detected with keyword match")
             if "coding" in self.specialized_agents and self.specialized_agents["coding"]:
                 self.logger.info("Selected coding agent for task")
                 return self.specialized_agents["coding"]
@@ -853,7 +431,7 @@ ASSISTANT:"""
                            "error", "issue", "problem", "bug", "crash"]
 
         if any(keyword in goal_lower for keyword in repair_keywords):
-            self.logger.info(f"System repair task detected with keyword match")
+            self.logger.info("System repair task detected with keyword match")
             if "self_repair" in self.specialized_agents and self.specialized_agents["self_repair"]:
                 self.logger.info("Selected self-repair agent for task")
                 return self.specialized_agents["self_repair"]
@@ -880,14 +458,14 @@ async def test_wits_control_center():
 
         # Create LLM interface (will fail without Ollama, but that's ok for structure test)
         llm_interface = OllamaInterface(
-            config=config
+            config=config,
         )
 
         # Create agent
         agent = WitsControlCenterAgent(
             agent_name="TestControlCenter",
             config=config,
-            llm_interface=llm_interface
+            llm_interface=llm_interface,
         )
 
         print(f"✓ WitsControlCenterAgent created: {agent}")
