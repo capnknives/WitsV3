@@ -139,6 +139,22 @@ class GuestRegistry:
             return guest
         return None
 
+    def display_name_for(self, guest_id: str, fallback: str | None = None) -> str:
+        """Join-page display name from registry (source of truth for logs/UI)."""
+        profile = self.get(guest_id)
+        if profile and profile.get("display_name"):
+            return str(profile["display_name"]).strip()[:80]
+        return (fallback or "Guest").strip()[:80]
+
+    def find_by_display_name(self, display_name: str) -> dict[str, Any] | None:
+        target = display_name.strip().lower()
+        for guest in self._data["guests"].values():
+            if guest.get("revoked"):
+                continue
+            if (guest.get("display_name") or "").strip().lower() == target:
+                return guest
+        return None
+
     def register_or_update(
         self, *, display_name: str, device_id: str, age_band: str = "teen"
     ) -> dict[str, Any]:
@@ -200,6 +216,20 @@ def _b64url_decode(data: str) -> bytes:
 
     pad = "=" * (-len(data) % 4)
     return base64.urlsafe_b64decode(data + pad)
+
+
+def enrich_guest_payload(
+    payload: dict[str, Any] | None,
+    registry: GuestRegistry | None = None,
+) -> dict[str, Any] | None:
+    """Merge registry display_name into a validated guest token payload."""
+    if not payload or not payload.get("guest_id"):
+        return payload
+    reg = registry or GuestRegistry()
+    name = reg.display_name_for(payload["guest_id"], fallback=payload.get("display_name"))
+    merged = dict(payload)
+    merged["display_name"] = name
+    return merged
 
 
 def issue_guest_token(

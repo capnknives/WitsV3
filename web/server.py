@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from core.content_policy import check_guest_content
 from core.guest_access import (
     GuestRegistry,
+    enrich_guest_payload,
     guest_access_enabled,
     guest_session_key,
 )
@@ -88,7 +89,7 @@ def create_app(system) -> FastAPI:
     guest_cfg = system.config.web_ui.guest_access
     guest_audit = GuestAuditLog(enabled=guest_cfg.audit_chat)
 
-    install_access_log_middleware(app, system.config)
+    install_access_log_middleware(app, system.config, guest_registry)
 
     if system.config.web_ui.require_auth and not web_token:
         logger.warning(
@@ -117,7 +118,10 @@ def create_app(system) -> FastAPI:
             return unauthorized_response()
 
         request.state.auth_role = auth.get("role") or "anonymous"
-        request.state.guest = auth.get("guest")
+        guest = auth.get("guest")
+        if guest:
+            guest = enrich_guest_payload(guest, guest_registry)
+        request.state.guest = guest
         return await call_next(request)
 
     # ------------------------------------------------------------- pages

@@ -69,7 +69,7 @@ web_ui:
   host: 0.0.0.0   # reachable from other devices on your network (e.g. your phone)
   port: 8000
   require_auth: true  # token comes from WITSV3_WEB_TOKEN in .env
-  owner_display_name: Owner  # override with WITSV3_OWNER_NAME=Sean in .env for access logs
+  owner_display_name: Richard  # aka Andy; override with WITSV3_OWNER_NAME in .env
   guest_access:
     enabled: true  # set true + WITSV3_GUEST_INVITE in .env for family testers
     allow_lan_only: true
