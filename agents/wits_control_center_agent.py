@@ -30,6 +30,8 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
     It's the friendly face of the system! ^_^
     """
 
+    INTENT_ANALYSIS_TEMPERATURE = 0.3
+
     def __init__(
         self,
         agent_name: str,

@@ -204,12 +204,10 @@ Composer did **not** implement these — still open in `revival-2026-07.md`:
 
 | # | Item | Notes |
 |---|------|-------|
-| 11 | MCP discover follow-ups | OCI/Docker packages, browse-before-install preview |
-| — | Merge to `main` | `fix/revive-2026-07` merged into `main` when manual tests A–F look good (Richard's call — held back July 7 pending manual testing) |
+| — | Merge to `main` | `fix/revive-2026-07` merged into `main` when manual tests A–F look good (Richard's call) |
 | — | Manual ops | Add `ANTHROPIC_API_KEY` if using ask-Claude. Supabase token revoke: N/A, no project exists anymore |
-| — | WCCA intent JSON repair | Same repair-reparse pattern as the orchestrator, applied to WCCA intent parsing |
 
-**Recently closed** (were on this list): embedding truncation on large memory stores (shipped `7660664`), `BRAVE_SEARCH_API_KEY` support (shipped), the `set_dependencies(tool_registry=...)` startup crash (shipped `28f3c5c`), and merging `composer/orchestrator-search-quality` + Tier 2/3 cleanup into `fix/revive-2026-07` (shipped `dc7f813`, fast-forward, July 7).
+**Recently closed** (were on this list): WCCA intent JSON repair (`bd5e22a`), MCP discover follow-ups (`86c513d`), embedding truncation on large memory stores (shipped `7660664`), `BRAVE_SEARCH_API_KEY` support (shipped), the `set_dependencies(tool_registry=...)` startup crash (shipped `28f3c5c`), and merging `composer/orchestrator-search-quality` + Tier 2/3 cleanup into `fix/revive-2026-07` (shipped `dc7f813`, fast-forward, July 7).
 
 ---
 

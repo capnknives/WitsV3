@@ -6,16 +6,28 @@ A streamlined, LLM-wrapper based AI orchestration system that runs entirely on l
 
 WitsV3 is designed for maximum flexibility and LLM-driven decision making. It focuses on a CLI-first approach with a modular design: a control-center agent clarifies goals, a ReAct-style orchestrator decomposes and executes tasks with tools, and a persistent memory system (with optional vector search and a neural-web knowledge graph) carries context across sessions.
 
-## ✅ Current Status — Fully Operational (Updated: 2026-07-06)
+## ✅ Current Status — Fully Operational (Updated: 2026-07-07)
 
-- **🎯 Test Suite**: **142 passed, 2 skipped** (skips are external MCP-server integration tests), 0 failures
+- **🎯 Test Suite**: **312 passed, 2 skipped** (skips are external MCP-server integration tests), 0 failures
 - **⚡ 100% GPU inference**: all configured models fit fully in 8 GB VRAM — no CPU spillover
-- **🤖 Models**: Qwen3 8B (general/orchestration), Qwen2.5-Coder 7B (coding), Llama 3.2 3B (fast fallback), nomic-embed-text (embeddings)
-- **⚙️ Tool Registry**: 14 tools auto-discovered and registered
+- **🤖 Models**: Qwen3 8B (general/orchestration), Qwen2.5-Coder 7B (coding), Llama 3.2 3B (fast fallback), nomic-embed-text (embeddings) — with smart routing across all three by query complexity
+- **⚙️ Tool Registry**: 22 tools auto-discovered and registered
 - **🔐 Secrets hygiene**: credentials live in a gitignored `.env`, never in `config.yaml`
 - **🧠 Agent System**: LLM-driven orchestrator with ReAct pattern, control center, and specialized agents (book writing, coding, self-repair)
+- **🔧 CI**: GitHub Actions runs the full suite on Python 3.10/3.11 on every push/PR (`.github/workflows/ci.yml`)
 
 ### 📋 Changelog
+
+**2026-07-07 — Search quality, MCP discovery, model routing, repo cleanup**
+
+- **`web_search` rewritten**: multi-provider fallback chain (Tavily → Brave → DuckDuckGo HTML/Lite scrape → Instant Answer), concurrent Tavily+Brave merge when both keys are set, real browser UA + retry-backoff (fixes the old DuckDuckGo 202 rate-limit wall)
+- **MCP discovery/marketplace**: `search_mcp_tools` agent tool + `/mcp` "Discover servers" page query the official MCP registry and one-click install new capabilities (npm/pypi), instead of only pre-configured servers
+- **Orchestrator JSON robustness**: `format=json` structured output, `<think>`-block stripping, balanced-brace JSON scanning, and a one-shot repair-reparse round trip fix qwen3's malformed ReAct JSON
+- **Smart model routing**: new `core/model_router.py` + `model_routing` config, exposed on `/settings` — trivial messages hit `llama3.2:3b`, code hits `qwen2.5-coder:7b`, everything else the default model
+- **Friendlier Ollama-down errors**: chat shows a plain-language card instead of a raw connection exception; status dot turns amber
+- **Save-to-file fixed**: "save our conversation to X" now reliably routes through the orchestrator (`read_conversation_history` → `write_file`) instead of breaking on oversized ReAct JSON
+- **Neural web tools wired up**: `enhanced_reasoning`, `neural_web_nlp_extract`, `neural_web_visualize` were built but unreachable (constructor bug, no DI path) — now auto-discovered and use the live Neural Web when `memory_manager.backend: neural`
+- **Repo cleanup**: project-level CI, single-source `pyproject.toml` (removed duplicate `pytest.ini`/`mypy.ini`/`.isort.cfg`/`.flake8`/`.coveragerc`), dead code removed (`*_fixed.py`/`*_updated.py` forks, stale root-level test scripts), PyQt6 GUI archived to `planning/archive/gui/` (replaced by the web UI)
 
 **2026-07-06 — Web UI (desktop + phone)**
 
@@ -148,6 +160,7 @@ Main configuration is `config.yaml`; the pydantic models (and defaults) live in 
 | `memory_manager.backend` | `basic` | `basic`, `faiss_cpu`, `faiss_gpu`, or `neural` |
 | `memory_manager.vector_dim` | `768` | Must match the embedding model |
 | `tool_system.mcp_connect_on_startup` | `false` | Connect to external MCP servers at boot |
+| `model_routing.enabled` | `true` | Route trivial/code/complex messages to differently-sized models; editable on `/settings` |
 | `auto_restart_on_file_change` | `false` | Watchdog-based auto-restart for development |
 
 Secrets are supplied via `.env` / environment variables (loaded in `core/config.py`):
@@ -162,7 +175,7 @@ Secrets are supplied via `.env` / environment variables (loaded in `core/config.
 - **Specialized agents** — book writing, coding, and self-repair agents invoked by the control center
 - **Memory Manager** — persistent memory segments with embeddings; backends for JSON (basic), FAISS, neural-web, and Supabase
 - **Neural Web** — concept graph with activation propagation and cross-domain learning
-- **Tool Registry** — auto-discovers tools (14 built-in: file ops, calculator, math, JSON, Python execution, web search, datetime, conversation analysis, network control, thinking, intent analysis)
+- **Tool Registry** — auto-discovers tools (22 built-in: file ops, calculator, math, JSON, Python execution, web search, document search/ingest, MCP discovery, datetime, conversation analysis, network control, thinking, intent analysis, ask-Claude escalation, neural-web reasoning/NLP-extraction/visualization)
 - **Adaptive LLM System** — complexity analyzer + dynamic module loader + semantic cache for routing queries to appropriately-sized models (`llm_interface.default_provider: adaptive` to enable)
 - **MCP integration** — Model Context Protocol adapter for external tool servers (opt-in at startup)
 
@@ -208,18 +221,21 @@ orchestrator uses the `document_search` tool to find relevant passages.
 
 1. ~~**Web UI**~~ — ✅ shipped 2026-07-06 (see above), including Android/PWA access
 2. ~~**Document RAG**~~ — ✅ shipped 2026-07-06 (see above)
-3. **Smart model routing** — wire the adaptive-LLM stack so trivial queries hit `llama3.2:3b`, code hits `qwen2.5-coder:7b`, and complex reasoning hits `qwen3:8b`
-4. PyQt6 desktop GUI and background-agent revival (in progress on a separate branch)
+3. ~~**Smart model routing**~~ — ✅ shipped 2026-07-07: `core/model_router.py` + `/settings` UI, trivial → `llama3.2:3b`, code → `qwen2.5-coder:7b`, complex → default model
+4. ~~**MCP tool discovery**~~ — ✅ shipped 2026-07-07: `search_mcp_tools` + `/mcp` discover/install from the official MCP registry
+5. Optional: MCP OCI/Docker package support, browse-before-install preview, WCCA intent JSON repair-reparse
+6. PyQt6 desktop GUI — archived (`planning/archive/gui/`), not planned for revival; web UI is the permanent replacement
 
 ## Documentation
 
 - [FILE_STRUCTURE.md](FILE_STRUCTURE.md) — file structure reference
 - [AGENTS.md](AGENTS.md) — agent architecture
 - [PATH_MIGRATION_GUIDE.md](PATH_MIGRATION_GUIDE.md) — path changes from previous versions
-- [TASK.md](TASK.md) — task tracking
+- [planning/roadmap/revival-2026-07.md](planning/roadmap/revival-2026-07.md) — canonical current status doc (`TASK.md` now just redirects here)
+- [planning/roadmap/composer-orchestrator-search-quality-2026-07.md](planning/roadmap/composer-orchestrator-search-quality-2026-07.md) — search-quality work, whole-repo audit backlog (Tiers 1–4)
 - [planning/](planning/README.md) — architecture, implementation notes, roadmap, and technical notes
   - [System Architecture](planning/architecture/system-architecture.md)
-  - [Neural Web Roadmap](planning/roadmap/neural-web-roadmap.md)
+  - [Neural Web Roadmap](planning/roadmap/neural-web-roadmap.md) *(historical — predates the July 2026 revival)*
   - [Consolidated System Fixes](planning/technical-notes/consolidated-system-fixes.md)
 
 ## Project Structure
@@ -231,9 +247,10 @@ WitsV3/
 ├── config/              # Additional YAML configs (personality, ethics, background agent)
 ├── data/                # Local data (memory files, MCP tool definitions) — personal data gitignored
 ├── planning/            # Design docs, roadmaps, technical notes (includes archive/gui/ — parked PyQt6 desktop GUI)
-├── scripts/             # Setup and maintenance scripts
-├── tests/               # Test suite (142 passing)
+├── scripts/             # Setup and maintenance scripts (manual_tests/ — standalone smoke scripts, not pytest)
+├── tests/               # Test suite (312 passing)
 ├── tools/               # Tool implementations
+├── web/                 # FastAPI + SSE web UI (run_web.py)
 ├── config.yaml          # Main configuration
 ├── run.py               # Main entry point (CLI + --test self-check)
 ├── requirements.txt     # Python dependencies (requirements.lock = pinned set)

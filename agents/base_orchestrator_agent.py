@@ -11,6 +11,7 @@ from abc import abstractmethod
 from agents.base_agent import BaseAgent
 from agents.orchestrator_tool_helpers import OrchestratorToolHelpersMixin
 from core.config import WitsV3Config
+from core.json_llm_parser import build_json_repair_prompt
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
 from core.schemas import StreamData, ConversationHistory
@@ -404,14 +405,11 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         Returns:
             Repair prompt
         """
-        return f"""The following text was supposed to be a single valid JSON object, but it failed to parse ({parse_error}).
-
-TEXT:
-{raw_response}
-
-Rewrite it as ONE valid JSON object. Preserve the intended content and keys ("thought", "action_type", "tool_name", "tool_args", "final_answer"). Do not add commentary, markdown fences, or any text outside the JSON object.
-
-Respond ONLY with the corrected JSON object."""
+        return build_json_repair_prompt(
+            raw_response,
+            parse_error,
+            required_keys='"thought", "action_type", "tool_name", "tool_args", "final_answer"',
+        )
 
     @abstractmethod
     def _build_reasoning_prompt(self, state: Dict[str, Any]) -> str:
