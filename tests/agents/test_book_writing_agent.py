@@ -36,10 +36,12 @@ class PromptRoutedLLM(BaseLLMInterface):
     def __init__(self, config: WitsV3Config | None = None):
         super().__init__(config or WitsV3Config())
         self.calls: list[str] = []
+        self.call_kwargs: list[dict] = []
         self.chapter_calls = 0
 
     async def generate_text(self, prompt: str, **kwargs) -> str:
         self.calls.append(prompt)
+        self.call_kwargs.append(kwargs)
         if "Analyze this book writing request" in prompt:
             return (
                 '{"task_type": "create_book", "genre": "fantasy", "style": "narrative", '
@@ -55,7 +57,7 @@ class PromptRoutedLLM(BaseLLMInterface):
             return "1. Opening hook\n2. Rising action\n3. Closing summary"
         if "Write a detailed scene-by-scene outline" in prompt:
             return "- Scene 1: setup\n- Scene 2: conflict\n- Scene 3: resolution"
-        if "Chapter outline (follow this)" in prompt:
+        if "THIS PART must cover ONLY this beat" in prompt:
             self.chapter_calls += 1
             return f"Chapter prose number {self.chapter_calls}. " * 20
         return "generic response"
@@ -132,6 +134,28 @@ async def test_extract_chapters_strips_duplicated_chapter_prefix(agent):
 )
 def test_extract_requested_filename(text, expected):
     assert extract_requested_filename(text) == expected
+
+
+# --------------------------------------------------------- length estimation
+
+
+@pytest.mark.parametrize(
+    "text,default,expected",
+    [
+        ("write a 100 page story", 1000, 25000),
+        ("write a 5000 word story", 1000, 5000),
+        ("write me a novella about a knight", 1000, 25000),
+        ("write me a novel about a knight", 1000, 80000),
+        ("write me a short story about a knight", 1000, 4000),
+        ("write me a story about a knight", 1000, 1000),
+    ],
+)
+def test_estimate_requested_length_prefers_explicit_over_named_form(agent, text, default, expected):
+    """Explicit page/word counts win; a named form ("novella") sets a
+    realistic default when nothing explicit is given — 2026-07-08 finding:
+    chapters/books were consistently coming out far short of what the named
+    form actually implies (a "novella" is 17.5k-40k words, not ~1-2k)."""
+    assert agent._estimate_requested_length(text, default) == expected
 
 
 def test_wants_full_book_now_matches_live_transcript_phrasing():
@@ -278,6 +302,114 @@ async def test_run_continuation_followup_resumes_same_book(agent):
         _cleanup(slug)
 
 
+# --------------------------------------------------- context window / length
+
+
+@pytest.mark.asyncio
+async def test_write_full_book_passes_num_ctx_to_llm_calls(agent):
+    """2026-07-08 finding: Ollama's own runtime context window default is
+    much smaller than most models' trained context length regardless of
+    max_tokens, and silently truncates a large prompt+completion for
+    novella-length chapters unless num_ctx is set explicitly on the call."""
+    slug = "scratch_num_ctx_test"
+    try:
+        book_id = "book-ctx"
+        agent.current_books[book_id] = BookStructure(
+            title="Ctx Test",
+            genre="fantasy",
+            target_length=2200,
+            chapters=[{"id": "c1", "title": "One", "outline": "x", "status": "planned"}],
+        )
+        async for _ in agent._handle_write_full_book(book_id, "sess-ctx", filename=slug):
+            pass
+
+        expected = agent.config.agents.book_writing_agent.num_ctx
+        assert expected > 0
+        assert any(kw.get("num_ctx") == expected for kw in agent.llm_interface.call_kwargs)
+    finally:
+        _cleanup(slug)
+
+
+@pytest.mark.asyncio
+async def test_write_full_book_targets_novella_density_per_chapter(agent):
+    """The per-chapter floor must reflect real novella density (2026-07-08
+    finding: chapters were consistently coming out short), not the old
+    900-word floor. Chapters are written beat-by-beat (see
+    test_write_full_book_generates_one_call_per_outline_beat), so the
+    per-beat word target should be the chapter target divided across the
+    mocked 3-beat outline: 2200 // 3 = 733."""
+    slug = "scratch_density_test"
+    try:
+        book_id = "book-density"
+        agent.current_books[book_id] = BookStructure(
+            title="Density Test",
+            genre="fantasy",
+            target_length=2200,  # low total, so the floor (not the average) governs
+            chapters=[{"id": "c1", "title": "One", "outline": "x", "status": "planned"}],
+        )
+        async for _ in agent._handle_write_full_book(book_id, "sess-density", filename=slug):
+            pass
+
+        writing_calls = [
+            c for c in agent.llm_interface.calls if "THIS PART must cover ONLY this beat" in c
+        ]
+        assert any("Write about 733 words" in c for c in writing_calls)
+    finally:
+        _cleanup(slug)
+
+
+@pytest.mark.asyncio
+async def test_write_full_book_scales_max_tokens_to_beat_target(agent):
+    """2026-07-08 finding: every beat call was passed the full chapter
+    max_tokens (e.g. 4500), so nothing capped how far a single beat could
+    overrun its own word target -- observed live as a 2200-word-target
+    chapter landing at 4124 words. Each beat call's max_tokens must scale
+    down with that beat's own word target instead of the whole chapter's
+    ceiling."""
+    slug = "scratch_beat_tokens_test"
+    try:
+        # A generous chapter-level ceiling, matching config.yaml's real
+        # value -- with the old bug this alone was passed to every beat
+        # call regardless of that beat's own target.
+        agent.config.agents.book_writing_agent.max_tokens = 4500
+        book_id = "book-beat-tokens"
+        agent.current_books[book_id] = BookStructure(
+            title="Beat Tokens Test",
+            genre="fantasy",
+            target_length=2200,  # mocked 3-beat outline -> 733 words/beat
+            chapters=[{"id": "c1", "title": "One", "outline": "x", "status": "planned"}],
+        )
+        async for _ in agent._handle_write_full_book(book_id, "sess-beat-tokens", filename=slug):
+            pass
+
+        writing_kwargs = [
+            kw
+            for prompt, kw in zip(
+                agent.llm_interface.calls, agent.llm_interface.call_kwargs, strict=True
+            )
+            if "THIS PART must cover ONLY this beat" in prompt
+        ]
+        assert writing_kwargs
+        # words_per_beat = 733 -> min(4500, max(400, int(733 * 2.3))) = 1685
+        for kw in writing_kwargs:
+            assert kw.get("max_tokens") == 1685
+    finally:
+        _cleanup(slug)
+
+
+def test_prepare_payload_includes_num_ctx():
+    from core.llm_interface import OllamaInterface
+
+    async def _run():
+        interface = OllamaInterface(config=WitsV3Config())
+        payload = await interface._prepare_payload("hi", num_ctx=8192)
+        assert payload["options"]["num_ctx"] == 8192
+
+    import asyncio
+
+    asyncio.run(_run())
+
+
 # ------------------------------------------------- point-of-view consistency
 
 
@@ -332,7 +464,7 @@ async def test_write_full_book_enforces_pov_across_chapters(agent):
             c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c
         ]
         writing_calls = [
-            c for c in agent.llm_interface.calls if "Chapter outline (follow this)" in c
+            c for c in agent.llm_interface.calls if "THIS PART must cover ONLY this beat" in c
         ]
         assert any("Narrate in first person" in c for c in writing_calls)
         assert any("point of view" in c.lower() for c in planning_calls)
@@ -350,6 +482,110 @@ def test_strip_leading_title_echo_leaves_real_prose_alone(agent):
     content = "The sky was still dark when Rick woke up."
     result = agent._strip_leading_title_echo(content, "Rick Discovers His Powers")
     assert result == content
+
+
+# ------------------------------------------------------ outline beat parsing
+
+
+def test_parse_outline_beats_folds_wrapped_lines_into_one_beat(agent):
+    """2026-07-08 finding: an outline whose bullets wrapped/elaborated
+    across multiple lines got parsed as one beat per *line*, producing 30+
+    "beats" for a single chapter and an 8,000+ word chapter against a
+    2,200-word target. Only an actual bullet/numbered marker should start a
+    new beat; anything else is a continuation of the previous one."""
+    outline = (
+        "- Scene 1: Rick wakes up\n"
+        "  He reflects on last night's failed jump.\n"
+        "  His muscles ache.\n"
+        "- Scene 2: A stranger arrives\n"
+        "  She refuses to explain herself at first.\n"
+    )
+    beats = agent._parse_outline_beats(outline)
+    assert beats == [
+        "Scene 1: Rick wakes up He reflects on last night's failed jump. His muscles ache.",
+        "Scene 2: A stranger arrives She refuses to explain herself at first.",
+    ]
+
+
+def test_parse_outline_beats_caps_beat_count(agent):
+    outline = "\n".join(f"- Beat {i}" for i in range(1, 21))
+    beats = agent._parse_outline_beats(outline)
+    assert len(beats) == agent._MAX_BEATS_PER_CHAPTER
+
+
+def test_parse_outline_beats_falls_back_to_whole_text_with_no_markers(agent):
+    outline = "Just some unstructured prose with no bullets at all."
+    assert agent._parse_outline_beats(outline) == [outline]
+
+
+# ------------------------------------------------- repeated-paragraph removal
+
+
+def test_dedupe_repeated_paragraphs_drops_near_duplicate(agent):
+    """2026-07-08 live-model finding: beat-by-beat generation produced a
+    chapter where a six-paragraph negotiation-and-agreement scene appeared
+    twice, near-verbatim, back to back -- each beat is a separate LLM call,
+    so nothing forced the model to notice it was repeating itself."""
+    first = "Sir Galahad considered Alaric's words carefully before nodding."
+    second = "The squire nodded back, eager to begin his training at last."
+    content = f"{first}\n\n{second}\n\n{first}"
+    result = agent._dedupe_repeated_paragraphs(content)
+    assert result == f"{first}\n\n{second}"
+
+
+def test_dedupe_repeated_paragraphs_keeps_distinct_content(agent):
+    content = "The knight drew his sword.\n\nThe squire watched in awe."
+    assert agent._dedupe_repeated_paragraphs(content) == content
+
+
+# --------------------------------------------- incomplete-sentence trimming
+
+
+def test_trim_incomplete_sentence_drops_trailing_fragment(agent):
+    """2026-07-08 live-model finding: a token-capped beat call sometimes
+    stopped mid-sentence ("...he forced himself to"), and a chapter once
+    ended on the bare word "The" -- both must be trimmed back to the last
+    complete sentence rather than left dangling."""
+    text = "He drew his sword and turned to face the door. Robin followed suit, unleashing"
+    assert agent._trim_incomplete_sentence(text) == (
+        "He drew his sword and turned to face the door."
+    )
+
+
+def test_trim_incomplete_sentence_leaves_complete_text_alone(agent):
+    text = "He drew his sword. Robin followed close behind."
+    assert agent._trim_incomplete_sentence(text) == text
+
+
+def test_trim_incomplete_sentence_falls_back_when_no_complete_sentence_exists(agent):
+    text = "no punctuation at all here"
+    assert agent._trim_incomplete_sentence(text) == text
+
+
+# -------------------------------------------------- meta-commentary removal
+
+
+def test_strip_meta_commentary_drops_self_referential_paragraph(agent):
+    """2026-07-08 live-model finding: despite the prompt's explicit "no
+    meta-commentary" instruction, one beat's output opened with "(The
+    critical narrative prose section comes to an end here -- the chapter
+    outline contains 4 beats after this one that must be covered in
+    subsequent outputs." -- breaking character instead of writing story."""
+    real_prose = "Alaric drew his sword and faced the bandits."
+    meta = (
+        "(The critical narrative prose section comes to an end here — the "
+        "chapter outline contains 4 beats after this one that must be "
+        "covered in subsequent outputs."
+    )
+    content = f"{real_prose}\n\n{meta}\n\n{real_prose}"
+    result = agent._strip_meta_commentary(content)
+    assert meta not in result
+    assert result == f"{real_prose}\n\n{real_prose}"
+
+
+def test_strip_meta_commentary_keeps_real_parenthetical_prose(agent):
+    content = "He drew his sword. (He had trained for this moment for years.)"
+    assert agent._strip_meta_commentary(content) == content
 
 
 # --------------------------------------------------- outline expansion & continuity
@@ -377,11 +613,13 @@ async def test_write_full_book_expands_outline_before_writing_prose(agent):
             c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c
         ]
         writing_calls = [
-            c for c in agent.llm_interface.calls if "Chapter outline (follow this)" in c
+            c for c in agent.llm_interface.calls if "THIS PART must cover ONLY this beat" in c
         ]
         assert len(planning_calls) == 1
-        assert len(writing_calls) == 1
-        # The prose call must actually be grounded in the expanded outline,
+        # One prose call per outline beat (the mocked outline has 3), not
+        # one call for the whole chapter — see _write_chapter_prose.
+        assert len(writing_calls) == 3
+        # The prose calls must actually be grounded in the expanded outline,
         # not just the original one-line summary.
         assert "Scene 1: setup" in writing_calls[0]
     finally:
@@ -440,7 +678,7 @@ async def test_write_full_book_injects_world_bible_into_prompts(agent):
             c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c
         ]
         writing_calls = [
-            c for c in agent.llm_interface.calls if "Chapter outline (follow this)" in c
+            c for c in agent.llm_interface.calls if "THIS PART must cover ONLY this beat" in c
         ]
         assert "Powers are tied to belief and pressure" in planning_calls[0]
         assert "Powers are tied to belief and pressure" in writing_calls[0]
@@ -475,11 +713,12 @@ async def test_seed_existing_chapter_writes_immediately_and_is_skipped_later(age
         async for _ in agent._handle_write_full_book(book_id, "sess-seed", filename=slug):
             pass
 
-        # Only the real (non-seeded) chapter should have triggered generation.
+        # Only the real (non-seeded) chapter should have triggered generation
+        # — one prose call per outline beat (the mocked outline has 3).
         writing_calls = [
-            c for c in agent.llm_interface.calls if "Chapter outline (follow this)" in c
+            c for c in agent.llm_interface.calls if "THIS PART must cover ONLY this beat" in c
         ]
-        assert len(writing_calls) == 1
+        assert len(writing_calls) == 3
         # And the seeded prologue text must show up as continuity context.
         planning_calls = [
             c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c

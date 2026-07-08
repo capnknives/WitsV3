@@ -187,17 +187,34 @@ class BookWritingAgent(
             async for stream in self._handle_general_writing(task_analysis, session_id):
                 yield stream
 
-    @staticmethod
-    def _estimate_requested_length(request: str, default: int) -> int:
-        """Parse an explicit page/word count out of the request, e.g. "100
-        page story" -> ~25,000 words (250 words/page is a common estimate).
-        Falls back to `default` when nothing is stated."""
+    # Standard genre-length terms, word counts per common publishing
+    # convention (Science Fiction and Fantasy Writers of America uses the
+    # same bands). Checked when the request names a form but gives no
+    # explicit page/word count, so "write me a novella" defaults to
+    # novella length (17.5k-40k words) instead of a generic short-story-sized
+    # default — 2026-07-08 finding: chapters/books were consistently coming
+    # out far short of what the named form actually implies.
+    _FORM_LENGTH_WORDS = {
+        "novella": 25000,
+        "novel": 80000,
+        "novelette": 12000,
+        "short story": 4000,
+    }
+
+    @classmethod
+    def _estimate_requested_length(cls, request: str, default: int) -> int:
+        """Parse an explicit page/word count, or a named form ("novella"),
+        out of the request. Falls back to `default` when nothing is stated."""
         page_match = re.search(r"\b(\d+)\s*-?\s*page\b", request, re.IGNORECASE)
         if page_match:
             return int(page_match.group(1)) * 250
         word_match = re.search(r"\b(\d+)\s*-?\s*words?\b", request, re.IGNORECASE)
         if word_match:
             return int(word_match.group(1))
+        lowered = request.lower()
+        for form, words in cls._FORM_LENGTH_WORDS.items():
+            if form in lowered:
+                return words
         return default
 
     async def _analyze_writing_task(self, request: str) -> dict[str, Any]:

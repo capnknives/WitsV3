@@ -24,6 +24,7 @@ new chapters continue it instead of ignoring it. This is what makes chapters
 read as installments of one novella instead of independent one-shot scenes.
 """
 
+import difflib
 import re
 import uuid
 from collections.abc import AsyncGenerator
@@ -184,17 +185,50 @@ class BookWritingWriterMixin:
             f"Brief premise for this chapter: {(chapter.get('outline') or '').strip() or 'Continue the story naturally.'}\n"
             f"{pov_line}\n"
             "Write a detailed scene-by-scene outline for THIS chapter only: what happens, "
-            "in what order, key beats, and how it connects to what came before. 4-8 bullet "
-            "points. Do not write prose — outline only."
+            "in what order, key beats, and how it connects to what came before. EXACTLY "
+            "4-6 beats, each ONE bullet on ONE line — no sub-bullets, no multi-line "
+            "elaboration per beat. Do not write prose — outline only."
         )
         return (
             await self.generate_response(
                 prompt,
                 model_name=book_settings.model,
                 temperature=max(0.3, book_settings.temperature - 0.2),
-                max_tokens=min(600, book_settings.max_tokens),
+                max_tokens=min(800, book_settings.max_tokens),
+                num_ctx=book_settings.num_ctx,
             )
         ).strip()
+
+    # Hard cap on beats per chapter regardless of what the outline call
+    # returns — 2026-07-08 finding: an outline whose bullets wrapped or
+    # elaborated across multiple lines got parsed as one beat per *line*,
+    # producing 30+ "beats" for a single chapter and an 8,000+ word chapter
+    # against a 2,200-word target.
+    _MAX_BEATS_PER_CHAPTER = 8
+    _BEAT_MARKER_RE = re.compile(r"^([-*•]|\d+[.)])\s+")
+
+    @classmethod
+    def _parse_outline_beats(cls, outline: str) -> list[str]:
+        """Split a detailed outline into its individual bullet-point beats.
+
+        Only a line starting with an actual bullet/numbered marker begins a
+        new beat; any other non-empty line is folded into the current beat
+        as continuation text, so a bullet that wraps or gets elaborated
+        across multiple lines doesn't get miscounted as multiple beats.
+        """
+        beats: list[str] = []
+        for raw_line in outline.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+            match = cls._BEAT_MARKER_RE.match(line)
+            if match:
+                beats.append(line[match.end() :].strip())
+            elif beats:
+                beats[-1] = f"{beats[-1]} {line}".strip()
+            # else: prose before the first bullet marker — ignore
+        beats = beats or [outline.strip()]
+        return beats[: cls._MAX_BEATS_PER_CHAPTER]
 
     async def _write_chapter_prose(
         self,
@@ -208,8 +242,19 @@ class BookWritingWriterMixin:
         target_words: int,
         book_settings,
     ) -> str:
-        """Generate the actual prose for one chapter from its detailed
-        outline, with the story bible and prior text as grounding context."""
+        """Generate the actual prose for one chapter, one outline beat per
+        LLM call, with the story bible and prior text as grounding context.
+
+        2026-07-08 finding: a single "write ~2200 words" call routinely
+        stopped far short (e.g. 619/1071 words). The obvious fix — chain
+        "continue, write more words" calls until long enough — made things
+        *worse*: with nothing new to say, the model either restated the
+        entire plot arc a second time after it had already reached a
+        natural conclusion, or degenerated into repetitive boilerplate
+        filler. Generating one call per outline beat instead gives every
+        call distinct content to produce, which is what actually produces
+        a longer chapter without padding or repetition.
+        """
         context_blocks = []
         if world_bible:
             context_blocks.append(
@@ -229,24 +274,135 @@ class BookWritingWriterMixin:
             else ""
         )
 
-        prompt = (f"{context}\n\n" if context else "") + (
-            f'Write Chapter {idx} of {total_chapters} of the {book.genre} book "{book.title}".\n\n'
-            f"Chapter title: {chapter['title']}\n"
-            f"Chapter outline (follow this):\n{detailed_outline}\n"
-            f"{pov_line}\n"
-            f"Write approximately {target_words} words of narrative prose for this chapter "
-            "only, matching the voice and tense already established in the story so far. "
-            "Output ONLY the prose — no chapter headers, no meta-commentary, no restatement "
-            "of the outline."
-        )
-        return (
-            await self.generate_response(
-                prompt,
-                model_name=book_settings.model,
-                temperature=book_settings.temperature,
-                max_tokens=book_settings.max_tokens,
+        beats = self._parse_outline_beats(detailed_outline)
+        words_per_beat = max(250, target_words // len(beats))
+        # Token budget per beat call, scaled to that beat's own word target
+        # rather than the whole chapter's ceiling. 2026-07-08 live-model
+        # finding: every beat call was passed the full chapter max_tokens
+        # (e.g. 4500), so nothing stopped a single beat from ballooning to
+        # several times its ~350-word target (observed: 600-700+ actual
+        # words/beat against a 366-word target, an entire chapter landing
+        # at 4124 words against a 2200-word target).
+        #
+        # 2026-07-08, second finding: a first attempt at 1.6 tokens/word
+        # was too tight -- the model's natural per-beat length runs
+        # 600-700+ words regardless of the stated target, so most beats hit
+        # the cap mid-sentence ("...he forced himself to", a chapter ending
+        # on the bare word "The"), and the next beat would then clumsily
+        # restate the severed opening instead of continuing past it. 2.3
+        # tokens/word gives enough headroom for the model's natural length
+        # to land inside the cap in the common case; _trim_incomplete_sentence
+        # below is the fallback for whatever still gets cut.
+        beat_max_tokens = min(book_settings.max_tokens, max(400, int(words_per_beat * 2.3)))
+
+        chapter_so_far = ""
+        for beat_idx, beat in enumerate(beats, start=1):
+            is_last = beat_idx == len(beats)
+            recent_tail = (chapter_so_far or continuity_tail)[-2000:]
+            prompt = (f"{context}\n\n" if context else "") + (
+                f"Write part {beat_idx} of {len(beats)} of Chapter {idx} of {total_chapters} of "
+                f'the {book.genre} book "{book.title}".\n\n'
+                f"Chapter title: {chapter['title']}\n"
+                f"Full chapter outline (for context, already covered beats are done — do not "
+                f"repeat them):\n{detailed_outline}\n\n"
+                f"THIS PART must cover ONLY this beat: {beat}\n"
+                + (
+                    f"\nWhat's already been written in this chapter so far (continue directly "
+                    f"from this, do not repeat or restart it):\n{recent_tail}\n"
+                    if recent_tail
+                    else ""
+                )
+                + f"\n{pov_line}"
+                f"Write about {words_per_beat} words of narrative prose covering only this "
+                "beat, flowing naturally from what came before. "
+                + (
+                    "This is the final beat — bring the chapter to a close."
+                    if is_last
+                    else "Do NOT conclude the chapter or wrap up the story yet — more beats "
+                    "follow after this one."
+                )
+                + " Output ONLY the prose — no chapter headers, no meta-commentary, no "
+                "restatement of the outline."
             )
-        ).strip()
+            segment = (
+                await self.generate_response(
+                    prompt,
+                    model_name=book_settings.model,
+                    temperature=book_settings.temperature,
+                    max_tokens=beat_max_tokens,
+                    num_ctx=book_settings.num_ctx,
+                )
+            ).strip()
+            segment = self._trim_incomplete_sentence(segment)
+            if segment:
+                chapter_so_far = f"{chapter_so_far.rstrip()}\n\n{segment}".strip()
+
+        return self._dedupe_repeated_paragraphs(self._strip_meta_commentary(chapter_so_far))
+
+    # Matches a paragraph where the model breaks character to comment on its
+    # own generation process instead of writing story prose -- 2026-07-08
+    # live-model finding: one beat's output opened with "(The critical
+    # narrative prose section comes to an end here -- the chapter outline
+    # contains 4 beats after this one that must be covered in subsequent
+    # outputs." despite the prompt's explicit "no meta-commentary"
+    # instruction. Real prose doesn't open a paragraph by naming "beats",
+    # "outline", or "output" inside parentheses, so this is a safe tell.
+    _META_COMMENTARY_RE = re.compile(
+        r"^\(.*\b(beat|outline|narrative prose section|subsequent output)s?\b", re.IGNORECASE
+    )
+
+    @classmethod
+    def _strip_meta_commentary(cls, content: str) -> str:
+        """Drop paragraphs where the model narrates its own generation
+        process rather than the story."""
+        paragraphs = [p for p in content.split("\n\n") if p.strip()]
+        kept = [p for p in paragraphs if not cls._META_COMMENTARY_RE.match(p.strip())]
+        return "\n\n".join(kept)
+
+    @staticmethod
+    def _trim_incomplete_sentence(text: str) -> str:
+        """Cut a trailing sentence fragment left when a beat call hits its
+        token cap mid-sentence, instead of leaving prose that stops
+        mid-word/mid-clause (e.g. "...he forced himself to", a chapter
+        ending on the bare word "The"). 2026-07-08 live-model finding: a
+        dangling fragment like this also confused the *next* beat, which
+        would clumsily restate the severed opening rather than continue
+        past it. Falls back to the untouched text if no complete sentence
+        is found at all, since a half-finished beat still beats an empty
+        one."""
+        stripped = text.rstrip()
+        if not stripped or stripped[-1] in ".!?”’\"'":
+            return stripped
+        last_end = max(stripped.rfind(ch) for ch in ".!?")
+        if last_end == -1:
+            return stripped
+        end = last_end + 1
+        if end < len(stripped) and stripped[end] in "”’\"'":
+            end += 1
+        return stripped[:end]
+
+    @staticmethod
+    def _dedupe_repeated_paragraphs(content: str, similarity_threshold: float = 0.8) -> str:
+        """Drop paragraphs that near-duplicate an earlier paragraph in the
+        same chapter. 2026-07-08 live-model finding: beat-by-beat generation
+        occasionally produced a near-verbatim repeat of an earlier beat's
+        resolution (e.g. two beats both landing on the same "agrees to
+        mentor him" exchange, word-for-word across six consecutive
+        paragraphs) instead of progressing the story, even though each beat
+        was generated from a distinct outline bullet."""
+        paragraphs = [p for p in content.split("\n\n") if p.strip()]
+        kept: list[str] = []
+        normalized_kept: list[str] = []
+        for para in paragraphs:
+            normalized = re.sub(r"\s+", " ", para.strip().lower())
+            if any(
+                difflib.SequenceMatcher(None, normalized, prior).ratio() >= similarity_threshold
+                for prior in normalized_kept
+            ):
+                continue
+            kept.append(para)
+            normalized_kept.append(normalized)
+        return "\n\n".join(kept)
 
     async def _handle_write_full_book(
         self,
@@ -282,9 +438,14 @@ class BookWritingWriterMixin:
 
         book_settings = self.config.agents.book_writing_agent
         world_bible = (book.world_bible or "").strip()
-        # Novella-density floor (was 400) — a "30 page" request should read
-        # like chapters of a real novella, not a series of short vignettes.
-        per_chapter_target = max(900, book.target_length // max(len(chapters), 1))
+        # Novella-density floor. Standard novellas run 17,500-40,000 words
+        # (~70-160 pages at 250 words/page); at typical chapter counts that's
+        # roughly 2,000-3,500 words per chapter, not the 900-word floor this
+        # used to have (2026-07-08 finding: chapters were consistently
+        # coming out too short even when target_length/chapter count implied
+        # more, and max_tokens/num_ctx weren't sized to support longer output
+        # anyway).
+        per_chapter_target = max(2200, book.target_length // max(len(chapters), 1))
 
         total_words = 0
         chapters_written = 0

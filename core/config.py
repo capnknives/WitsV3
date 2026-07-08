@@ -78,8 +78,18 @@ class BookWritingAgentSettings(BaseModel):
     max_tokens: int = Field(
         default=1600,
         gt=0,
-        description="Max tokens per chapter-generation call — kept well under typical "
-        "Ollama context windows so a chapter completes instead of being cut off",
+        description="Max tokens per chapter-generation call — must comfortably cover a "
+        "real novella-length chapter (~2,000-3,500 words, i.e. ~2,800-4,900 tokens) or "
+        "chapters come out short",
+    )
+    num_ctx: int = Field(
+        default=8192,
+        gt=0,
+        description="Ollama context-window override for chapter generation. Ollama's own "
+        "runtime default is much smaller than most models' trained context length "
+        "(often 2k-4k tokens) regardless of max_tokens, and silently truncates a large "
+        "world-bible + continuity + outline prompt combined with a long completion "
+        "unless this is set explicitly.",
     )
 
     class Config:

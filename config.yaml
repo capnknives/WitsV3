@@ -20,17 +20,23 @@ adaptive_llm:
     enable_caching: true
     similarity_threshold: 0.92
 agents:
-  # NOTE: only model/temperature/max_tokens are wired to BookWritingAgentSettings
-  # (core/config.py) and actually take effect. enable_narrative_intelligence and
-  # story_structure_patterns are not read by any loader and currently do nothing —
-  # see planning/roadmap/config-surface-truth-2026-07.md.
+  # NOTE: only model/temperature/max_tokens/num_ctx are wired to
+  # BookWritingAgentSettings (core/config.py) and actually take effect.
+  # enable_narrative_intelligence and story_structure_patterns are not read
+  # by any loader and currently do nothing — see
+  # planning/roadmap/config-surface-truth-2026-07.md.
   book_writing_agent:
     enable_narrative_intelligence: true
     # Per-chapter generation bound (the book is written one chapter per LLM
-    # call), not a whole-book budget — keep this comfortably under the
-    # model's context window so a chapter finishes instead of truncating.
-    # 2600 gives headroom for ~1200-1800 word novella-length chapters.
-    max_tokens: 2600
+    # call), not a whole-book budget. A real novella chapter runs roughly
+    # 2,000-3,500 words (~2,800-4,900 tokens) — 4500 leaves headroom for
+    # that plus a safety margin before truncating.
+    max_tokens: 4500
+    # Ollama's own runtime context window default is much smaller than most
+    # models' trained context length (often 2k-4k tokens) regardless of
+    # max_tokens, and silently truncates a large world-bible + continuity +
+    # outline prompt combined with a long completion unless set explicitly.
+    num_ctx: 8192
     # hermes3:8b (Nous Research) over the system default qwen3:8b: tuned for
     # long-context narrative coherence and multi-turn roleplay, and unlike
     # qwen3 it doesn't spend part of max_tokens on hidden <think> reasoning

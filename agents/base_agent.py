@@ -87,6 +87,7 @@ class BaseAgent(ABC):
         temperature: float | None = None,
         max_tokens: int | None = None,
         response_format: str | None = None,
+        num_ctx: int | None = None,
     ) -> str:
         """
         Generate a response using the LLM.
@@ -97,16 +98,22 @@ class BaseAgent(ABC):
             temperature: Optional temperature override
             max_tokens: Optional max tokens override
             response_format: Optional output constraint ("json" for Ollama structured output)
+            num_ctx: Optional Ollama context-window override — needed for long-form
+                generation (e.g. novella chapters), since Ollama's own default context
+                is otherwise much smaller than most models' trained context length and
+                silently truncates a large prompt+completion.
 
         Returns:
             Generated text response
         """
         try:
-            # Only pass format when requested — some BaseLLMInterface
+            # Only pass format/num_ctx when requested — some BaseLLMInterface
             # implementations (and test fakes) don't accept the kwarg.
             extra_kwargs: dict[str, Any] = {}
             if response_format is not None:
                 extra_kwargs["format"] = response_format
+            if num_ctx is not None:
+                extra_kwargs["num_ctx"] = num_ctx
             response = await self.llm_interface.generate_text(
                 prompt=prompt,
                 model=model_name or self.get_model_name(),

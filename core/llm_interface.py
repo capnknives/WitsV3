@@ -45,8 +45,14 @@ class BaseLLMInterface(ABC):
         max_tokens: int | None = None,
         stop_sequences: list[str] | None = None,
         format: str | None = None,
+        num_ctx: int | None = None,
     ) -> str:
-        """Generate text from the LLM. format="json" constrains output to valid JSON (Ollama structured output)."""
+        """Generate text from the LLM. format="json" constrains output to valid JSON
+        (Ollama structured output). num_ctx overrides the model's runtime context
+        window — Ollama otherwise falls back to its own default (commonly 2k-4k
+        tokens) regardless of the model's trained context length, which silently
+        truncates prompt+completion for long-form generation (e.g. novella
+        chapters) unless a caller asks for more room explicitly."""
         pass
 
     @abstractmethod
@@ -84,6 +90,7 @@ class OllamaInterface(BaseLLMInterface):
         stop_sequences: list[str] | None = None,
         stream: bool = False,
         format: str | None = None,
+        num_ctx: int | None = None,
     ) -> dict[str, Any]:
         effective_model = model or self.ollama_settings.default_model
         options: dict[str, Any] = {
@@ -95,6 +102,8 @@ class OllamaInterface(BaseLLMInterface):
             options["num_predict"] = max_tokens
         if stop_sequences is not None:
             options["stop"] = stop_sequences
+        if num_ctx is not None:
+            options["num_ctx"] = num_ctx
 
         payload = {"model": effective_model, "prompt": prompt, "stream": stream, "options": options}
         if format is not None:
@@ -178,9 +187,17 @@ class OllamaInterface(BaseLLMInterface):
         max_tokens: int | None = None,
         stop_sequences: list[str] | None = None,
         format: str | None = None,
+        num_ctx: int | None = None,
     ) -> str:
         payload = await self._prepare_payload(
-            prompt, model, temperature, max_tokens, stop_sequences, stream=False, format=format
+            prompt,
+            model,
+            temperature,
+            max_tokens,
+            stop_sequences,
+            stream=False,
+            format=format,
+            num_ctx=num_ctx,
         )
 
         async def _generate() -> str:
