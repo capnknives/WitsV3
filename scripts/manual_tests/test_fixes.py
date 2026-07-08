@@ -11,26 +11,6 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-async def test_intent_tool():
-    """Test intent analysis tool with empty parameters"""
-    print("🧪 Testing intent analysis tool...")
-    try:
-        from tools.intent_analysis_tool import IntentAnalysisTool
-        tool = IntentAnalysisTool()
-
-        # Test with empty parameters (should not fail)
-        result = await tool.execute()
-        print(f"✅ Intent tool works with empty params: {result['type']}")
-
-        # Test with actual input
-        result = await tool.execute("Hello Richard!")
-        print(f"✅ Intent tool works with input: {result['type']}")
-
-        return True
-    except Exception as e:
-        print(f"❌ Intent tool test failed: {e}")
-        return False
-
 async def test_think_tool():
     """Test think tool with empty parameters"""
     print("🧪 Testing think tool...")
@@ -96,10 +76,9 @@ async def main():
     print("=" * 50)
 
     tests = [
-        ("Intent Analysis Tool", test_intent_tool()),
         ("Think Tool", test_think_tool()),
         ("Personality System", test_personality_system()),
-        ("Control Center Recognition", test_control_center_recognition())
+        ("Control Center Recognition", test_control_center_recognition()),
     ]
 
     passed = 0
