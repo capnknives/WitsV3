@@ -5,7 +5,7 @@ Tests for the background agent
 import os
 import pytest
 import asyncio
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from datetime import datetime, timedelta
 
 from agents.background_agent import BackgroundAgent
@@ -138,6 +138,25 @@ async def test_memory_maintenance(background_agent, memory_manager):
 
     # Verify memory manager was called
     memory_manager.get_recent_memory.assert_called_once_with(limit=100)
+
+@pytest.mark.asyncio
+async def test_execute_task_dispatches_self_repair(background_agent):
+    """_execute_task routes 'self_repair' to _run_self_repair (Docker-deployment
+    parity for the daily self-repair job run.py schedules in-process)."""
+    background_agent._run_self_repair = AsyncMock()
+
+    await background_agent._execute_task("self_repair", {"settings": {}})
+
+    background_agent._run_self_repair.assert_awaited_once_with({})
+
+
+@pytest.mark.asyncio
+async def test_run_self_repair_noop_when_disabled(background_agent):
+    background_agent.config.self_repair.enabled = False
+    with patch("agents.self_repair_agent.SelfRepairAgent") as mock_agent_cls:
+        await background_agent._run_self_repair({})
+    mock_agent_cls.assert_not_called()
+
 
 @pytest.mark.asyncio
 async def test_agent_start_stop(background_agent):

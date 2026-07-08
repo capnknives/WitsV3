@@ -91,6 +91,7 @@ class WitsV3System:
         self.config = config
         self.session_histories = {}        # Initialize core components
         self.file_watcher = None
+        self.self_repair_scheduler = None
         self.llm_interface: Optional[BaseLLMInterface] = None
         self.memory_manager: Optional[MemoryManager] = None
         self.tool_registry: Optional[ToolRegistry] = None
@@ -222,9 +223,55 @@ class WitsV3System:
             if HAS_FILE_WATCHER and self.config.auto_restart_on_file_change:
                 await self._initialize_file_watcher()
 
+            if self.config.self_repair.daily_schedule_enabled:
+                self._initialize_self_repair_schedule()
+
         except Exception as e:
             logger.error(f"Failed to initialize WitsV3 system: {e}")
             raise
+
+    def _initialize_self_repair_schedule(self):
+        """Run the self-repair agent's autonomous scan-and-fix on a cron
+        schedule (default: daily at 3am). Guarded by
+        self_repair.daily_schedule_enabled; restart_after_fix stays off by
+        default so a scheduled repair never surprises an active session."""
+        try:
+            from apscheduler.schedulers.asyncio import AsyncIOScheduler
+            from apscheduler.triggers.cron import CronTrigger
+
+            self.self_repair_scheduler = AsyncIOScheduler()
+            self.self_repair_scheduler.add_job(
+                self._run_scheduled_self_repair,
+                CronTrigger.from_crontab(self.config.self_repair.daily_schedule_cron),
+                id="daily_self_repair",
+                replace_existing=True,
+            )
+            self.self_repair_scheduler.start()
+            logger.info(
+                "Scheduled autonomous self-repair: cron '%s'",
+                self.config.self_repair.daily_schedule_cron,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to schedule self-repair job (non-fatal): {e}")
+
+    async def _run_scheduled_self_repair(self):
+        """The actual job body: run the self-repair agent's autonomous scan
+        and log the outcome. Never raises — a failed repair attempt should
+        never take down the scheduler."""
+        if not self.self_repair_agent:
+            return
+        logger.info("Scheduled self-repair scan starting...")
+        try:
+            results = []
+            async for stream_data in self.self_repair_agent.run(
+                "Scan for recent errors and fix any that can be safely resolved.",
+                session_id=f"scheduled-self-repair-{uuid.uuid4().hex[:8]}",
+            ):
+                if stream_data.type in ("result", "observation"):
+                    results.append(f"[{stream_data.type}] {stream_data.content}")
+            logger.info("Scheduled self-repair scan finished:\n%s", "\n".join(results))
+        except Exception as e:
+            logger.error(f"Scheduled self-repair scan failed: {e}")
 
     async def _initialize_file_watcher(self):
         """Initialize the file watcher for auto-restart functionality."""
@@ -452,6 +499,10 @@ class WitsV3System:
         if self.file_watcher:
             await self.file_watcher.stop()
             logger.info("File watcher shutdown complete")
+
+        if self.self_repair_scheduler:
+            self.self_repair_scheduler.shutdown(wait=False)
+            logger.info("Self-repair scheduler shutdown complete")
 
         if self.memory_manager:
             # Save any pending memory operations

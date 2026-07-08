@@ -147,6 +147,8 @@ class BackgroundAgent(BaseAgent):
                 await self._monitor_system(task_config["settings"])
             elif task_name == "knowledge_graph_construction":
                 await self._build_knowledge_graph(task_config["settings"])
+            elif task_name == "self_repair":
+                await self._run_self_repair(task_config["settings"])
 
             logger.info(f"Completed task: {task_name}")
 
@@ -226,6 +228,29 @@ class BackgroundAgent(BaseAgent):
         """Build semantic knowledge graph from memory segments"""
         # Implement knowledge graph construction
         pass
+
+    async def _run_self_repair(self, settings: Dict[str, Any]):
+        """Run the self-repair agent's autonomous scan-and-fix (Docker-deployment
+        parity for the same job WitsV3System schedules in-process — see
+        run.py's _run_scheduled_self_repair)."""
+        if not self.config.self_repair.enabled:
+            return
+        from agents.self_repair_agent import SelfRepairAgent
+
+        agent = SelfRepairAgent(
+            agent_name="SystemDoctor",
+            config=self.config,
+            llm_interface=self.llm_interface,
+            memory_manager=self.memory_manager,
+            tool_registry=self.tool_registry,
+        )
+        results = []
+        async for stream_data in agent.run(
+            "Scan for recent errors and fix any that can be safely resolved."
+        ):
+            if stream_data.type in ("result", "observation"):
+                results.append(f"[{stream_data.type}] {stream_data.content}")
+        logger.info("Background self-repair scan finished:\n%s", "\n".join(results))
 
     async def _monitor_system_resources(self):
         """Continuously monitor system resources"""

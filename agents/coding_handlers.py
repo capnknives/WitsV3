@@ -5,12 +5,103 @@ import uuid
 from typing import Any, AsyncGenerator, Dict, List
 
 from core.schemas import StreamData
+from core.safe_code_editor import PROJECT_ROOT, extract_code_from_response
 
 from agents.coding_models import CodeProject
 
 
 class CodingHandlersMixin:
     """Mixin providing coding task handlers and project structure generation."""
+
+    async def _handle_fix_existing_file(
+        self,
+        file_path: str,
+        user_input: str,
+        session_id: str,
+    ) -> AsyncGenerator[StreamData, None]:
+        """Fix, debug, or refactor a real file the user named, through the
+        same verify-before-commit pipeline the self-repair agent uses:
+        write a candidate fix, run pytest, commit on success or revert to
+        the original bytes on failure. Nothing broken is ever left in place.
+        """
+        fix_tool = self.tool_registry.get_tool("apply_code_fix") if self.tool_registry else None
+        if fix_tool is None:
+            yield self.stream_result(
+                "apply_code_fix tool is unavailable — cannot safely edit an existing file."
+            )
+            return
+
+        full_path = PROJECT_ROOT / file_path
+        yield self.stream_action(f"Reading {file_path}...")
+        original = full_path.read_text(encoding="utf-8", errors="replace")
+
+        prompt = (
+            "You are editing a real file in a software project per the user's request. "
+            "Output ONLY the full, corrected file content inside a single ```python "
+            "code fence — no prose, no explanation, no partial snippets. Preserve "
+            "everything not related to the requested change.\n\n"
+            f"File: {file_path}\n"
+            f"User request: {user_input}\n\n"
+            f"Current file content:\n```python\n{original}\n```\n"
+        )
+        yield self.stream_thinking(f"Drafting a change to {file_path}...")
+        proposed = await self.generate_response(prompt, temperature=0.2, max_tokens=4000)
+        new_content = extract_code_from_response(proposed)
+
+        if new_content.strip() == original.strip():
+            yield self.stream_result("No change was needed — the file already satisfies the request.")
+            return
+
+        yield self.stream_action(f"Applying candidate change to {file_path} and verifying with tests...")
+        result = await fix_tool.execute(
+            file_path=file_path, new_content=new_content, reason=user_input[:120]
+        )
+
+        if result["success"]:
+            note = f"committed as {result['commit_sha']}" if result.get("committed") else "applied but not committed"
+            yield self.stream_observation(f"Change verified — tests passed, {note}.")
+            yield self.stream_result(f"Updated {file_path} as requested.")
+            await self.store_memory(
+                content=f"Coding agent edited {file_path}: {user_input[:200]}",
+                segment_type="CODE_EDIT",
+                importance=0.7,
+                metadata={"file": file_path, "commit_sha": result.get("commit_sha"), "session_id": session_id},
+            )
+        else:
+            tail = result.get("test_output", "")[-500:]
+            yield self.stream_observation(f"Candidate change failed verification — reverted.\n{tail}")
+            yield self.stream_result(
+                f"Could not safely apply that change to {file_path} — it failed tests and was reverted."
+            )
+
+    async def _write_project_files(
+        self, project: "CodeProject", files: Dict[str, str]
+    ) -> List[str]:
+        """Write generated project files to workspace/<project.name>/ and
+        syntax-check each .py file with py_compile, so a broken scaffold is
+        reported immediately instead of silently sitting in memory as text.
+        """
+        from core.safe_code_editor import resolve_within_project, run_py_compile
+
+        results = []
+        workspace_rel = f"workspace/{project.name}"
+        for rel_name, content in files.items():
+            file_rel = f"{workspace_rel}/{rel_name}"
+            try:
+                resolved = resolve_within_project(file_rel)
+            except PermissionError as e:
+                results.append(f"  ✗ {rel_name}: {e}")
+                continue
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_text(content, encoding="utf-8")
+
+            if resolved.suffix == ".py":
+                ok, output = await run_py_compile(resolved)
+                status = "✓" if ok else "✗ syntax error"
+                results.append(f"  {status} {rel_name}" + ("" if ok else f": {output.strip()[-300:]}"))
+            else:
+                results.append(f"  ✓ {rel_name}")
+        return results
 
     async def _handle_project_creation(
         self,
@@ -70,6 +161,11 @@ class CodingHandlersMixin:
 
         self.current_projects[project_id] = project
 
+        yield self.stream_action(f"Writing {len(initial_files)} files to disk...")
+        write_results = await self._write_project_files(project, initial_files)
+        for line in write_results:
+            yield self.stream_observation(line)
+
         await self.store_memory(
             content=f"Created {language} {project_type} project: {project.name}",
             segment_type="CODE_PROJECT",
@@ -78,7 +174,8 @@ class CodingHandlersMixin:
                 "project_id": project_id,
                 "language": language,
                 "project_type": project_type,
-                "session_id": session_id
+                "session_id": session_id,
+                "workspace_path": f"workspace/{project.name}",
             }
         )
 
@@ -97,7 +194,8 @@ class CodingHandlersMixin:
             await self.neural_web.connect_concepts(f"project_{project_id}", language, "uses")
 
         yield self.stream_result(
-            f"Created project '{project.name}' with {len(initial_files)} initial files"
+            f"Created project '{project.name}' with {len(initial_files)} files "
+            f"written to workspace/{project.name}/"
         )
         yield self.stream_result("Project Architecture:")
         yield self.stream_result(architecture_response)

@@ -96,6 +96,17 @@ web_search:
   timeout_seconds: 12
   region: wt-wt         # DuckDuckGo region (wt-wt = no region)
   safesearch: moderate  # off | moderate | strict
+self_repair:
+  # Diagnose-and-fix is verified before anything is committed: tests must
+  # pass, or the edit is reverted to the exact original bytes. See
+  # core/safe_code_editor.py.
+  enabled: true
+  daily_schedule_enabled: true
+  daily_schedule_cron: "0 3 * * *"  # 3am daily
+  max_issues_per_run: 3
+  log_scan_lines: 2000
+  restart_after_fix: false  # keep off by default so a scheduled repair never surprises an active session
+  test_timeout_seconds: 120
 docker:
   background_agents:
     cpu_limit: "1.0"

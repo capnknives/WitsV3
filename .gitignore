@@ -59,6 +59,8 @@ documents/*
 !documents/.gitkeep
 exports/*
 !exports/.gitkeep
+workspace/*
+!workspace/.gitkeep
 mcp_servers/*
 !mcp_servers/.gitkeep
 !mcp_servers/README.md

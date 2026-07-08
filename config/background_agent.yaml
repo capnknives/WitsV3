@@ -49,6 +49,12 @@ tasks:
       max_graph_size: 10000
       update_interval_hours: 24
 
+  self_repair:
+    enabled: true
+    schedule: "0 3 * * *" # Daily at 3am
+    description: "Scan logs for real errors and apply verified, revert-on-failure fixes (see core/safe_code_editor.py)"
+    settings: {}
+
 logging:
   file: "logs/background_agent.log"
   max_size_mb: 10

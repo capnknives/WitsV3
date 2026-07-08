@@ -124,6 +124,20 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
         if not session_id:
             session_id = str(uuid.uuid4())
 
+        # A request naming a real, existing project file is a stronger signal
+        # than keyword-based task classification below — route it straight
+        # through the verify-before-commit edit pipeline instead of the
+        # generic (LLM-prose-only) debugging/refactoring handlers.
+        from core.safe_code_editor import extract_file_mention
+
+        mention = extract_file_mention(user_input)
+        if mention:
+            file_path, _line = mention
+            yield self.stream_thinking(f"Request names an existing file: {file_path}")
+            async for stream in self._handle_fix_existing_file(file_path, user_input, session_id):
+                yield stream
+            return
+
         yield self.stream_thinking("Analyzing coding request...")
 
         task_analysis = await self._analyze_coding_task(user_input)

@@ -30,6 +30,7 @@ All agent/feature work lands on **`fix/revive-2026-07`** first. Richard merges
 | Web search multi-provider (Tavily → Brave → DDG) | ✅ Shipped |
 | MCP registry discover/install + OCI/Docker + browse-before-install | ✅ Shipped |
 | Tier 1–4 repo hygiene (CI, dead-code cleanup, 500-line splits, MCP on-demand-only) | ✅ Shipped |
+| Coding agent + self-repair (verified edit pipeline, daily schedule) | ✅ Shipped July 8 2026 — see §1a |
 | July revival feature backlog | ✅ **Closed** — only gates + polish remain |
 
 ---
@@ -40,12 +41,107 @@ These are **human verification**, not code tasks.
 
 | # | Action | Notes |
 |---|--------|-------|
-| G1 | Run manual tests **A–F** | See composer handoff doc; especially **F** (save-to-file): *"Save a log of our conversations as exports/chat_log.txt"* |
-| G2 | Optional: add `ANTHROPIC_API_KEY` | Required only for ask-Claude escalation |
-| G3 | Watch logs on document Q&A | Confirm orchestrator **uses** `document_search` results instead of hallucinating (should improve after structured JSON, but verify) |
+| G1 | ~~Run manual tests **A–F**~~ | ✅ DONE July 8 2026 — driven live against a dedicated `claude/work` instance (no browser available): A (model routing toggle), B (Ollama-down friendly card, verified via a deliberately-unreachable Ollama URL rather than killing the real service), C (single `web_search` call, numbered sources, grounded answer), D (document upload + question answered via the orchestrator's automatic `search_memory` context injection, not a stray `web_search`), E (107 passed), F (save-to-file wrote a real file with correct USER/ASSISTANT lines). Test residue (uploaded doc, memory segments, exported log) was cleaned up afterward via the real `delete_segments` API. |
+| G2 | Optional: add `ANTHROPIC_API_KEY` | Required only for ask-Claude escalation — still open, Richard's call |
+| G3 | ~~Watch logs on document Q&A~~ | ✅ DONE July 8 2026 — verified with an unguessable planted codeword (`ZEBRA-QUASAR-77`) in an uploaded test document; the orchestrator answered correctly, which is only possible if it actually used the retrieved content rather than hallucinating. |
 
 **Already done (no action):** Tavily key, Brave key, Supabase token revoke (N/A — no project),
-WCCA JSON repair, MCP follow-ups, Tier 4 splits.
+WCCA JSON repair, MCP follow-ups, Tier 4 splits, G1/G3 manual verification.
+
+---
+
+## 1a. Coding agent & self-repair — from stub to real (SHIPPED July 8 2026)
+
+**Audit finding (before this work):** both `AdvancedCodingAgent` and `SelfRepairAgent`
+were LLM-prose generators with no filesystem/process I/O at all. The coding agent's
+"project creation" built a `CodeProject.files` dict from **hardcoded scaffold
+template strings**, held only in memory — never written to disk, never compiled,
+never tested. Its debugging/refactoring handlers asked the LLM to write a generic
+guide as prose. `SelfRepairAgent.run()` was a literal 2-line LLM passthrough: send
+the raw user message to the LLM, stream back whatever came out — no log parsing,
+no diagnosis, no fix, no verification. The more elaborate `self_repair_handlers.py`/
+`self_repair_utils.py` "fix" functions were dead code (never imported by the live
+agent) and were themselves simulations (`await asyncio.sleep(0.5); return True`).
+Separately, `FileWriteTool` had a real path-guard check in source, but it was
+**unreachable dead code** — two full `try/except` blocks back to back, where the
+first always returned before the second (which held the only safety check) could
+run — so `write_file` had zero enforced path restriction in practice. Process
+restart existed (`run.py`'s file-watcher-triggered relaunch) but was off by
+default and never invoked by any agent. Scheduling infrastructure was real
+(APScheduler + cron config) but lived only in a Docker-only, normally-unstarted
+`BackgroundAgent`, with no repair task defined.
+
+**Plan:** build one shared, safety-first verified-edit pipeline and give both
+agents (and the tool registry generally) a real detect → diagnose → fix → verify
+→ (optionally) restart loop on top of it, then wire a scheduled autonomous run.
+
+**Shipped:**
+
+1. **`core/safe_code_editor.py`** — the shared pipeline every code-writing path
+   now goes through: snapshot original bytes → write candidate → run pytest →
+   commit to git *only* on a passing verification, or restore the exact original
+   bytes (or delete a new file) on failure. A failed attempt never leaves stray
+   git state and is never left broken in the working tree. `resolve_within_project()`
+   is the one enforced boundary — refuses any path escaping the project directory.
+2. **`tools/self_repair_tools.py`** — four new registry tools any agent can call:
+   `diagnose_log_errors` (parses `logs/witsv3.log` tracebacks for file/line,
+   read-only), `run_test_suite` (pytest wrapper), `apply_code_fix` (the verified
+   pipeline above), `restart_app` (deliberately schedules a relaunch a few
+   seconds out so the current response can finish streaming first — reuses the
+   same `subprocess.Popen` + process-exit pattern as the existing file-watcher
+   restart, just triggered on purpose instead of on any `.py` save).
+3. **`agents/self_repair_agent.py` rewritten**: if the request names a real
+   existing file, targets it directly; otherwise scans recent logs via
+   `diagnose_log_errors`. For each actionable issue, reads the file, asks the LLM
+   for a full corrected version, and applies it through `apply_code_fix` — verified
+   fixes are reported with their commit sha, failed ones report that the file was
+   reverted, never silently swallowed. Optional restart after a verified fix,
+   gated by `self_repair.restart_after_fix` (default off).
+4. **`AdvancedCodingAgent` gets two real capabilities**: project creation now
+   writes generated files to `workspace/<project_name>/` and runs `py_compile` on
+   each `.py` file, reporting per-file syntax status instead of leaving everything
+   as an in-memory string; and a request naming a real existing file (e.g. "fix
+   the bug in agents/foo.py") routes straight to a new `_handle_fix_existing_file`
+   that reuses the exact same verify-before-commit pipeline as self-repair —
+   so "coding agent" and "self-repair agent" share one trustworthy edit path
+   rather than two different half-measures.
+5. **`FileWriteTool` dead-code bug fixed** — collapsed the two duplicate
+   try/except blocks into one, now actually enforced via
+   `resolve_within_project()`, with a regression test locking in the fix.
+6. **Daily autonomous schedule**: `self_repair.daily_schedule_enabled` (default
+   on, cron `0 3 * * *`) runs the scan-and-fix loop from inside `WitsV3System`
+   itself (`run.py`, APScheduler — no Docker required), plus a matching
+   `self_repair` task added to the Docker-only `BackgroundAgent` dispatcher for
+   deployment parity.
+7. **New config section** `self_repair` in `core/config.py`/`config.yaml`:
+   `enabled`, `daily_schedule_enabled`, `daily_schedule_cron`, `max_issues_per_run`,
+   `log_scan_lines`, `restart_after_fix` (default `false`), `test_timeout_seconds`.
+
+**Tests:** `tests/core/test_safe_code_editor.py` (9), `tests/tools/test_self_repair_tools.py` (8),
+`tests/agents/test_self_repair_agent.py` (12, rewritten), `tests/agents/test_advanced_coding_agent.py`
+(5, new), `tests/tools/test_file_tools.py` (2, new — locks in the path-guard fix),
+`tests/agents/test_background_agent.py` (+2), `tests/test_run_self_repair_schedule.py` (5, new).
+
+**Known limitations / honest next steps** (not done here — good follow-ups):
+
+- The LLM is asked for a **full corrected file**, not a diff/patch — reliable for
+  small-to-medium files, but large files risk truncation or an expensive
+  regeneration. A diff-based apply path would scale better.
+- `diagnose_log_errors` only resolves file/line from a real Python traceback
+  (`Traceback (most recent call last): ... File "...", line N`). Bare
+  `ERROR`/`CRITICAL` log lines without a traceback are surfaced but marked
+  non-actionable — nothing tries to guess a file for those.
+- FAISS/neural/Supabase memory backends never wired `_prune_if_needed()`-style
+  hooks into their own `add_segment`, and likewise nothing here extends
+  self-repair awareness into those backends specifically (out of scope — `basic`
+  is the configured default).
+- Process restart is still the same blunt `subprocess.Popen` + process-exit
+  primitive that predates this work — ungraceful for the uvicorn web-server path
+  (no in-flight-request draining). Fine for a CLI/dev restart; a production
+  supervisor process would be a better foundation if this needs to be graceful.
+- `restart_after_fix` defaults to `false` for the *scheduled* daily run
+  specifically so it can never surprise someone using the app live; it's fully
+  wired and tested, just off by default.
 
 ---
 

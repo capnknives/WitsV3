@@ -6,7 +6,6 @@ This module contains tools for file operations.
 import asyncio
 import aiofiles
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -83,64 +82,45 @@ class FileWriteTool(BaseTool):
         )
     
     async def execute(
-        self, 
-        file_path: str, 
-        content: str, 
+        self,
+        file_path: str,
+        content: str,
         encoding: str = "utf-8",
         mode: str = "w"
     ) -> str:
         """
-        Write content to file.
-        
+        Write content to file. Refuses to write outside the project
+        directory (see core.safe_code_editor.resolve_within_project).
+
         Args:
             file_path: Path to the file to write
             content: Content to write
             encoding: File encoding (default: utf-8)
             mode: Write mode ('w' for overwrite, 'a' for append)
-            
+
         Returns:
             Success message or error
         """
+        from core.safe_code_editor import resolve_within_project
+
         try:
-            file_path = Path(file_path).resolve()
-            
-            # Create directory if it doesn't exist
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            
-            async with aiofiles.open(file_path, mode=mode, encoding=encoding) as f:
+            resolved = resolve_within_project(file_path)
+        except PermissionError as e:
+            self.logger.error(str(e))
+            return f"Error: {e}"
+
+        try:
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+
+            async with aiofiles.open(resolved, mode=mode, encoding=encoding) as f:
                 await f.write(content)
-            
+
             action = "appended to" if mode == "a" else "written to"
-            self.logger.info(f"Content {action} file: {file_path} ({len(content)} characters)")
-            return f"Successfully {action} file: {file_path}"
-            
-        except Exception as e:
-            self.logger.error(f"Error writing to file {file_path}: {e}")
-            return f"Error writing file: {str(e)}"
-        try:
-            file_path = Path(file_path).resolve()
-
-            # Enhanced safety check
-            if str(file_path).startswith(os.path.abspath(".")):
-                # Create directory if it doesn't exist
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Log the actual path we're writing to
-                self.logger.info(f"Writing to file: {file_path} (mode: {mode})")
-
-                async with aiofiles.open(file_path, mode=mode, encoding=encoding) as f:
-                    await f.write(content)
-
-                action = "appended to" if mode == "a" else "written to"
-                self.logger.info(f"Content {action} file: {file_path} ({len(content)} characters)")
-                return f"Successfully {action} file: {file_path}"
-            else:
-                error_msg = f"Security error: Cannot write outside project directory: {file_path}"
-                self.logger.error(error_msg)
-                return f"Error: {error_msg}"
+            self.logger.info(f"Content {action} file: {resolved} ({len(content)} characters)")
+            return f"Successfully {action} file: {resolved}"
 
         except PermissionError as e:
-            error_msg = f"Permission error writing to file {file_path}: {e}"
+            error_msg = f"Permission error writing to file {resolved}: {e}"
             self.logger.error(error_msg)
             return f"Error: {error_msg}"
         except FileNotFoundError as e:
@@ -148,12 +128,9 @@ class FileWriteTool(BaseTool):
             self.logger.error(error_msg)
             return f"Error: {error_msg}"
         except Exception as e:
-            self.logger.error(f"Error writing to file {file_path}: {e}")
+            self.logger.error(f"Error writing to file {resolved}: {e}")
             return f"Error writing file: {str(e)}"
-            
-            
-            
-    
+
     def get_schema(self) -> Dict[str, Any]:
         """Get tool schema."""
         return {

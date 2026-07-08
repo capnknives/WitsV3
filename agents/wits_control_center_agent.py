@@ -249,6 +249,25 @@ User input: {user_input}
                 yield stream_data
             return
 
+        # Try a specialized agent (book writing / coding / self-repair) before
+        # the generic enhanced-capabilities/orchestrator paths below — those
+        # unconditionally `return` once entered, so a specialized agent match
+        # checked afterward would never actually be reached in practice.
+        if suggested_response == "specialized" or complexity in ["moderate", "complex", "research"]:
+            specialized_agent = await self._select_specialized_agent(user_input)
+
+            if specialized_agent:
+                agent_type = next((k for k, v in self.specialized_agents.items() if v == specialized_agent), "specialized")
+                yield self.stream_thinking(f"Using {agent_type} agent for: {user_input}")
+
+                async for stream_data in specialized_agent.run(
+                    user_input=user_input,
+                    conversation_history=conversation_history,
+                    session_id=session_id,
+                ):
+                    yield stream_data
+                return
+
         # For complex tasks, use enhanced capabilities if available
         if self.has_enhanced_capabilities and requires_tools and complexity in ["moderate", "complex", "research"]:
             yield self.stream_thinking("Using enhanced capabilities for complex task...")
@@ -295,23 +314,7 @@ User input: {user_input}
                         return
                 except Exception as e:
                     self.logger.error(f"Error using enhanced capabilities: {e}")
-                    # Fall back to specialized agent
-
-        # For more complex queries, try to delegate to a specialized agent
-        if suggested_response == "specialized" or complexity in ["moderate", "complex", "research"]:
-            specialized_agent = await self._select_specialized_agent(user_input)
-
-            if specialized_agent:
-                agent_type = next((k for k, v in self.specialized_agents.items() if v == specialized_agent), "specialized")
-                yield self.stream_thinking(f"Using {agent_type} agent for: {user_input}")
-
-                async for stream_data in specialized_agent.run(
-                    user_input=user_input,
-                    conversation_history=conversation_history,
-                    session_id=session_id,
-                ):
-                    yield stream_data
-                return
+                    # Fall through to the generic orchestrator below
 
         # Default: delegate to orchestrator for tool-based execution
         if self.orchestrator_agent and (requires_tools or suggested_response == "orchestrator"):

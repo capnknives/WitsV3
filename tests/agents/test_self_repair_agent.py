@@ -1,10 +1,14 @@
-"""Tests for the simplified SelfRepairAgent (Tier 4 hygiene backlog)."""
-
+"""Tests for the real SelfRepairAgent (detect -> diagnose -> fix -> verify loop)."""
 from typing import AsyncGenerator, List, Optional
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agents.self_repair_agent import SelfRepairAgent
+from agents.self_repair_agent import (
+    SelfRepairAgent,
+    extract_code_from_response,
+    extract_file_mention,
+)
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.schemas import StreamData
@@ -29,50 +33,160 @@ class ScriptedLLM(BaseLLMInterface):
         return [0.0] * 8
 
 
-@pytest.fixture
-def agent() -> SelfRepairAgent:
-    return SelfRepairAgent(
-        agent_name="TestSelfRepair",
-        config=WitsV3Config(),
-        llm_interface=ScriptedLLM("All systems nominal."),
-    )
+def _fake_registry(tools: dict):
+    registry = MagicMock()
+    registry.get_tool = lambda name: tools.get(name)
+    return registry
 
 
 @pytest.mark.asyncio
-async def test_self_repair_agent_initializes(agent: SelfRepairAgent):
+async def test_self_repair_agent_initializes():
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), ScriptedLLM())
     assert agent.agent_name == "TestSelfRepair"
     assert agent.llm_interface is not None
 
 
 @pytest.mark.asyncio
-async def test_self_repair_run_streams_thinking_and_result(agent: SelfRepairAgent):
+async def test_falls_back_to_plain_llm_response_without_tool_registry():
+    """No tool_registry (e.g. constructed standalone) -> graceful LLM passthrough."""
+    llm = ScriptedLLM("All systems nominal.")
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=None)
+
     streams: List[StreamData] = []
-    async for item in agent.run("Perform a health check", session_id="sess-1"):
+    async for item in agent.run("check disk space"):
         streams.append(item)
 
-    types = [s.type for s in streams]
-    assert "thinking" in types
-    assert "result" in types
     assert streams[-1].type == "result"
     assert streams[-1].content == "All systems nominal."
-
-
-@pytest.mark.asyncio
-async def test_self_repair_run_passes_user_input_to_llm():
-    llm = ScriptedLLM("ok")
-    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm)
-
-    async for _ in agent.run("check disk space"):
-        pass
-
     assert llm.calls == ["check disk space"]
 
 
 @pytest.mark.asyncio
-async def test_self_repair_generates_session_id_when_missing(agent: SelfRepairAgent):
-    streams: List[StreamData] = []
-    async for item in agent.run("health check"):
-        streams.append(item)
+async def test_disabled_via_config_short_circuits():
+    config = WitsV3Config()
+    config.self_repair.enabled = False
+    agent = SelfRepairAgent("TestSelfRepair", config, ScriptedLLM(), tool_registry=_fake_registry({}))
 
-    assert streams
-    assert agent.llm_interface.calls
+    streams = [item async for item in agent.run("fix the bug")]
+    assert len(streams) == 1
+    assert "disabled" in streams[0].content.lower()
+
+
+@pytest.mark.asyncio
+async def test_no_issues_found_reports_nothing_to_repair():
+    diagnose = AsyncMock(return_value={"issues": [], "message": "No issues."})
+    registry = _fake_registry({"diagnose_log_errors": MagicMock(execute=diagnose)})
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), ScriptedLLM(), tool_registry=registry)
+
+    streams = [item async for item in agent.run("please do a health check")]
+    assert any("nothing to repair" in s.content.lower() for s in streams)
+
+
+@pytest.mark.asyncio
+async def test_targets_a_file_named_in_the_request(tmp_path, monkeypatch):
+    import core.safe_code_editor as sce
+    scratch = sce.PROJECT_ROOT / "tests" / "agents" / "_scratch_target.py"
+    scratch.write_text("def broken():\n    return 1 / 0\n", encoding="utf-8")
+
+    fix_execute = AsyncMock(return_value={
+        "success": True, "committed": True, "commit_sha": "abc1234",
+        "message": "Edit applied and verified.", "test_output": "1 passed",
+    })
+    registry = _fake_registry({"apply_code_fix": MagicMock(execute=fix_execute)})
+    llm = ScriptedLLM("```python\ndef broken():\n    return 0\n```")
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=registry)
+
+    try:
+        streams = [
+            item async for item in agent.run(
+                "tests/agents/_scratch_target.py has a ZeroDivisionError, please fix it"
+            )
+        ]
+    finally:
+        scratch.unlink(missing_ok=True)
+
+    fix_execute.assert_awaited_once()
+    call_kwargs = fix_execute.await_args.kwargs
+    assert call_kwargs["file_path"] == "tests/agents/_scratch_target.py"
+    assert "def broken():\n    return 0" in call_kwargs["new_content"]
+    assert any("Repaired" in s.content for s in streams if s.type == "result")
+
+
+@pytest.mark.asyncio
+async def test_reverted_fix_is_reported_as_failure(tmp_path):
+    import core.safe_code_editor as sce
+    scratch = sce.PROJECT_ROOT / "tests" / "agents" / "_scratch_target2.py"
+    scratch.write_text("def broken():\n    return 1 / 0\n", encoding="utf-8")
+
+    fix_execute = AsyncMock(return_value={
+        "success": False, "committed": False, "commit_sha": None,
+        "message": "Verification failed; change reverted to the original file.",
+        "test_output": "1 failed",
+    })
+    registry = _fake_registry({"apply_code_fix": MagicMock(execute=fix_execute)})
+    llm = ScriptedLLM("```python\nstill broken\n```")
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=registry)
+
+    try:
+        streams = [
+            item async for item in agent.run("tests/agents/_scratch_target2.py is broken, fix it")
+        ]
+    finally:
+        scratch.unlink(missing_ok=True)
+
+    assert any(
+        "could not safely repair" in s.content.lower()
+        for s in streams if s.type == "result"
+    )
+
+
+@pytest.mark.asyncio
+async def test_scans_logs_when_no_file_named_in_request():
+    diagnose = AsyncMock(return_value={
+        "issues": [{"actionable": True, "file": "does/not/exist.py", "line": 1, "message": "boom", "kind": "traceback"}],
+        "message": "Found 1 issue.",
+    })
+    registry = _fake_registry({
+        "diagnose_log_errors": MagicMock(execute=diagnose),
+        "apply_code_fix": MagicMock(execute=AsyncMock()),
+    })
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), ScriptedLLM(), tool_registry=registry)
+
+    streams = [item async for item in agent.run("please run a health check and fix any issues")]
+
+    diagnose.assert_awaited_once()
+    assert any("does not exist" in s.content.lower() for s in streams)
+
+
+@pytest.mark.asyncio
+async def test_reports_when_fix_tool_unavailable_but_issues_found():
+    diagnose = AsyncMock(return_value={
+        "issues": [{"actionable": True, "file": "does/not/exist.py", "line": 1, "message": "boom", "kind": "traceback"}],
+        "message": "Found 1 issue.",
+    })
+    registry = _fake_registry({"diagnose_log_errors": MagicMock(execute=diagnose)})
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), ScriptedLLM(), tool_registry=registry)
+
+    streams = [item async for item in agent.run("please run a health check and fix any issues")]
+    assert any("apply_code_fix tool is unavailable" in s.content for s in streams)
+
+
+def test_extract_file_mention_finds_existing_project_file():
+    result = extract_file_mention("please look at agents/self_repair_agent.py:42 and fix it")
+    assert result is not None
+    path, line = result
+    assert path == "agents/self_repair_agent.py"
+    assert line == 42
+
+
+def test_extract_file_mention_ignores_nonexistent_files():
+    assert extract_file_mention("fix agents/totally_made_up_xyz123.py") is None
+
+
+def test_extract_code_from_response_strips_fence():
+    response = "Here you go:\n```python\nx = 1\n```\n"
+    assert extract_code_from_response(response) == "x = 1\n"
+
+
+def test_extract_code_from_response_falls_back_to_raw_text():
+    assert extract_code_from_response("no fences here") == "no fences here"

@@ -182,6 +182,21 @@ class PersonalitySettings(BaseModel):
     profile_id: str = Field(default="richard_elliot_wits", description="Active personality profile ID")
     allow_runtime_switching: bool = Field(default=False, description="Allow personality switching at runtime")
 
+
+class SelfRepairSettings(BaseModel):
+    """Autonomous self-repair: detect real problems (log tracebacks, failing
+    tests, or a user-described bug), diagnose with the LLM, and apply a
+    *verified* fix — tests must pass before anything is committed, and any
+    failed attempt is reverted to the exact original bytes. Nothing broken
+    is ever left in place or committed."""
+    enabled: bool = Field(default=True, description="Enable the self-repair agent's diagnose-and-fix capability")
+    daily_schedule_enabled: bool = Field(default=True, description="Run an autonomous self-repair scan on a schedule")
+    daily_schedule_cron: str = Field(default="0 3 * * *", description="Cron expression for the scheduled self-repair run (default: 3am daily)")
+    max_issues_per_run: int = Field(default=3, gt=0, description="Cap on distinct issues attempted per run")
+    log_scan_lines: int = Field(default=2000, gt=0, description="Trailing lines of logs/witsv3.log to scan for errors")
+    restart_after_fix: bool = Field(default=False, description="Automatically restart the app after a verified fix (off by default so a scheduled repair never surprises an active session)")
+    test_timeout_seconds: float = Field(default=120.0, gt=0, description="Timeout for the verification test run per fix attempt")
+
 class WitsV3Config(BaseModel):
     project_name: str = Field(default="WitsV3")
     version: str = Field(default="3.0.0")
@@ -203,6 +218,7 @@ class WitsV3Config(BaseModel):
     escalation: EscalationSettings = Field(default_factory=EscalationSettings)
     model_routing: ModelRoutingSettings = Field(default_factory=ModelRoutingSettings)
     web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
+    self_repair: SelfRepairSettings = Field(default_factory=SelfRepairSettings)
 
     class Config:
         validate_assignment = True
