@@ -23,12 +23,24 @@ ZeroDivisionError: division by zero
 
 
 def test_parse_traceback_issues_extracts_traceback_with_file_and_line():
+    # SAMPLE_LOG deliberately uses a sibling worktree path (.../WitsV3-claude/...)
+    # — the parser must remap package-relative suffixes onto this checkout.
     issues = parse_traceback_issues(SAMPLE_LOG, max_issues=5)
     actionable = [i for i in issues if i["actionable"]]
     assert actionable, "expected at least one actionable (file-resolvable) issue"
     assert actionable[0]["file"] == "agents/base_agent.py"
     assert actionable[0]["line"] == 42
     assert "ZeroDivisionError" in actionable[0]["message"]
+
+
+def test_relative_to_project_remaps_sibling_worktree_paths():
+    from tools.self_repair_tools import _relative_to_project
+
+    foreign = (
+        r"c:\Users\capta\source\repos\capnknives\WitsV3-claude\agents\base_agent.py"
+    )
+    assert _relative_to_project(foreign) == "agents/base_agent.py"
+    assert _relative_to_project(r"C:\Python310\Lib\logging\__init__.py") is None
 
 
 def test_parse_traceback_issues_includes_bare_error_lines_as_non_actionable():

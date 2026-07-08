@@ -46,15 +46,59 @@ _LEVEL_LINE_RE = re.compile(
 )
 
 
+# Package roots we accept when remapping frames from a sibling worktree or
+# relocated checkout (e.g. log paths under .../WitsV3-claude/... while running
+# from .../WitsV3/). Stdlib / site-packages never contain these as top segments.
+_PROJECT_PATH_MARKERS = (
+    "agents/",
+    "core/",
+    "tools/",
+    "web/",
+    "tests/",
+    "scripts/",
+    "config/",
+)
+
+
+def _candidate_project_rel(path_str: str) -> Optional[str]:
+    """Best-effort package-relative path from an absolute or relative frame."""
+    normalized = path_str.replace("\\", "/")
+    lower = normalized.lower()
+    for marker in _PROJECT_PATH_MARKERS:
+        if lower.startswith(marker):
+            return normalized
+        needle = "/" + marker
+        idx = lower.rfind(needle)
+        if idx != -1:
+            return normalized[idx + 1 :]
+    return None
+
+
 def _relative_to_project(path_str: str) -> Optional[str]:
-    """Return path relative to PROJECT_ROOT if it's inside the project and
-    actually exists, else None (filters out stdlib/site-packages frames)."""
+    """Return path relative to PROJECT_ROOT if it maps to a real project file.
+
+    Prefers an absolute path under this checkout. If the frame came from a
+    sibling worktree or another relocate of the same repo, still accepts a
+    known package-relative suffix when that file exists here — so self-repair
+    can act on logs recorded from a parallel clone. Returns None for
+    stdlib / site-packages / anything we cannot resolve locally.
+    """
     try:
         p = Path(path_str).resolve()
-        rel = p.relative_to(PROJECT_ROOT)
+        rel = p.relative_to(PROJECT_ROOT.resolve())
+        if (PROJECT_ROOT / rel).is_file() or (PROJECT_ROOT / rel).exists():
+            return rel.as_posix()
     except (ValueError, OSError):
+        pass
+
+    candidate_rel = _candidate_project_rel(path_str)
+    if not candidate_rel:
         return None
-    return rel.as_posix() if p.exists() else None
+    candidate_rel = candidate_rel.lstrip("/")
+    if not candidate_rel or ":" in candidate_rel.split("/", 1)[0]:
+        return None
+    local = PROJECT_ROOT / candidate_rel
+    return Path(candidate_rel).as_posix() if local.is_file() else None
 
 
 def parse_traceback_issues(log_text: str, max_issues: int) -> List[Dict[str, Any]]:
