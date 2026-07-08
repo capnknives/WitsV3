@@ -78,6 +78,8 @@ web_ui:
     allow_document_search: false
     audit_chat: true
     content_policy_enabled: true
+    default_guest_age_band: teen
+    adult_allow_document_search: true
 document_rag:
   enabled: true
   documents_path: documents

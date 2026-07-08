@@ -220,9 +220,10 @@ Do **not** ship guest chat without tool/route locks.
 
 ### Phase 3 — Content safety (~1 session)
 
-- [x] `core/content_policy.py` — teen blocklist + input/output preflight on guest chat
+- [x] `core/content_policy.py` — tiered child / teen / adult filters
 - [x] Wire input/output checks on guest chat stream (`web/server.py`)
-- [x] Tests with blocked prompt fixtures (`tests/web/test_guest_audit.py`)
+- [x] Owner-assigned age bands (`PATCH /api/guest/admin/age-band`, `guest_set_age_band` tool); guests cannot self-promote
+- [x] Tests with blocked prompt fixtures (`tests/web/test_guest_age_band.py`)
 - [ ] `config/guest_policy.yaml` (externalize blocklist)
 - [ ] Force strict safesearch for guest web_search
 - [ ] Guest-specific system prompt slice in WCCA/orchestrator

@@ -30,6 +30,29 @@ GUEST_ALLOWED_TOOLS = frozenset(
     }
 )
 
+
+def guest_tools_for_age_band(age_band: str, config: Any | None = None) -> frozenset[str]:
+    """Tool allowlist for a guest based on owner-assigned age band."""
+    allowed = set(GUEST_ALLOWED_TOOLS)
+    band = normalize_age_band(age_band)
+    guest_cfg = getattr(getattr(config, "web_ui", None), "guest_access", None) if config else None
+    if guest_cfg is not None and getattr(guest_cfg, "allow_document_search", False):
+        allowed.add("document_search")
+    if (
+        band == "adult"
+        and guest_cfg is not None
+        and getattr(guest_cfg, "adult_allow_document_search", True)
+    ):
+        allowed.add("document_search")
+    return frozenset(allowed)
+
+
+def normalize_age_band(value: str | None, *, default: str = "teen") -> str:
+    from core.content_policy import normalize_age_band as _norm
+
+    return _norm(value, default=default)
+
+
 # API path prefixes guests may call (exact or prefix match).
 GUEST_ALLOWED_API_PREFIXES = (
     "/api/guest/",
@@ -156,15 +179,19 @@ class GuestRegistry:
         return None
 
     def register_or_update(
-        self, *, display_name: str, device_id: str, age_band: str = "teen"
+        self,
+        *,
+        display_name: str,
+        device_id: str,
+        default_age_band: str = "teen",
     ) -> dict[str, Any]:
         now = time.time()
+        default_age_band = normalize_age_band(default_age_band)
         existing = self.find_by_device(device_id)
         if existing:
             existing["display_name"] = display_name.strip()[:80] or existing["display_name"]
             existing["last_seen"] = now
-            if age_band:
-                existing["age_band"] = age_band
+            # age_band is owner-assigned only — never changed on /join re-register.
             self._save()
             out = dict(existing)
             out["_returning"] = True
@@ -175,7 +202,7 @@ class GuestRegistry:
             "guest_id": guest_id,
             "display_name": display_name.strip()[:80] or "Guest",
             "device_ids": [device_id],
-            "age_band": age_band or "teen",
+            "age_band": default_age_band,
             "first_seen": now,
             "last_seen": now,
             "revoked": False,
@@ -185,6 +212,22 @@ class GuestRegistry:
         out = dict(profile)
         out["_returning"] = False
         return out
+
+    def set_age_band(self, guest_id: str, age_band: str) -> dict[str, Any] | None:
+        """Owner-only: assign child / teen / adult tier for a guest."""
+        normalized = normalize_age_band(age_band)
+        guest = self._data["guests"].get(guest_id)
+        if not guest or guest.get("revoked"):
+            return None
+        guest["age_band"] = normalized
+        self._save()
+        return dict(guest)
+
+    def set_age_band_by_name(self, display_name: str, age_band: str) -> dict[str, Any] | None:
+        guest = self.find_by_display_name(display_name)
+        if not guest:
+            return None
+        return self.set_age_band(guest["guest_id"], age_band)
 
     def touch(self, guest_id: str) -> None:
         guest = self._data["guests"].get(guest_id)
@@ -273,6 +316,9 @@ def enrich_guest_payload(
     name = reg.display_name_for(payload["guest_id"], fallback=payload.get("display_name"))
     merged = dict(payload)
     merged["display_name"] = name
+    profile = reg.get(payload["guest_id"])
+    if profile:
+        merged["age_band"] = profile.get("age_band", "teen")
     return merged
 
 

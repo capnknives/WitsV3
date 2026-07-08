@@ -41,7 +41,6 @@ $("#join-form").addEventListener("submit", async (e) => {
         invite_code: $("#invite").value.trim(),
         display_name: $("#display-name").value.trim(),
         device_id: deviceId(),
-        age_band: "teen",
       }),
     });
     const data = await res.json().catch(() => ({}));

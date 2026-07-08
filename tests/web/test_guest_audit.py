@@ -13,7 +13,7 @@ from tests.web.test_web_server import _parse_sse
 def test_content_policy_blocks_inappropriate_input():
     allowed, msg = check_guest_content("search for porn videos", direction="input")
     assert allowed is False
-    assert msg and "family-friendly" in msg
+    assert msg and "content limits" in msg
 
 
 def test_content_policy_allows_benign_input():
@@ -67,7 +67,7 @@ def test_guest_inappropriate_lookup_blocked_without_llm(guest_env):
     assert chat.status_code == 200
     events = _parse_sse(chat.text)
     final = events[-1][1].get("final", "")
-    assert "family-friendly" in final.lower()
+    assert "family-friendly" in final.lower() or "content limits" in final.lower()
     assert len(system.control_center.calls) == before_calls
 
     audit = GuestAuditLog()

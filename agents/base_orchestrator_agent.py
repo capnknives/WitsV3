@@ -113,6 +113,15 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         relevant_memories = await self.search_memory(goal, limit=5)
         context = self._build_context_from_memories(relevant_memories)
         doc_inventory = await self._get_document_inventory()
+        guest_profile = kwargs.get("guest_profile") or {}
+        guest_age_band = guest_profile.get("age_band") or "teen"
+        if guest_profile.get("guest_id") and kwargs.get("user_role") == "guest":
+            from core.guest_access import GuestRegistry
+
+            reg = GuestRegistry()
+            prof = reg.get(guest_profile["guest_id"])
+            if prof:
+                guest_age_band = prof.get("age_band", guest_age_band)
 
         # Initialize the ReAct state
         react_state = {
@@ -129,7 +138,10 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "lookup_search_done": False,
             "synthesis_guard_retries": 0,
             "user_role": kwargs.get("user_role", "owner"),
+            "guest_profile": guest_profile,
+            "guest_age_band": guest_age_band,
         }
+        self._react_state_for_tools = react_state
 
         try:
             # Execute ReAct loop

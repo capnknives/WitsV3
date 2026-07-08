@@ -227,6 +227,15 @@ class OrchestratorRoutingMixin:
         "show me guests",
         "family testers",
         "tester accounts",
+        "set age band",
+        "age band",
+        "as a teen",
+        "as an adult",
+        "as a child",
+        "make guest",
+        "set guest",
+        "set sean",
+        "protection tier",
     )
 
     def _needs_guest_audit_review(self, message: str) -> bool:

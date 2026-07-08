@@ -360,6 +360,7 @@ User input: {user_input}
                             conversation_history=conversation_history,
                             session_id=session_id,
                             user_role=getattr(self, "_request_user_role", "owner"),
+                            guest_profile=getattr(self, "_request_guest_profile", None),
                         ):
                             yield stream_data
                         return
@@ -375,6 +376,7 @@ User input: {user_input}
                 conversation_history=conversation_history,
                 session_id=session_id,
                 user_role=getattr(self, "_request_user_role", "owner"),
+                guest_profile=getattr(self, "_request_guest_profile", None),
             ):
                 yield stream_data
             return

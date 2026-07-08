@@ -128,3 +128,68 @@ class GuestAuditSummaryTool(BaseTool):
             },
             "required": [],
         }
+
+
+class GuestSetAgeBandTool(BaseTool):
+    """Owner assigns child / teen / adult protection tier for a guest."""
+
+    def __init__(self):
+        super().__init__(
+            name="guest_set_age_band",
+            description=(
+                "Owner-only: set a guest's age/protection tier (child, teen, or adult). "
+                "Use when the owner says someone is a teen/kid/adult, e.g. set Sean to teen "
+                "or set my wife to adult. Guests cannot change their own tier."
+            ),
+        )
+        self.registry = GuestRegistry()
+
+    async def execute(
+        self,
+        age_band: str,
+        display_name: str | None = None,
+        guest_id: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        user_role = kwargs.get("user_role", "owner")
+        if user_role == "guest":
+            return "guest_set_age_band is only available to the owner."
+
+        from core.content_policy import age_band_description, normalize_age_band
+
+        band = normalize_age_band(age_band)
+        if guest_id:
+            profile = self.registry.set_age_band(guest_id.strip(), band)
+        elif display_name:
+            profile = self.registry.set_age_band_by_name(display_name.strip(), band)
+        else:
+            return "Provide display_name or guest_id to set a guest's age band."
+
+        if not profile:
+            return f"No guest found for {display_name or guest_id}."
+
+        name = profile.get("display_name", "?")
+        return (
+            f"Set {name} to age band '{band}' ({age_band_description(band)}). "
+            "Content filters and tool access now follow this owner-assigned tier."
+        )
+
+    def get_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "age_band": {
+                    "type": "string",
+                    "description": "child, teen, or adult (owner-assigned protection tier).",
+                },
+                "display_name": {
+                    "type": "string",
+                    "description": "Guest /join display name (e.g. Sean).",
+                },
+                "guest_id": {
+                    "type": "string",
+                    "description": "Optional guest UUID if known.",
+                },
+            },
+            "required": ["age_band"],
+        }
