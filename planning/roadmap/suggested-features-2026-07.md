@@ -1,8 +1,8 @@
 # WitsV3 — Suggested Features & Roadmap
 
 **Last updated:** July 8, 2026  
-**Working branch tip:** `cursor/iron-delta-w0r5` (merges into `fix/revive-2026-07`)  
-**Test suite:** 406 collected — re-run `pytest tests/ -q --no-cov` before claiming green
+**Working branch tip:** `cursor/work` (merges into `fix/revive-2026-07`)  
+**Test suite:** 426 passing, 2 skipped (~40s) — re-run `pytest -q` before claiming green
 
 This is the **canonical forward roadmap**: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
@@ -32,6 +32,10 @@ Feature work → **`fix/revive-2026-07`** → Richard merges to **`main`** after
 | Dual self-repair schedule fix (Docker bg agent off by default) | ✅ Shipped July 8 |
 | Docs pass (README install guide, redirects, roadmap truth) | ✅ Shipped July 8 |
 | Full CI lint (ruff E/F/W/I/UP/B + black --check) | ✅ Shipped July 8 |
+| Owner-gated `/shutdown` + `/restart` (chat + API, token-gated) | ✅ Shipped July 8 |
+| Web UI modernization (centered header, sleeker chat/composer) | ✅ Shipped July 8 |
+| Memory browser (search + recent w/ pagination + gated prune) | ✅ Shipped July 8 |
+| Adaptive LLM stack archived; clutter Wave A/B cleanup | ✅ Shipped July 8 |
 | July revival feature backlog | ✅ **Closed** — polish + optional features remain |
 
 ---
@@ -84,10 +88,10 @@ Summary of what landed (detail also in README § Self-repair):
 | Orchestrator synthesis guard | Ground answers in tool observations | Medium | ✅ Done |
 | Friendlier Ollama-down (CLI) | Match web UX | Small | ✅ Done |
 | Conversation export UX | One-click export in web UI | Small–Medium | ✅ Done |
-| Conversation-history-aware intent | Short replies after a clarifying question misclassified as casual chat | Medium | Open |
+| Conversation-history-aware intent | Short replies after a clarifying question misclassified as casual chat | Medium | Open (Claude, WCCA branch) |
 | Expand CI lint | Full ruff/black blocked by legacy noise | Medium (incremental) | ✅ Done July 8 — CI runs full `ruff check` + `black --check` |
 | Docs / README modernity | Install + honest status | Medium | ✅ Done July 8 |
-| Clutter cleanup wave 1 | Delete orphans listed in clutter catalog (`self_repair_handlers*`, `run_backup.py`, …) | Small–Medium | Open |
+| Clutter cleanup wave 1 | Delete orphans + relocate scripts (see clutter catalog §1/Wave B) | Small–Medium | ✅ Done July 8 — Wave A deletes confirmed; `ollama_probe`/`analyze_memory`/`llm_diagnostic_basic` → `scripts/` |
 
 ### P2 — Structure & hygiene (second-pass splits)
 
@@ -109,7 +113,7 @@ Files still over ~500 lines (excluding archived GUI). Re-measure before splittin
 | Feature | Value | Notes |
 |---------|-------|-------|
 | Scheduled background tasks UI | Visibility into jobs | Read-only status first |
-| Memory browser in web UI | Inspect/prune without CLI | Builds on memory APIs |
+| ~~Memory browser in web UI~~ | ✅ Done July 8 — search + recent (filters, Prev/Next pagination) + gated prune | `/api/memory/{search,recent,prune}` |
 | Multi-session chat history | Named sessions | Session store + UI |
 | Tool usage analytics | Latency / failure rates | Lightweight metrics |
 | MCP server health dashboard | State + last error | Extend `/mcp` |
@@ -130,7 +134,7 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 
 | Item | Verdict |
 |------|---------|
-| Adaptive LLM stack | Dormant / superseded by `model_router.py` — archive when confirmed unused |
+| Adaptive LLM stack | ✅ Archived July 8 → `planning/archive/adaptive_llm/core/` (superseded by `model_router.py`; `test_adaptive_llm.py` + `tests/config.yaml` removed). Root `torch.py` shim now unused — safe follow-up delete |
 | `planning/archive/gui/` | Keep archived; web UI is the client |
 | Supabase | Optional; skip in default install docs |
 | Synthetic brain doc set | Historical — entry [`docs/SYNTHETIC_BRAIN.md`](../../docs/SYNTHETIC_BRAIN.md) |
@@ -170,10 +174,11 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 ## 6. Suggested next chunk
 
 1. Promote `fix/revive-2026-07` → `main` when ready  
-2. Clutter cleanup wave 1 (orphans from catalog §1)  
-3. Conversation-history-aware intent classification  
+2. ~~Clutter cleanup wave 1 (orphans from catalog §1)~~ ✅ July 8  
+3. Conversation-history-aware intent classification (Claude, WCCA branch)  
 4. ~~Incremental lint hygiene until CI can enforce fuller ruff/black~~ ✅  
-5. Optional: memory browser / multi-session chat  
+5. ~~Memory browser~~ ✅ July 8 · multi-session chat still open  
+6. Archive synthetic-brain / cognitive cluster (catalog §3a) — next cleanup wave  
 
 ---
 

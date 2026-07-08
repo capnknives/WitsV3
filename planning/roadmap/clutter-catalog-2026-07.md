@@ -189,19 +189,19 @@ Canonical: `suggested-features-2026-07.md` (forward) + `revival-2026-07.md` (shi
 
 ## 10. Suggested cleanup waves
 
-### Wave A — Safe deletes (≈2.1k lines)
-1. Delete orphan self-repair triad (`handlers` / `utils` / `models`).
-2. Delete `run_backup.py`, `run_clean.py`, `create_dummy_model.py`, `update_config.py`, `embedding_dimension_fix.py`.
-3. Delete `conversation_handler.py` and `intent_analysis_tool.py` (update any capability-list strings).
-4. Decide: delete or unblock `json_tool.py`.
+### Wave A — Safe deletes (≈2.1k lines) — ✅ DONE July 8 2026
+1. ✅ Delete orphan self-repair triad (`handlers` / `utils` / `models`).
+2. ✅ Delete `run_backup.py`, `run_clean.py`, `create_dummy_model.py`, `update_config.py`, `embedding_dimension_fix.py`.
+3. ✅ Delete `conversation_handler.py` and `intent_analysis_tool.py` (capability strings updated).
+4. Decide: delete or unblock `json_tool.py`. *(still open — kept, has passing tests)*
 
-### Wave B — Relocate scripts
-1. Move `ollama_probe.py`, `analyze_memory.py`, `llm_diagnostic_basic.py` → `scripts/`.
-2. Move or quarantine root `torch.py`.
+### Wave B — Relocate scripts — ✅ DONE July 8 2026 (torch pending)
+1. ✅ Move `ollama_probe.py`, `analyze_memory.py`, `llm_diagnostic_basic.py` → `scripts/` (`run_test.py` string updated).
+2. Move or quarantine root `torch.py`. *(now unused after adaptive archive — safe follow-up delete)*
 
 ### Wave C — Archive dormant clusters
-1. Adaptive LLM + `core/adaptive/` → `planning/archive/` (or delete if you don’t want research revival).
-2. Synthetic brain + cognitive + `memory_handler` → archive together.
+1. ✅ **DONE July 8 2026** — Adaptive LLM + `core/adaptive/` → `planning/archive/adaptive_llm/core/`; `tests/test_adaptive_llm.py` + `tests/config.yaml` removed.
+2. Synthetic brain + cognitive + `memory_handler` → archive together. *(next wave)*
 
 ### Wave D — Product decisions (don’t delete until decided)
 1. Neural stack (`working_memory`, `knowledge_graph`, `cross_domain_learning`, neural orchestrator): **ship as default** or **mark research-only** in README.
