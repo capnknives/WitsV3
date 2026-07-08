@@ -1,11 +1,12 @@
 # WitsV3 — Suggested Features & Roadmap
 
-**Last updated:** July 8, 2026  
+**Last updated:** July 8, 2026 (post Top-50 gap analysis)  
 **Working branch tip:** `cursor/work` (merges into `fix/revive-2026-07`)  
 **Test suite:** 435 collected — re-run `pytest -q` before claiming green
 
 This is the **canonical forward roadmap**: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
+For **Top 50 Local AI feature mapping** (has vs gap), see [`local-ai-50-gap-analysis-2026-07.md`](local-ai-50-gap-analysis-2026-07.md).  
 For audits (clutter / tools / config), see the July 8 catalog docs in this folder.
 
 ### Git workflow
@@ -73,7 +74,69 @@ Summary of what landed (detail also in README § Self-repair):
 
 ---
 
-## 2. Recommended next work (prioritized)
+## 2. Post–Top-50 roadmap (July 8, 2026)
+
+Mapped against [`FEATURE_IDEAS/Top Local AI System Features.docx`](FEATURE_IDEAS/Top%20Local%20AI%20System%20Features.docx) — detail in [`local-ai-50-gap-analysis-2026-07.md`](local-ai-50-gap-analysis-2026-07.md).  
+**Score:** 6 full matches · 26 partial · 17 gaps · 4 N/A (hardware/OS).
+
+**Product stance:** WitsV3 is a **personal LAN orchestration stack**, not a full sovereign AI OS. Do not chase voice, fine-tuning, microVM sandboxes, or Windows ODR unless requirements change.
+
+### Phase 0 — Ship gate (now)
+
+| # | Item | Maps to | Effort |
+|---|------|---------|--------|
+| 0.1 | Merge `fix/revive-2026-07` → `main` when satisfied | — | Human |
+| 0.2 | Keep pytest green | — | Ongoing |
+| 0.3 | Optional `ANTHROPIC_API_KEY` for ask-Claude | #18 | Owner |
+
+### Phase 1 — Trust & daily-use quality (next 4–6 weeks)
+
+Highest ROI vs the Top-50 doc and existing open items.
+
+| # | Item | Maps to | Effort | Notes |
+|---|------|---------|--------|-------|
+| 1.1 | ~~**Conversation-history-aware intent**~~ | #21–22 | Medium | ✅ Done July 8 — WCCA follow-up routing |
+| 1.2 | ~~**Guest Phase 3–4 completion**~~ | #27, #43–45 | Medium | ✅ Done July 8 — policy YAML, safesearch, admin UI |
+| 1.3 | ~~**Hybrid document search**~~ | #31, #33 | Medium–Large | ✅ Done July 8 — BM25 + vector fuse in `document_tools` |
+| 1.4 | ~~**Pre-compaction memory flush**~~ | #22 | Medium | ✅ Done July 8 — flush before history window drops turns |
+| 1.5 | ~~**Evidence sufficiency gate**~~ | #33 | Small–Medium | ✅ Done July 8 — synthesis guard blocks weak doc answers |
+| 1.6 | ~~**Multi-session chat UI**~~ | #21 | Medium | ✅ Done July 8 — `/api/sessions` + Chats panel |
+
+### Phase 2 — Operator UX & observability
+
+| # | Item | Maps to | Effort |
+|---|------|---------|--------|
+| 2.1 | Ollama model pull/status helper in `/settings` | #8–9 | Small |
+| 2.2 | MCP server health panel (state, last error) | #14, #20 | Small–Medium |
+| 2.3 | Tool usage analytics (latency, failures) | #20 | Medium |
+| 2.4 | Streaming tool progress in SSE | #20 | Medium |
+| 2.5 | Scheduled background tasks UI (read-only) | — | Small |
+| 2.6 | Offline / air-gap mode flag (disable web_search + MCP egress) | #6 | Small |
+
+### Phase 3 — Memory depth (pick one path)
+
+| # | Item | Maps to | Effort | Verdict |
+|---|------|---------|--------|---------|
+| 3a | **Pragmatic:** FAISS default + session memory search in orchestrator | #21, #25, #29 | Medium | Recommended — flip `memory_manager.backend: faiss_cpu` after validation |
+| 3b | **Research:** Wire KG into document RAG (light GraphRAG) | #28 | Large | Only if ISO/compliance-style docs become primary use |
+| 3c | **Research:** Neural web as product surface | #21, #28 | Large | See [`neural-web-roadmap.md`](neural-web-roadmap.md) — decide before investing |
+| 3d | SKILL.md-style orchestrator playbooks | #16 | Medium | Reusable workflows without full agent swarm |
+
+### Phase 4 — Parked (explicitly out of scope)
+
+| Area | Features | Why |
+|------|----------|-----|
+| Voice / ambient | #34–37 | No STT/TTS pipeline; huge scope |
+| Smart home | #38 | Home Assistant integration |
+| Fine-tuning | #46–50 | Training infra ≠ orchestration product |
+| Enterprise sandbox | #40–41 | microVM / SEB overkill for personal LAN |
+| Windows ODR | #15 | OS-level; MCP registry covers discover |
+| Multimodal chat | #11 | Wait for stable local vision models + UX |
+| Digital twin / persona emulation | #39 | Sensitive; guest profiles + personality enough for now |
+
+---
+
+## 2a. Legacy priority table (July revival — mostly done)
 
 ### P0 — Verify & promote
 
@@ -81,18 +144,18 @@ Summary of what landed (detail also in README § Self-repair):
 2. Keep the suite green (including traceback remapping across sibling worktree log paths)  
 3. Merge `fix/revive-2026-07` → `main` when satisfied  
 
-### P1 — High leverage
+### P1 — High leverage (historical)
 
 | Item | Why | Effort | Status |
 |------|-----|--------|--------|
 | Orchestrator synthesis guard | Ground answers in tool observations | Medium | ✅ Done |
 | Friendlier Ollama-down (CLI) | Match web UX | Small | ✅ Done |
 | Conversation export UX | One-click export in web UI | Small–Medium | ✅ Done |
-| Conversation-history-aware intent | Short replies after a clarifying question misclassified as casual chat | Medium | Open (Claude, WCCA branch) |
-| **Guest / family tester access** | LAN phone testing without owner token; device identity + safe tool subset | Medium–Large | ✅ Safe MVP July 8 — [`guest-tester-access-2026-07.md`](guest-tester-access-2026-07.md); Phase 3 content policy + Phase 4 owner admin still open |
-| Expand CI lint | Full ruff/black blocked by legacy noise | Medium (incremental) | ✅ Done July 8 — CI runs full `ruff check` + `black --check` |
+| Conversation-history-aware intent | Short replies after a clarifying question misclassified as casual chat | Medium | ✅ Done July 8 (Phase 1.1) |
+| **Guest / family tester access** | LAN phone testing without owner token; device identity + safe tool subset | Medium–Large | ✅ Done July 8 — Phase 3–4 complete (Phase 1.2) |
+| Expand CI lint | Full ruff/black blocked by legacy noise | Medium (incremental) | ✅ Done July 8 |
 | Docs / README modernity | Install + honest status | Medium | ✅ Done July 8 |
-| Clutter cleanup wave 1 | Delete orphans + relocate scripts (see clutter catalog §1/Wave B) | Small–Medium | ✅ Done July 8 — Wave A deletes confirmed; `ollama_probe`/`analyze_memory`/`llm_diagnostic_basic` → `scripts/` |
+| Clutter cleanup wave 1 | Delete orphans + relocate scripts | Small–Medium | ✅ Done July 8 |
 
 ### P2 — Structure & hygiene (second-pass splits)
 
@@ -109,17 +172,18 @@ Files still over ~500 lines (excluding archived GUI). Re-measure before splittin
 
 **Recently under control:** `enhanced_reasoning.py` split into models/patterns modules; `wits_control_center_agent.py` / `web/server.py` remain manageable.
 
-### P3 — Features (when P0–P2 are boring)
+### P3 — Features (superseded by §2 Phases 1–2)
 
-| Feature | Value | Notes |
-|---------|-------|-------|
-| Scheduled background tasks UI | Visibility into jobs | Read-only status first |
-| ~~Memory browser in web UI~~ | ✅ Done July 8 — search + recent (filters, Prev/Next pagination) + gated prune | `/api/memory/{search,recent,prune}` |
-| Multi-session chat history | Named sessions | Session store + UI |
-| Tool usage analytics | Latency / failure rates | Lightweight metrics |
-| MCP server health dashboard | State + last error | Extend `/mcp` |
-| Local model pull helper | `ollama pull` from UI | Reduces friction |
-| Streaming tool progress | Richer SSE for long tools | UX for search/RAG |
+| Feature | Value | Status |
+|---------|-------|--------|
+| ~~Memory browser in web UI~~ | Search + prune | ✅ Done July 8 |
+| Multi-session chat history | Named sessions | ✅ Done July 8 (Phase 1.6) |
+| Tool usage analytics | Latency / failure rates | **→ Phase 2.3** |
+| MCP server health dashboard | State + last error | **→ Phase 2.2** |
+| Local model pull helper | `ollama pull` from UI | **→ Phase 2.1** |
+| Streaming tool progress | Richer SSE for long tools | **→ Phase 2.4** |
+| Scheduled background tasks UI | Visibility into jobs | **→ Phase 2.5** |
+| Hybrid RAG | Lexical + semantic | ✅ Done July 8 (Phase 1.3) |
 
 Document upload via web already exists in the UI side panel — prefer polish over a net-new feature.
 
@@ -160,6 +224,8 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 ```
 planning/roadmap/
 ├── suggested-features-2026-07.md   ← YOU ARE HERE (what's next)
+├── local-ai-50-gap-analysis-2026-07.md  ← Top 50 feature map (has / partial / gap)
+├── FEATURE_IDEAS/Top Local AI System Features.docx  ← source reference doc
 ├── guest-tester-access-2026-07.md  ← guest / family-tester access (safe MVP)
 ├── revival-2026-07.md              ← what shipped + error triage log
 ├── clutter-catalog-2026-07.md      ← dead/dormant inventory
@@ -174,15 +240,15 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 
 ---
 
-## 6. Suggested next chunk
+## 6. Suggested next chunk (post Top-50)
 
-1. Promote `fix/revive-2026-07` → `main` when ready  
-2. ~~Clutter cleanup wave 1 (orphans from catalog §1)~~ ✅ July 8  
-3. Conversation-history-aware intent classification (Claude, WCCA branch)  
-4. ~~Incremental lint hygiene until CI can enforce fuller ruff/black~~ ✅  
-5. ~~Memory browser~~ ✅ July 8 · multi-session chat still open  
-6. ~~Archive synthetic-brain / cognitive cluster (catalog §3a)~~ ✅ July 8  
-7. ~~**Guest / family tester access** (safe MVP)~~ ✅ July 8 — `/join`, invite auth, tool/route locks; Phase 3–4 (content policy, owner admin) still open — [`guest-tester-access-2026-07.md`](guest-tester-access-2026-07.md)  
+1. **Phase 0:** Promote `fix/revive-2026-07` → `main` when ready  
+2. **Phase 1.1:** Conversation-history-aware intent (WCCA branch)  
+3. **Phase 1.2:** Guest content policy + owner admin UI  
+4. **Phase 1.3:** Hybrid document search spike (BM25 + existing vector path)  
+5. **Phase 1.6:** Multi-session chat UI (quick win once 1.1–1.2 stable)  
+
+Defer Phase 3 (FAISS default / GraphRAG / neural web) until Phase 1 RAG + memory work proves the need.
 
 ---
 
