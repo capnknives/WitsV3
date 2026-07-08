@@ -13,6 +13,9 @@ This directory holds revival status, forward-looking plans, and historical roadm
 | Document | Purpose |
 |----------|---------|
 | **[suggested-features-2026-07.md](suggested-features-2026-07.md)** | **Forward roadmap** — what to add, improve, or remove next (start here) |
+| **[clutter-catalog-2026-07.md](clutter-catalog-2026-07.md)** | **Dead/dormant inventory** — stubs, orphans, unfinished modules, cleanup waves |
+| **[tool-registry-reality-2026-07.md](tool-registry-reality-2026-07.md)** | **Tool registry audit** — LIVE / BLOCKED / NEVER_PROMPTED / DEAD per tool |
+| **[config-surface-truth-2026-07.md](config-surface-truth-2026-07.md)** | **Config truth pass** — live knobs vs YAML ghosts vs empty cron jobs |
 | **[revival-2026-07.md](revival-2026-07.md)** | **Shipped work log** — July 2026 revival commits, error triage, closed backlog |
 | **[composer-orchestrator-search-quality-2026-07.md](composer-orchestrator-search-quality-2026-07.md)** | **Historical handoff** — manual regression tests A–F, Tier 1–4 audit detail |
 | **[neural-web-roadmap.md](neural-web-roadmap.md)** | **Historical** — 2025 neural web design (predates revival) |
