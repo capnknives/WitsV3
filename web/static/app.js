@@ -232,6 +232,16 @@ function addToolChip(text) {
   scrollDown();
 }
 
+function addObservationCard(text, source) {
+  const safe = text || "";
+  const label = source ? `${source} output` : "Tool output";
+  const details = el("details", "tool-output");
+  details.appendChild(el("summary", null, `🧾 ${label}`));
+  details.appendChild(el("div", "tool-output-text", safe));
+  chatEl.appendChild(details);
+  scrollDown();
+}
+
 async function sendMessage(text) {
   if (busy || !text.trim()) return;
   busy = true;
@@ -278,6 +288,7 @@ async function sendMessage(text) {
         } else if (event === "stream") {
           if (payload.type === "thinking") addThinking(payload.content);
           else if (payload.type === "tool_call" || payload.type === "action") addToolChip(payload.content);
+          else if (payload.type === "observation") addObservationCard(payload.content, payload.source);
           else if (payload.type === "result") { addAssistantMsg(payload.content); sawResult = true; }
           else if (payload.type === "error") {
             addErrorMsg(payload.content, payload.user_error);
@@ -423,6 +434,87 @@ $("#memory-go").addEventListener("click", async () => {
       box.appendChild(item);
     });
   } catch (e) { /* handled */ }
+});
+
+$("#memory-recent-go").addEventListener("click", async () => {
+  try {
+    const limit = Math.max(1, parseInt($("#memory-recent-limit").value, 10) || 20);
+    const offset = Math.max(0, parseInt($("#memory-recent-offset").value, 10) || 0);
+    const segmentType = ($("#memory-recent-type").value || "").trim();
+    const source = ($("#memory-recent-source").value || "").trim();
+
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (segmentType) qs.set("segment_type", segmentType);
+    if (source) qs.set("source", source);
+
+    const res = await api(`/api/memory/recent?${qs.toString()}`);
+    const body = await res.json();
+    const box = $("#memory-recent-results");
+    box.innerHTML = "";
+
+    if (!body.results || !body.results.length) {
+      box.appendChild(el("div", "mem-item", "No recent memory segments."));
+      return;
+    }
+
+    for (const r of body.results) {
+      const item = el("div", "mem-item");
+      item.appendChild(el("div", "meta", `${r.type || "?"} · ${r.source || "?"} · ${r.timestamp || ""}`));
+      const lines = [];
+      if (r.tool_name) lines.push(`tool: ${r.tool_name}`);
+      if (r.text) lines.push(r.text);
+      item.appendChild(el("div", null, lines.join("\n\n")));
+      box.appendChild(item);
+    }
+  } catch (e) {
+    /* handled by api() */
+  }
+});
+
+$("#memory-prune-go").addEventListener("click", async () => {
+  try {
+    const segmentType = ($("#memory-prune-type").value || "").trim();
+    const source = ($("#memory-prune-source").value || "").trim();
+    const confirm = ($("#memory-prune-confirm").value || "").trim();
+
+    const status = $("#memory-prune-status");
+    status.textContent = "";
+
+    if (confirm !== "PRUNE") {
+      status.textContent = `Type PRUNE to confirm.`;
+      return;
+    }
+
+    const filter = {};
+    if (segmentType) filter.type = segmentType;
+    if (source) filter.source = source;
+
+    if (!Object.keys(filter).length) {
+      status.textContent = "Provide at least one filter: type and/or source.";
+      return;
+    }
+
+    const res = await api("/api/memory/prune", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filter_dict: filter, confirm: "PRUNE" }),
+    });
+
+    if (res.ok) {
+      const body = await res.json();
+      status.textContent = `Pruned ${body.removed} memory segments.`;
+      $("#memory-prune-confirm").value = "";
+
+      // Reload the list (best-effort).
+      $("#memory-recent-offset").value = "0";
+      $("#memory-recent-go").click();
+    } else {
+      const body = await res.json().catch(() => ({}));
+      status.textContent = body.detail || `Prune failed (HTTP ${res.status}).`;
+    }
+  } catch (e) {
+    /* handled by api() */
+  }
 });
 
 async function loadDocs() {

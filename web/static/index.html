@@ -49,6 +49,33 @@
         <button id="memory-go">Go</button>
       </div>
       <div id="memory-results"></div>
+
+      <hr class="panel-sep">
+
+      <div class="mem-section-title">Recent memory</div>
+      <div class="row">
+        <input id="memory-recent-type" type="text" placeholder="Type filter… (optional)">
+        <input id="memory-recent-source" type="text" placeholder="Source filter… (optional)">
+      </div>
+      <div class="row">
+        <input id="memory-recent-limit" type="number" min="1" value="20">
+        <input id="memory-recent-offset" type="number" min="0" value="0">
+        <button id="memory-recent-go">Load</button>
+      </div>
+      <div id="memory-recent-results"></div>
+
+      <hr class="panel-sep">
+
+      <div class="mem-section-title">Prune (delete)</div>
+      <div class="row">
+        <input id="memory-prune-type" type="text" placeholder="Type (optional)">
+        <input id="memory-prune-source" type="text" placeholder="Source (optional)">
+      </div>
+      <div class="row">
+        <input id="memory-prune-confirm" type="text" placeholder="Type PRUNE to confirm">
+        <button id="memory-prune-go">Prune</button>
+      </div>
+      <div id="memory-prune-status" class="mem-prune-status"></div>
     </section>
     <section id="tab-docs" class="tab">
       <label class="upload-btn">

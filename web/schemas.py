@@ -33,6 +33,13 @@ class SettingsUpdate(BaseModel):
     escalation_max_tokens: int | None = None
 
 
+class MemoryPruneRequest(BaseModel):
+    """Request to delete memory segments by filter (web UI safeguard)."""
+
+    filter_dict: dict[str, Any]
+    confirm: str
+
+
 class MCPServerAdd(BaseModel):
     name: str
     command: str

@@ -81,6 +81,29 @@ main#chat {
   font-size: 12.5px; padding: 4px 10px; border-radius: 999px;
 }
 
+.tool-output {
+  align-self: flex-start;
+  max-width: 88%;
+  background: #172235;
+  border-left: 2px solid #5b8cff;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13.5px;
+}
+
+.tool-output summary {
+  cursor: pointer;
+  color: #9db8ff;
+  font-size: 12.5px;
+  margin-left: -2px;
+}
+
+.tool-output-text {
+  white-space: pre-wrap;
+  margin-top: 8px;
+  color: var(--fg);
+}
+
 .typing { align-self: flex-start; color: var(--fg-dim); font-size: 14px; }
 .typing::after { content: "…"; animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: 0.3; } }
@@ -156,6 +179,10 @@ main#chat {
 
 .mem-item, .doc-item { padding: 8px 0; border-bottom: 1px solid #232838; font-size: 14px; }
 .mem-item .meta, .doc-item .meta { color: var(--fg-dim); font-size: 12px; }
+
+.panel-sep { border: 0; border-top: 1px solid #262b3a; margin: 12px 0; }
+.mem-section-title { color: var(--fg-dim); font-weight: 700; font-size: 13px; margin: 4px 0 8px; }
+.mem-prune-status { color: var(--fg-dim); font-size: 13px; margin-top: 6px; white-space: pre-wrap; }
 
 /* --------------------------------------------- ask-Claude approvals */
 .escalation-card {

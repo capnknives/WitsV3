@@ -25,7 +25,13 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from core.schemas import ConversationHistory, StreamData
 from web.routes_mcp import register_mcp_routes
 from web.routes_personality import register_personality_routes
-from web.schemas import ChatRequest, EscalationDecision, ExportRequest, SettingsUpdate
+from web.schemas import (
+    ChatRequest,
+    EscalationDecision,
+    ExportRequest,
+    MemoryPruneRequest,
+    SettingsUpdate,
+)
 from web.user_errors import format_chat_error
 
 logger = logging.getLogger("WitsV3.WebUI")
@@ -284,6 +290,78 @@ def create_app(system) -> FastAPI:
                 for s in segments
             ]
         }
+
+    @app.get("/api/memory/recent")
+    async def memory_recent(
+        limit: int = 20,
+        offset: int = 0,
+        segment_type: str | None = None,
+        source: str | None = None,
+    ):
+        """
+        List recent memory segments (recency-sorted, newest first).
+
+        offset is counted from the newest segment (client-side "pagination").
+        """
+        limit = max(1, min(limit, 100))
+        offset = max(0, offset)
+
+        filter_dict: dict[str, Any] = {}
+        if segment_type:
+            filter_dict["type"] = segment_type
+        if source:
+            filter_dict["source"] = source
+
+        fetch_limit = min(limit + offset + 1, 1000)  # cap to avoid abuse
+        segments = await system.memory_manager.get_recent_memory(
+            limit=fetch_limit, filter_dict=filter_dict or None
+        )
+
+        items = segments[offset : offset + limit]
+
+        def preview(seg: Any) -> str:
+            content = getattr(seg, "content", None)
+            if content is None:
+                return ""
+            return (getattr(content, "text", None) or getattr(content, "tool_output", None) or "")[
+                :500
+            ]
+
+        results = [
+            {
+                "id": getattr(s, "id", None),
+                "timestamp": getattr(getattr(s, "timestamp", None), "isoformat", lambda: None)(),
+                "type": getattr(s, "type", None),
+                "source": getattr(s, "source", None),
+                "tool_name": (
+                    getattr(getattr(s, "content", None), "tool_name", None)
+                    or getattr(s, "metadata", {}).get("tool_name")
+                ),
+                "text": preview(s),
+            }
+            for s in items
+        ]
+
+        return {
+            "results": results,
+            "offset": offset,
+            "limit": limit,
+            "has_more": len(segments) > offset + limit,
+        }
+
+    @app.post("/api/memory/prune")
+    async def memory_prune(body: MemoryPruneRequest):
+        # Confirm safeguard to prevent accidental wipes from the UI.
+        if body.confirm != "PRUNE":
+            return JSONResponse(
+                {"detail": "missing/incorrect confirm (type PRUNE)"}, status_code=400
+            )
+
+        if not body.filter_dict:
+            return JSONResponse({"detail": "filter_dict must not be empty"}, status_code=400)
+
+        removed = await system.memory_manager.delete_segments(body.filter_dict)
+        return {"success": True, "removed": removed}
 
     @app.get("/api/search/providers")
     async def search_providers():

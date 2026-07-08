@@ -1,6 +1,7 @@
 """Tests for the WitsV3 web UI server."""
 
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -55,8 +56,27 @@ class FakeMemoryManager:
         return [seg][:limit]
 
     async def get_recent_memory(self, limit=10, filter_dict=None):
-        seg = SimpleNamespace(metadata={"file_path": "notes.md"})
-        return [seg, seg]
+        # Produce stable fake segments for pagination tests.
+        total = 2
+        items = []
+        for i in range(min(limit, total)):
+            items.append(
+                SimpleNamespace(
+                    id=f"seg-{i}",
+                    timestamp=datetime(2026, 1, 1, 0, 0, i, tzinfo=timezone.utc),
+                    type="DOCUMENT_CHUNK",
+                    source="notes.md",
+                    content=SimpleNamespace(
+                        text=f"recent match {i}", tool_output=None, tool_name=None
+                    ),
+                    metadata={"file_path": "notes.md"},
+                )
+            )
+        return items
+
+    async def delete_segments(self, filter_dict):
+        # Pretend everything matches (tests only validate the endpoint contract).
+        return 2
 
 
 class FakeSystem:
@@ -207,6 +227,33 @@ def test_memory_search(client_noauth):
     body = client.get("/api/memory/search", params={"q": "cats"}).json()
     assert body["results"][0]["relevance"] == 0.87
     assert "cats" in body["results"][0]["text"]
+
+
+def test_memory_recent_list(client_noauth):
+    client, _ = client_noauth
+    body = client.get("/api/memory/recent", params={"limit": 2, "offset": 0}).json()
+    assert len(body["results"]) == 2
+    assert body["results"][0]["type"] == "DOCUMENT_CHUNK"
+    assert "timestamp" in body["results"][0]
+
+
+def test_memory_prune_requires_confirm(client_noauth):
+    client, _ = client_noauth
+    res = client.post(
+        "/api/memory/prune",
+        json={"filter_dict": {"type": "DOCUMENT_CHUNK"}, "confirm": "NOPE"},
+    )
+    assert res.status_code == 400
+
+
+def test_memory_prune_deletes(client_noauth):
+    client, _ = client_noauth
+    res = client.post(
+        "/api/memory/prune",
+        json={"filter_dict": {"type": "DOCUMENT_CHUNK"}, "confirm": "PRUNE"},
+    )
+    assert res.status_code == 200
+    assert res.json()["removed"] == 2
 
 
 # ------------------------------------------------------------------ documents
