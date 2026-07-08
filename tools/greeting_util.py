@@ -6,5 +6,5 @@ def format_greeting(name: str, excited: bool = False) -> str:
     """Return a greeting for name; add an exclamation mark if excited."""
     greeting = f"Hello, {name}"
     if excited:
-        greeting = greeting  # BUG: should append "!" but doesn't
+        greeting += "!"
     return greeting
