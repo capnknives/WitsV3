@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import uuid
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -23,7 +24,22 @@ from typing import Any
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from core.content_policy import check_guest_content
+from core.guest_access import (
+    GuestRegistry,
+    enrich_guest_payload,
+    guest_access_enabled,
+    guest_session_key,
+)
+from core.guest_audit import GuestAuditLog
+from core.guest_user_profile import GuestUserProfileStore
 from core.schemas import ConversationHistory, StreamData
+from web.access_log import install_access_log_middleware, owner_display_name, resolve_caller_label
+from web.guest_auth import (
+    guest_forbidden_response,
+    resolve_auth,
+    unauthorized_response,
+)
 from web.owner_controls import (
     owner_auth_detail,
     owner_auth_failure,
@@ -31,6 +47,7 @@ from web.owner_controls import (
     parse_owner_command,
     schedule_owner_action,
 )
+from web.routes_guest import register_guest_routes
 from web.routes_mcp import register_mcp_routes
 from web.routes_personality import register_personality_routes
 from web.schemas import (
@@ -52,6 +69,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 # user can enter a token; every /api/* call is protected).
 PUBLIC_PATHS = {
     "/",
+    "/join",
     "/personality",
     "/settings",
     "/mcp",
@@ -60,6 +78,7 @@ PUBLIC_PATHS = {
     "/app.js",
     "/style.css",
     "/mcp.css",
+    "/join.js",
 }
 
 
@@ -68,6 +87,9 @@ def create_app(system) -> FastAPI:
     app = FastAPI(title="WitsV3 Web UI", docs_url=None, redoc_url=None)
     web_token = os.getenv("WITSV3_WEB_TOKEN", "")
     require_auth = bool(system.config.web_ui.require_auth and web_token)
+    guest_registry = GuestRegistry()
+    guest_cfg = system.config.web_ui.guest_access
+    guest_audit = GuestAuditLog(enabled=guest_cfg.audit_chat)
 
     if system.config.web_ui.require_auth and not web_token:
         logger.warning(
@@ -78,20 +100,51 @@ def create_app(system) -> FastAPI:
     # ------------------------------------------------------------- auth
     @app.middleware("http")
     async def auth_middleware(request: Request, call_next):
-        if require_auth and request.url.path.startswith("/api/"):
-            header = request.headers.get("authorization", "")
-            token = header.removeprefix("Bearer ").strip() if header.startswith("Bearer ") else ""
-            if not token:
-                token = request.query_params.get("token", "")
-            if token != web_token:
-                return JSONResponse({"detail": "unauthorized"}, status_code=401)
+        if not request.url.path.startswith("/api/"):
+            return await call_next(request)
+
+        # When neither owner auth nor guest access is active, leave open
+        # (matches historical "no token configured" behavior).
+        guests_on = guest_access_enabled(system.config)
+        if not require_auth and not guests_on:
+            request.state.auth_role = "owner"
+            request.state.guest = None
+            return await call_next(request)
+
+        auth = resolve_auth(request, system.config)
+        if not auth["allow"]:
+            if auth.get("role") == "guest":
+                return guest_forbidden_response()
+            return unauthorized_response()
+
+        request.state.auth_role = auth.get("role") or "anonymous"
+        guest = auth.get("guest")
+        if guest:
+            guest = enrich_guest_payload(guest, guest_registry)
+        request.state.guest = guest
+        if request.state.auth_role == "owner":
+            request.state.caller_label = owner_display_name(system.config)
+        elif request.state.auth_role == "guest" and guest:
+            request.state.caller_label = (guest.get("display_name") or "Guest")[:40]
         return await call_next(request)
+
+    install_access_log_middleware(app, system.config, guest_registry)
 
     # ------------------------------------------------------------- pages
     @app.get("/")
     async def index():
         # no-store so browsers always pick up frontend updates
         return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/join")
+    async def join_page():
+        return FileResponse(STATIC_DIR / "join.html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/join.js")
+    async def join_js():
+        return FileResponse(
+            STATIC_DIR / "join.js", media_type="application/javascript", headers={"Cache-Control": "no-store"}
+        )
 
     @app.get("/personality")
     async def personality_page():
@@ -157,20 +210,86 @@ def create_app(system) -> FastAPI:
 
     @app.post("/api/chat")
     async def chat(body: ChatRequest, request: Request):
-        session_id = body.session_id or str(uuid.uuid4())
+        guest = getattr(request.state, "guest", None)
+        auth_role = getattr(request.state, "auth_role", None) or "owner"
+        raw_session = body.session_id or str(uuid.uuid4())
+        if guest:
+            session_id = guest_session_key(guest["guest_id"], raw_session)
+            client_session_id = raw_session
+        else:
+            session_id = raw_session
+            client_session_id = raw_session
 
         if session_id not in system.session_histories:
             system.session_histories[session_id] = ConversationHistory(session_id=session_id)
         conversation = system.session_histories[session_id]
         conversation.add_message("user", body.message)
 
+        def _guest_age_band() -> str:
+            if not guest:
+                return "teen"
+            profile = guest_registry.get(guest["guest_id"])
+            return (profile or {}).get("age_band", "teen")
+
+        def _audit(
+            event_type: str,
+            *,
+            content: str | None = None,
+            meta: dict[str, Any] | None = None,
+        ) -> None:
+            if not guest:
+                return
+            guest_audit.log(
+                guest_id=guest["guest_id"],
+                event_type=event_type,
+                display_name=guest.get("display_name"),
+                device_id=guest.get("device_id"),
+                session_id=client_session_id,
+                content=content,
+                meta=meta,
+            )
+
         owner_action = parse_owner_command(body.message)
+        # Guests never get owner slash commands (even if they type /shutdown).
+        if guest and owner_action:
+            owner_action = None
 
         async def event_stream():
             def sse(event: str, data: dict[str, Any]) -> str:
                 return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-            yield sse("session", {"session_id": session_id})
+            yield sse(
+                "session",
+                {
+                    "session_id": client_session_id,
+                    "role": "guest" if guest else "owner",
+                    "display_name": (guest or {}).get("display_name"),
+                },
+            )
+
+            if guest and guest_cfg.content_policy_enabled:
+                allowed, refusal = check_guest_content(
+                    body.message, direction="input", age_band=_guest_age_band()
+                )
+                if not allowed and refusal:
+                    _audit(
+                        "content_blocked",
+                        content=body.message,
+                        meta={"direction": "input"},
+                    )
+                    conversation.add_message("assistant", refusal)
+                    yield sse(
+                        "stream",
+                        {"type": "result", "content": refusal, "source": "web"},
+                    )
+                    yield sse("done", {"final": refusal, "content_blocked": True})
+                    return
+
+            if guest:
+                _audit("chat_user", content=body.message)
+
+            caller = resolve_caller_label(request, system.config, guest_registry)
+            logger.info("[%s] chat: %s", caller, body.message[:160])
 
             # Exact slash commands bypass the agent so the owner can kill a hung UI.
             if owner_action:
@@ -203,18 +322,65 @@ def create_app(system) -> FastAPI:
                 return
 
             result_parts = []
+            profile_store = GuestUserProfileStore()
+            guest_personalization = ""
+            if guest:
+                guest_personalization = profile_store.personalization_block(
+                    guest["guest_id"],
+                    guest.get("display_name", "Guest"),
+                    guest_registry,
+                )
             try:
                 async for stream_data in system.control_center.run(
                     user_input=body.message,
                     conversation_history=conversation,
                     session_id=session_id,
+                    user_role=auth_role if auth_role in ("owner", "guest") else "owner",
+                    guest_profile=guest,
+                    guest_personalization_context=guest_personalization,
                 ):
                     payload = _stream_payload(stream_data)
                     yield sse("stream", payload)
+                    if guest and stream_data.type in ("tool_call", "action"):
+                        _audit(
+                            "tool_call",
+                            content=stream_data.content,
+                            meta={"stream_type": stream_data.type},
+                        )
+                    if guest and stream_data.type == "error":
+                        _audit("error", content=payload.get("content"))
                     if stream_data.type in ("result", "error"):
                         result_parts.append(payload["content"])
 
                 final_text = "\n".join(result_parts) or "(no response)"
+                if guest and guest_cfg.content_policy_enabled:
+                    allowed, refusal = check_guest_content(
+                        final_text, direction="output", age_band=_guest_age_band()
+                    )
+                    if not allowed and refusal:
+                        _audit(
+                            "content_blocked",
+                            content=final_text,
+                            meta={"direction": "output"},
+                        )
+                        final_text = refusal
+                if guest:
+                    _audit("chat_assistant", content=final_text)
+
+                    async def _refresh_guest_profile() -> None:
+                        try:
+                            await profile_store.update_from_turn_async(
+                                guest_id=guest["guest_id"],
+                                display_name=guest.get("display_name", "Guest"),
+                                user_message=body.message,
+                                assistant_message=final_text,
+                                llm_interface=getattr(system, "llm_interface", None),
+                                config=system.config,
+                            )
+                        except Exception as prof_err:
+                            logger.warning("Guest profile update failed: %s", prof_err)
+
+                    asyncio.create_task(_refresh_guest_profile())
                 conversation.add_message("assistant", final_text)
                 yield sse("done", {"final": final_text})
 
@@ -225,6 +391,8 @@ def create_app(system) -> FastAPI:
                 if fmt.get("hint"):
                     error_msg = f"{fmt['message']}\n\n{fmt['hint']}"
                 conversation.add_message("assistant", error_msg)
+                if guest:
+                    _audit("error", content=error_msg)
                 yield sse(
                     "stream",
                     {
@@ -251,10 +419,16 @@ def create_app(system) -> FastAPI:
         return "\n\n".join(lines)
 
     @app.post("/api/export")
-    async def export_conversation(body: ExportRequest):
+    async def export_conversation(body: ExportRequest, request: Request):
         """Write the current session transcript to exports/ (one-click export)."""
-        session_id = body.session_id
-        if not session_id or session_id not in system.session_histories:
+        guest = getattr(request.state, "guest", None)
+        raw_session = body.session_id
+        if not raw_session:
+            return JSONResponse({"detail": "no active session"}, status_code=400)
+        session_id = (
+            guest_session_key(guest["guest_id"], raw_session) if guest else raw_session
+        )
+        if session_id not in system.session_histories:
             return JSONResponse({"detail": "no active session"}, status_code=400)
 
         conversation = system.session_histories[session_id]
@@ -316,7 +490,7 @@ def create_app(system) -> FastAPI:
 
     # ------------------------------------------------------------- info
     @app.get("/api/status")
-    async def status():
+    async def status(request: Request):
         cfg = system.config
         ollama_available = None
         llm = getattr(system, "llm_interface", None)
@@ -325,8 +499,13 @@ def create_app(system) -> FastAPI:
                 ollama_available = await llm.is_service_available()
             except Exception:
                 ollama_available = False
+        role = getattr(request.state, "auth_role", None) or "owner"
+        guest = getattr(request.state, "guest", None)
         return {
             "project": cfg.project_name,
+            "role": role,
+            "guest_access_enabled": guest_access_enabled(cfg),
+            "display_name": (guest or {}).get("display_name") if role == "guest" else None,
             "version": cfg.version,
             "models": {
                 "default": cfg.ollama_settings.default_model,
@@ -342,13 +521,20 @@ def create_app(system) -> FastAPI:
         }
 
     @app.get("/api/tools")
-    async def tools():
-        return {
-            "tools": [
-                {"name": t.name, "description": t.description}
-                for t in system.tool_registry.tools.values()
-            ]
-        }
+    async def tools(request: Request):
+        from core.guest_access import GUEST_ALLOWED_TOOLS
+
+        role = getattr(request.state, "auth_role", None)
+        all_tools = [
+            {"name": t.name, "description": t.description}
+            for t in system.tool_registry.tools.values()
+        ]
+        if role == "guest":
+            allowed = set(GUEST_ALLOWED_TOOLS)
+            if system.config.web_ui.guest_access.allow_document_search:
+                allowed.add("document_search")
+            all_tools = [t for t in all_tools if t["name"] in allowed]
+        return {"tools": all_tools}
 
     @app.get("/api/memory/search")
     async def memory_search(q: str, limit: int = 5):
@@ -661,6 +847,7 @@ def create_app(system) -> FastAPI:
         )
         return {"ingest": summary}
 
+    register_guest_routes(app, system, guest_registry, guest_audit)
     register_mcp_routes(app, system)
     register_personality_routes(app, system)
 

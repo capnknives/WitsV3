@@ -14,16 +14,17 @@ A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it
 
 | Area | State |
 |------|--------|
-| Test suite | **406 collected** — re-run `pytest tests/ -q --no-cov` for the live count |
+| Test suite | **435 collected** — re-run `pytest tests/ -q --no-cov` for the live count |
 | Models (default) | `qwen3:8b` (general), `qwen2.5-coder:7b` (coding), `llama3.2:3b` (fast), `nomic-embed-text` (embeddings) |
 | GPU target | Configured models fit in ~8 GB VRAM when fully on-GPU |
 | Built-in tools | **26** auto-discovered (files, search, docs, MCP discovery, self-repair, neural-web helpers, …) |
 | Agents | Control center → orchestrator + book / coding / self-repair specialists |
 | Safe code edits | Verified-edit pipeline: write → pytest → commit, or revert to original bytes |
+| Guest / family testers | Opt-in LAN access via `/join` (invite code; no owner token) — see below |
 | CI | GitHub Actions on Python 3.10 / 3.11 (`.github/workflows/ci.yml`) |
 | Secrets | Gitignored `.env` only — never in `config.yaml` |
 
-**Recently shipped (July 2026):** Web UI + PWA, Document RAG, multi-provider web search, smart model routing, MCP registry discover/install, orchestrator JSON robustness, synthesis guard (answers grounded in tool results), one-click chat export, coding + self-repair made real (filesystem + verify-before-commit), daily autonomous self-repair schedule.
+**Recently shipped (July 2026):** Web UI + PWA, Document RAG, multi-provider web search, smart model routing, MCP registry discover/install, orchestrator JSON robustness, synthesis guard (answers grounded in tool results), one-click chat export, coding + self-repair made real (filesystem + verify-before-commit), daily autonomous self-repair schedule, guest / family-tester access (safe MVP).
 
 **What's next:** see [`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md).
 
@@ -95,6 +96,8 @@ Optional:
 | Variable | Purpose |
 |----------|---------|
 | `WITSV3_AUTH_TOKEN_HASH` | Admin token hash — generate with `python setup_auth.py` |
+| `WITSV3_GUEST_INVITE` | Short invite code for family testers on `/join` (requires `web_ui.guest_access.enabled`) |
+| `WITSV3_GUEST_SECRET` | Signs guest session tokens (recommended random string; else derived from web token + invite) |
 | `TAVILY_API_KEY` / `BRAVE_SEARCH_API_KEY` | Better `web_search` (DuckDuckGo is the keyless fallback) |
 | `ANTHROPIC_API_KEY` | Ask-Claude escalation (per-request approval in the UI; never automatic) |
 | `WITSV3_SUPABASE_*` | Optional Supabase memory backend — skip if unused |
@@ -111,6 +114,22 @@ Optional:
 
 Open `http://localhost:8000`, enter `WITSV3_WEB_TOKEN`, chat.
 
+Phone (same Wi-Fi): open the LAN URL printed at startup → browser menu → **Add to Home screen** (PWA). Away from home: [Tailscale](https://tailscale.com) on PC and phone. One-time Windows firewall (Admin PowerShell):
+
+```powershell
+New-NetFirewallRule -DisplayName "WitsV3 Web UI" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
+```
+
+### Guest / family testers (optional)
+
+Let someone on your LAN (e.g. a nephew) chat **without** your owner token:
+
+1. Set `WITSV3_GUEST_INVITE` (and ideally `WITSV3_GUEST_SECRET`) in `.env`
+2. Set `web_ui.guest_access.enabled: true` in `config.yaml`
+3. They open `http://<your-lan-ip>:8000/join`, enter the invite code + their name
+
+Guests get chat-only UI, a filtered tool allowlist (no file write / self-repair / MCP / settings), and a remembered identity per browser/device. Full design: [`planning/roadmap/guest-tester-access-2026-07.md`](planning/roadmap/guest-tester-access-2026-07.md).
+
 Other entry points:
 
 ```bash
@@ -120,12 +139,6 @@ pytest tests/ -q --no-cov  # Full test suite
 ```
 
 `run.py` and `run_web.py` both schedule the daily autonomous self-repair job in-process when enabled in config (no separate Docker service required).
-
-Phone (same Wi-Fi): open the LAN URL printed at startup → browser menu → **Add to Home screen** (PWA). Away from home: [Tailscale](https://tailscale.com) on PC and phone. One-time Windows firewall (Admin PowerShell):
-
-```powershell
-New-NetFirewallRule -DisplayName "WitsV3 Web UI" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow
-```
 
 ---
 
@@ -138,6 +151,7 @@ New-NetFirewallRule -DisplayName "WitsV3 Web UI" -Direction Inbound -Protocol TC
 | Search the web | `web_search` — Tavily → Brave → DuckDuckGo |
 | Edit project code safely | “Fix the bug in `tools/foo.py`” → verified-edit pipeline |
 | Autonomous maintenance | Daily self-repair scan (config: `self_repair.*`) |
+| Guest / family tester on LAN | `/join` with invite code (opt-in; no owner token) |
 | Extra tools | MCP discover/install on `/mcp` |
 
 ### Document RAG

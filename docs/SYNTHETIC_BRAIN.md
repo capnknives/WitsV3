@@ -12,12 +12,13 @@ was superseded by the July 2026 revival work
 (`planning/roadmap/revival-2026-07.md`). It is **not** the current
 architecture.
 
-## What actually shipped
+## What actually shipped (then archived)
 
 - `core/memory_handler.py`, `core/cognitive_architecture.py` — the "base
-  versions" mentioned in these docs are the ones still imported by the live
-  system today.
-- `config/wits_core.yaml` — identity/memory/cognitive config structure.
+  versions" mentioned in these docs were never wired into `run.py` / `run_web.py`.
+  Archived July 2026 → `planning/archive/synthetic_brain/`.
+- `config/wits_core.yaml` — identity/memory/cognitive config structure (still present;
+  `debug_modules` for this cluster cleared).
 
 ## What did not ship / was abandoned
 

@@ -212,6 +212,45 @@ class CLISettings(BaseModel):
     show_tool_calls: bool = Field(default=True)
 
 
+class GuestAccessSettings(BaseModel):
+    """Family-tester / guest access on the LAN (see guest-tester-access roadmap)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Allow guests with WITSV3_GUEST_INVITE (requires invite + signing secret)",
+    )
+    allow_lan_only: bool = Field(
+        default=True, description="Reject guest registration from non-RFC1918 / non-loopback IPs"
+    )
+    token_ttl_hours: int = Field(
+        default=720, gt=0, description="Guest session token lifetime in hours"
+    )
+    max_message_rate_per_minute: int = Field(
+        default=20, gt=0, description="Per-device chat rate limit for guests"
+    )
+    allow_document_search: bool = Field(
+        default=False, description="Let guests use document_search on owner-ingested docs"
+    )
+    audit_chat: bool = Field(
+        default=True, description="Append guest turns to data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl"
+    )
+    content_policy_enabled: bool = Field(
+        default=True, description="Block inappropriate guest input/output (family-friendly)"
+    )
+    default_guest_age_band: str = Field(
+        default="teen",
+        description="Age tier assigned to new /join guests (owner can change later). Guests cannot self-promote.",
+    )
+    adult_allow_document_search: bool = Field(
+        default=True,
+        description="Owner-assigned adult guests may use document_search on ingested docs",
+    )
+    profile_llm_extraction: bool = Field(
+        default=True,
+        description="Use a small local LLM to extract interests/facts into guest user profiles",
+    )
+
+
 class WebUISettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the web UI server")
     host: str = Field(
@@ -222,6 +261,11 @@ class WebUISettings(BaseModel):
     require_auth: bool = Field(
         default=True, description="Require the WITSV3_WEB_TOKEN bearer token for API access"
     )
+    owner_display_name: str = Field(
+        default="Owner",
+        description="Name shown in web UI access logs for owner sessions (override with WITSV3_OWNER_NAME)",
+    )
+    guest_access: GuestAccessSettings = Field(default_factory=GuestAccessSettings)
 
 
 class DocumentRAGSettings(BaseModel):

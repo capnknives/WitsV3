@@ -236,8 +236,134 @@ class OrchestratorRoutingMixin:
         """True for a short "keep going" reply with no new content of its own."""
         return bool(self._AGENT_CONTINUATION_RE.match(message.strip()))
 
+    # Owner guest admin: audit summaries + account roster (guest_audit_summary / guest_accounts_list).
+    _GUEST_AUDIT_SIGNALS = (
+        "guest log",
+        "guest logs",
+        "guest audit",
+        "guest activity",
+        "family tester",
+        "tester log",
+        "tester logs",
+        "what did tester",
+        "what has tester",
+        "summarize tester",
+        "other user",
+        "other users",
+        "guest user",
+        "who joined",
+        "nephew",
+        "nephews",
+    )
+
+    _GUEST_PROFILE_SIGNALS = (
+        "interested in",
+        "what does",
+        "what do we know about",
+        "what do you know about",
+        "what does the system know",
+        "what does wits know",
+        "what have we learned about",
+        "what have you learned about",
+        "guest profile",
+        "user profile",
+        "their hobbies",
+        "their interests",
+        "what is sean into",
+        "what is tester into",
+        "tell me about sean",
+        "tell me about tester",
+        "know about tester",
+        "know about sean",
+    )
+
+    _GUEST_ACCOUNTS_SIGNALS = (
+        "list guest",
+        "list guests",
+        "list all guest",
+        "list active guest",
+        "guest accounts",
+        "guest account",
+        "active guest",
+        "active guests",
+        "registered guest",
+        "registered guests",
+        "who are the guests",
+        "show me guests",
+        "family testers",
+        "tester accounts",
+        "set age band",
+        "age band",
+        "as a teen",
+        "as an adult",
+        "as a child",
+        "make guest",
+        "set guest",
+        "set sean",
+        "protection tier",
+    )
+
+    def _needs_guest_audit_review(self, message: str) -> bool:
+        lowered = message.lower()
+        return any(sig in lowered for sig in self._GUEST_AUDIT_SIGNALS)
+
+    def _needs_guest_accounts_list(self, message: str) -> bool:
+        lowered = message.lower()
+        return any(sig in lowered for sig in self._GUEST_ACCOUNTS_SIGNALS)
+
+    def _message_mentions_guest_name(self, message: str) -> bool:
+        from core.guest_access import GuestRegistry
+
+        lowered = message.lower()
+        for guest in GuestRegistry().list_active_guests():
+            name = (guest.get("display_name") or "").strip().lower()
+            if name and name in lowered:
+                return True
+        return False
+
+    def _extract_guest_name_for_profile_query(self, message: str) -> str | None:
+        from core.guest_access import GuestRegistry
+
+        lowered = message.lower()
+        matches: list[tuple[float, str]] = []
+        for guest in GuestRegistry().list_active_guests():
+            name = (guest.get("display_name") or "").strip()
+            if name and name.lower() in lowered:
+                matches.append((float(guest.get("last_seen") or 0), name))
+        if matches:
+            return max(matches, key=lambda x: x[0])[1]
+        return None
+
+    def _needs_guest_profile_review(self, message: str) -> bool:
+        lowered = message.lower()
+        if not any(sig in lowered for sig in self._GUEST_PROFILE_SIGNALS):
+            return False
+        if self._message_mentions_guest_name(message):
+            return True
+        return any(
+            w in lowered
+            for w in (
+                "guest",
+                "tester",
+                "nephew",
+                "sean",
+                "family",
+                "user",
+                "profile",
+                "interest",
+                "hobbies",
+            )
+        )
+
+    def _needs_guest_admin_review(self, message: str) -> bool:
+        if self._needs_guest_profile_review(message):
+            return True
+        return self._needs_guest_audit_review(message) or self._needs_guest_accounts_list(message)
+
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
         """True when answering requires tools (ingested docs or live web search)."""
+        if self._needs_guest_admin_review(user_input):
+            return True
         if self._needs_file_write(user_input):
             return True
         doc_inventory = await self._get_document_inventory()

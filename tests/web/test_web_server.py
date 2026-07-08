@@ -18,8 +18,14 @@ class FakeControlCenter:
     def __init__(self):
         self.calls = []
 
-    async def run(self, user_input, conversation_history=None, session_id=None):
-        self.calls.append({"user_input": user_input, "session_id": session_id})
+    async def run(self, user_input, conversation_history=None, session_id=None, **kwargs):
+        self.calls.append(
+            {
+                "user_input": user_input,
+                "session_id": session_id,
+                "user_role": kwargs.get("user_role", "owner"),
+            }
+        )
         yield StreamData(type="thinking", content="pondering", source="wcca")
         yield StreamData(type="tool_call", content="calculator(2+2)", source="orchestrator")
         yield StreamData(type="result", content="The answer is 4.", source="orchestrator")
@@ -182,7 +188,7 @@ def test_chat_reuses_session(client_noauth):
 
 
 class OllamaDownControlCenter:
-    async def run(self, user_input, conversation_history=None, session_id=None):
+    async def run(self, user_input, conversation_history=None, session_id=None, **kwargs):
         yield StreamData(
             type="error",
             content="An error occurred during orchestration: Failed to connect to Ollama at http://localhost:11434.",

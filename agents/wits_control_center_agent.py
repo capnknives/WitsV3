@@ -158,6 +158,13 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         if not session_id:
             session_id = str(uuid.uuid4())
 
+        user_role = kwargs.get("user_role", "owner")
+        guest_profile = kwargs.get("guest_profile")
+        self._request_user_role = user_role
+        self._request_guest_profile = guest_profile
+        self._skip_global_memory_store = user_role == "guest"
+        self._guest_personalization_context = kwargs.get("guest_personalization_context", "")
+
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
 
         if any(kw in user_input.lower() for kw in ["remember", "don't forget", "recall"]):
@@ -292,8 +299,10 @@ User input: {user_input}
         # decided — 2026-07-08 finding: "find and fix any bugs in your code"
         # was classified as clarification_question and "conversation" for a
         # follow-up, both of which return before specialized-agent routing
-        # is ever considered below.
-        if self._needs_self_repair(user_input):
+        # is ever considered below. Guests never get self-repair.
+        if getattr(self, "_request_user_role", "owner") != "guest" and self._needs_self_repair(
+            user_input
+        ):
             intent_type = "goal_defined"
             complexity = "moderate"
             requires_tools = True
@@ -321,6 +330,20 @@ User input: {user_input}
             complexity = "moderate"
             requires_tools = True
             suggested_response = "specialized"
+
+        # Guest interest/profile queries use saved JSON facts only — never web search.
+        if (
+            getattr(self, "_request_user_role", "owner") == "owner"
+            and self._needs_guest_profile_review(user_input)
+        ):
+            yield self.stream_thinking("Loading saved guest profile (no web search)...")
+            from tools.guest_profile_tool import GuestUserProfileSummaryTool
+
+            tool = GuestUserProfileSummaryTool()
+            display_name = self._extract_guest_name_for_profile_query(user_input)
+            report = await tool.execute(display_name=display_name, user_role="owner")
+            yield self.stream_result(report)
+            return
 
         yield self.stream_thinking(
             f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}"
@@ -367,7 +390,10 @@ User input: {user_input}
         # the generic enhanced-capabilities/orchestrator paths below — those
         # unconditionally `return` once entered, so a specialized agent match
         # checked afterward would never actually be reached in practice.
-        if suggested_response == "specialized" or complexity in ["moderate", "complex", "research"]:
+        # Guests stay on chat/orchestrator with the filtered tool allowlist.
+        if getattr(self, "_request_user_role", "owner") != "guest" and (
+            suggested_response == "specialized" or complexity in ["moderate", "complex", "research"]
+        ):
             # A continuation phrase ("make it", "write it all") carries no
             # keywords of its own — resume the agent that handled the
             # previous turn in this session instead of running it through
@@ -396,7 +422,8 @@ User input: {user_input}
 
         # For complex tasks, use enhanced capabilities if available
         if (
-            self.has_enhanced_capabilities
+            getattr(self, "_request_user_role", "owner") != "guest"
+            and self.has_enhanced_capabilities
             and requires_tools
             and complexity in ["moderate", "complex", "research"]
         ):
@@ -443,6 +470,11 @@ User input: {user_input}
                             user_input=user_input,
                             conversation_history=conversation_history,
                             session_id=session_id,
+                            user_role=getattr(self, "_request_user_role", "owner"),
+                            guest_profile=getattr(self, "_request_guest_profile", None),
+                            guest_personalization_context=getattr(
+                                self, "_guest_personalization_context", ""
+                            ),
                         ):
                             yield stream_data
                         return
@@ -457,6 +489,11 @@ User input: {user_input}
                 user_input=user_input,
                 conversation_history=conversation_history,
                 session_id=session_id,
+                user_role=getattr(self, "_request_user_role", "owner"),
+                guest_profile=getattr(self, "_request_guest_profile", None),
+                guest_personalization_context=getattr(
+                    self, "_guest_personalization_context", ""
+                ),
             ):
                 yield stream_data
             return
@@ -498,10 +535,12 @@ User input: {user_input}
 
         personality_prompt = personality_manager.get_system_prompt()
         documents_context = self._documents_context(await self._get_document_inventory())
+        personalization = getattr(self, "_guest_personalization_context", "")
+        personalization_block = f"\n{personalization}\n" if personalization else ""
         conversation_prompt = f"""{personality_prompt}
 
 You are having a casual conversation with the user. Respond in a friendly, helpful manner.
-
+{personalization_block}
 USER DOCUMENTS:
 {documents_context}
 

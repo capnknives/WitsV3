@@ -98,6 +98,8 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         if self._session_model != self.get_model_name():
             self.logger.info(f"Orchestrating with routed model: {self._session_model}")
 
+        self._skip_global_memory_store = kwargs.get("user_role") == "guest"
+
         # Initial setup
         yield self.stream_thinking(f"Starting orchestration for goal: {goal}")
 
@@ -113,6 +115,15 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         relevant_memories = await self.search_memory(goal, limit=5)
         context = self._build_context_from_memories(relevant_memories)
         doc_inventory = await self._get_document_inventory()
+        guest_profile = kwargs.get("guest_profile") or {}
+        guest_age_band = guest_profile.get("age_band") or "teen"
+        if guest_profile.get("guest_id") and kwargs.get("user_role") == "guest":
+            from core.guest_access import GuestRegistry
+
+            reg = GuestRegistry()
+            prof = reg.get(guest_profile["guest_id"])
+            if prof:
+                guest_age_band = prof.get("age_band", guest_age_band)
 
         # Initialize the ReAct state
         react_state = {
@@ -128,7 +139,12 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "tool_total_failures": {},
             "lookup_search_done": False,
             "synthesis_guard_retries": 0,
+            "user_role": kwargs.get("user_role", "owner"),
+            "guest_profile": guest_profile,
+            "guest_age_band": guest_age_band,
+            "guest_personalization_context": kwargs.get("guest_personalization_context", ""),
         }
+        self._react_state_for_tools = react_state
 
         try:
             # Execute ReAct loop

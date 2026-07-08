@@ -10,6 +10,28 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
 
 
+class GuestRegisterRequest(BaseModel):
+    invite_code: str
+    display_name: str
+    device_id: str
+    age_band: str | None = None  # ignored — owner assigns tier; new guests get default_guest_age_band
+
+
+class GuestSetAgeBandRequest(BaseModel):
+    age_band: str
+    guest_id: str | None = None
+    display_name: str | None = None
+
+
+class GuestRevokeRequest(BaseModel):
+    guest_id: str
+
+
+class GuestMergeRequest(BaseModel):
+    target_guest_id: str
+    source_guest_id: str
+
+
 class ExportRequest(BaseModel):
     session_id: str | None = None
     file_path: str | None = None

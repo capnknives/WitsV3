@@ -132,3 +132,27 @@ def test_blocks_tools_after_lookup_search_done():
     msg = h._preflight_tool_call("document_search", {"query": "x"}, state)
     assert msg is not None
     assert "final_answer" in msg
+
+
+def test_blocks_write_file_for_guest_role():
+    h = _harness()
+    state = {
+        "user_role": "guest",
+        "goal": "write a file",
+        "tool_repeat_failures": {},
+        "tool_total_failures": {},
+    }
+    msg = h._preflight_tool_call("write_file", {"file_path": "x.py", "content": "hi"}, state)
+    assert msg is not None
+    assert "guest" in msg.lower()
+
+
+def test_allows_web_search_for_guest_role():
+    h = _harness()
+    state = {
+        "user_role": "guest",
+        "goal": "search news",
+        "tool_repeat_failures": {},
+        "tool_total_failures": {},
+    }
+    assert h._preflight_tool_call("web_search", {"query": "news"}, state) is None

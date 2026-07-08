@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1117">
+  <title>Join WITS</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="join-page">
+  <main class="join-card">
+    <div class="join-brand">
+      <span class="logo">◆</span>
+      <h1>Join WITS</h1>
+    </div>
+    <p class="join-lead">Enter the family invite code and your name to chat. You won’t need the owner token.</p>
+    <p id="join-disabled" class="join-error" hidden>Guest access is turned off on this server.</p>
+    <form id="join-form">
+      <label for="invite">Invite code</label>
+      <input id="invite" name="invite" type="password" autocomplete="off" required placeholder="Code from Richard">
+      <label for="display-name">Your name</label>
+      <input id="display-name" name="display_name" type="text" autocomplete="nickname" required maxlength="80" placeholder="e.g. Alex">
+      <p id="join-error" class="join-error" hidden></p>
+      <button id="join-btn" type="submit">Continue</button>
+    </form>
+    <p class="join-foot"><a href="/?owner=1">Owner login</a> (requires your web token)</p>
+  </main>
+  <script src="/join.js"></script>
+</body>
+</html>

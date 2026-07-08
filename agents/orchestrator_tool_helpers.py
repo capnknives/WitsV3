@@ -22,6 +22,13 @@ class OrchestratorToolHelpersMixin:
     TOOL_TOTAL_FAILURE_LIMIT = 3
     ORCHESTRATOR_BLOCKED_TOOLS = frozenset({"intent_analysis", "json_manipulate"})
 
+    def _guest_allowed_tools(self) -> frozenset[str]:
+        from core.guest_access import guest_tools_for_age_band
+
+        state = getattr(self, "_react_state_for_tools", None) or {}
+        age_band = state.get("guest_age_band", "teen")
+        return guest_tools_for_age_band(age_band, getattr(self, "config", None))
+
     @staticmethod
     def _has_ingested_documents(state: dict[str, Any]) -> bool:
         """True when USER DOCUMENTS lists at least one ingested file."""
@@ -36,6 +43,33 @@ class OrchestratorToolHelpersMixin:
         self, tool_name: str, tool_args: dict[str, Any], state: dict[str, Any]
     ) -> str | None:
         """Return a block message to skip doomed/repeat tool calls, or None to proceed."""
+        if state.get("user_role") == "guest" and tool_name not in self._guest_allowed_tools():
+            return (
+                f"Blocked {tool_name}: not available for guest users. "
+                f"Use web_search, math_operations, or datetime, or final_answer to respond."
+            )
+        goal = state.get("goal", "")
+        from agents.wcca_routing_mixin import OrchestratorRoutingMixin
+
+        if state.get("user_role") == "owner" and OrchestratorRoutingMixin._needs_guest_profile_review(
+            OrchestratorRoutingMixin(), goal
+        ):
+            if tool_name == "web_search":
+                return (
+                    "Blocked web_search: guest profile questions must use "
+                    "guest_user_profile_summary (saved facts only, no online lookup)."
+                )
+            if tool_name not in (
+                "guest_user_profile_summary",
+                "guest_accounts_list",
+                "guest_audit_summary",
+                "guest_set_age_band",
+            ):
+                return (
+                    f"Blocked {tool_name}: for guest profile/interest questions use "
+                    "guest_user_profile_summary only."
+                )
+
         if tool_name in self.ORCHESTRATOR_BLOCKED_TOOLS:
             return (
                 f"Blocked {tool_name}: not available in the orchestrator. "
@@ -512,6 +546,14 @@ class OrchestratorToolHelpersMixin:
                 path = self._save_file_path_from_goal(state.get("goal", ""))
                 if path:
                     args["file_path"] = path
+
+        if tool_name in (
+            "guest_audit_summary",
+            "guest_accounts_list",
+            "guest_set_age_band",
+            "guest_user_profile_summary",
+        ):
+            args.setdefault("user_role", state.get("user_role", "owner"))
 
         return args
 

@@ -33,6 +33,21 @@
     .toggle-row input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--accent); }
     .price-note { color: var(--fg-dim); font-size: 12.5px; margin-top: 8px; }
     .warn { color: #ffcf8f; font-size: 13px; }
+    .guest-card { background: var(--bg-3); border: 1px solid #2c3245; border-radius: 8px;
+                  padding: 12px; margin-bottom: 10px; }
+    .guest-card h3 { margin: 0 0 6px; font-size: 15px; }
+    .guest-meta { color: var(--fg-dim); font-size: 12.5px; margin-bottom: 8px; }
+    .guest-interests { font-size: 13px; margin-bottom: 8px; }
+    .guest-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .guest-actions select { flex: 1; min-width: 100px; }
+    .guest-actions button { background: var(--accent); border: none; color: #fff; border-radius: 6px;
+                            padding: 6px 10px; font: inherit; cursor: pointer; }
+    .guest-actions button.danger { background: #a63d3d; }
+    .guest-actions button.merge { background: #3d5a7a; }
+    .guest-dup-warn { color: #ffcf8f; font-size: 12.5px; margin-bottom: 8px; }
+    .guest-profile-pre { background: #0a0c12; border: 1px solid #2c3245; border-radius: 6px;
+                         padding: 8px; font-size: 12px; max-height: 160px; overflow: auto;
+                         white-space: pre-wrap; margin-top: 8px; display: none; }
     .actions { display: flex; gap: 10px; margin-top: 22px; }
     #save-btn { background: var(--accent); border: none; color: #fff; border-radius: 8px;
                 padding: 12px 18px; font: inherit; cursor: pointer; flex: 1; }
@@ -142,6 +157,16 @@
         <input type="number" id="escalation_max_tokens" min="256" max="16000" step="256" value="2048">
       </div>
 
+      <h2>Family testers</h2>
+      <div id="guest-section" class="setting">
+        <div class="hint" style="margin-bottom:12px">
+          Guests who joined via <code>/join</code>. Set their protection tier and see what Wits learned from chat.
+        </div>
+        <div id="guest-disabled" class="warn" hidden>Guest access is disabled in config.</div>
+        <div id="guest-list"></div>
+        <button type="button" id="guest-refresh-btn" style="margin-top:10px;background:var(--bg-3);border:1px solid #2c3245;color:var(--fg);border-radius:8px;padding:8px 14px;cursor:pointer;font:inherit">Refresh guest list</button>
+      </div>
+
       <div class="actions">
         <button id="save-btn" type="submit">Save settings</button>
       </div>
@@ -203,6 +228,169 @@
     }
     $("#escalation_model").addEventListener("change", updatePriceNote);
 
+    function renderGuestList(data) {
+      const list = $("#guest-list");
+      list.innerHTML = "";
+      if (!data.enabled) {
+        $("#guest-disabled").hidden = false;
+        return;
+      }
+      $("#guest-disabled").hidden = true;
+      const guests = data.guests || [];
+      if (!guests.length) {
+        list.innerHTML = '<p class="hint">No active guest accounts yet. Share the /join link.</p>';
+        return;
+      }
+      if ((data.duplicate_names || []).length) {
+        const warn = document.createElement("p");
+        warn.className = "guest-dup-warn";
+        warn.textContent =
+          `Duplicate join names detected: ${data.duplicate_names.join(", ")}. ` +
+          "Merge or revoke extras so each person has one account.";
+        list.appendChild(warn);
+      }
+      for (const g of guests) {
+        const card = document.createElement("div");
+        card.className = "guest-card";
+        const interests = (g.top_interests || [])
+          .map((i) => `${i.label} (${i.count})`)
+          .join(", ") || "none yet";
+        const dupNote = g.duplicate_name
+          ? `<div class="guest-dup-warn">⚠ Duplicate name — merge or revoke this extra account.</div>`
+          : "";
+        const mergeBlock =
+          g.merge_candidates && g.merge_candidates.length
+            ? `<div class="guest-actions" style="margin-top:6px">
+                 <select class="guest-merge-source" data-target="${g.guest_id}">
+                   <option value="">Merge another duplicate into this account…</option>
+                   ${g.merge_candidates
+                     .map(
+                       (c) =>
+                         `<option value="${c.guest_id}">Merge id ${c.guest_id.slice(0, 8)}… into this</option>`
+                     )
+                     .join("")}
+                 </select>
+                 <button type="button" class="merge guest-merge-btn" data-target="${g.guest_id}">Merge</button>
+               </div>`
+            : "";
+        card.innerHTML = `
+          <h3>${g.display_name}</h3>
+          ${dupNote}
+          <div class="guest-meta">id ${g.guest_id.slice(0, 8)}… · ${g.device_count} device(s) · ${g.turn_count} chat turns · ${g.fact_count} notes</div>
+          <div class="guest-interests"><b>Interests:</b> ${interests}</div>
+          <div class="guest-actions">
+            <select data-guest-id="${g.guest_id}" class="guest-band-select" aria-label="Age band for ${g.display_name}">
+              <option value="child">child</option>
+              <option value="teen">teen</option>
+              <option value="adult">adult</option>
+            </select>
+            <button type="button" class="guest-save-band" data-guest-id="${g.guest_id}">Save tier</button>
+            <button type="button" class="guest-view-profile" data-name="${g.display_name}">View profile</button>
+            <button type="button" class="danger guest-revoke" data-guest-id="${g.guest_id}" data-name="${g.display_name}">Revoke</button>
+          </div>
+          ${mergeBlock}
+          <pre class="guest-profile-pre"></pre>`;
+        const sel = card.querySelector(".guest-band-select");
+        sel.value = g.age_band || "teen";
+        list.appendChild(card);
+      }
+      list.querySelectorAll(".guest-save-band").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const gid = btn.dataset.guestId;
+          const card = btn.closest(".guest-card");
+          const band = card.querySelector(".guest-band-select").value;
+          btn.disabled = true;
+          try {
+            const res = await api("/api/guest/admin/age-band", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ guest_id: gid, age_band: band }),
+            });
+            if (res.ok) setStatus(`Updated ${card.querySelector("h3").textContent} → ${band}`, true);
+            else setStatus(`Tier update failed: ${(await res.json()).detail || res.status}`, false);
+          } catch (e) { /* handled */ }
+          finally { btn.disabled = false; }
+        });
+      });
+      list.querySelectorAll(".guest-view-profile").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const card = btn.closest(".guest-card");
+          const pre = card.querySelector(".guest-profile-pre");
+          if (pre.style.display === "block") {
+            pre.style.display = "none";
+            return;
+          }
+          btn.disabled = true;
+          try {
+            const res = await api(`/api/guest/admin/profile?display_name=${encodeURIComponent(btn.dataset.name)}`);
+            const body = await res.json();
+            pre.textContent = body.summary || JSON.stringify(body.profile, null, 2);
+            pre.style.display = "block";
+          } catch (e) { /* handled */ }
+          finally { btn.disabled = false; }
+        });
+      });
+      list.querySelectorAll(".guest-revoke").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const name = btn.dataset.name;
+          const gid = btn.dataset.guestId;
+          if (!confirm(`Revoke guest account for ${name} (${gid.slice(0, 8)}…)? They will need to /join again.`)) {
+            return;
+          }
+          btn.disabled = true;
+          try {
+            const res = await api("/api/guest/admin/account", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ guest_id: gid }),
+            });
+            if (res.ok) {
+              setStatus(`Revoked ${name}`, true);
+              loadGuests();
+            } else {
+              setStatus(`Revoke failed: ${(await res.json()).detail || res.status}`, false);
+            }
+          } catch (e) { /* handled */ }
+          finally { btn.disabled = false; }
+        });
+      });
+      list.querySelectorAll(".guest-merge-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const target = btn.dataset.target;
+          const card = btn.closest(".guest-card");
+          const source = card.querySelector(".guest-merge-source")?.value;
+          if (!source) {
+            setStatus("Pick a duplicate account to merge into this one.", false);
+            return;
+          }
+          btn.disabled = true;
+          try {
+            const res = await api("/api/guest/admin/merge", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ target_guest_id: target, source_guest_id: source }),
+            });
+            if (res.ok) {
+              setStatus("Accounts merged — one profile kept.", true);
+              loadGuests();
+            } else {
+              setStatus(`Merge failed: ${(await res.json()).detail || res.status}`, false);
+            }
+          } catch (e) { /* handled */ }
+          finally { btn.disabled = false; }
+        });
+      });
+    }
+
+    async function loadGuests() {
+      try {
+        const res = await api("/api/guest/admin/accounts");
+        if (res.ok) renderGuestList(await res.json());
+      } catch (e) { /* optional section */ }
+    }
+
+    $("#guest-refresh-btn").addEventListener("click", loadGuests);
+
     async function load() {
       try {
         const res = await api("/api/settings");
@@ -224,6 +412,7 @@
         $("#escalation_max_tokens").value = s.escalation_max_tokens;
         $("#key-warning").hidden = s.anthropic_key_configured;
         updatePriceNote();
+        loadGuests();
       } catch (e) { /* handled */ }
     }
 
