@@ -15,11 +15,25 @@ let guestName = localStorage.getItem("wits_guest_name") || "";
 let isGuest = Boolean(guestToken) && !token;
 let busy = false;
 
-// Magic login link: /?token=XYZ stores the owner token and cleans the URL,
-// so phones never have to type it manually. Clears any guest session.
-const urlToken = new URLSearchParams(location.search).get("token");
-if (urlToken) {
-  token = urlToken.trim();
+function isLocalhost() {
+  const h = location.hostname;
+  return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+}
+
+function wantsOwnerLogin() {
+  return new URLSearchParams(location.search).get("owner") === "1";
+}
+
+function consumeOwnerUrlToken() {
+  const params = new URLSearchParams(location.search);
+  const ownerParam = params.get("owner_token") || params.get("token");
+  if (!ownerParam) return;
+  // Owner magic links are localhost-only. LAN URLs must never embed the owner token.
+  if (!isLocalhost()) {
+    history.replaceState(null, "", location.pathname);
+    return;
+  }
+  token = ownerParam.trim();
   localStorage.setItem("wits_token", token);
   localStorage.removeItem("wits_guest_token");
   guestToken = "";
@@ -780,21 +794,52 @@ $("#docs-reindex").addEventListener("click", async () => {
 });
 
 /* ---------------------------------------------------------- boot */
-applyGuestChrome();
-if (!activeToken()) {
-  if (localStorage.getItem("wits_guest_token")) {
-    location.href = "/join";
-  } else {
-    showTokenModal();
+async function bootstrapAuth() {
+  consumeOwnerUrlToken();
+
+  let guestAccessEnabled = false;
+  try {
+    const res = await fetch("/api/guest/status");
+    if (res.ok) {
+      guestAccessEnabled = (await res.json()).enabled;
+    }
+  } catch {
+    /* server down — fall through */
   }
-} else if (isGuest) {
-  addAssistantMsg(
-    guestName
-      ? `Welcome back, ${guestName} — you're chatting as a guest tester.`
-      : "You're chatting as a guest tester. Ask me anything."
-  );
-} else {
-  addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
+
+  // Stale owner token from an old LAN magic link / QR — drop it when guest mode is on.
+  if (guestAccessEnabled && !isLocalhost() && token && !wantsOwnerLogin()) {
+    token = "";
+    localStorage.removeItem("wits_token");
+    isGuest = Boolean(guestToken);
+  }
+
+  applyGuestChrome();
+
+  if (!activeToken()) {
+    if (localStorage.getItem("wits_guest_token")) {
+      location.href = "/join";
+      return;
+    }
+    if (guestAccessEnabled && !wantsOwnerLogin()) {
+      location.href = "/join";
+      return;
+    }
+    showTokenModal();
+    return;
+  }
+
+  if (isGuest) {
+    addAssistantMsg(
+      guestName
+        ? `Welcome back, ${guestName} — you're chatting as a guest tester.`
+        : "You're chatting as a guest tester. Ask me anything."
+    );
+  } else {
+    addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
+  }
+  checkStatus();
+  setInterval(checkStatus, 30000);
 }
-checkStatus();
-setInterval(checkStatus, 30000);
+
+bootstrapAuth();
