@@ -1,0 +1,17 @@
+---
+description: Pytest and pytest-asyncio requirements for WitsV3
+globs: "tests/**/*.py"
+alwaysApply: false
+---
+
+# Testing
+
+- Add pytest coverage under `/tests` mirroring package layout (`agents/`, `core/`, `tools/`, `web/`)
+- Use **pytest-asyncio** for async tests
+- Mock **Ollama** and other external I/O in unit tests
+- Per feature: **happy path**, **error path**, **edge case**
+- Prefer Ollama running when intentionally running live integration checks
+
+## Don't Do
+
+- Flaky tests that depend on live network or unmocked LLM calls for unit coverage

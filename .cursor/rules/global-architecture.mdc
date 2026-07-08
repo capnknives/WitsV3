@@ -1,0 +1,45 @@
+---
+description: Core WitsV3 project routing, roadmap priorities, and stack declaration
+alwaysApply: true
+---
+
+# WitsV3 — Global Architecture
+
+## Worktrees & docs
+
+- Work from **`WitsV3-cursor`** (branch `cursor/work` or `cursor/*`). Personal runtime = sibling `WitsV3`; Claude = `WitsV3-claude` — see `WORKTREES.md`
+- **Always read** `planning/roadmap/suggested-features-2026-07.md` for priorities and `README.md` for how it runs today
+- Architecture ref: `planning/architecture/system-architecture.md` (many sections mid-2025 — trust README/roadmap for status)
+- Shipped log: `planning/roadmap/revival-2026-07.md`
+- Root `TASK.md` / `PLANNING.md` are **redirects only** — do not append phase checklists; update the suggested-features roadmap
+- Legacy root `.cursorrules` is a one-line redirect here; canonical rules live under `.cursor/rules/*.mdc`
+
+## Stack declaration
+
+- **Python 3.10+**, **FastAPI + SSE** (`web/`), **Pydantic** (`core/schemas.py`), **Ollama** primary LLM
+- Local-first orchestration: Web UI (primary) + CLI, ReAct orchestrator, tool registry, persistent memory, optional neural web / MCP
+
+## Packages
+
+- `agents/` — BaseAgent, orchestrators, control center, specialists
+- `core/` — config, LLM, memory, schemas, safe_code_editor
+- `tools/` — BaseTool implementations (auto-discovered)
+- `web/` — FastAPI + SSE UI
+
+## Task & docs standards
+
+- Track new work in `planning/roadmap/suggested-features-2026-07.md`
+- Log large shipped chunks in `planning/roadmap/revival-2026-07.md` when relevant
+- Update `README.md` when install or user-facing behavior changes
+- Prefer the canonical roadmap over proliferating “status” docs
+
+## Critical
+
+- Preserve the ReAct loop in orchestrators
+- Maintain compatibility with existing tools/agents unless intentionally retiring them
+- Prefer Ollama running for integration checks
+
+## Don't Do
+
+- Circular imports between packages
+- Schema changes without updating dependents

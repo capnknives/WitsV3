@@ -1,0 +1,35 @@
+---
+description: Python async, typing, modularity, and verified-edit pipeline for WitsV3
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python & Async
+
+## Language
+
+- Python **3.10+** with type hints throughout
+- Follow PEP8; format with **black**
+- Use **Pydantic** models for validation (`core/schemas.py`)
+- Imports: relative within packages, absolute cross-package
+- Google-style docstrings; `# Reason:` for non-obvious logic
+
+## Async
+
+- All agent/tool methods must be **async** — WitsV3 is fully async
+- Never break async patterns — I/O must be async
+
+## Structure
+
+- **Max 500 lines per file** — split when approaching the limit
+- New tools extend `BaseTool`; new agents extend `BaseAgent`
+
+## Verified edits
+
+- Code edits that must survive the gate go through `core/safe_code_editor.py` (write → pytest → commit or restore)
+- Be careful with Unicode / memory-segment serialization
+
+## Don't Do
+
+- Synchronous I/O in hot paths
+- Leaving broken files on disk after a failed self-edit (use the verified-edit pipeline)

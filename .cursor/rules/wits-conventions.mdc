@@ -1,0 +1,32 @@
+---
+description: USE WHEN creating or modifying agents, tools, or memory components
+globs: "agents/**/*.py,tools/**/*.py,core/**/*memory*"
+alwaysApply: false
+---
+
+# WitsV3 Conventions (agents / tools / memory)
+
+## Streaming & registry
+
+- **StreamData** — `stream_thinking()`, `stream_action()`, observation/result helpers
+- **Tool registry** — register with `get_llm_description()`
+- **Memory manager** — `store_memory()` / `search_memory()`
+
+## Config & logging
+
+- Config-driven: `WitsV3Config` / `config.yaml`; secrets in `.env` only
+- Logging: `self.logger` in classes
+
+## LLM integration
+
+- **Ollama is primary** — friendly errors via `core/user_errors.py` when down
+- Stream via `AsyncGenerator`; parse robustly (`ResponseParser`, JSON repair paths)
+- Prefer `core/model_router.py` for size routing over the dormant adaptive-LLM stack
+- Preserve the ReAct loop in orchestrators
+
+## Don't Do
+
+- Hardcoded config (use `config.yaml` / env)
+- Circular imports between packages
+- Schema changes without updating dependents
+- Breaking compatibility with existing tools/agents unless intentionally retiring them
