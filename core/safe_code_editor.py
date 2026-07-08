@@ -98,8 +98,16 @@ async def run_pytest(
 ) -> Tuple[bool, str]:
     """Run pytest as a trusted subprocess (this is orchestration code, not
     arbitrary agent-authored code — it is not run through the sandboxed
-    python_execute tool). Returns (passed, tail_of_combined_output)."""
-    args = [sys.executable, "-m", "pytest", "-q", "-o", "addopts="]
+    python_execute tool). Returns (passed, tail_of_combined_output).
+
+    Uses --tb=native so failures print as standard Python tracebacks
+    ("Traceback (most recent call last): ... File \"...\", line N") instead
+    of pytest's own assertion-rewrite style — that's the same format
+    tools.self_repair_tools.parse_traceback_issues() already parses from
+    logs/witsv3.log, so a failing test can feed the same issue-extraction
+    path as a logged runtime error.
+    """
+    args = [sys.executable, "-m", "pytest", "-q", "-o", "addopts=", "--tb=native"]
     args += list(test_paths or [])
     proc = await asyncio.create_subprocess_exec(
         *args,

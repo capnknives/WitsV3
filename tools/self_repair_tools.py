@@ -57,9 +57,17 @@ def _relative_to_project(path_str: str) -> Optional[str]:
     return rel.as_posix() if p.exists() else None
 
 
-def _parse_log_issues(log_text: str, max_issues: int) -> List[Dict[str, Any]]:
+def parse_traceback_issues(log_text: str, max_issues: int) -> List[Dict[str, Any]]:
     """Extract distinct tracebacks (preferred, file/line-resolvable) and bare
-    ERROR/CRITICAL lines (message-only, not auto-fixable) from log text."""
+    ERROR/CRITICAL lines (message-only, not auto-fixable) from log text.
+
+    Not log-specific despite the name's origin: run_pytest() uses
+    --tb=native specifically so a failing test's output is the same
+    "Traceback (most recent call last): ... File \"...\", line N" shape as a
+    logged runtime error, so this same parser covers both sources — see
+    SelfRepairAgent's whole-codebase fallback (no file named, no log issues
+    -> run the test suite and parse failures the same way).
+    """
     issues: List[Dict[str, Any]] = []
     seen_messages = set()
 
@@ -130,7 +138,7 @@ class DiagnoseLogErrorsTool(BaseTool):
             tail = f.readlines()[-max(1, int(lines)):]
         text = "".join(tail)
 
-        issues = _parse_log_issues(text, max(1, int(max_issues)))
+        issues = parse_traceback_issues(text, max(1, int(max_issues)))
         actionable = sum(1 for i in issues if i["actionable"])
         return {
             "success": True,

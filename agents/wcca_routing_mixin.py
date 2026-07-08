@@ -120,6 +120,28 @@ class OrchestratorRoutingMixin:
         lowered = message.lower()
         return any(sig in lowered for sig in self._FILE_SAVE_SIGNALS)
 
+    # Phrases signaling an unambiguous, self-contained request to find/fix
+    # real bugs — deliberately specific multi-word phrases (not bare "bug"/
+    # "fix", which are too broad and would swallow unrelated chit-chat).
+    # 2026-07-08: "find and fix any bugs in your code" was classified as a
+    # clarification_question and never reached specialized-agent routing at
+    # all (that gate only runs for intent_type == "direct_response"). This
+    # signal short-circuits that misclassification the same way
+    # _needs_web_search/_needs_file_write already do for their cases.
+    _SELF_REPAIR_SIGNALS = (
+        "bugs in your code", "bugs in the code", "bugs in your codebase",
+        "bugs in the codebase", "bug in your code", "bug in the code",
+        "fix any bugs", "find any bugs", "find bugs in", "find and fix",
+        "search for bugs", "look for bugs", "scan for bugs",
+        "fix bugs in", "repair your code", "repair your own code",
+        "analyze your own code", "your own codebase",
+    )
+
+    def _needs_self_repair(self, message: str) -> bool:
+        """True for an unambiguous "find/fix real bugs" request."""
+        lowered = message.lower()
+        return any(sig in lowered for sig in self._SELF_REPAIR_SIGNALS)
+
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
         """True when answering requires tools (ingested docs or live web search)."""
         if self._needs_file_write(user_input):

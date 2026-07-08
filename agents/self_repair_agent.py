@@ -110,9 +110,34 @@ class SelfRepairAgent(BaseAgent):
             issues = []
 
         if not issues:
+            # Neither a named file nor a resolvable log traceback — fall back
+            # to running the real test suite and treating any failures as
+            # issues. Without this, a vague "find bugs in the codebase"
+            # request had no path to actually inspect the codebase at all.
+            test_tool = self._tool("run_test_suite")
+            if test_tool is not None:
+                yield self.stream_thinking("No log errors either — running the test suite to look for real failures...")
+                test_result = await test_tool.execute(timeout=settings.test_timeout_seconds)
+                if not test_result.get("passed", True):
+                    from tools.self_repair_tools import parse_traceback_issues
+
+                    issues = [
+                        i for i in parse_traceback_issues(
+                            test_result.get("output", ""), settings.max_issues_per_run
+                        )
+                        if i.get("actionable")
+                    ]
+                    yield self.stream_observation(
+                        f"Test suite failed — found {len(issues)} resolvable issue(s) in the failures."
+                    )
+                else:
+                    yield self.stream_observation("Test suite passed — no failing tests to investigate.")
+
+        if not issues:
             yield self.stream_result(
                 "No actionable issues found — no resolvable file/line in recent logs, "
-                "and the request didn't name a specific file. Nothing to repair."
+                "no failing tests, and the request didn't name a specific file. "
+                "Nothing to repair."
             )
             return
 

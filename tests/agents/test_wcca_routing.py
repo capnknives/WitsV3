@@ -16,6 +16,7 @@ from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.wits_control_center_agent import WitsControlCenterAgent
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
+from core.schemas import StreamData
 
 
 class DummyLLM(BaseLLMInterface):
@@ -74,6 +75,120 @@ def test_casual_word_requires_word_boundary(wcca):
 def test_greetings_still_casual(wcca):
     assert wcca._is_casual_conversation("hi there, how are you doing today my friend") is True
     assert wcca._is_casual_conversation("thanks!") is True
+
+
+# ---------------------------------------------- specialized-agent selection
+
+@pytest.fixture
+def wcca_with_specialists():
+    """Regression coverage for the 2026-07-08 live-chat finding: 'find and
+    fix bugs in the codebase' routed to the coding agent instead of
+    self-repair, because plain substring matching let "codebase" trip the
+    "code" keyword before the repair keywords were ever checked."""
+    agent = WitsControlCenterAgent(
+        agent_name="TestWCCA",
+        config=WitsV3Config(),
+        llm_interface=DummyLLM(),
+        memory_manager=FakeMemoryManager({}),
+        specialized_agents={
+            "book_writing": SimpleNamespace(name="book_writing"),
+            "coding": SimpleNamespace(name="coding"),
+            "self_repair": SimpleNamespace(name="self_repair"),
+        },
+    )
+    agent.has_enhanced_capabilities = False
+    agent.meta_reasoning = None
+    return agent
+
+
+@pytest.mark.asyncio
+async def test_bug_report_mentioning_codebase_routes_to_self_repair(wcca_with_specialists):
+    agent = await wcca_with_specialists._select_specialized_agent(
+        "find and fix any bugs in the wits v3 codebase"
+    )
+    assert agent.name == "self_repair"
+
+
+@pytest.mark.asyncio
+async def test_codebase_word_does_not_false_positive_match_code(wcca_with_specialists):
+    # "codebase" must not substring-match the "code" keyword.
+    agent = await wcca_with_specialists._select_specialized_agent(
+        "tell me about the codebase structure"
+    )
+    assert agent is None
+
+
+@pytest.mark.asyncio
+async def test_description_word_does_not_false_positive_match_script(wcca_with_specialists):
+    # "description" contains "script" as a raw substring (de-SCRIPT-ion).
+    agent = await wcca_with_specialists._select_specialized_agent(
+        "give me a longer description of this"
+    )
+    assert agent is None
+
+
+@pytest.mark.asyncio
+async def test_plain_coding_request_still_routes_to_coding(wcca_with_specialists):
+    agent = await wcca_with_specialists._select_specialized_agent(
+        "write me a python script that sorts a list"
+    )
+    assert agent.name == "coding"
+
+
+@pytest.mark.asyncio
+async def test_story_request_routes_to_book_writing(wcca_with_specialists):
+    agent = await wcca_with_specialists._select_specialized_agent(
+        "write a story about a dragon"
+    )
+    assert agent.name == "book_writing"
+
+
+# -------------------------------------------- unambiguous bug-hunt override
+
+def test_needs_self_repair_matches_the_live_finding(wcca_with_specialists):
+    assert wcca_with_specialists._needs_self_repair("find and fix any bugs in your code.") is True
+
+
+def test_needs_self_repair_ignores_unrelated_chat(wcca_with_specialists):
+    assert wcca_with_specialists._needs_self_repair("hey, how's it going?") is False
+
+
+class _FakeSpecializedAgent:
+    """Records that .run() was actually invoked, for the intent-override test below."""
+
+    def __init__(self, name):
+        self.name = name
+        self.received_input = None
+
+    async def run(self, user_input, conversation_history=None, session_id=None, **kwargs):
+        self.received_input = user_input
+        yield StreamData(type="result", content=f"{self.name} ran", source=self.name)
+
+
+@pytest.mark.asyncio
+async def test_bug_hunt_request_reaches_self_repair_despite_clarification_classification(
+    wcca_with_specialists,
+):
+    """2026-07-08 finding: the LLM intent classifier called this a
+    clarification_question, which returns before specialized-agent routing
+    is ever considered — _needs_self_repair must force delegation anyway."""
+    self_repair_agent = _FakeSpecializedAgent("self_repair")
+    wcca_with_specialists.specialized_agents["self_repair"] = self_repair_agent
+
+    intent_analysis = {
+        "type": "clarification_question",
+        "complexity": "simple",
+        "suggested_response": "clarification",
+        "requires_tools": False,
+        "clarification_question": "Could you clarify what you'd like me to check?",
+    }
+    streams = [
+        item async for item in wcca_with_specialists._handle_intent_response(
+            intent_analysis, "find and fix any bugs in your code.", None, "sess-1"
+        )
+    ]
+    assert self_repair_agent.received_input == "find and fix any bugs in your code."
+    assert any("self_repair ran" in s.content for s in streams)
 
 
 # ------------------------------------------------------- document routing
