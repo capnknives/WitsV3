@@ -173,6 +173,8 @@ class BaseAgent(ABC):
         Returns:
             Memory segment ID if stored, None if no memory manager
         """
+        if getattr(self, "_skip_global_memory_store", False):
+            return None
         if not self.memory_manager:
             return None
 

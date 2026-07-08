@@ -164,10 +164,13 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
                 [f"- {tool['name']}: {tool['description']}" for tool in self.available_tools]
             )
 
+        personalization = state.get("guest_personalization_context", "")
+        personalization_block = f"\nGUEST PERSONALIZATION:\n{personalization}\n" if personalization else ""
+
         prompt = f"""You are an AI orchestrator using the ReAct (Reason-Act-Observe) pattern to achieve goals.
 
 GOAL: {goal}
-{lookup_hint}
+{lookup_hint}{personalization_block}
 CONTEXT:
 {context}
 

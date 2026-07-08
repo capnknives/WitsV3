@@ -230,7 +230,18 @@ Do **not** ship guest chat without tool/route locks.
 
 **Exit criteria:** Obvious inappropriate queries refused without tool calls.
 
-**Owner chat:** Ask e.g. "summarize TESTER's guest logs" — routes to `guest_audit_summary` tool; "list active guest accounts" — `guest_accounts_list`.
+**Owner chat:** Ask e.g. "summarize TESTER's guest logs" — routes to `guest_audit_summary` tool; "list active guest accounts" — `guest_accounts_list`; "what is Sean interested in?" — `guest_user_profile_summary`.
+
+### Phase 3b — Guest interest profiles (~0.5 session)
+
+- [x] `core/guest_user_profile.py` — JSON doc per guest under `data/guest_user_profiles/<guest_id>.json`
+- [x] Post-turn profile update from guest chat (`web/server.py`) — interests, self-reported facts, topic history
+- [x] Owner tool `guest_user_profile_summary` (`tools/guest_profile_tool.py`)
+- [x] Guest chat personalization context injected into WCCA/orchestrator (not stored in global memory)
+- [x] Guest turns skip global `store_memory` (profiles stay separate from owner memory)
+- [x] Tests (`tests/core/test_guest_user_profile.py`)
+
+**Exit criteria:** After a few guest chats, owner can ask what a guest cares about and get a structured summary.
 
 ### Phase 4 — Owner admin & polish (~1 session)
 

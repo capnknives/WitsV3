@@ -212,6 +212,21 @@ class OrchestratorRoutingMixin:
         "nephews",
     )
 
+    _GUEST_PROFILE_SIGNALS = (
+        "interested in",
+        "what does",
+        "what do we know about",
+        "what have we learned about",
+        "guest profile",
+        "user profile",
+        "their hobbies",
+        "their interests",
+        "what is sean into",
+        "what is tester into",
+        "tell me about sean",
+        "tell me about tester",
+    )
+
     _GUEST_ACCOUNTS_SIGNALS = (
         "list guest",
         "list guests",
@@ -246,8 +261,31 @@ class OrchestratorRoutingMixin:
         lowered = message.lower()
         return any(sig in lowered for sig in self._GUEST_ACCOUNTS_SIGNALS)
 
+    def _needs_guest_profile_review(self, message: str) -> bool:
+        lowered = message.lower()
+        if not any(sig in lowered for sig in self._GUEST_PROFILE_SIGNALS):
+            return False
+        return any(
+            w in lowered
+            for w in (
+                "guest",
+                "tester",
+                "nephew",
+                "sean",
+                "family",
+                "user",
+                "profile",
+                "interest",
+                "hobbies",
+            )
+        )
+
     def _needs_guest_admin_review(self, message: str) -> bool:
-        return self._needs_guest_audit_review(message) or self._needs_guest_accounts_list(message)
+        return (
+            self._needs_guest_audit_review(message)
+            or self._needs_guest_accounts_list(message)
+            or self._needs_guest_profile_review(message)
+        )
 
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
         """True when answering requires tools (ingested docs or live web search)."""

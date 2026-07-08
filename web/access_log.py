@@ -74,10 +74,10 @@ def log_http_access(
     if request.url.query:
         path = f"{path}?{request.url.query}"
     ACCESS_LOGGER.info(
-        '%s:%s [%s] - "%s %s HTTP/1.1" %s',
+        '[%s] %s:%s - "%s %s" %s',
+        label,
         host,
         port,
-        label,
         request.method,
         path,
         status_code,

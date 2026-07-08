@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import uuid
+import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -31,8 +32,9 @@ from core.guest_access import (
     guest_session_key,
 )
 from core.guest_audit import GuestAuditLog
+from core.guest_user_profile import GuestUserProfileStore
 from core.schemas import ConversationHistory, StreamData
-from web.access_log import install_access_log_middleware
+from web.access_log import install_access_log_middleware, owner_display_name, resolve_caller_label
 from web.guest_auth import (
     guest_forbidden_response,
     resolve_auth,
@@ -89,8 +91,6 @@ def create_app(system) -> FastAPI:
     guest_cfg = system.config.web_ui.guest_access
     guest_audit = GuestAuditLog(enabled=guest_cfg.audit_chat)
 
-    install_access_log_middleware(app, system.config, guest_registry)
-
     if system.config.web_ui.require_auth and not web_token:
         logger.warning(
             "web_ui.require_auth is true but WITSV3_WEB_TOKEN is not set - "
@@ -122,7 +122,13 @@ def create_app(system) -> FastAPI:
         if guest:
             guest = enrich_guest_payload(guest, guest_registry)
         request.state.guest = guest
+        if request.state.auth_role == "owner":
+            request.state.caller_label = owner_display_name(system.config)
+        elif request.state.auth_role == "guest" and guest:
+            request.state.caller_label = (guest.get("display_name") or "Guest")[:40]
         return await call_next(request)
+
+    install_access_log_middleware(app, system.config, guest_registry)
 
     # ------------------------------------------------------------- pages
     @app.get("/")
@@ -282,6 +288,9 @@ def create_app(system) -> FastAPI:
             if guest:
                 _audit("chat_user", content=body.message)
 
+            caller = resolve_caller_label(request, system.config, guest_registry)
+            logger.info("[%s] chat: %s", caller, body.message[:160])
+
             # Exact slash commands bypass the agent so the owner can kill a hung UI.
             if owner_action:
                 denied = owner_auth_detail(request)
@@ -313,6 +322,13 @@ def create_app(system) -> FastAPI:
                 return
 
             result_parts = []
+            profile_store = GuestUserProfileStore()
+            guest_personalization = ""
+            if guest:
+                guest_personalization = profile_store.personalization_block(
+                    guest["guest_id"],
+                    guest.get("display_name", "Guest"),
+                )
             try:
                 async for stream_data in system.control_center.run(
                     user_input=body.message,
@@ -320,6 +336,7 @@ def create_app(system) -> FastAPI:
                     session_id=session_id,
                     user_role=auth_role if auth_role in ("owner", "guest") else "owner",
                     guest_profile=guest,
+                    guest_personalization_context=guest_personalization,
                 ):
                     payload = _stream_payload(stream_data)
                     yield sse("stream", payload)
@@ -348,6 +365,21 @@ def create_app(system) -> FastAPI:
                         final_text = refusal
                 if guest:
                     _audit("chat_assistant", content=final_text)
+
+                    async def _refresh_guest_profile() -> None:
+                        try:
+                            await profile_store.update_from_turn_async(
+                                guest_id=guest["guest_id"],
+                                display_name=guest.get("display_name", "Guest"),
+                                user_message=body.message,
+                                assistant_message=final_text,
+                                llm_interface=getattr(system, "llm_interface", None),
+                                config=system.config,
+                            )
+                        except Exception as prof_err:
+                            logger.warning("Guest profile update failed: %s", prof_err)
+
+                    asyncio.create_task(_refresh_guest_profile())
                 conversation.add_message("assistant", final_text)
                 yield sse("done", {"final": final_text})
 
