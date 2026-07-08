@@ -31,6 +31,7 @@ from core.guest_access import (
 )
 from core.guest_audit import GuestAuditLog
 from core.schemas import ConversationHistory, StreamData
+from web.access_log import install_access_log_middleware
 from web.guest_auth import (
     guest_forbidden_response,
     resolve_auth,
@@ -86,6 +87,8 @@ def create_app(system) -> FastAPI:
     guest_registry = GuestRegistry()
     guest_cfg = system.config.web_ui.guest_access
     guest_audit = GuestAuditLog(enabled=guest_cfg.audit_chat)
+
+    install_access_log_middleware(app, system.config)
 
     if system.config.web_ui.require_auth and not web_token:
         logger.warning(

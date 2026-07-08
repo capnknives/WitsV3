@@ -122,7 +122,9 @@ async def main() -> int:
     print("=" * 72)
     print()
 
-    server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="info"))
+    server = uvicorn.Server(
+        uvicorn.Config(app, host=host, port=port, log_level="info", access_log=False)
+    )
     try:
         await server.serve()
     finally:

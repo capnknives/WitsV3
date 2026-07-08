@@ -216,6 +216,10 @@ class WebUISettings(BaseModel):
     require_auth: bool = Field(
         default=True, description="Require the WITSV3_WEB_TOKEN bearer token for API access"
     )
+    owner_display_name: str = Field(
+        default="Owner",
+        description="Name shown in web UI access logs for owner sessions (override with WITSV3_OWNER_NAME)",
+    )
     guest_access: GuestAccessSettings = Field(default_factory=GuestAccessSettings)
 
 
