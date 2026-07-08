@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime, timedelta
 
+import httpx
+
 from .config import WitsV3Config, OllamaSettings
 
 logger = logging.getLogger(__name__)
@@ -149,29 +151,74 @@ class ModelReliabilityManager:
 
     async def _check_all_models_health(self):
         """Check health of all tracked models."""
+        ollama_reachable, available_models = await self._probe_ollama()
         for model_name in self.model_health.keys():
             try:
-                await self._check_model_health(model_name)
+                await self._check_model_health(model_name, ollama_reachable, available_models)
             except Exception as e:
                 self.logger.error(f"Error checking health for model {model_name}: {e}")
 
-    async def _check_model_health(self, model_name: str):
+    async def _probe_ollama(self) -> Tuple[bool, Optional[Set[str]]]:
+        """Ping Ollama's tag list once per health-check cycle.
+
+        Returns (reachable, available_model_names). available_model_names is
+        None when Ollama couldn't be reached at all, so callers can tell
+        "down" apart from "up but this model isn't pulled".
+        """
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{self.ollama_settings.url}/api/tags")
+                response.raise_for_status()
+                data = response.json()
+        except Exception as e:
+            self.logger.warning(f"Ollama health probe failed: {e}")
+            return False, None
+
+        names: Set[str] = set()
+        for m in data.get("models", []):
+            name = m.get("name") or m.get("model") or ""
+            if not name:
+                continue
+            names.add(name)
+            names.add(name.split(":")[0])  # tolerate configured names without an explicit tag
+        return True, names
+
+    async def _check_model_health(
+        self,
+        model_name: str,
+        ollama_reachable: bool = True,
+        available_models: Optional[Set[str]] = None,
+    ):
         """
         Check health of a specific model.
 
         Args:
             model_name: Name of the model to check
+            ollama_reachable: Whether the last `/api/tags` probe succeeded
+            available_models: Model names/base-names Ollama reports as pulled
+                (None if Ollama couldn't be reached)
         """
         if model_name in self.quarantined_models:
             return  # Skip quarantined models
 
-        # TODO: Implement actual health check by sending a small test request
-        # For now, we'll just update the status based on recent failures
         health = self.model_health.get(model_name)
         if not health:
             return
 
-        # Simple health assessment based on recent failures
+        if not ollama_reachable:
+            # Ollama itself is unreachable — surface this immediately instead
+            # of waiting for a live generation request to fail and hoping the
+            # failure-history heuristic below eventually catches up.
+            health.status = ModelStatus.DEGRADED
+            return
+
+        if available_models is not None and model_name.split(":")[0] not in available_models \
+                and model_name not in available_models:
+            self.logger.warning(f"Model '{model_name}' not found in Ollama's tag list (not pulled?)")
+            health.status = ModelStatus.DEGRADED
+            return
+
+        # Ollama is up and the model is present — assess from recent failures.
         recent_failures = [
             f for f in health.failure_history
             if f.timestamp > datetime.now() - timedelta(minutes=10)

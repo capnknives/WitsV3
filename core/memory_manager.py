@@ -143,15 +143,16 @@ class BaseMemoryBackend(ABC):
                     # Decide if we want to store the segment without embedding or fail
 
     async def _prune_if_needed(self):
-        """Check if memory pruning is needed based on time interval or size threshold."""
+        """Check if memory pruning is needed based on time interval, size, or count."""
         if not self.settings.enable_auto_pruning:
             return
 
         current_time = time.monotonic()
         should_prune_by_time = (current_time - self.last_prune_time) > self.settings.pruning_interval_seconds
+        should_prune_by_count = len(self.segments) > self.settings.max_memory_segments
         should_prune_by_size = await self._should_prune_by_size()
 
-        if should_prune_by_time or should_prune_by_size:
+        if should_prune_by_time or should_prune_by_count or should_prune_by_size:
             await self.prune_memory()
             self.last_prune_time = current_time
 
@@ -239,8 +240,7 @@ class BasicMemoryBackend(BaseMemoryBackend):
         await self._generate_embedding_if_needed(segment)
         self.segments.append(segment)
         await self._save_to_disk()
-        # TODO: Temporarily disabled auto-pruning to fix syntax errors
-        # await self._prune_if_needed()
+        await self._prune_if_needed()
         return segment.id
 
     async def get_segment(self, segment_id: str) -> Optional[MemorySegment]:
