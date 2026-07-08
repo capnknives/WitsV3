@@ -41,11 +41,19 @@
       <button id="panel-close">✕</button>
     </div>
     <nav class="panel-tabs">
-      <button data-tab="tools" class="active">Tools</button>
+      <button data-tab="chats" class="active">Chats</button>
+      <button data-tab="tools">Tools</button>
       <button data-tab="memory">Memory</button>
       <button data-tab="docs">Documents</button>
     </nav>
-    <section id="tab-tools" class="tab active"></section>
+    <section id="tab-chats" class="tab active">
+      <div class="chats-toolbar">
+        <span id="chats-count" class="chats-count">—</span>
+        <button id="chats-new" class="ghost-btn" title="Start a new chat">＋ New</button>
+      </div>
+      <div id="session-list"></div>
+    </section>
+    <section id="tab-tools" class="tab"></section>
     <section id="tab-memory" class="tab">
       <div class="row">
         <input id="memory-q" type="search" placeholder="Search memory…">

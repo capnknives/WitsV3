@@ -169,6 +169,51 @@ def test_guest_tools_filtered(guest_env):
     assert "ingest_documents" not in names
 
 
+def test_guest_sessions_isolated_from_owner(guest_env):
+    client, system = guest_env
+    owner_headers = {"Authorization": "Bearer owner-sekrit"}
+    guest_token = _register(client, name="Mia", device="device-mia-42").json()["guest_token"]
+    guest_headers = {"Authorization": f"Bearer {guest_token}"}
+
+    owner_chat = _parse_sse(
+        client.post(
+            "/api/chat",
+            json={"message": "owner planning notes"},
+            headers=owner_headers,
+        ).text
+    )
+    owner_session = owner_chat[0][1]["session_id"]
+
+    guest_chat = _parse_sse(
+        client.post(
+            "/api/chat",
+            json={"message": "guest minecraft tips"},
+            headers=guest_headers,
+        ).text
+    )
+    guest_session = guest_chat[0][1]["session_id"]
+
+    owner_list = client.get("/api/sessions", headers=owner_headers).json()["sessions"]
+    guest_list = client.get("/api/sessions", headers=guest_headers).json()["sessions"]
+
+    assert len(owner_list) == 1
+    assert owner_list[0]["session_id"] == owner_session
+    assert len(guest_list) == 1
+    assert guest_list[0]["session_id"] == guest_session
+
+    assert client.get(
+        f"/api/sessions/{guest_session}/messages",
+        headers=owner_headers,
+    ).status_code == 404
+
+    guest_messages = client.get(
+        f"/api/sessions/{guest_session}/messages",
+        headers=guest_headers,
+    ).json()
+    assert guest_messages["messages"][0]["content"] == "guest minecraft tips"
+    assert any(k.startswith("guest:") for k in system.session_histories)
+
+
 def test_token_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("WITSV3_GUEST_SECRET", "roundtrip-secret")
     monkeypatch.setenv("WITSV3_GUEST_INVITE", "x")

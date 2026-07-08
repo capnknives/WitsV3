@@ -351,6 +351,7 @@ async function sendMessage(text) {
         if (event === "session") {
           sessionId = payload.session_id;
           localStorage.setItem("wits_session", sessionId);
+          loadSessions();
         } else if (event === "stream") {
           if (payload.type === "thinking") addThinking(payload.content);
           else if (payload.type === "tool_call" || payload.type === "action") addToolChip(payload.content);
@@ -419,12 +420,23 @@ inputEl.addEventListener("input", () => {
   inputEl.style.height = Math.min(inputEl.scrollHeight, 130) + "px";
 });
 
-$("#new-chat-btn").addEventListener("click", () => {
-  sessionId = null;
-  localStorage.removeItem("wits_session");
-  chatEl.innerHTML = "";
-  addAssistantMsg("New chat started. What can I do for you?");
-});
+async function startNewChat() {
+  try {
+    const res = await api("/api/sessions", { method: "POST" });
+    const body = await res.json();
+    sessionId = body.session_id;
+    localStorage.setItem("wits_session", sessionId);
+    chatEl.innerHTML = "";
+    addAssistantMsg("New chat started. What can I do for you?");
+    loadSessions();
+  } catch (e) {
+    if (e.message !== "unauthorized") {
+      addAssistantMsg("Couldn't start a new chat — try again.", true);
+    }
+  }
+}
+
+$("#new-chat-btn").addEventListener("click", () => startNewChat());
 
 $("#export-btn").addEventListener("click", async () => {
   if (!sessionId) {
@@ -455,6 +467,7 @@ const backdrop = $("#panel-backdrop");
 function openPanel() {
   panel.hidden = false;
   backdrop.hidden = false;
+  loadSessions();
   loadTools();
   loadDocs();
 }
@@ -474,12 +487,107 @@ document.querySelectorAll(".panel-tabs button").forEach((btn) => {
     document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
     btn.classList.add("active");
     $(`#tab-${btn.dataset.tab}`).classList.add("active");
+    if (btn.dataset.tab === "chats") loadSessions();
     if (btn.dataset.tab === "memory" && !memLoadedOnce) {
       memLoadedOnce = true;
       memRecentOffset = 0;
       loadRecentMemory();
     }
   });
+});
+
+function renderChatMessages(messages) {
+  chatEl.innerHTML = "";
+  for (const m of messages || []) {
+    if (m.role === "user") addUserMsg(m.content);
+    else if (m.role === "assistant") addAssistantMsg(m.content);
+  }
+}
+
+async function switchSession(id) {
+  if (busy || !id || id === sessionId) return;
+  try {
+    const res = await api(`/api/sessions/${encodeURIComponent(id)}/messages`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      addAssistantMsg(`Couldn't load chat: ${body.detail || res.status}`, true);
+      return;
+    }
+    const body = await res.json();
+    sessionId = body.session_id;
+    localStorage.setItem("wits_session", sessionId);
+    renderChatMessages(body.messages);
+    if (!body.messages.length) {
+      addAssistantMsg("Switched to an empty chat. What can I do for you?");
+    }
+    loadSessions();
+  } catch (e) {
+    if (e.message !== "unauthorized") addAssistantMsg("Couldn't switch chats.", true);
+  }
+}
+
+async function renameSession(id, currentTitle) {
+  const title = prompt("Rename chat:", currentTitle);
+  if (!title || title.trim() === currentTitle) return;
+  try {
+    const res = await api(`/api/sessions/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: title.trim() }),
+    });
+    if (res.ok) loadSessions();
+    else {
+      const body = await res.json().catch(() => ({}));
+      addAssistantMsg(`Rename failed: ${body.detail || res.status}`, true);
+    }
+  } catch (e) {
+    if (e.message !== "unauthorized") addAssistantMsg("Rename failed.", true);
+  }
+}
+
+async function loadSessions() {
+  const box = $("#session-list");
+  if (!box) return;
+  try {
+    const res = await api("/api/sessions");
+    const { sessions } = await res.json();
+    $("#chats-count").textContent = sessions.length
+      ? `${sessions.length} chat${sessions.length === 1 ? "" : "s"}`
+      : "No chats yet";
+    box.innerHTML = "";
+    if (!sessions.length) {
+      box.appendChild(el("div", "session-empty", "Start a chat with ＋ or send a message."));
+      return;
+    }
+    sessions.forEach((s) => {
+      const item = el("div", `session-item${s.session_id === sessionId ? " active" : ""}`);
+      const main = el("div", "session-main");
+      main.appendChild(el("div", "session-title", s.title || "New chat"));
+      if (s.preview) main.appendChild(el("div", "session-preview", s.preview));
+      const metaBits = [`${s.message_count} msg${s.message_count === 1 ? "" : "s"}`];
+      if (s.updated_at) metaBits.push(fmtDate(s.updated_at));
+      main.appendChild(el("div", "session-meta", metaBits.join(" · ")));
+
+      const renameBtn = el("button", "session-rename", "✎");
+      renameBtn.title = "Rename";
+      renameBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        renameSession(s.session_id, s.title || "New chat");
+      });
+
+      item.appendChild(main);
+      item.appendChild(renameBtn);
+      item.addEventListener("click", () => switchSession(s.session_id));
+      box.appendChild(item);
+    });
+  } catch (e) {
+    /* handled by api() */
+  }
+}
+
+$("#chats-new").addEventListener("click", () => {
+  closePanel();
+  startNewChat();
 });
 
 async function loadTools() {
@@ -793,6 +901,25 @@ $("#docs-reindex").addEventListener("click", async () => {
   loadDocs();
 });
 
+async function restoreSessionIfAny() {
+  if (!sessionId) return false;
+  try {
+    const res = await api(`/api/sessions/${encodeURIComponent(sessionId)}/messages`);
+    if (!res.ok) {
+      sessionId = null;
+      localStorage.removeItem("wits_session");
+      return false;
+    }
+    const body = await res.json();
+    renderChatMessages(body.messages);
+    return true;
+  } catch (e) {
+    sessionId = null;
+    localStorage.removeItem("wits_session");
+    return false;
+  }
+}
+
 /* ---------------------------------------------------------- boot */
 async function bootstrapAuth() {
   consumeOwnerUrlToken();
@@ -830,13 +957,19 @@ async function bootstrapAuth() {
   }
 
   if (isGuest) {
-    addAssistantMsg(
-      guestName
-        ? `Welcome back, ${guestName} — you're chatting as a guest tester.`
-        : "You're chatting as a guest tester. Ask me anything."
-    );
+    const restored = await restoreSessionIfAny();
+    if (!restored) {
+      addAssistantMsg(
+        guestName
+          ? `Welcome back, ${guestName} — you're chatting as a guest tester.`
+          : "You're chatting as a guest tester. Ask me anything."
+      );
+    }
   } else {
-    addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
+    const restored = await restoreSessionIfAny();
+    if (!restored) {
+      addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
+    }
   }
   checkStatus();
   setInterval(checkStatus, 30000);

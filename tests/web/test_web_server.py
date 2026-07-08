@@ -187,6 +187,77 @@ def test_chat_reuses_session(client_noauth):
     assert len(system.session_histories[session_id].messages) == 4
 
 
+def test_create_session(client_noauth):
+    client, system = client_noauth
+    res = client.post("/api/sessions")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["title"] == "New chat"
+    assert body["session_id"]
+    assert len(system.session_histories) == 1
+
+
+def test_list_sessions_and_auto_title(client_noauth):
+    client, system = client_noauth
+    assert client.get("/api/sessions").json() == {"sessions": []}
+
+    first = _parse_sse(
+        client.post("/api/chat", json={"message": "Summarize the quarterly report"}).text
+    )
+    session_id = first[0][1]["session_id"]
+
+    listed = client.get("/api/sessions").json()["sessions"]
+    assert len(listed) == 1
+    assert listed[0]["session_id"] == session_id
+    assert listed[0]["title"] == "Summarize the quarterly report"
+    assert listed[0]["message_count"] == 2
+    assert "quarterly" in listed[0]["preview"]
+
+
+def test_get_session_messages(client_noauth):
+    client, _ = client_noauth
+    first = _parse_sse(client.post("/api/chat", json={"message": "hello there"}).text)
+    session_id = first[0][1]["session_id"]
+
+    body = client.get(f"/api/sessions/{session_id}/messages").json()
+    assert body["session_id"] == session_id
+    assert body["title"] == "hello there"
+    assert len(body["messages"]) == 2
+    assert body["messages"][0]["role"] == "user"
+    assert body["messages"][0]["content"] == "hello there"
+    assert body["messages"][1]["role"] == "assistant"
+
+
+def test_rename_session(client_noauth):
+    client, system = client_noauth
+    created = client.post("/api/sessions").json()
+    session_id = created["session_id"]
+
+    res = client.patch(
+        f"/api/sessions/{session_id}",
+        json={"title": "Planning notes"},
+    )
+    assert res.status_code == 200
+    assert res.json()["title"] == "Planning notes"
+    assert system.session_histories[session_id].title == "Planning notes"
+
+    listed = client.get("/api/sessions").json()["sessions"]
+    assert listed[0]["title"] == "Planning notes"
+
+
+def test_rename_session_requires_title(client_noauth):
+    client, _ = client_noauth
+    created = client.post("/api/sessions").json()
+    res = client.patch(f"/api/sessions/{created['session_id']}", json={"title": "   "})
+    assert res.status_code == 400
+
+
+def test_get_session_messages_not_found(client_noauth):
+    client, _ = client_noauth
+    res = client.get("/api/sessions/missing-id/messages")
+    assert res.status_code == 404
+
+
 class OllamaDownControlCenter:
     async def run(self, user_input, conversation_history=None, session_id=None, **kwargs):
         yield StreamData(

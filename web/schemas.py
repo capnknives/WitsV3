@@ -37,6 +37,15 @@ class ExportRequest(BaseModel):
     file_path: str | None = None
 
 
+class SessionRenameRequest(BaseModel):
+    title: str
+
+
+class SessionCreateResponse(BaseModel):
+    session_id: str
+    title: str
+
+
 class SettingsUpdate(BaseModel):
     """Runtime-adjustable settings from the /settings page. All optional."""
 
