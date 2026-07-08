@@ -212,6 +212,10 @@ class GuestAccessSettings(BaseModel):
         default=True,
         description="Owner-assigned adult guests may use document_search on ingested docs",
     )
+    profile_llm_extraction: bool = Field(
+        default=True,
+        description="Use a small local LLM to extract interests/facts into guest user profiles",
+    )
 
 
 class WebUISettings(BaseModel):

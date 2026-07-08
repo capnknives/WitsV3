@@ -80,6 +80,39 @@ def test_register_and_chat(guest_env):
     assert any(k.startswith("guest:") for k in system.session_histories)
 
 
+def test_chat_logs_guest_label(guest_env, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="WitsV3.WebUI")
+    caplog.set_level(logging.INFO, logger="uvicorn.access")
+    client, _ = guest_env
+    reg = _register(client, name="TESTER", device="device-tester-9001")
+    token = reg.json()["guest_token"]
+    client.post(
+        "/api/chat",
+        json={"message": "I love Minecraft"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    combined = " ".join(r.message for r in caplog.records)
+    assert "[TESTER]" in combined
+    assert "chat:" in combined.lower() or "POST /api/chat" in combined
+
+
+def test_owner_admin_accounts(guest_env):
+    client, _ = guest_env
+    _register(client, name="Sean", device="device-sean-9001")
+    res = client.get(
+        "/api/guest/admin/accounts",
+        headers={"Authorization": "Bearer owner-sekrit"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["enabled"] is True
+    names = [g["display_name"] for g in body["guests"]]
+    assert "Sean" in names
+
+
+
 def test_guest_blocked_from_settings(guest_env):
     client, _ = guest_env
     token = _register(client).json()["guest_token"]

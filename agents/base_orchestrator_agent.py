@@ -98,6 +98,8 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         if self._session_model != self.get_model_name():
             self.logger.info(f"Orchestrating with routed model: {self._session_model}")
 
+        self._skip_global_memory_store = kwargs.get("user_role") == "guest"
+
         # Initial setup
         yield self.stream_thinking(f"Starting orchestration for goal: {goal}")
 
@@ -140,6 +142,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "user_role": kwargs.get("user_role", "owner"),
             "guest_profile": guest_profile,
             "guest_age_band": guest_age_band,
+            "guest_personalization_context": kwargs.get("guest_personalization_context", ""),
         }
         self._react_state_for_tools = react_state
 

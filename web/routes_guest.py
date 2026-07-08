@@ -17,6 +17,8 @@ from core.guest_access import (
     normalize_age_band,
 )
 from core.guest_audit import GuestAuditLog
+from core.guest_user_profile import GuestUserProfileStore
+from web.access_log import owner_display_name
 from web.schemas import GuestRegisterRequest, GuestSetAgeBandRequest
 
 logger = logging.getLogger("WitsV3.WebUI")
@@ -155,4 +157,70 @@ def register_guest_routes(
             "guest_id": profile["guest_id"],
             "display_name": profile["display_name"],
             "age_band": profile.get("age_band", band),
+        }
+
+    @app.get("/api/guest/admin/accounts")
+    async def owner_list_guest_accounts(request: Request):
+        """Owner-only: roster + interest profile summaries."""
+        if getattr(request.state, "auth_role", None) != "owner":
+            return JSONResponse(
+                {"detail": "Only the owner can view guest accounts."},
+                status_code=403,
+            )
+        store = GuestUserProfileStore()
+        profile_by_id = {p["guest_id"]: p for p in store.list_profile_summaries()}
+        guests = []
+        for acct in guest_registry.list_active_guests():
+            gid = acct["guest_id"]
+            prof = profile_by_id.get(gid, {})
+            guests.append(
+                {
+                    "guest_id": gid,
+                    "display_name": acct.get("display_name", "Guest"),
+                    "age_band": acct.get("age_band", "teen"),
+                    "first_seen": acct.get("first_seen"),
+                    "last_seen": acct.get("last_seen"),
+                    "device_count": len(acct.get("device_ids") or []),
+                    "turn_count": prof.get("turn_count", 0),
+                    "top_interests": prof.get("top_interests", []),
+                    "fact_count": prof.get("fact_count", 0),
+                    "profile_updated_at": prof.get("updated_at"),
+                }
+            )
+        return {
+            "enabled": guest_access_enabled(system.config),
+            "invite_configured": bool(guest_invite_configured()),
+            "owner_display_name": owner_display_name(system.config),
+            "guests": guests,
+        }
+
+    @app.get("/api/guest/admin/profile")
+    async def owner_get_guest_profile(request: Request, guest_id: str = "", display_name: str = ""):
+        """Owner-only: full JSON interest profile for one guest."""
+        if getattr(request.state, "auth_role", None) != "owner":
+            return JSONResponse(
+                {"detail": "Only the owner can view guest profiles."},
+                status_code=403,
+            )
+        acct = None
+        if guest_id:
+            acct = guest_registry.get(guest_id.strip())
+        elif display_name:
+            acct = guest_registry.find_by_display_name(display_name.strip())
+        if not acct:
+            return JSONResponse({"detail": "Guest not found."}, status_code=404)
+        store = GuestUserProfileStore()
+        profile = store.load(acct["guest_id"], acct.get("display_name", "Guest"))
+        return {
+            "account": {
+                "guest_id": acct["guest_id"],
+                "display_name": acct.get("display_name"),
+                "age_band": acct.get("age_band", "teen"),
+                "last_seen": acct.get("last_seen"),
+            },
+            "profile": profile,
+            "summary": store.format_owner_summary(
+                guest_id=acct["guest_id"],
+                registry=guest_registry,
+            ),
         }

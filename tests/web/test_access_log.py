@@ -90,3 +90,21 @@ def test_resolve_caller_label_anon_api(config, monkeypatch):
     monkeypatch.setenv("WITSV3_WEB_TOKEN", "owner-tok")
     req = _request("/api/status", auth_role=None, guest=None)
     assert resolve_caller_label(req, config) == "anon"
+
+
+def test_log_http_access_format(config, caplog):
+    import logging
+
+    from web.access_log import log_http_access
+
+    caplog.set_level(logging.INFO, logger="uvicorn.access")
+    req = MagicMock()
+    req.url.path = "/api/chat"
+    req.url.query = ""
+    req.method = "POST"
+    req.client = MagicMock(host="127.0.0.1", port=51234)
+    req.state = MagicMock()
+    req.state.caller_label = "TESTER"
+    log_http_access(req, 200, config)
+    assert any("[TESTER]" in r.message and "POST /api/chat" in r.message for r in caplog.records)
+

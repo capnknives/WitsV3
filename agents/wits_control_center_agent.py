@@ -144,6 +144,8 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         guest_profile = kwargs.get("guest_profile")
         self._request_user_role = user_role
         self._request_guest_profile = guest_profile
+        self._skip_global_memory_store = user_role == "guest"
+        self._guest_personalization_context = kwargs.get("guest_personalization_context", "")
 
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
 
@@ -410,6 +412,9 @@ User input: {user_input}
                             session_id=session_id,
                             user_role=getattr(self, "_request_user_role", "owner"),
                             guest_profile=getattr(self, "_request_guest_profile", None),
+                            guest_personalization_context=getattr(
+                                self, "_guest_personalization_context", ""
+                            ),
                         ):
                             yield stream_data
                         return
@@ -426,6 +431,9 @@ User input: {user_input}
                 session_id=session_id,
                 user_role=getattr(self, "_request_user_role", "owner"),
                 guest_profile=getattr(self, "_request_guest_profile", None),
+                guest_personalization_context=getattr(
+                    self, "_guest_personalization_context", ""
+                ),
             ):
                 yield stream_data
             return
@@ -467,10 +475,12 @@ User input: {user_input}
 
         personality_prompt = personality_manager.get_system_prompt()
         documents_context = self._documents_context(await self._get_document_inventory())
+        personalization = getattr(self, "_guest_personalization_context", "")
+        personalization_block = f"\n{personalization}\n" if personalization else ""
         conversation_prompt = f"""{personality_prompt}
 
 You are having a casual conversation with the user. Respond in a friendly, helpful manner.
-
+{personalization_block}
 USER DOCUMENTS:
 {documents_context}
 
