@@ -194,7 +194,12 @@ def test_guest_cannot_edit_profile_facts_api(guest_env):
     assert res.status_code == 403
 
 
-def test_profile_query_signals():
+def test_profile_query_signals(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    reg = GuestRegistry()
+    reg.register_or_update(display_name="TESTER", device_id="device-aaa-11111")
+
     probe = _RoutingProbe()
     assert probe._needs_guest_profile_review("what does the system know about TESTER")
     assert probe._extract_guest_name_for_profile_query("what do you know about TESTER") == "TESTER"

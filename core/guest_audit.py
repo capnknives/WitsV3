@@ -6,7 +6,10 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.guest_access import GuestRegistry
 
 logger = logging.getLogger("WitsV3.GuestAudit")
 
@@ -192,6 +195,8 @@ def sync_audit_display_names(
     registry: GuestRegistry | None = None,
 ) -> int:
     """Rewrite guest audit JSONL display_name fields from the registry. Returns rows updated."""
+    from core.guest_access import GuestRegistry
+
     audit = audit or GuestAuditLog()
     registry = registry or GuestRegistry()
     updated = 0

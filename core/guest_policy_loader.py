@@ -12,7 +12,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_POLICY_PATH = Path("config/guest_policy.yaml")
+_DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / "config" / "guest_policy.yaml"
 
 
 @lru_cache(maxsize=1)
