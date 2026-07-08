@@ -116,28 +116,28 @@ async def test_system_monitoring(background_agent):
 
 @pytest.mark.asyncio
 async def test_memory_maintenance(background_agent, memory_manager):
-    """Test memory maintenance functionality"""
-    # Mock memory manager
-    memory_manager.get_recent_memory.return_value = [
-        Mock(
-            timestamp=datetime.now() - timedelta(days=31),
-            importance=0.2
-        ),
-        Mock(
-            timestamp=datetime.now() - timedelta(days=15),
-            importance=0.8
-        )
-    ]
+    """Test memory maintenance actually deletes matching segments.
 
-    # Run memory maintenance
+    Regression coverage for a real bug: _maintain_memory used to identify
+    old/low-importance segments and then do `pass` instead of removing them
+    (config/background_agent.yaml's own audit flagged this as EMPTY_IMPL).
+    """
+    old_segment = Mock(id="old-seg", timestamp=datetime.now() - timedelta(days=31), importance=0.9)
+    low_importance_segment = Mock(id="low-imp-seg", timestamp=datetime.now() - timedelta(days=1), importance=0.1)
+    keep_segment = Mock(id="keep-seg", timestamp=datetime.now() - timedelta(days=1), importance=0.9)
+    memory_manager.get_recent_memory.return_value = [old_segment, low_importance_segment, keep_segment]
+    memory_manager.delete_segments = AsyncMock(return_value=1)
+
     await background_agent._maintain_memory({
         "max_age_days": 30,
         "min_importance_threshold": 0.3,
         "batch_size": 100
     })
 
-    # Verify memory manager was called
     memory_manager.get_recent_memory.assert_called_once_with(limit=100)
+    assert memory_manager.delete_segments.await_count == 2
+    called_ids = {call.args[0]["id"] for call in memory_manager.delete_segments.await_args_list}
+    assert called_ids == {"old-seg", "low-imp-seg"}
 
 @pytest.mark.asyncio
 async def test_execute_task_dispatches_self_repair(background_agent):
@@ -156,6 +156,43 @@ async def test_run_self_repair_noop_when_disabled(background_agent):
     with patch("agents.self_repair_agent.SelfRepairAgent") as mock_agent_cls:
         await background_agent._run_self_repair({})
     mock_agent_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_optimize_semantic_cache_logs_honest_noop(background_agent, caplog):
+    """Doesn't silently claim success — logs that it's not implemented."""
+    with caplog.at_level("WARNING"):
+        await background_agent._optimize_semantic_cache({})
+    assert "not implemented" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_build_knowledge_graph_logs_honest_noop(background_agent, caplog):
+    with caplog.at_level("WARNING"):
+        await background_agent._build_knowledge_graph({})
+    assert "not implemented" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_health_server_reports_running_state():
+    """Regression coverage: nothing used to listen on port 8000 at all, so
+    docker-compose.background.yml's `curl -f http://localhost:8000/health`
+    healthcheck failed forever."""
+    from agents.background_agent import _start_health_server
+
+    agent = Mock(running=True, active_tasks={"self_repair": Mock()})
+    runner = await _start_health_server(agent, host="127.0.0.1", port=18099)
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get("http://127.0.0.1:18099/health") as resp:
+                assert resp.status == 200
+                body = await resp.json()
+                assert body["status"] == "ok"
+                assert body["running"] is True
+                assert body["active_tasks"] == ["self_repair"]
+    finally:
+        await runner.cleanup()
 
 
 @pytest.mark.asyncio

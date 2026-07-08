@@ -20,7 +20,11 @@ tasks:
       batch_size: 100
 
   semantic_cache_optimization:
-    enabled: true
+    # Off by default: the semantic cache belongs to the deprecated adaptive-LLM
+    # stack (planning/archive/adaptive_llm/) — _optimize_semantic_cache() is a
+    # documented no-op, not a real job. Enable only after actually reviving
+    # that stack.
+    enabled: false
     schedule: "0 * * * *" # Hourly
     description: "Clean and optimize semantic cache"
     settings:
@@ -41,7 +45,10 @@ tasks:
       metrics_retention_days: 7
 
   knowledge_graph_construction:
-    enabled: true
+    # Off by default: _build_knowledge_graph() is a documented no-op —
+    # knowledge graph construction belongs to the dormant neural-web stack
+    # (memory_manager.backend: neural). Enable only if that backend is active.
+    enabled: false
     schedule: "0 0 * * 0" # Weekly on Sunday
     description: "Build semantic knowledge graph from memory segments"
     settings:
