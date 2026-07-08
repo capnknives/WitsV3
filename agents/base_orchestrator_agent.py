@@ -286,16 +286,36 @@ class BaseOrchestratorAgent(BaseAgent):
     def _format_tool_observation(self, tool_name: str, result: Any) -> str:
         """Render a tool result for the ReAct observation.
 
-        Search-shaped results (a dict with a "results" list) are rendered as
-        readable text — the AI summary is explicitly flagged as unverified and
-        the individual sources are numbered — so the model reconciles the
-        answer against the sources instead of echoing a possibly-wrong summary.
+        Only web_search-shaped dicts (provider metadata + link/title/snippet
+        hits) get the numbered-source layout. Other tools such as
+        document_search and search_mcp_tools also return a ``results`` list
+        but with different fields — those stay as plain tool output.
         """
-        if isinstance(result, dict) and isinstance(result.get("results"), list) and (
-            "answer" in result or result.get("results")
-        ):
+        if isinstance(result, dict) and self._is_web_search_result(tool_name, result):
             return self._format_search_observation(tool_name, result)
         return f"Tool {tool_name} result: {result}"
+
+    @staticmethod
+    def _is_web_search_result(tool_name: str, result: Dict[str, Any]) -> bool:
+        """True when *result* is from web_search, not another results-list tool."""
+        results = result.get("results")
+        if not isinstance(results, list):
+            return False
+
+        # web_search always sets provider (or answer_provider) on success.
+        if result.get("provider") or result.get("answer_provider"):
+            return True
+
+        # Non-empty hits: web results carry link/title/snippet; document_search
+        # uses file/text/chunk and MCP discovery uses name/command.
+        if results and isinstance(results[0], dict):
+            sample = results[0]
+            if "link" in sample or "snippet" in sample:
+                return tool_name == "web_search"
+            if "file" in sample or "text" in sample or "installable" in sample:
+                return False
+
+        return False
 
     @staticmethod
     def _format_search_observation(tool_name: str, result: Dict[str, Any]) -> str:
