@@ -67,6 +67,8 @@ def register_guest_routes(
         profile = guest_registry.register_or_update(
             display_name=name, device_id=device_id, age_band=age_band
         )
+        request.state.caller_label = profile["display_name"]
+        request.state.auth_role = "guest"
         token = issue_guest_token(
             guest_id=profile["guest_id"],
             device_id=device_id,

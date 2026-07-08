@@ -187,6 +187,40 @@ def format_guest_audit_report(
     return "\n".join(lines)
 
 
+def sync_audit_display_names(
+    audit: GuestAuditLog | None = None,
+    registry: GuestRegistry | None = None,
+) -> int:
+    """Rewrite guest audit JSONL display_name fields from the registry. Returns rows updated."""
+    audit = audit or GuestAuditLog()
+    registry = registry or GuestRegistry()
+    updated = 0
+    if not audit.base_dir.is_dir():
+        return 0
+    for guest_dir in audit.base_dir.iterdir():
+        if not guest_dir.is_dir():
+            continue
+        guest_id = guest_dir.name
+        canonical = registry.display_name_for(guest_id, fallback=None)
+        if not canonical or canonical == "Guest":
+            continue
+        for jsonl in guest_dir.glob("*.jsonl"):
+            lines_out: list[str] = []
+            changed = False
+            for line in jsonl.read_text(encoding="utf-8").splitlines():
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if row.get("display_name") != canonical:
+                    row["display_name"] = canonical
+                    changed = True
+                    updated += 1
+                lines_out.append(json.dumps(row, ensure_ascii=False))
+            if changed:
+                jsonl.write_text("\n".join(lines_out) + "\n", encoding="utf-8")
+    return updated
+
+
 def build_owner_audit_digest(
     *,
     display_name: str | None = None,
