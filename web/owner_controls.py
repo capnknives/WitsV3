@@ -42,10 +42,15 @@ def parse_owner_command(message: str) -> str | None:
 
 
 def extract_bearer_token(request: Request) -> str:
+    """Read the bearer token from the Authorization header only.
+
+    Query-string tokens are intentionally not accepted — they leak via URLs,
+    QR codes, browser history, and Referer headers.
+    """
     header = request.headers.get("authorization", "")
     if header.startswith("Bearer "):
         return header.removeprefix("Bearer ").strip()
-    return (request.query_params.get("token") or "").strip()
+    return ""
 
 
 def configured_web_token() -> str:

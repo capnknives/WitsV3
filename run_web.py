@@ -21,6 +21,7 @@ if hasattr(sys.stderr, "reconfigure"):
 import uvicorn
 
 from core.config import load_config
+from core.guest_access import guest_access_enabled
 from run import WitsV3System
 from web.server import create_app
 
@@ -49,6 +50,26 @@ def _port_in_use(host: str, port: int) -> bool:
         return False
 
 
+def startup_urls(config, port: int, web_token: str) -> tuple[str, str | None]:
+    """Return (localhost_url, lan_url_for_phone).
+
+    When guest access is enabled, the LAN URL must NOT embed the owner token —
+    family testers use /join with an invite code instead.
+    """
+    lan_ip = _lan_ip()
+    if web_token:
+        localhost = f"http://localhost:{port}/?owner_token={web_token}"
+    else:
+        localhost = f"http://localhost:{port}/"
+
+    if guest_access_enabled(config):
+        return localhost, f"http://{lan_ip}:{port}/join"
+
+    if web_token:
+        return localhost, f"http://{lan_ip}:{port}/?owner_token={web_token}"
+    return localhost, f"http://{lan_ip}:{port}/"
+
+
 async def main() -> int:
     config = load_config()
 
@@ -75,20 +96,26 @@ async def main() -> int:
 
     host, port = config.web_ui.host, config.web_ui.port
     web_token = os.getenv("WITSV3_WEB_TOKEN", "")
-    token_suffix = f"/?token={web_token}" if web_token else "/"
-    phone_url = f"http://{_lan_ip()}:{port}{token_suffix}"
+    localhost_url, phone_url = startup_urls(config, port, web_token)
+    guests_on = guest_access_enabled(config)
     print()
     print("=" * 72)
     print("  WitsV3 Web UI is starting")
-    print(f"    This PC:    http://localhost:{port}{token_suffix}")
-    if host == "0.0.0.0":
-        print(f"    Your phone: {phone_url}")
-        print("                (same Wi-Fi; the link logs you in automatically)")
+    print(f"    This PC (owner):  {localhost_url}")
+    if host == "0.0.0.0" and phone_url:
+        if guests_on:
+            print(f"    Family testers:   {phone_url}")
+            print("                      (invite code required — never share your owner token)")
+        else:
+            print(f"    Your phone:       {phone_url}")
+            print("                      (localhost-only owner_token; prefer typing token on phone)")
         try:
             import qrcode
+
             qr = qrcode.QRCode(border=1)
             qr.add_data(phone_url)
-            print("\n  Or just scan this with your phone camera:\n")
+            label = "family tester" if guests_on else "phone"
+            print(f"\n  Scan for {label} (no owner token in this QR):\n")
             qr.print_ascii(invert=True)
         except ImportError:
             pass

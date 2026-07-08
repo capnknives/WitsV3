@@ -25,6 +25,7 @@ The original design is **appropriate** for a LAN family tester. Changes before b
 | Guest could type `/shutdown` in chat | Owner slash commands require **owner Bearer**, not guest token |
 | `evaluate_ethics()` as primary filter | Keep as optional; **hard allowlist + content policy** are the real controls |
 | Specialist agents (coding / self-repair) | Guests must **not** route to those agents — WCCA guest path = chat/orchestrator with filtered tools only |
+| **LAN URL / QR embedded owner token** | **Fixed July 8:** phone banner uses `/join` only; `?owner_token=` localhost-only; stale LAN owner tokens cleared when guest mode on |
 | Open questions (no owner answer yet) | Defaults for MVP: **teen** policy, **no document RAG**, **text invite**, **in-memory sessions OK** |
 
 ---
@@ -230,7 +231,7 @@ Do **not** ship guest chat without tool/route locks.
 ### Phase 4 — Owner admin & polish (~1 session)
 
 - [ ] Settings panel: enable guest access, regenerate invite, guest list, revoke
-- [ ] Startup banner: guest join URL + optional QR (separate from owner magic link)
+- [x] Startup banner: guest join URL + QR **without owner token** (July 8 security fix)
 - [ ] README + `.env.example` docs
 - [ ] Log guest actions at INFO for owner review
 
