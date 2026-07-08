@@ -78,6 +78,45 @@ def agent():
     )
 
 
+# ---------------------------------------------- chapter structure parsing
+
+
+@pytest.mark.asyncio
+async def test_extract_chapters_ignores_non_chapter_section_headers(agent):
+    """2026-07-08 live-model finding: a structure response that also
+    described title/audience/themes/research/style produced markdown
+    section headers ("### Target Audience") that the old bare
+    `line.startswith("#")` check misparsed as chapters, yielding chapters
+    with no real outline that generated near-empty prose."""
+    response = (
+        "### Title and Subtitle\n"
+        "The Knight's Tale\n\n"
+        "### Chapter Breakdown\n"
+        "Chapter 1: The Beginning\n"
+        "A knight starts his journey.\n\n"
+        "Chapter 2: The Middle\n"
+        "The knight faces trials.\n\n"
+        "### Target Audience\n"
+        "Young adults.\n\n"
+        "### Research Requirements\n"
+        "Medieval history.\n"
+    )
+    chapters = await agent._extract_chapters_from_response(response, "book-x")
+    titles = [c["title"] for c in chapters]
+    assert titles == ["The Beginning", "The Middle"]
+    assert "starts his journey" in chapters[0]["outline"]
+
+
+@pytest.mark.asyncio
+async def test_extract_chapters_strips_duplicated_chapter_prefix(agent):
+    """The extracted title must not still carry "Chapter N:" — the writer
+    pipeline re-adds its own "Chapter N:" prefix when saving, so keeping it
+    here produced doubled headers like "## Chapter 1: Chapter 1: Title"."""
+    response = "Chapter 3: The Reckoning\nEverything comes to a head.\n"
+    chapters = await agent._extract_chapters_from_response(response, "book-y")
+    assert chapters[0]["title"] == "The Reckoning"
+
+
 # --------------------------------------------------------- helper regexes
 
 

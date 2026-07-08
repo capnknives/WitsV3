@@ -270,6 +270,15 @@ class BookWritingAgent(BookWritingWriterMixin, BookWritingHandlersMixin, BaseAge
             result["filename"] = detected_filename
         result.setdefault("filename", None)
         result["length"] = self._estimate_requested_length(request, result.get("length") or 10000)
+
+        # 2026-07-08 live-model finding: a real "write a short story ...
+        # save it as X" request was classified by the model itself as
+        # "general_writing" (valid JSON, just the wrong task_type) — and
+        # only the create_book path ever writes to disk. An explicit save
+        # request must always produce a real saved file regardless of which
+        # task_type the classifier picked, so force it here.
+        if result["filename"] and result["task_type"] != "create_book":
+            result["task_type"] = "create_book"
         return result
 
     async def get_writing_statistics(self, session_id: str | None = None) -> dict[str, Any]:

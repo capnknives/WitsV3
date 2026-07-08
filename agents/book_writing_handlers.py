@@ -25,18 +25,29 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         # Generate book structure
         book_id = str(uuid.uuid4())
 
+        # 2026-07-08 finding: a prompt that also asked for title/audience/
+        # themes/research/style produced section headers ("### Target
+        # Audience", "### Research Requirements", ...) that _extract_chapters
+        # _from_response then misparsed as chapters (its match was any line
+        # starting with "#"), yielding chapters with no real outline and
+        # near-empty generated prose. Nothing else in this method reads
+        # structure_response besides chapter extraction, so ask for ONLY a
+        # strict, unambiguous chapter list.
         structure_prompt = f"""
-        Create a detailed structure for a {task_analysis['genre']} book about {task_analysis['topic']}.
+        Plan the chapter-by-chapter structure for a {task_analysis['genre']} book about
+        {task_analysis['topic']}, approximately {task_analysis.get('length', 50000)} words total.
 
-        Generate:
-        1. A compelling title and subtitle
-        2. Chapter breakdown with titles and brief descriptions
-        3. Target audience
-        4. Key themes and messages
-        5. Research requirements
-        6. Writing style guidelines
+        List each chapter using EXACTLY this format and nothing else — no title, subtitle,
+        target audience, themes, research notes, or style guidelines, chapters only:
 
-        Book should be approximately {task_analysis.get('length', 50000)} words.
+        Chapter 1: <chapter title>
+        <one or two sentence description of what happens in this chapter>
+
+        Chapter 2: <chapter title>
+        <one or two sentence description of what happens in this chapter>
+
+        Continue until the story/book's full arc is covered (use as many chapters as the
+        content naturally needs).
         """
 
         yield self.stream_thinking("Generating book structure...")

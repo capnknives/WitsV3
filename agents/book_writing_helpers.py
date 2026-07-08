@@ -66,6 +66,23 @@ def is_continuation_phrase(text: str) -> bool:
     return bool(_CONTINUATION_RE.match(text.strip()))
 
 
+# Matches "Chapter 1: ...", "### Chapter 2 - ...", "Ch. 3: ..." — deliberately
+# requires the "chapter"/"ch." word AND a following number, unlike the old
+# bare `line.startswith("#")` check, which misparsed unrelated markdown
+# section headers ("### Target Audience", "### Research Requirements") as
+# chapters (2026-07-08 live-model finding: this produced near-empty,
+# nonsensical "chapters" once the writer pipeline actually used them).
+_CHAPTER_HEADING_RE = re.compile(r"^#{0,4}\s*(chapter|ch\.)\s*\d+\b", re.IGNORECASE)
+# Strips a matched "Chapter 1:"/"### Chapter 1 -" prefix off a heading line
+# so the stored title is just "The Beginning", not "Chapter 1: The
+# Beginning" — the writer pipeline re-adds its own "Chapter N:" prefix when
+# saving, so keeping it here produced doubled headers like
+# "## Chapter 1: Chapter 1: The Beginning" in the saved file.
+_CHAPTER_HEADING_PREFIX_RE = re.compile(
+    r"^#{0,4}\s*(chapter|ch\.)\s*\d+\s*[:\-–.]?\s*", re.IGNORECASE
+)
+
+
 class BookWritingHelpersMixin:
     """Extracted helpers to keep handler mixin under the 500-line limit."""
 
@@ -81,13 +98,14 @@ class BookWritingHelpersMixin:
         current_chapter = None
         for line in lines:
             line = line.strip()
-            if line.startswith("Chapter") or line.startswith("ch.") or line.startswith("#"):
+            if _CHAPTER_HEADING_RE.match(line):
                 if current_chapter:
                     chapters.append(current_chapter)
 
+                title = _CHAPTER_HEADING_PREFIX_RE.sub("", line).strip() or line
                 current_chapter = {
                     "id": str(uuid.uuid4()),
-                    "title": line,
+                    "title": title,
                     "outline": "",
                     "word_target": 2000,
                     "status": "planned",
