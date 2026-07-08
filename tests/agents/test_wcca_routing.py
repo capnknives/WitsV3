@@ -33,6 +33,23 @@ class DummyLLM(BaseLLMInterface):
         return [0.0] * 8
 
 
+class ScriptedLLM(BaseLLMInterface):
+    """Returns a fixed response string for every call — used to control
+    intent-analysis JSON in the clarification-merge tests below."""
+
+    def __init__(self, response: str):
+        self.response = response
+
+    async def generate_text(self, prompt: str, **kwargs) -> str:
+        return self.response
+
+    async def stream_text(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
+        yield self.response
+
+    async def get_embedding(self, text, model=None):
+        return [0.0] * 8
+
+
 class FakeMemoryManager:
     """Only what _get_document_inventory needs."""
 
@@ -189,6 +206,91 @@ async def test_bug_hunt_request_reaches_self_repair_despite_clarification_classi
     ]
     assert self_repair_agent.received_input == "find and fix any bugs in your code."
     assert any("self_repair ran" in s.content for s in streams)
+
+
+# --------------------------------------- conversation-history-aware follow-ups
+
+@pytest.mark.asyncio
+async def test_clarification_question_records_pending_state(wcca_with_specialists):
+    """_handle_intent_response's clarification_question branch must record
+    the original request so a later reply can be merged with it.
+
+    Uses a request that does NOT match _SELF_REPAIR_SIGNALS — that override
+    runs unconditionally before the clarification_question branch and would
+    otherwise reroute this to specialized-agent selection instead (covered
+    separately by the _needs_self_repair tests above).
+    """
+    intent_analysis = {
+        "type": "clarification_question",
+        "complexity": "simple",
+        "suggested_response": "clarification",
+        "requires_tools": False,
+        "clarification_question": "Which project?",
+    }
+    original_request = "help me improve something in my project."
+    async for _ in wcca_with_specialists._handle_intent_response(
+        intent_analysis, original_request, None, "sess-pending"
+    ):
+        pass
+    assert wcca_with_specialists._pending_clarifications["sess-pending"] == original_request
+
+
+@pytest.mark.asyncio
+async def test_followup_reply_merges_with_pending_clarification_and_reaches_self_repair(
+    wcca_with_specialists,
+):
+    """End-to-end regression for the actual July 8 live-chat bug: a bare
+    follow-up reply ("Specifically the wits v3 codebase") is meaningless on
+    its own and the LLM classifier really did call it "conversation" — the
+    merge with the pending original request must rescue it regardless."""
+    agent = wcca_with_specialists
+    self_repair_agent = _FakeSpecializedAgent("self_repair")
+    agent.specialized_agents["self_repair"] = self_repair_agent
+    session_id = "sess-followup"
+    agent._pending_clarifications[session_id] = "find and fix any bugs in your code."
+    agent.llm_interface = ScriptedLLM(
+        '{"type": "conversation", "complexity": "simple", "suggested_response": "direct"}'
+    )
+
+    streams = [
+        item async for item in agent.run("Specifically the wits v3 codebase", session_id=session_id)
+    ]
+
+    assert session_id not in agent._pending_clarifications
+    assert self_repair_agent.received_input == (
+        "find and fix any bugs in your code.\nSpecifically the wits v3 codebase"
+    )
+    assert any("self_repair ran" in s.content for s in streams)
+
+
+@pytest.mark.asyncio
+async def test_casual_reply_after_clarification_is_not_merged(wcca_with_specialists):
+    """A topic change ("thanks") after a clarifying question should just
+    clear the stale pending state, not get prefixed onto unrelated chat or
+    misrouted to the self-repair agent it was never about."""
+    agent = wcca_with_specialists
+    self_repair_agent = _FakeSpecializedAgent("self_repair")
+    agent.specialized_agents["self_repair"] = self_repair_agent
+    session_id = "sess-casual"
+    agent._pending_clarifications[session_id] = "find and fix any bugs in your code."
+
+    async for _ in agent.run("thanks!", session_id=session_id):
+        pass
+
+    assert session_id not in agent._pending_clarifications
+    assert self_repair_agent.received_input is None
+
+
+@pytest.mark.asyncio
+async def test_remember_command_clears_pending_clarification_without_merging(wcca_with_specialists):
+    agent = wcca_with_specialists
+    session_id = "sess-remember"
+    agent._pending_clarifications[session_id] = "find and fix any bugs in your code."
+
+    async for _ in agent.run("remember my favorite color is blue", session_id=session_id):
+        pass
+
+    assert session_id not in agent._pending_clarifications
 
 
 # ------------------------------------------------------- document routing
