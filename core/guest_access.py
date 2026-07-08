@@ -204,6 +204,50 @@ class GuestRegistry:
     def list_guests(self) -> list[dict[str, Any]]:
         return list(self._data["guests"].values())
 
+    def list_active_guests(self) -> list[dict[str, Any]]:
+        return [g for g in self.list_guests() if not g.get("revoked")]
+
+
+def format_active_guest_accounts(
+    registry: GuestRegistry | None = None,
+    *,
+    include_revoked: bool = False,
+) -> str:
+    """Human-readable roster of /join guest accounts for the owner."""
+    from datetime import datetime, timezone
+
+    reg = registry or GuestRegistry()
+    active = reg.list_active_guests()
+    revoked = [g for g in reg.list_guests() if g.get("revoked")]
+
+    if not active and not (include_revoked and revoked):
+        return (
+            "No active guest accounts yet. Family testers appear here after they "
+            "register at /join with the invite code."
+        )
+
+    def _fmt_ts(ts: float | int | None) -> str:
+        if not ts:
+            return "unknown"
+        return datetime.fromtimestamp(float(ts), timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [f"Active guest accounts: {len(active)}"]
+    for g in sorted(active, key=lambda x: (x.get("display_name") or "").lower()):
+        devices = len(g.get("device_ids") or [])
+        lines.append(
+            f"- {g.get('display_name', 'Guest')} "
+            f"(id {g['guest_id'][:8]}…, age_band={g.get('age_band', 'teen')}, "
+            f"devices={devices}, first={_fmt_ts(g.get('first_seen'))}, "
+            f"last_seen={_fmt_ts(g.get('last_seen'))})"
+        )
+
+    if include_revoked and revoked:
+        lines.append(f"\nRevoked guests: {len(revoked)}")
+        for g in sorted(revoked, key=lambda x: (x.get("display_name") or "").lower()):
+            lines.append(f"- {g.get('display_name', 'Guest')} (id {g['guest_id'][:8]}…)")
+
+    return "\n".join(lines)
+
 
 def _b64url(data: bytes) -> str:
     import base64

@@ -5,7 +5,53 @@ from __future__ import annotations
 from typing import Any
 
 from core.base_tool import BaseTool
+from core.guest_access import GuestRegistry, format_active_guest_accounts
 from core.guest_audit import GuestAuditLog, build_owner_audit_digest
+
+
+class GuestAccountsListTool(BaseTool):
+    """List active /join guest accounts for the owner."""
+
+    def __init__(self):
+        super().__init__(
+            name="guest_accounts_list",
+            description=(
+                "Owner-only: list all active guest/family-tester accounts registered via /join. "
+                "Use when the owner asks who has joined, to list guest accounts, active testers, "
+                "or family members with access. For chat activity summaries use guest_audit_summary."
+            ),
+        )
+        self.registry = GuestRegistry()
+
+    async def execute(self, include_revoked: bool = False, **kwargs: Any) -> str:
+        user_role = kwargs.get("user_role", "owner")
+        if user_role == "guest":
+            return (
+                "guest_accounts_list is only available to the owner. "
+                "Guests cannot list other accounts."
+            )
+        try:
+            report = format_active_guest_accounts(
+                self.registry, include_revoked=include_revoked
+            )
+            self.logger.info("Guest accounts list for owner (revoked=%s)", include_revoked)
+            return report
+        except Exception as e:
+            self.logger.error("Guest accounts list failed: %s", e, exc_info=True)
+            return f"Error listing guest accounts: {e}"
+
+    def get_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "include_revoked": {
+                    "type": "boolean",
+                    "description": "If true, also list revoked guest accounts.",
+                    "default": False,
+                },
+            },
+            "required": [],
+        }
 
 
 class GuestAuditSummaryTool(BaseTool):
@@ -16,9 +62,9 @@ class GuestAuditSummaryTool(BaseTool):
             name="guest_audit_summary",
             description=(
                 "Owner-only: summarize guest/family-tester chat audit logs. "
-                "Use when the owner asks what a guest did, wants a log summary, "
-                "or asks about TESTER or other join users. Returns recent messages, "
-                "tool calls, and any blocked inappropriate content."
+                "Use when the owner asks what a guest did or wants activity/details for a "
+                "specific tester. To list who has joined (account roster), use "
+                "guest_accounts_list instead."
             ),
         )
         self.audit = GuestAuditLog()
