@@ -69,10 +69,10 @@ Safe, high confusion / line-count wins:
 
 | Path | Lines | Category | Evidence | Recommendation |
 |------|------:|----------|----------|----------------|
-| `synthetic_brain_stubs.py` | 94 | STUB | Stub LLM/KG/WM; only used by integration | **archive** |
-| `synthetic_brain_integration.py` | 87 | ORPHAN/STUB | Fallback wrappers; no production importer | **archive** |
-| `cognitive_architecture.py` | 367 | ORPHAN | Only tests + `__main__`; wrong KG constructor vs real API | **archive** |
-| `memory_handler.py` | 320 | STUB/ORPHAN | Procedural memory “not yet implemented”; wrong KG/WM APIs; not on `MemoryManager` path | **archive** with cognitive |
+| `synthetic_brain_stubs.py` | 94 | STUB | Stub LLM/KG/WM; only used by integration | ✅ **archived** July 8 → `planning/archive/synthetic_brain/` |
+| `synthetic_brain_integration.py` | 87 | ORPHAN/STUB | Fallback wrappers; no production importer | ✅ **archived** |
+| `cognitive_architecture.py` | 367 | ORPHAN | Only tests + `__main__`; wrong KG constructor vs real API | ✅ **archived** |
+| `memory_handler.py` | 320 | STUB/ORPHAN | Procedural memory “not yet implemented”; wrong KG/WM APIs; not on `MemoryManager` path | ✅ **archived** |
 
 ### 3b. Adaptive LLM cluster (explicitly dormant)
 
@@ -130,7 +130,7 @@ Safe, high confusion / line-count wins:
 | `update_config.py` | 51 | ORPHAN | **delete** |
 | `embedding_dimension_fix.py` | 64 | ORPHAN | **delete** |
 | `analyze_memory.py` | 28 | ORPHAN script | **move** → `scripts/` |
-| `torch.py` | 35 | STUB | Fake torch for tests — **move** under `tests/` or delete if unused |
+| `torch.py` | 35 | STUB | Fake torch for tests | ✅ **deleted** July 8 (adaptive stack archived) |
 | `llm_diagnostic_basic.py` | 86 | utility | **move** → `scripts/` (used by `run_test.py`) |
 | `run.py` / `run_web.py` / `run_background_agent.py` / `run_test.py` | — | LIVE | **keep** |
 | `setup_auth.py` / `setup_dependencies.py` / `install.py` | — | LIVE | **keep** |
@@ -195,13 +195,13 @@ Canonical: `suggested-features-2026-07.md` (forward) + `revival-2026-07.md` (shi
 3. ✅ Delete `conversation_handler.py` and `intent_analysis_tool.py` (capability strings updated).
 4. Decide: delete or unblock `json_tool.py`. *(still open — kept, has passing tests)*
 
-### Wave B — Relocate scripts — ✅ DONE July 8 2026 (torch pending)
+### Wave B — Relocate scripts — ✅ DONE July 8 2026
 1. ✅ Move `ollama_probe.py`, `analyze_memory.py`, `llm_diagnostic_basic.py` → `scripts/` (`run_test.py` string updated).
-2. Move or quarantine root `torch.py`. *(now unused after adaptive archive — safe follow-up delete)*
+2. ✅ Delete root `torch.py` (unused after adaptive archive).
 
 ### Wave C — Archive dormant clusters
 1. ✅ **DONE July 8 2026** — Adaptive LLM + `core/adaptive/` → `planning/archive/adaptive_llm/core/`; `tests/test_adaptive_llm.py` + `tests/config.yaml` removed.
-2. Synthetic brain + cognitive + `memory_handler` → archive together. *(next wave)*
+2. ✅ **DONE July 8 2026** — Synthetic brain + cognitive + `memory_handler` → `planning/archive/synthetic_brain/`.
 
 ### Wave D — Product decisions (don’t delete until decided)
 1. Neural stack (`working_memory`, `knowledge_graph`, `cross_domain_learning`, neural orchestrator): **ship as default** or **mark research-only** in README.

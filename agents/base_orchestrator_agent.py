@@ -128,6 +128,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "tool_total_failures": {},
             "lookup_search_done": False,
             "synthesis_guard_retries": 0,
+            "user_role": kwargs.get("user_role", "owner"),
         }
 
         try:

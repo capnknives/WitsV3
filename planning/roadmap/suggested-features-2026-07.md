@@ -2,7 +2,7 @@
 
 **Last updated:** July 8, 2026  
 **Working branch tip:** `cursor/work` (merges into `fix/revive-2026-07`)  
-**Test suite:** 426 passing, 2 skipped (~40s) — re-run `pytest -q` before claiming green
+**Test suite:** 435 collected — re-run `pytest -q` before claiming green
 
 This is the **canonical forward roadmap**: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
@@ -89,6 +89,7 @@ Summary of what landed (detail also in README § Self-repair):
 | Friendlier Ollama-down (CLI) | Match web UX | Small | ✅ Done |
 | Conversation export UX | One-click export in web UI | Small–Medium | ✅ Done |
 | Conversation-history-aware intent | Short replies after a clarifying question misclassified as casual chat | Medium | Open (Claude, WCCA branch) |
+| **Guest / family tester access** | LAN phone testing without owner token; device identity + safe tool subset | Medium–Large | ✅ Safe MVP July 8 — [`guest-tester-access-2026-07.md`](guest-tester-access-2026-07.md); Phase 3 content policy + Phase 4 owner admin still open |
 | Expand CI lint | Full ruff/black blocked by legacy noise | Medium (incremental) | ✅ Done July 8 — CI runs full `ruff check` + `black --check` |
 | Docs / README modernity | Install + honest status | Medium | ✅ Done July 8 |
 | Clutter cleanup wave 1 | Delete orphans + relocate scripts (see clutter catalog §1/Wave B) | Small–Medium | ✅ Done July 8 — Wave A deletes confirmed; `ollama_probe`/`analyze_memory`/`llm_diagnostic_basic` → `scripts/` |
@@ -134,7 +135,8 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 
 | Item | Verdict |
 |------|---------|
-| Adaptive LLM stack | ✅ Archived July 8 → `planning/archive/adaptive_llm/core/` (superseded by `model_router.py`; `test_adaptive_llm.py` + `tests/config.yaml` removed). Root `torch.py` shim now unused — safe follow-up delete |
+| Adaptive LLM stack | ✅ Archived July 8 → `planning/archive/adaptive_llm/core/` (superseded by `model_router.py`; `test_adaptive_llm.py` + `tests/config.yaml` removed). Root `torch.py` shim deleted |
+| Synthetic brain / cognitive cluster | ✅ Archived July 8 → `planning/archive/synthetic_brain/` (`memory_handler`, `cognitive_architecture`, stubs, integration + tests) |
 | `planning/archive/gui/` | Keep archived; web UI is the client |
 | Supabase | Optional; skip in default install docs |
 | Synthetic brain doc set | Historical — entry [`docs/SYNTHETIC_BRAIN.md`](../../docs/SYNTHETIC_BRAIN.md) |
@@ -158,6 +160,7 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 ```
 planning/roadmap/
 ├── suggested-features-2026-07.md   ← YOU ARE HERE (what's next)
+├── guest-tester-access-2026-07.md  ← guest / family-tester access (safe MVP)
 ├── revival-2026-07.md              ← what shipped + error triage log
 ├── clutter-catalog-2026-07.md      ← dead/dormant inventory
 ├── tool-registry-reality-2026-07.md
@@ -178,7 +181,8 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 3. Conversation-history-aware intent classification (Claude, WCCA branch)  
 4. ~~Incremental lint hygiene until CI can enforce fuller ruff/black~~ ✅  
 5. ~~Memory browser~~ ✅ July 8 · multi-session chat still open  
-6. Archive synthetic-brain / cognitive cluster (catalog §3a) — next cleanup wave  
+6. ~~Archive synthetic-brain / cognitive cluster (catalog §3a)~~ ✅ July 8  
+7. ~~**Guest / family tester access** (safe MVP)~~ ✅ July 8 — `/join`, invite auth, tool/route locks; Phase 3–4 (content policy, owner admin) still open — [`guest-tester-access-2026-07.md`](guest-tester-access-2026-07.md)  
 
 ---
 

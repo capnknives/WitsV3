@@ -136,6 +136,13 @@ Quick gates before promoting `fix/revive-2026-07` → `main`:
 3. Re-run full pytest and clear any remaining failures before calling the branch green.
 4. Docs/install authenticity pass — ✅ README + planning indexes updated July 8 2026.
 
+### Guest / family-tester access (July 8 2026)
+
+Safe MVP landed on `cursor/work`: `/join` invite flow, HMAC guest tokens, device
+registry (`data/guest_profiles.json`), owner-only API deny, orchestrator tool
+allowlist, no specialist-agent routing for guests. Plan + remaining Phase 3–4
+work: [`guest-tester-access-2026-07.md`](guest-tester-access-2026-07.md).
+
 ### Whole-repo audit (Tiers 1–4) — complete
 
 **Tiers 1–4 shipped July 7 2026.** Detail preserved in

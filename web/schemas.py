@@ -10,6 +10,13 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
 
 
+class GuestRegisterRequest(BaseModel):
+    invite_code: str
+    display_name: str
+    device_id: str
+    age_band: str | None = "teen"
+
+
 class ExportRequest(BaseModel):
     session_id: str | None = None
     file_path: str | None = None

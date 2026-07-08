@@ -22,6 +22,16 @@ class OrchestratorToolHelpersMixin:
     TOOL_TOTAL_FAILURE_LIMIT = 3
     ORCHESTRATOR_BLOCKED_TOOLS = frozenset({"intent_analysis", "json_manipulate"})
 
+    def _guest_allowed_tools(self) -> frozenset[str]:
+        from core.guest_access import GUEST_ALLOWED_TOOLS
+
+        allowed = set(GUEST_ALLOWED_TOOLS)
+        cfg = getattr(self, "config", None)
+        guest_cfg = getattr(getattr(cfg, "web_ui", None), "guest_access", None)
+        if guest_cfg is not None and getattr(guest_cfg, "allow_document_search", False):
+            allowed.add("document_search")
+        return frozenset(allowed)
+
     @staticmethod
     def _has_ingested_documents(state: dict[str, Any]) -> bool:
         """True when USER DOCUMENTS lists at least one ingested file."""
@@ -36,6 +46,12 @@ class OrchestratorToolHelpersMixin:
         self, tool_name: str, tool_args: dict[str, Any], state: dict[str, Any]
     ) -> str | None:
         """Return a block message to skip doomed/repeat tool calls, or None to proceed."""
+        if state.get("user_role") == "guest" and tool_name not in self._guest_allowed_tools():
+            return (
+                f"Blocked {tool_name}: not available for guest users. "
+                f"Use web_search, math_operations, or datetime, or final_answer to respond."
+            )
+
         if tool_name in self.ORCHESTRATOR_BLOCKED_TOOLS:
             return (
                 f"Blocked {tool_name}: not available in the orchestrator. "

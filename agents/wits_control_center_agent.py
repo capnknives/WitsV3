@@ -140,6 +140,11 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         if not session_id:
             session_id = str(uuid.uuid4())
 
+        user_role = kwargs.get("user_role", "owner")
+        guest_profile = kwargs.get("guest_profile")
+        self._request_user_role = user_role
+        self._request_guest_profile = guest_profile
+
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
 
         if any(kw in user_input.lower() for kw in ["remember", "don't forget", "recall"]):
@@ -274,8 +279,10 @@ User input: {user_input}
         # decided — 2026-07-08 finding: "find and fix any bugs in your code"
         # was classified as clarification_question and "conversation" for a
         # follow-up, both of which return before specialized-agent routing
-        # is ever considered below.
-        if self._needs_self_repair(user_input):
+        # is ever considered below. Guests never get self-repair.
+        if getattr(self, "_request_user_role", "owner") != "guest" and self._needs_self_repair(
+            user_input
+        ):
             intent_type = "goal_defined"
             complexity = "moderate"
             requires_tools = True
@@ -326,7 +333,14 @@ User input: {user_input}
         # the generic enhanced-capabilities/orchestrator paths below — those
         # unconditionally `return` once entered, so a specialized agent match
         # checked afterward would never actually be reached in practice.
-        if suggested_response == "specialized" or complexity in ["moderate", "complex", "research"]:
+        # Guests stay on chat/orchestrator with the filtered tool allowlist.
+        if (
+            getattr(self, "_request_user_role", "owner") != "guest"
+            and (
+                suggested_response == "specialized"
+                or complexity in ["moderate", "complex", "research"]
+            )
+        ):
             specialized_agent = await self._select_specialized_agent(user_input)
 
             if specialized_agent:
@@ -346,7 +360,8 @@ User input: {user_input}
 
         # For complex tasks, use enhanced capabilities if available
         if (
-            self.has_enhanced_capabilities
+            getattr(self, "_request_user_role", "owner") != "guest"
+            and self.has_enhanced_capabilities
             and requires_tools
             and complexity in ["moderate", "complex", "research"]
         ):
@@ -393,6 +408,7 @@ User input: {user_input}
                             user_input=user_input,
                             conversation_history=conversation_history,
                             session_id=session_id,
+                            user_role=getattr(self, "_request_user_role", "owner"),
                         ):
                             yield stream_data
                         return
@@ -407,6 +423,7 @@ User input: {user_input}
                 user_input=user_input,
                 conversation_history=conversation_history,
                 session_id=session_id,
+                user_role=getattr(self, "_request_user_role", "owner"),
             ):
                 yield stream_data
             return
