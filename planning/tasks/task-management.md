@@ -1,10 +1,18 @@
 ---
 title: "WitsV3 Task Management"
 created: "2025-06-09"
-last_updated: "2025-06-11"
-status: "active"
+last_updated: "2026-07-07"
+status: "superseded"
+superseded_by: "planning/roadmap/suggested-features-2026-07.md"
 ---
 # WitsV3 Task Management
+
+> **Superseded (July 2026).** This file reflects 2025 phase planning and is no
+> longer maintained. Use **[`planning/roadmap/suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md)**
+> for the forward roadmap and **[`planning/roadmap/revival-2026-07.md`](../roadmap/revival-2026-07.md)**
+> for what shipped during the July revival.
+
+The content below is preserved for historical reference only.
 
 ## Table of Contents
 
