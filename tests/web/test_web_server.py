@@ -120,6 +120,33 @@ def test_chat_streams_events_and_records_history(client_noauth):
     assert roles == ["user", "assistant"]
 
 
+def test_export_writes_session_transcript(client_noauth, tmp_path, monkeypatch):
+    client, system = client_noauth
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "exports").mkdir()
+
+    chat_res = client.post("/api/chat", json={"message": "hello"})
+    events = _parse_sse(chat_res.text)
+    session_id = events[0][1]["session_id"]
+
+    export_res = client.post("/api/export", json={"session_id": session_id})
+    assert export_res.status_code == 200
+    data = export_res.json()
+    assert data["success"] is True
+    assert data["message_count"] == 2
+    out = tmp_path / data["file_path"]
+    assert out.is_file()
+    text = out.read_text(encoding="utf-8")
+    assert "USER: hello" in text
+    assert "ASSISTANT:" in text
+
+
+def test_export_requires_session(client_noauth):
+    client, _ = client_noauth
+    res = client.post("/api/export", json={"session_id": "missing"})
+    assert res.status_code == 400
+
+
 def test_chat_reuses_session(client_noauth):
     client, system = client_noauth
     first = _parse_sse(client.post("/api/chat", json={"message": "hi"}).text)

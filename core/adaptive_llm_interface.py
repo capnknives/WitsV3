@@ -4,12 +4,11 @@ AdaptiveLLMInterface for WitsV3 Adaptive LLM System.
 This module implements the main interface for the Adaptive LLM System,
 integrating the complexity analyzer, dynamic module loader, and semantic cache.
 
-DORMANT / EXPERIMENTAL: only loaded when
+DORMANT / EXPERIMENTAL: only relevant when
 `llm_interface.default_provider: adaptive` is set in config (default is
-"ollama", so it is not on a normal startup path). Superseded by
-`core/model_router.py`, which is what `/settings` model routing actually
-uses. Left in place for reference rather than removed; see
-planning/roadmap/composer-orchestrator-search-quality-2026-07.md Tier 3 #10.
+"ollama"). As of July 2026, `get_llm_interface()` ignores adaptive and returns
+Ollama instead — see `planning/archive/adaptive_llm/README.md`.
+Superseded by `core/model_router.py` for smart routing.
 """
 
 import logging

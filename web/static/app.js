@@ -342,6 +342,28 @@ $("#new-chat-btn").addEventListener("click", () => {
   addAssistantMsg("New chat started. What can I do for you?");
 });
 
+$("#export-btn").addEventListener("click", async () => {
+  if (!sessionId) {
+    addAssistantMsg("Nothing to export yet — send a message first.", true);
+    return;
+  }
+  try {
+    const res = await api("/api/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      addAssistantMsg(`✅ ${data.message}`);
+    } else {
+      addAssistantMsg(`Export failed: ${data.detail || res.status}`, true);
+    }
+  } catch (e) {
+    if (e.message !== "unauthorized") addAssistantMsg(`Export failed: ${e.message}`, true);
+  }
+});
+
 /* ---------------------------------------------------------- panel */
 const panel = $("#panel");
 const backdrop = $("#panel-backdrop");

@@ -25,7 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from core.schemas import ConversationHistory, StreamData
 from web.routes_mcp import register_mcp_routes
 from web.routes_personality import register_personality_routes
-from web.schemas import ChatRequest, EscalationDecision, SettingsUpdate
+from web.schemas import ChatRequest, EscalationDecision, ExportRequest, SettingsUpdate
 from web.user_errors import format_chat_error
 
 logger = logging.getLogger("WitsV3.WebUI")
@@ -173,6 +173,47 @@ def create_app(system) -> FastAPI:
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    def _format_session_export(conversation: ConversationHistory) -> str:
+        if not conversation.messages:
+            return "Conversation history is empty."
+        lines = []
+        for msg in conversation.messages:
+            lines.append(f"{msg.role.upper()}: {msg.content}")
+        return "\n\n".join(lines)
+
+    @app.post("/api/export")
+    async def export_conversation(body: ExportRequest):
+        """Write the current session transcript to exports/ (one-click export)."""
+        session_id = body.session_id
+        if not session_id or session_id not in system.session_histories:
+            return JSONResponse({"detail": "no active session"}, status_code=400)
+
+        conversation = system.session_histories[session_id]
+        content = _format_session_export(conversation)
+        if not content.strip():
+            return JSONResponse({"detail": "conversation is empty"}, status_code=400)
+
+        export_dir = Path("exports")
+        export_dir.mkdir(parents=True, exist_ok=True)
+        if body.file_path:
+            rel = Path(body.file_path.replace("\\", "/"))
+            if rel.is_absolute() or ".." in rel.parts or len(rel.parts) != 1:
+                return JSONResponse({"detail": "invalid file_path"}, status_code=400)
+            out_path = export_dir / rel.name
+        else:
+            stamp = uuid.uuid4().hex[:8]
+            out_path = export_dir / f"chat_export_{stamp}.txt"
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8")
+
+        return {
+            "success": True,
+            "file_path": str(out_path).replace("\\", "/"),
+            "message_count": len(conversation.messages),
+            "message": f"Exported {len(conversation.messages)} messages to {out_path}",
+        }
 
     # ------------------------------------------------------------- info
     @app.get("/api/status")

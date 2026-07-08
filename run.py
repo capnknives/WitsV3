@@ -30,6 +30,7 @@ from core.llm_interface import OllamaInterface, BaseLLMInterface
 from core.memory_manager import MemoryManager, BasicMemoryBackend
 from core.tool_registry import ToolRegistry
 from core.schemas import ConversationHistory, StreamData
+from core.user_errors import format_cli_error
 from agents.wits_control_center_agent import WitsControlCenterAgent
 from agents.llm_driven_orchestrator import LLMDrivenOrchestrator
 from tools.mcp_tool_registry import MCPToolRegistry
@@ -414,8 +415,8 @@ class WitsV3System:
             return final_response
 
         except Exception as e:
-            error_msg = f"Error processing request: {str(e)}"
-            logger.error(error_msg)
+            error_msg = format_cli_error(e, self.config.ollama_settings.url)
+            logger.error(f"Error processing request: {e}")
             conversation.add_message("assistant", error_msg)
             return error_msg
 
@@ -544,7 +545,8 @@ async def run_cli():
                 print("\n\nGoodbye! Thanks for using WitsV3!")
                 break
             except Exception as e:
-                print(f"\nAn error occurred: {str(e)}")
+                ollama_url = wits_system.config.ollama_settings.url if wits_system.config else "http://localhost:11434"
+                print(f"\n{format_cli_error(e, ollama_url)}")
                 logger.error(f"CLI error: {e}", exc_info=True)
 
     except Exception as e:

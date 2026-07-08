@@ -224,14 +224,11 @@ def get_enhanced_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
         Enhanced LLM interface
     """
     if config.llm_interface.default_provider == "adaptive":
-        # Import here to avoid circular imports
-        from .adaptive_llm_interface import AdaptiveLLMInterface
-
-        # Create reliable base LLM interface
-        base_llm = ReliableOllamaInterface(config)
-
-        # Then create the adaptive LLM interface with the reliable base LLM
-        return AdaptiveLLMInterface(config, base_llm)
+        logger.warning(
+            "llm_interface.default_provider 'adaptive' is deprecated — "
+            "using ReliableOllamaInterface. See planning/archive/adaptive_llm/README.md."
+        )
+        return ReliableOllamaInterface(config)
     elif config.llm_interface.default_provider == "ollama":
         return ReliableOllamaInterface(config)
     else:
