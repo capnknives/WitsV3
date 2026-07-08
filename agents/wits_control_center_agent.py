@@ -59,6 +59,13 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         self.orchestrator_agent = orchestrator_agent
         self.specialized_agents = specialized_agents or {}
 
+        # session_id -> the original request that triggered a clarifying
+        # question we're still waiting on an answer to. See run()'s merge
+        # step below — a short reply like "specifically the wits v3 codebase"
+        # is meaningless in isolation and was being classified as standalone
+        # casual chat, never reaching task/specialized-agent routing at all.
+        self._pending_clarifications: dict[str, str] = {}
+
         # Use control center specific model
         self.model_name = config.ollama_settings.control_center_model
 
@@ -86,6 +93,31 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         """Get the model name for the control center."""
         return self.config.ollama_settings.control_center_model
 
+    @staticmethod
+    def _is_casual_reply(message: str) -> bool:
+        """Narrower casual-chat check for the clarification merge guard below.
+
+        _is_casual_conversation (wcca_routing_mixin) treats any message under
+        6 words as casual — a heuristic tuned for classifying a message in
+        isolation. But a short, substantive answer to our own clarifying
+        question (e.g. "specifically the wits v3 codebase", 5 words) would
+        get misjudged as casual by that rule and never get merged back in,
+        which is the exact bug this feature exists to fix. This checks only
+        for actual greeting/small-talk words or phrases, with no length
+        shortcut, so brevity alone never counts as "casual" here.
+        """
+        lowered = message.lower()
+        words = set(re.findall(r"[a-z']+", lowered))
+        casual_words = {
+            "hello", "hi", "hey", "thanks", "appreciate",
+            "nice", "cool", "great", "bye", "goodbye",
+        }
+        casual_phrases = (
+            "how are you", "what's up", "how's it going",
+            "thank you", "see you", "talk to you",
+        )
+        return bool(words & casual_words) or any(phrase in lowered for phrase in casual_phrases)
+
     async def run(
         self,
         user_input: str,
@@ -111,6 +143,10 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
 
         if any(kw in user_input.lower() for kw in ["remember", "don't forget", "recall"]):
+            # An explicit "remember X" is a deterministic command unrelated to
+            # any pending clarification — drop the pending state rather than
+            # risk merging stale context into an unrelated later reply.
+            self._pending_clarifications.pop(session_id, None)
             await self.store_memory(
                 content=user_input,
                 segment_type="USER_FACT",
@@ -122,6 +158,15 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
                 "Handled remember intent, exiting early. No further orchestration will occur."
             )
             return
+
+        # One-shot merge: if our last turn in this session was a clarifying
+        # question, treat this reply as answering it rather than judging it
+        # in isolation — unless it reads as casual chat (topic change), in
+        # which case just drop the stale pending state and move on normally.
+        pending_original = self._pending_clarifications.pop(session_id, None)
+        if pending_original and not self._is_casual_reply(user_input):
+            yield self.stream_thinking("Treating this as an answer to my last question...")
+            user_input = f"{pending_original}\n{user_input}"
 
         try:
             # Initial processing
@@ -263,6 +308,10 @@ User input: {user_input}
             question = (intent_analysis.get("clarification_question") or "").strip()
             if not question:
                 question = "Could you please provide more details about what you'd like me to help you with?"
+            # Remember what we asked about so a short follow-up reply (e.g.
+            # "specifically the wits v3 codebase") gets merged with this
+            # original request instead of being judged as standalone chat.
+            self._pending_clarifications[session_id] = user_input
             yield self.stream_result(question)
             return
 
