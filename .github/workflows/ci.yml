@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, fix/revive-2026-07]
+  pull_request:
+    branches: [main, fix/revive-2026-07]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -e .
+
+      - name: Run tests
+        run: python -m pytest tests/ -q
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.10'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            coverage_html/
+
+  lint:
+    name: Lint (critical)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install ruff
+        run: python -m pip install --upgrade pip ruff
+
+      # Full ruff/black/isort enforcement is via pre-commit locally.
+      # CI gates on undefined names and syntax errors until the legacy baseline is cleaned up.
+      - name: Ruff (critical rules)
+        run: ruff check agents core tools web tests --select F821,E9,E722

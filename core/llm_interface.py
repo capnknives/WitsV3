@@ -40,8 +40,9 @@ class BaseLLMInterface(ABC):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stop_sequences: Optional[List[str]] = None,
+        format: Optional[str] = None,
     ) -> str:
-        """Generate text from the LLM."""
+        """Generate text from the LLM. format="json" constrains output to valid JSON (Ollama structured output)."""
         pass
 
     @abstractmethod
@@ -80,7 +81,8 @@ class OllamaInterface(BaseLLMInterface):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stop_sequences: Optional[List[str]] = None,
-        stream: bool = False
+        stream: bool = False,
+        format: Optional[str] = None
     ) -> Dict[str, Any]:
         effective_model = model or self.ollama_settings.default_model
         options: Dict[str, Any] = {
@@ -91,12 +93,15 @@ class OllamaInterface(BaseLLMInterface):
         if stop_sequences is not None:
             options["stop"] = stop_sequences
 
-        return {
+        payload = {
             "model": effective_model,
             "prompt": prompt,
             "stream": stream,
             "options": options
         }
+        if format is not None:
+            payload["format"] = format
+        return payload
 
     async def _execute_with_retry(self, operation_name: str, func: Callable[..., Awaitable[T]], *args, **kwargs) -> T:
         """Execute a function with retry logic on failure."""
@@ -160,8 +165,9 @@ class OllamaInterface(BaseLLMInterface):
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         stop_sequences: Optional[List[str]] = None,
+        format: Optional[str] = None,
     ) -> str:
-        payload = await self._prepare_payload(prompt, model, temperature, max_tokens, stop_sequences, stream=False)
+        payload = await self._prepare_payload(prompt, model, temperature, max_tokens, stop_sequences, stream=False, format=format)
 
         async def _generate() -> str:
             response = await self.http_client.post(

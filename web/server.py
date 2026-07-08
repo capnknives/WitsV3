@@ -24,7 +24,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from core.schemas import ConversationHistory
+from core.schemas import ConversationHistory, StreamData
+from web.user_errors import format_chat_error
 
 logger = logging.getLogger("WitsV3.WebUI")
 
@@ -33,7 +34,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 # Paths that never require auth (the shell page + PWA assets load before the
 # user can enter a token; every /api/* call is protected).
 PUBLIC_PATHS = {"/", "/personality", "/settings", "/mcp",
-                "/manifest.webmanifest", "/icon.svg", "/app.js", "/style.css"}
+                "/manifest.webmanifest", "/icon.svg", "/app.js", "/style.css", "/mcp.css"}
 
 
 class ChatRequest(BaseModel):
@@ -48,6 +49,11 @@ class SettingsUpdate(BaseModel):
     max_iterations: Optional[int] = None
     default_model: Optional[str] = None
     orchestrator_model: Optional[str] = None
+    routing_enabled: Optional[bool] = None
+    routing_trivial_model: Optional[str] = None
+    routing_code_model: Optional[str] = None
+    routing_complex_model: Optional[str] = None
+    routing_trivial_max_chars: Optional[int] = None
     escalation_enabled: Optional[bool] = None
     escalation_model: Optional[str] = None
     escalation_max_tokens: Optional[int] = None
@@ -58,6 +64,21 @@ class MCPServerAdd(BaseModel):
     command: str
     working_directory: Optional[str] = None
     args: Optional[list[str]] = None
+
+
+class MCPRegistryInstall(BaseModel):
+    """Install a server discovered via the MCP registry search. Writes a config
+    entry (does NOT connect — connecting runs the command, a separate action)."""
+    name: str
+    command: list[str]
+    working_directory: Optional[str] = None
+    env: Optional[Dict[str, str]] = None
+    connect: bool = False
+
+
+class MCPToolInvoke(BaseModel):
+    """Invoke a connected MCP tool from the web UI playground."""
+    arguments: Dict[str, Any] = {}
 
 
 class EscalationDecision(BaseModel):
@@ -138,7 +159,31 @@ def create_app(system) -> FastAPI:
         return FileResponse(STATIC_DIR / "style.css", media_type="text/css",
                             headers={"Cache-Control": "no-cache"})
 
+    @app.get("/mcp.css")
+    async def mcp_css():
+        return FileResponse(STATIC_DIR / "mcp.css", media_type="text/css",
+                            headers={"Cache-Control": "no-cache"})
+
     # ------------------------------------------------------------- chat
+    def _stream_payload(stream_data: StreamData) -> Dict[str, Any]:
+        """Serialize a StreamData event for SSE, with friendly error copy."""
+        payload: Dict[str, Any] = {
+            "type": stream_data.type,
+            "content": stream_data.content,
+            "source": stream_data.source,
+        }
+        if stream_data.error_details:
+            payload["error_details"] = stream_data.error_details
+        if stream_data.type == "error":
+            combined = stream_data.content
+            if stream_data.error_details:
+                combined = f"{combined}\n{stream_data.error_details}"
+            fmt = format_chat_error(combined, system.config.ollama_settings.url)
+            if fmt["code"] != "generic":
+                payload["content"] = fmt["message"]
+            payload["user_error"] = fmt
+        return payload
+
     @app.post("/api/chat")
     async def chat(body: ChatRequest):
         session_id = body.session_id or str(uuid.uuid4())
@@ -160,14 +205,10 @@ def create_app(system) -> FastAPI:
                     conversation_history=conversation,
                     session_id=session_id,
                 ):
-                    payload = {
-                        "type": stream_data.type,
-                        "content": stream_data.content,
-                        "source": stream_data.source,
-                    }
+                    payload = _stream_payload(stream_data)
                     yield sse("stream", payload)
                     if stream_data.type in ("result", "error"):
-                        result_parts.append(stream_data.content)
+                        result_parts.append(payload["content"])
 
                 final_text = "\n".join(result_parts) or "(no response)"
                 conversation.add_message("assistant", final_text)
@@ -175,9 +216,17 @@ def create_app(system) -> FastAPI:
 
             except Exception as e:
                 logger.error(f"Chat stream failed: {e}", exc_info=True)
-                error_msg = f"Error processing request: {e}"
+                fmt = format_chat_error(e, system.config.ollama_settings.url)
+                error_msg = fmt["message"]
+                if fmt.get("hint"):
+                    error_msg = f"{fmt['message']}\n\n{fmt['hint']}"
                 conversation.add_message("assistant", error_msg)
-                yield sse("stream", {"type": "error", "content": error_msg, "source": "web"})
+                yield sse("stream", {
+                    "type": "error",
+                    "content": fmt["message"],
+                    "source": "web",
+                    "user_error": fmt,
+                })
                 yield sse("done", {"final": error_msg})
 
         return StreamingResponse(
@@ -190,6 +239,13 @@ def create_app(system) -> FastAPI:
     @app.get("/api/status")
     async def status():
         cfg = system.config
+        ollama_available = None
+        llm = getattr(system, "llm_interface", None)
+        if llm is not None and hasattr(llm, "is_service_available"):
+            try:
+                ollama_available = await llm.is_service_available()
+            except Exception:
+                ollama_available = False
         return {
             "project": cfg.project_name,
             "version": cfg.version,
@@ -197,6 +253,10 @@ def create_app(system) -> FastAPI:
                 "default": cfg.ollama_settings.default_model,
                 "orchestrator": cfg.ollama_settings.orchestrator_model,
                 "embedding": cfg.ollama_settings.embedding_model,
+            },
+            "ollama": {
+                "url": cfg.ollama_settings.url,
+                "available": ollama_available,
             },
             "tool_count": len(system.tool_registry.tools),
             "active_sessions": len(system.session_histories),
@@ -248,6 +308,7 @@ def create_app(system) -> FastAPI:
         from core.escalation import MODEL_PRICES, get_escalation_manager
 
         cfg = system.config
+        mr = cfg.model_routing
         return {
             "history_window": cfg.agents.history_window,
             "default_temperature": cfg.agents.default_temperature,
@@ -255,6 +316,13 @@ def create_app(system) -> FastAPI:
             "default_model": cfg.ollama_settings.default_model,
             "orchestrator_model": cfg.ollama_settings.orchestrator_model,
             "available_models": await _list_ollama_models(),
+            "model_routing": {
+                "enabled": mr.enabled,
+                "trivial_model": mr.trivial_model,
+                "code_model": mr.code_model,
+                "complex_model": mr.complex_model,
+                "trivial_max_chars": mr.trivial_max_chars,
+            },
             "escalation_enabled": cfg.escalation.enabled,
             "escalation_model": cfg.escalation.model,
             "escalation_max_tokens": cfg.escalation.max_tokens,
@@ -284,6 +352,11 @@ def create_app(system) -> FastAPI:
             apply(cfg.agents, "max_iterations", update.max_iterations, "agents")
             apply(cfg.ollama_settings, "default_model", update.default_model, "ollama_settings")
             apply(cfg.ollama_settings, "orchestrator_model", update.orchestrator_model, "ollama_settings")
+            apply(cfg.model_routing, "enabled", update.routing_enabled, "model_routing")
+            apply(cfg.model_routing, "trivial_model", update.routing_trivial_model, "model_routing")
+            apply(cfg.model_routing, "code_model", update.routing_code_model, "model_routing")
+            apply(cfg.model_routing, "complex_model", update.routing_complex_model, "model_routing")
+            apply(cfg.model_routing, "trivial_max_chars", update.routing_trivial_max_chars, "model_routing")
             apply(cfg.escalation, "enabled", update.escalation_enabled, "escalation")
             apply(cfg.escalation, "model", update.escalation_model, "escalation")
             apply(cfg.escalation, "max_tokens", update.escalation_max_tokens, "escalation")
@@ -363,6 +436,96 @@ def create_app(system) -> FastAPI:
         system.mcp_registry = registry  # system.shutdown() disconnects it
         return registry.mcp_adapter
 
+    def _unregister_mcp_tools_for_server(server_name: str) -> int:
+        """Remove mcp_* wrappers for a disconnected server from the live registry."""
+        removed = 0
+        for name, tool in list(system.tool_registry.tools.items()):
+            if not name.startswith("mcp_"):
+                continue
+            server = getattr(tool, "server_name", None)
+            if server == server_name:
+                system.tool_registry.unregister_tool(name)
+                removed += 1
+        return removed
+
+    def _register_mcp_tools_for_server(adapter, server_name: str) -> list:
+        """Register connected MCP tools with the live tool registry."""
+        from tools.mcp_tool import MCPTool as MCPToolWrapper
+
+        registered = []
+        tools = [t for t in adapter.tools.values() if t.server_name == server_name]
+        for mcp_tool in tools:
+            wrapper_name = f"mcp_{mcp_tool.name}"
+            system.tool_registry.register_tool(MCPToolWrapper(
+                name=wrapper_name,
+                description=mcp_tool.description,
+                mcp_tool=mcp_tool,
+                mcp_adapter=adapter,
+            ))
+            registered.append(mcp_tool)
+        return registered
+
+    async def _connect_mcp_server_entry(name: str, entry: Dict[str, Any]):
+        """Connect one configured MCP server; returns (ok, tools_or_error)."""
+        import asyncio
+        from core.mcp_adapter import MCPServer, startup_timeout_for_command
+
+        if "command" not in entry:
+            return False, "server entry has no command"
+
+        adapter = _mcp_adapter(create=True)
+        if name in adapter.clients:
+            await adapter.remove_server(name)
+            _unregister_mcp_tools_for_server(name)
+
+        command = entry["command"]
+        cmd_list = command.split() if isinstance(command, str) else list(command)
+        server = MCPServer(
+            name=name,
+            command=cmd_list,
+            args=entry.get("args"),
+            env=entry.get("env"),
+            working_directory=entry.get("working_directory"),
+        )
+        connect_timeout = startup_timeout_for_command(cmd_list) + 15.0
+        try:
+            ok = await asyncio.wait_for(adapter.add_server(server), timeout=connect_timeout)
+        except asyncio.TimeoutError:
+            return False, (
+                f"connection timed out ({connect_timeout:.0f}s). "
+                "npx/uvx servers can take 1–2 minutes on first run — try Reconnect."
+            )
+        if not ok:
+            return False, "connection failed — check logs/witsv3.log for details"
+
+        tools = _register_mcp_tools_for_server(adapter, name)
+        logger.info(f"MCP server connected: {name} ({len(tools)} tools)")
+        return True, tools
+
+    @app.get("/api/mcp/status")
+    async def mcp_status():
+        adapter = _mcp_adapter()
+        config_servers = _load_mcp_config().get("servers", [])
+        connected = list(adapter.clients.keys()) if adapter else []
+        tool_count = len(adapter.tools) if adapter else 0
+        return {
+            "configured_servers": len(config_servers),
+            "connected_servers": len(connected),
+            "connected": connected,
+            "tool_count": tool_count,
+            "registry_url": system.config.tool_system.mcp_registry_url,
+        }
+
+    @app.get("/api/search/providers")
+    async def search_providers():
+        """Which web search providers are configured (no secrets exposed)."""
+        ws = system.config.web_search
+        return {
+            "provider_mode": ws.provider,
+            "tavily_configured": bool(ws.tavily_api_key or os.getenv("TAVILY_API_KEY")),
+            "brave_configured": bool(ws.brave_api_key or os.getenv("BRAVE_SEARCH_API_KEY")),
+            "fallback": "duckduckgo",
+        }
     @app.get("/api/mcp/servers")
     async def mcp_servers():
         adapter = _mcp_adapter()
@@ -409,6 +572,7 @@ def create_app(system) -> FastAPI:
         adapter = _mcp_adapter()
         if adapter and name in adapter.clients:
             await adapter.remove_server(name)
+        _unregister_mcp_tools_for_server(name)
 
         config = _load_mcp_config()
         before = len(config.get("servers", []))
@@ -420,49 +584,55 @@ def create_app(system) -> FastAPI:
 
     @app.post("/api/mcp/servers/{name:path}/connect")
     async def mcp_connect_server(name: str):
-        import asyncio
-        from core.mcp_adapter import MCPServer
-        from tools.mcp_tool import MCPTool as MCPToolWrapper
-
         entry = next((s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None)
         if entry is None:
             return JSONResponse({"detail": "unknown server"}, status_code=404)
-        if "command" not in entry:
-            return JSONResponse({"detail": "server entry has no command"}, status_code=400)
 
-        adapter = _mcp_adapter(create=True)
-        if name in adapter.clients:
-            return JSONResponse({"detail": "already connected"}, status_code=409)
-
-        command = entry["command"]
-        server = MCPServer(
-            name=name,
-            command=command.split() if isinstance(command, str) else command,
-            args=entry.get("args"),
-            env=entry.get("env"),
-            working_directory=entry.get("working_directory"),
-        )
-        try:
-            ok = await asyncio.wait_for(adapter.add_server(server), timeout=45)
-        except asyncio.TimeoutError:
-            return JSONResponse({"detail": "connection timed out (45s)"}, status_code=502)
+        ok, payload = await _connect_mcp_server_entry(name, entry)
         if not ok:
-            return JSONResponse({"detail": "connection failed - check the server log"}, status_code=502)
+            status = 409 if payload == "already connected" else 502
+            return JSONResponse({"detail": payload}, status_code=status)
 
-        # Register this server's tools with the live tool registry
-        tools = [t for t in await adapter.list_available_tools() if t.server_name == name]
-        for mcp_tool in tools:
-            system.tool_registry.register_tool(MCPToolWrapper(
-                name=f"mcp_{mcp_tool.name}",
-                description=mcp_tool.description,
-                mcp_tool=mcp_tool,
-                mcp_adapter=adapter,
-            ))
-        logger.info(f"MCP server connected via web UI: {name} ({len(tools)} tools)")
+        tools = payload
+        tool_list = [{"name": t.name, "description": t.description} for t in tools]
+        result = {"connected": True, "tools": tool_list, "tool_count": len(tool_list)}
+        if not tool_list:
+            result["warning"] = (
+                "Server handshake succeeded but no tools were listed. "
+                "Try Reconnect — npx servers often need a second attempt after cache warm-up."
+            )
+        return result
+
+    @app.post("/api/mcp/servers/{name:path}/reconnect")
+    async def mcp_reconnect_server(name: str):
+        """Disconnect (if needed) and connect again — fixes stale 0-tool sessions."""
+        entry = next((s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None)
+        if entry is None:
+            return JSONResponse({"detail": "unknown server"}, status_code=404)
+        adapter = _mcp_adapter()
+        if adapter and name in adapter.clients:
+            await adapter.remove_server(name)
+            _unregister_mcp_tools_for_server(name)
+        ok, payload = await _connect_mcp_server_entry(name, entry)
+        if not ok:
+            return JSONResponse({"detail": payload}, status_code=502)
+        tools = payload
+        tool_list = [{"name": t.name, "description": t.description} for t in tools]
         return {
-            "connected": True,
-            "tools": [{"name": t.name, "description": t.description} for t in tools],
+            "reconnected": True,
+            "tools": tool_list,
+            "tool_count": len(tool_list),
         }
+
+    @app.post("/api/mcp/servers/{name:path}/disconnect")
+    async def mcp_disconnect_server(name: str):
+        adapter = _mcp_adapter()
+        if not adapter or name not in adapter.clients:
+            return JSONResponse({"detail": "server not connected"}, status_code=409)
+        await adapter.remove_server(name)
+        removed = _unregister_mcp_tools_for_server(name)
+        logger.info(f"MCP server disconnected via web UI: {name} ({removed} tools unregistered)")
+        return {"disconnected": True, "tools_removed": removed}
 
     @app.get("/api/mcp/servers/{name:path}/tools")
     async def mcp_server_tools(name: str):
@@ -470,7 +640,117 @@ def create_app(system) -> FastAPI:
         if not adapter or name not in adapter.clients:
             return JSONResponse({"detail": "server not connected"}, status_code=409)
         tools = [t for t in await adapter.list_available_tools() if t.server_name == name]
-        return {"tools": [{"name": t.name, "description": t.description} for t in tools]}
+        return {
+            "tools": [
+                {
+                    "name": t.name,
+                    "registered_name": f"mcp_{t.name}",
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                }
+                for t in tools
+            ]
+        }
+
+    @app.get("/api/mcp/tools")
+    async def mcp_all_tools():
+        """All tools from connected MCP servers (for the playground)."""
+        adapter = _mcp_adapter()
+        if not adapter:
+            return {"tools": []}
+        return {
+            "tools": [
+                {
+                    "name": t.name,
+                    "registered_name": f"mcp_{t.name}",
+                    "server": t.server_name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                }
+                for t in await adapter.list_available_tools()
+            ]
+        }
+
+    @app.post("/api/mcp/tools/{tool_name:path}/invoke")
+    async def mcp_invoke_tool(tool_name: str, body: MCPToolInvoke):
+        """Run a connected MCP tool from the web UI (human testing)."""
+        adapter = _mcp_adapter()
+        if not adapter:
+            return JSONResponse({"detail": "no MCP servers connected"}, status_code=409)
+
+        bare = tool_name.removeprefix("mcp_")
+        tool = adapter.tools.get(bare)
+        if tool is None:
+            return JSONResponse({"detail": f"unknown MCP tool: {tool_name}"}, status_code=404)
+
+        from core.schemas import ToolCall
+
+        try:
+            result = await adapter.call_tool(ToolCall(
+                call_id=f"web_ui_{uuid.uuid4().hex[:8]}",
+                tool_name=bare,
+                arguments=body.arguments,
+            ))
+        except Exception as e:
+            return JSONResponse({"detail": str(e)}, status_code=502)
+
+        if not result.success:
+            return JSONResponse({"success": False, "error": result.error}, status_code=502)
+        return {"success": True, "result": result.result}
+
+    # -------------------------------------------- mcp registry (discover)
+    @app.get("/api/mcp/registry/search")
+    async def mcp_registry_search(q: str = "", limit: int = 10):
+        from core.mcp_registry_search import search_registry
+
+        try:
+            entries = await search_registry(
+                q, limit=max(1, min(limit, 25)),
+                registry_url=system.config.tool_system.mcp_registry_url,
+            )
+        except Exception as e:
+            logger.warning(f"MCP registry search failed: {e}")
+            return JSONResponse({"detail": f"registry search failed: {e}"}, status_code=502)
+
+        existing = {s.get("name") for s in _load_mcp_config().get("servers", [])}
+        for entry in entries:
+            entry["already_added"] = entry["name"] in existing
+        return {"results": entries}
+
+    @app.post("/api/mcp/registry/install")
+    async def mcp_registry_install(body: MCPRegistryInstall):
+        name = body.name.strip()
+        if not name or not body.command:
+            return JSONResponse({"detail": "name and command are required"}, status_code=400)
+
+        config = _load_mcp_config()
+        if any(s.get("name") == name for s in config.get("servers", [])):
+            return JSONResponse({"detail": f"server '{name}' already exists"}, status_code=409)
+
+        entry: Dict[str, Any] = {"name": name, "command": body.command, "source": "registry"}
+        if body.working_directory:
+            entry["working_directory"] = body.working_directory
+        if body.env:
+            # Drop blank values so we don't feed empty required vars to the server.
+            env = {k: v for k, v in body.env.items() if v}
+            if env:
+                entry["env"] = env
+        config.setdefault("servers", []).append(entry)
+        _save_mcp_config(config)
+        logger.info(f"MCP server installed from registry via web UI: {name}")
+
+        connect_result = None
+        if body.connect:
+            ok, payload = await _connect_mcp_server_entry(name, entry)
+            if ok:
+                connect_result = {
+                    "connected": True,
+                    "tools": [{"name": t.name, "description": t.description} for t in payload],
+                }
+            else:
+                connect_result = {"connected": False, "detail": payload}
+
+        return {"installed": True, "server": entry, "connect": connect_result}
 
     # ------------------------------------------------------ personality
     @app.get("/api/personality")

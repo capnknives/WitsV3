@@ -2,8 +2,14 @@
 title: "WitsV3 Enhancement Roadmap: Neural Web Architecture"
 created: "2025-06-09"
 last_updated: "2025-06-09"
-status: "active"
+status: "historical"
 ---
+
+> **Historical document.** Written 2025-06-09, predates the July 2026 revival
+> work. Kept for background/context only — for current status see
+> [`planning/roadmap/revival-2026-07.md`](revival-2026-07.md). Some items here
+> (e.g. Neural Web tools) were later found unwired at the code level; see
+> `planning/roadmap/composer-orchestrator-search-quality-2026-07.md` Tier 3 §9.
 
 # WitsV3 Enhancement Roadmap: Neural Web Architecture
 

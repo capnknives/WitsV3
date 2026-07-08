@@ -71,6 +71,11 @@ class MemoryManagerSettings(BaseModel):
     max_results_per_search: int = Field(default=5)
     pruning_interval_seconds: int = Field(default=3600)
     max_memory_segments: int = Field(default=10000)
+    max_embedding_chars: int = Field(
+        default=6000,
+        gt=0,
+        description="Max characters sent to the embedding model (nomic-embed-text limit)",
+    )
 
     # Enhanced pruning settings
     enable_auto_pruning: bool = Field(default=True, description="Enable automatic memory pruning")
@@ -94,6 +99,7 @@ class ToolSystemSettings(BaseModel):
     enable_mcp_tools: bool = Field(default=True)
     mcp_connect_on_startup: bool = Field(default=False, description="Connect to external MCP servers during startup (slows boot when servers are unavailable)")
     mcp_tool_definitions_path: str = Field(default="data/mcp_tools.json")
+    mcp_registry_url: str = Field(default="https://registry.modelcontextprotocol.io", description="Official MCP registry used by the discover/search feature")
     # langchain_bridge_enabled: bool = Field(default=False) # Placeholder
 
 class CLISettings(BaseModel):
@@ -142,6 +148,34 @@ class ModelRoutingSettings(BaseModel):
     complex_model: str = Field(default="qwen3:8b", description="Model for everything else")
     trivial_max_chars: int = Field(default=140, gt=0, description="Messages longer than this are never routed to the trivial model")
 
+class WebSearchSettings(BaseModel):
+    """Web search tool configuration.
+
+    The tool tries providers in a fallback chain so it returns *real* web
+    results even with no API key configured. Quality improves a lot if you
+    add a key (Tavily or Brave) in the gitignored .env:
+      - TAVILY_API_KEY        (https://tavily.com — 1000 free searches/mo, LLM-optimized)
+      - BRAVE_SEARCH_API_KEY  (https://brave.com/search/api — 2000 free/mo)
+    Keys are NEVER stored in config.yaml; they are injected from the
+    environment at load time (see _apply_env_overrides)."""
+    provider: str = Field(
+        default="auto",
+        description="Provider to use: auto (try all, best-available first), tavily, brave, or duckduckgo",
+    )
+    max_results: int = Field(default=5, gt=0, le=25, description="Default number of results to return")
+    tavily_search_depth: str = Field(
+        default="advanced",
+        description="Tavily depth: 'advanced' (more accurate answers, 2 credits) or 'basic' (1 credit). "
+                    "'basic' can return wrong answers for date/fact queries — 'advanced' is worth it.",
+    )
+    timeout_seconds: float = Field(default=12.0, gt=0, description="Per-request HTTP timeout")
+    region: str = Field(default="wt-wt", description="DuckDuckGo region code (wt-wt = no region)")
+    safesearch: str = Field(default="moderate", description="Safe search level: off, moderate, strict")
+    # Secrets — populated from the environment, not config.yaml.
+    tavily_api_key: str = Field(default="", description="Set via TAVILY_API_KEY env var")
+    brave_api_key: str = Field(default="", description="Set via BRAVE_SEARCH_API_KEY env var")
+
+
 class PersonalitySettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable personality system")
     profile_path: str = Field(default="config/wits_personality.yaml", description="Path to personality profile")
@@ -168,6 +202,7 @@ class WitsV3Config(BaseModel):
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
     escalation: EscalationSettings = Field(default_factory=EscalationSettings)
     model_routing: ModelRoutingSettings = Field(default_factory=ModelRoutingSettings)
+    web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
 
     class Config:
         validate_assignment = True
@@ -200,6 +235,8 @@ def _apply_env_overrides(config: "WitsV3Config") -> "WitsV3Config":
       - WITSV3_SUPABASE_URL:      Supabase project URL
       - WITSV3_SUPABASE_KEY:      Supabase API key
       - WITSV3_AUTH_TOKEN_HASH:   SHA256 hash of the admin auth token
+      - TAVILY_API_KEY:           optional web-search provider (better results)
+      - BRAVE_SEARCH_API_KEY:     optional web-search provider (better results)
     """
     supabase_url = os.getenv("WITSV3_SUPABASE_URL")
     if supabase_url:
@@ -212,6 +249,15 @@ def _apply_env_overrides(config: "WitsV3Config") -> "WitsV3Config":
     auth_token_hash = os.getenv("WITSV3_AUTH_TOKEN_HASH")
     if auth_token_hash:
         config.security.auth_token_hash = auth_token_hash
+
+    # Web search API keys (optional — the tool falls back to keyless DuckDuckGo)
+    tavily_key = os.getenv("TAVILY_API_KEY")
+    if tavily_key:
+        config.web_search.tavily_api_key = tavily_key
+
+    brave_key = os.getenv("BRAVE_SEARCH_API_KEY")
+    if brave_key:
+        config.web_search.brave_api_key = brave_key
 
     return config
 

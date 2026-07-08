@@ -230,8 +230,7 @@ WitsV3/
 ├── core/                # Core systems (config, LLM interface, memory, schemas, adapters)
 ├── config/              # Additional YAML configs (personality, ethics, background agent)
 ├── data/                # Local data (memory files, MCP tool definitions) — personal data gitignored
-├── gui/                 # PyQt6 desktop GUI (work in progress)
-├── planning/            # Design docs, roadmaps, technical notes
+├── planning/            # Design docs, roadmaps, technical notes (includes archive/gui/ — parked PyQt6 desktop GUI)
 ├── scripts/             # Setup and maintenance scripts
 ├── tests/               # Test suite (142 passing)
 ├── tools/               # Tool implementations

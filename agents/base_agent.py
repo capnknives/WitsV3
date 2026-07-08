@@ -84,7 +84,8 @@ class BaseAgent(ABC):
         prompt: str,
         model_name: Optional[str] = None,
         temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
+        response_format: Optional[str] = None
     ) -> str:
         """
         Generate a response using the LLM.
@@ -94,16 +95,23 @@ class BaseAgent(ABC):
             model_name: Optional model override
             temperature: Optional temperature override
             max_tokens: Optional max tokens override
+            response_format: Optional output constraint ("json" for Ollama structured output)
 
         Returns:
             Generated text response
         """
         try:
+            # Only pass format when requested — some BaseLLMInterface
+            # implementations (and test fakes) don't accept the kwarg.
+            extra_kwargs: Dict[str, Any] = {}
+            if response_format is not None:
+                extra_kwargs["format"] = response_format
             response = await self.llm_interface.generate_text(
                 prompt=prompt,
                 model=model_name or self.get_model_name(),
                 temperature=temperature or self.temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                **extra_kwargs
             )
             return response
         except Exception as e:
@@ -170,8 +178,20 @@ class BaseAgent(ABC):
         if not self.memory_manager:
             return None
 
+        # nomic-embed-text rejects very long inputs; cap before persisting.
+        from core.memory_manager import (
+            MemorySegment,
+            MemorySegmentContent,
+            resolve_max_embedding_chars,
+            truncate_for_embedding,
+        )
+
+        max_chars = resolve_max_embedding_chars(self.config)
+        content = truncate_for_embedding(
+            content, max_chars, suffix="\n… [truncated for memory]"
+        )
+
         try:
-            from core.memory_manager import MemorySegment, MemorySegmentContent
 
             segment = MemorySegment(
                 type=segment_type,

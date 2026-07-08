@@ -43,6 +43,23 @@
         "node",
         "index.js"
       ]
+    },
+    {
+      "name": "com.mcparmory/google-gmail",
+      "command": [
+        "uvx",
+        "mcparmory-google-gmail==1.0.4"
+      ],
+      "source": "registry"
+    },
+    {
+      "name": "io.github.DeusData/codebase-memory-mcp",
+      "command": [
+        "npx",
+        "-y",
+        "codebase-memory-mcp@0.8.1"
+      ],
+      "source": "registry"
     }
   ]
 }

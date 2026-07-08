@@ -1,5 +1,7 @@
 # WITS Synthetic Brain Implementation - Remaining Tasks
 
+> **Historical.** Superseded — see [`SYNTHETIC_BRAIN.md`](SYNTHETIC_BRAIN.md) for current status.
+
 ## Overview
 
 We've successfully committed the Phase 1 implementation of the WITS Synthetic Brain expansion plan. This document outlines the remaining tasks that need to be addressed in the next work session.

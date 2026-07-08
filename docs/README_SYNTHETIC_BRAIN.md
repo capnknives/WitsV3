@@ -1,5 +1,7 @@
 # WITS Synthetic Brain
 
+> **Historical.** Superseded — see [`SYNTHETIC_BRAIN.md`](SYNTHETIC_BRAIN.md) for current status.
+
 ## Overview
 
 The WITS Synthetic Brain is an expansion of the WitsV3 system that transitions WITS from a language-model-based assistant to a fully modular synthetic brain. This implementation adds memory systems, sensorimotor input/output, self-modeling, autonomous goal capabilities, emotion modeling, ethical reasoning, and symbolic planning.

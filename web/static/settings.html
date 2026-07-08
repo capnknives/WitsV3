@@ -44,7 +44,11 @@
 </head>
 <body>
   <div class="wrap">
-    <header><a href="/">← back to chat</a></header>
+    <header>
+      <a href="/">← back to chat</a>
+      <span style="flex:1"></span>
+      <a href="/personality">Personality →</a>
+    </header>
     <h1>◆ WITS Settings</h1>
 
     <form id="form">
@@ -82,6 +86,35 @@
       <div class="setting">
         <label for="orchestrator_model">Orchestrator model</label>
         <select id="orchestrator_model"></select>
+      </div>
+
+      <h2>Smart model routing</h2>
+      <div class="setting">
+        <div class="toggle-row">
+          <div>
+            <label for="routing_enabled">Route by request type</label>
+            <div class="hint" style="margin-bottom:0">Short chat → fast model, code questions → coder model,
+              everything else → default. Applies to casual replies and orchestration goals.</div>
+          </div>
+          <input type="checkbox" id="routing_enabled">
+        </div>
+      </div>
+      <div class="setting">
+        <label for="routing_trivial_model">Casual / trivial model</label>
+        <select id="routing_trivial_model"></select>
+      </div>
+      <div class="setting">
+        <label for="routing_code_model">Code model</label>
+        <select id="routing_code_model"></select>
+      </div>
+      <div class="setting">
+        <label for="routing_complex_model">Complex / default routed model</label>
+        <select id="routing_complex_model"></select>
+      </div>
+      <div class="setting">
+        <label for="routing_trivial_max_chars">Trivial max length (chars)</label>
+        <div class="hint">Messages longer than this never go to the trivial model, even if they look like small talk.</div>
+        <input type="number" id="routing_trivial_max_chars" min="20" max="500" step="10" value="140">
       </div>
 
       <h2>Ask-Claude escalation</h2>
@@ -180,6 +213,12 @@
         $("#max_iterations").value = s.max_iterations;
         fillSelect($("#default_model"), s.available_models, s.default_model);
         fillSelect($("#orchestrator_model"), s.available_models, s.orchestrator_model);
+        const mr = s.model_routing || {};
+        $("#routing_enabled").checked = !!mr.enabled;
+        fillSelect($("#routing_trivial_model"), s.available_models, mr.trivial_model);
+        fillSelect($("#routing_code_model"), s.available_models, mr.code_model);
+        fillSelect($("#routing_complex_model"), s.available_models, mr.complex_model);
+        $("#routing_trivial_max_chars").value = mr.trivial_max_chars ?? 140;
         fillSelect($("#escalation_model"), Object.keys(prices), s.escalation_model);
         $("#escalation_enabled").checked = s.escalation_enabled;
         $("#escalation_max_tokens").value = s.escalation_max_tokens;
@@ -203,6 +242,11 @@
             max_iterations: parseInt($("#max_iterations").value, 10),
             default_model: $("#default_model").value,
             orchestrator_model: $("#orchestrator_model").value,
+            routing_enabled: $("#routing_enabled").checked,
+            routing_trivial_model: $("#routing_trivial_model").value,
+            routing_code_model: $("#routing_code_model").value,
+            routing_complex_model: $("#routing_complex_model").value,
+            routing_trivial_max_chars: parseInt($("#routing_trivial_max_chars").value, 10),
             escalation_enabled: $("#escalation_enabled").checked,
             escalation_model: $("#escalation_model").value,
             escalation_max_tokens: parseInt($("#escalation_max_tokens").value, 10),

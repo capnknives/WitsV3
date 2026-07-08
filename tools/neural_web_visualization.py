@@ -24,6 +24,20 @@ from core.memory_manager import MemoryManager
 logger = logging.getLogger(__name__)
 
 
+def _resolve_neural_web(memory_manager) -> Optional[NeuralWeb]:
+    """Pull the live NeuralWeb out of memory_manager when the neural backend is active."""
+    if memory_manager is None:
+        return None
+    try:
+        from core.neural_memory_backend import NeuralMemoryBackend
+        backend = getattr(memory_manager, "backend", None)
+        if isinstance(backend, NeuralMemoryBackend):
+            return backend.neural_web
+    except ImportError:
+        pass
+    return None
+
+
 class NeuralWebVisualizer:
     """Visualization tools for Neural Web knowledge networks."""
 
@@ -103,7 +117,7 @@ class NeuralWebVisualizer:
             # Use spring layout for better organization
             try:
                 pos = nx.spring_layout(viz_graph, k=3, iterations=50)
-            except:
+            except Exception:
                 # Fallback to circular layout if spring fails
                 pos = nx.circular_layout(viz_graph)
 
@@ -576,51 +590,69 @@ class NeuralWebVisualizer:
 
 
 class NeuralWebVisualizationTool(BaseTool):
-    """Tool for generating Neural Web visualizations."""
+    """Tool for generating Neural Web visualizations.
 
-    def __init__(self, config: WitsV3Config):
-        super().__init__(config)
-        self.name = "neural_web_visualize"
-        self.description = "Generate visualizations of the Neural Web knowledge network"
+    Dependencies are injected lazily via set_dependencies() (same pattern
+    document/web-search tools use) so tool_registry auto-discovery — which
+    only instantiates tools with zero required constructor args — can find
+    it, and startup can wire in the real config/neural_web afterward.
+    """
+
+    def __init__(self):
+        super().__init__(
+            name="neural_web_visualize",
+            description="Generate visualizations of the Neural Web knowledge network",
+        )
+        self.config: Optional[WitsV3Config] = None
+        self._neural_web: Optional[NeuralWeb] = None
+
+    def set_dependencies(self, config: WitsV3Config, llm_interface=None, memory_manager=None, **kwargs) -> None:
+        """Wire in shared system dependencies (called by WitsV3System startup)."""
+        self.config = config
+        self._neural_web = _resolve_neural_web(memory_manager)
 
     def get_schema(self) -> Dict[str, Any]:
         return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "format": {
-                            "type": "string",
-                            "enum": ["png", "svg", "pdf", "html"],
-                            "description": "Output format for the visualization"
-                        },
-                        "include_weights": {
-                            "type": "boolean",
-                            "description": "Whether to include connection weights"
-                        },
-                        "filter_threshold": {
-                            "type": "number",
-                            "description": "Minimum connection strength to include"
-                        },
-                        "max_nodes": {
-                            "type": "integer",
-                            "description": "Maximum number of nodes to include"
-                        },
-                        "include_domains": {
-                            "type": "boolean",
-                            "description": "Whether to include domain information"
-                        }
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "format": {
+                        "type": "string",
+                        "enum": ["png", "svg", "pdf", "html"],
+                        "description": "Output format for the visualization"
                     },
-                    "required": ["format"]
-                }
+                    "include_weights": {
+                        "type": "boolean",
+                        "description": "Whether to include connection weights"
+                    },
+                    "filter_threshold": {
+                        "type": "number",
+                        "description": "Minimum connection strength to include"
+                    },
+                    "max_nodes": {
+                        "type": "integer",
+                        "description": "Maximum number of nodes to include"
+                    },
+                    "include_domains": {
+                        "type": "boolean",
+                        "description": "Whether to include domain information"
+                    }
+                },
+                "required": ["format"]
             }
         }
 
     async def execute(self, **kwargs) -> ToolResult:
         try:
+            if self.config is None:
+                return ToolResult(
+                    success=False,
+                    result=None,
+                    error="neural_web_visualize tool has no dependencies wired (set_dependencies was never called)"
+                )
+
             # Get Neural Web instance
             neural_web = await self._get_neural_web()
 
@@ -681,14 +713,15 @@ class NeuralWebVisualizationTool(BaseTool):
     async def _get_neural_web(self) -> Optional[NeuralWeb]:
         """Get the Neural Web instance from the system."""
         try:
-            # For now, create a simple test neural web
-            # In production, this would be retrieved from the memory manager or agent
+            if self._neural_web is not None:
+                return self._neural_web
+
+            logger.warning(
+                "Neural Web backend not active (memory_manager.backend must be "
+                "'neural') — visualizing demo data instead of live concepts"
+            )
             neural_web = NeuralWeb()
-
-            # Add some test data if the neural web is empty
-            if not neural_web.concepts:
-                await self._add_test_data(neural_web)
-
+            await self._add_test_data(neural_web)
             return neural_web
 
         except Exception as e:

@@ -19,6 +19,32 @@ import numpy as np
 from .config import WitsV3Config, MemoryManagerSettings
 from .llm_interface import BaseLLMInterface # To get embeddings
 
+
+def truncate_for_embedding(text: str, max_chars: int, suffix: str = "…") -> str:
+    """Truncate *text* so the returned string length is at most *max_chars*."""
+    if len(text) <= max_chars:
+        return text
+    if len(suffix) >= max_chars:
+        return suffix[:max_chars]
+    return text[: max_chars - len(suffix)] + suffix
+
+
+DEFAULT_MAX_EMBEDDING_CHARS = 6000
+
+
+def resolve_max_embedding_chars(config_or_settings: Any) -> int:
+    """Return max embedding input length from config or memory settings."""
+    if config_or_settings is None:
+        return DEFAULT_MAX_EMBEDDING_CHARS
+    mm = getattr(config_or_settings, "memory_manager", config_or_settings)
+    if mm is None:
+        return DEFAULT_MAX_EMBEDDING_CHARS
+    value = getattr(mm, "max_embedding_chars", DEFAULT_MAX_EMBEDDING_CHARS)
+    if not isinstance(value, int) or value <= 0:
+        return DEFAULT_MAX_EMBEDDING_CHARS
+    return value
+
+
 # --- Pydantic Models for Memory Segments ---
 class MemorySegmentContent(BaseModel):
     text: Optional[str] = None
@@ -105,7 +131,10 @@ class BaseMemoryBackend(ABC):
         if segment.embedding is None:
             text_to_embed = segment.content.text or segment.content.tool_output
             if text_to_embed:
-                try:                    segment.embedding = await self.llm_interface.get_embedding(
+                max_chars = resolve_max_embedding_chars(self.settings)
+                text_to_embed = truncate_for_embedding(text_to_embed, max_chars)
+                try:
+                    segment.embedding = await self.llm_interface.get_embedding(
                         text_to_embed,
                         model=self.config.ollama_settings.embedding_model
                     )

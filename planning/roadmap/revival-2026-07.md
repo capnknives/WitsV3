@@ -1,7 +1,7 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
-**Branch:** `fix/revive-2026-07` (16 commits, July 6–7 2026, not yet merged to `main`)
-**Test suite:** 191 passed / 2 skipped (skips are external MCP-server integration tests)
+**Branch:** `fix/revive-2026-07` (July 6–7 2026, merged to `main` at 1a555f2; later work continues on the branch)
+**Test suite:** 312 passed / 2 skipped (skips are external MCP-server integration tests)
 **Last updated:** July 7, 2026
 
 This document tracks the July 2026 revival effort: what was worked on, what
@@ -50,6 +50,8 @@ suggested next steps.
 |---|---|
 | `8514e62` | "Amnesia" fix: direct-response window 5 → 20 messages (configurable via `/settings`) |
 | `89fd4ac` | `validate_tool_call` now unwraps schemas nested under `"parameters"` — valid args were flagged "unknown" and required-param checks were silently skipped for `document_search`/`web_search`/`ask_claude` |
+| `32f857f` | **Orchestrator JSON robustness** (roadmap #5): reasoning calls use Ollama `format=json`; parser strips `<think>` blocks, scans for balanced JSON, completes truncated objects, repairs common syntax slips; one-shot repair-reparse LLM retry before keyword fallback |
+| `bddfe8f` | **Web search actually used for current events**: "who died June 14 2026?" refused ("training only goes to 2023") without searching. Fixed 4 defects — (1) WCCA `_needs_web_search()` routes current-info/lookup questions to the orchestrator before the casual heuristic (which flagged any <10-word question as small talk); (2) `ReliableOllamaInterface` dropped the `format` kwarg → `format=json` reasoning crashed ALL orchestration at runtime (now `**kwargs` pass-through); (3) ReAct prompt now tells the model to call web_search and never refuse on a cutoff; (4) Tavily `basic` depth gave a wrong answer (Ken Errair, d.1968) → default `advanced` returns Oliver Tree. Verified live end-to-end. Suite 251 passed / 2 skipped |
 | `277960d` | **Control-center routing overhaul** (the "too rigid" fix): (a) casual-chat detector substring-matched "hi" inside "things"/"this" → real requests answered as small talk, now word-boundary matching; (b) intent analysis + direct-response prompts now include a live ingested-document inventory, and any message mentioning an ingested filename (or words from it, e.g. "audit") routes straight to the orchestrator, checked before the casual heuristic; (c) LLM `goal_defined` intents defaulted to "simple" and never reached the orchestrator — now they delegate. Regression tests in `tests/agents/test_wcca_routing.py` |
 
 ### Environment (no commits — machine/system state)
@@ -71,8 +73,8 @@ suggested next steps.
 | PDFs skipped — pypdf missing | ✅ Fixed (`89fd4ac`) |
 | "I don't have access to your report" despite successful search | ✅ Fixed (`ed0ef6c` + `277960d`) |
 | Document questions misrouted to chat/clarification unless phrased exactly | ✅ Fixed (`277960d`) |
-| `web_search` fails with DuckDuckGo status 202 (rate-limited/blocked) | ⚠️ OPEN — external; needs fallback backend or backoff |
-| Orchestrator "Failed to parse reasoning response: Expecting ',' delimiter" (×15 in one session) | ⚠️ OPEN — qwen3 emits malformed JSON in the ReAct loop |
+| `web_search` fails with DuckDuckGo status 202 (rate-limited/blocked) | ✅ Fixed July 7 — rewritten as a multi-provider tool: real DuckDuckGo HTML/Lite scraping (with a browser UA + 202/429 retry-backoff) instead of the useless Instant Answer API, plus optional Tavily/Brave via `.env` keys |
+| Orchestrator "Failed to parse reasoning response" on save-to-file (×16, content embedded in JSON) | ✅ Fixed July 7 — save-to-file flow: WCCA routing, session injection, content auto-fill, strip large bodies from ReAct JSON |
 | Ollama connection refused (service not running) | ⚠️ Environmental — start the tray app; consider a friendlier UI error |
 
 ---
@@ -80,31 +82,50 @@ suggested next steps.
 ## 3. What's left to do
 
 ### Richard's manual action items (browser/keys — can't be automated)
-1. **Revoke the leaked `sbp_...` Supabase personal access token** at supabase.com/dashboard/account/tokens (leaked in git history before the secrets cleanup).
-2. **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
+- [x] ~~**Revoke the leaked `sbp_...` Supabase personal access token**~~ N/A confirmed July 7 2026 — Richard has no Supabase project anymore, so the leaked token has nothing to grant access to. No action needed; left in git history as a dead credential.
+- [ ] **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
+- [x] ~~**Get a Tavily web-search API key**~~ DONE July 7 2026 — key added to `.env` as `TAVILY_API_KEY`; verified live, `web_search` now routes through Tavily (returns synthesized answer + results).
+- [ ] **Get a Brave Search API key** at brave.com/search/api (free tier: 2000/mo) and add `BRAVE_SEARCH_API_KEY=...` to `.env`. Good second option / fallback. Neither key is required — `web_search` already returns real results keyless via DuckDuckGo.
 
 ### Repo hygiene
-3. ~~Push `fix/revive-2026-07` to GitHub~~ DONE July 7 — branch is on GitHub (with the mcp_servers repos registered as proper submodules). **Merging to `main` is still Richard's call** (merge locally or open a PR).
+- [x] ~~Push `fix/revive-2026-07` to GitHub and merge to `main`~~ DONE July 7 — branch pushed (with the mcp_servers repos registered as proper submodules) and merged to `main` (1a555f2) with Richard's authorization. Repo hygiene fully resolved.
 
 ### Roadmap (approved earlier)
 4. ~~Smart model routing~~ SHIPPED July 7 2026: new `core/model_router.py` + `model_routing` config section (enabled by default; trivial → llama3.2:3b, code → qwen2.5-coder:7b, complex → default). Routes on the **raw user message/goal only** — never full prompt templates, which always look complex. Wired at three points: WCCA casual-chat response, WCCA fallback direct response, and the orchestrator ReAct loop (routes once per goal in `run()`; `allow_trivial=False` so the 3b model never handles ReAct JSON; code goals go to qwen2.5-coder, which should also reduce the malformed-JSON failures). `core/adaptive_llm_interface.py` was NOT activated — it routes to on-disk neural "modules" that don't exist, not to Ollama models; the lean router replaces that idea. Tests in `tests/core/test_model_router.py`; suite 207 passed / 2 skipped. Note: routing config is not in the /settings web page yet (config.local.yaml can override it).
-5. **Orchestrator reasoning robustness**: the qwen3 malformed-JSON parse failures and result-dismissing synthesis are the same weakness. Code goals now hit qwen2.5-coder via routing (item 4), which should help; still worth doing: Ollama structured output (`format=json`) on reasoning calls and/or a repair-reparse pass.
+5. ~~Orchestrator reasoning robustness~~ SHIPPED July 7 2026: three layers of defense against qwen3's malformed ReAct JSON. (a) **Ollama structured output**: reasoning calls now send `format=json` (new `format` param on `OllamaInterface.generate_text`/`_prepare_payload`, `response_format` on `BaseAgent.generate_response` — passed only when set, so other interfaces/test fakes are unaffected), which grammar-constrains generation to valid JSON. (b) **Robust parsing** in `LLMDrivenOrchestrator`: strips qwen3 `<think>` blocks, extracts candidates from markdown fences and string-aware balanced-brace scanning (the old greedy `\{.*\}` regex broke whenever a response had multiple `{...}` spans), completes truncated objects (closes open strings/braces), and applies conservative repairs (trailing commas, smart quotes, Python `True/False/None`). (c) **Repair-reparse round trip** in the ReAct loop: if parsing still fails, the fallback result is flagged `_parse_failed` and the model is asked once (also `format=json`) to rewrite its own output as valid JSON before keyword fallback is used. Tests in `tests/agents/test_orchestrator_json.py` (15 cases incl. the literal "Expecting ',' delimiter" failure); suite 222 passed / 2 skipped. Note: the related result-dismissing synthesis ("hallucinates instead of using document_search results") should also shrink — structured output stops think-block leakage into parsed thoughts — but watch the logs to confirm.
 
 ### Smaller quality items
-6. **web_search resilience**: DuckDuckGo HTML endpoint rate-limits (status 202); add retry/backoff and/or an alternative backend.
-7. **Friendlier "Ollama is down" handling** in the web UI (currently three retries then a raw error in chat).
-8. **Intent-handler cleanup**: `clarification_question`/`direct_response` LLM intents still funnel through the casual-chat prompt instead of using their own generated text; the enhanced/meta-reasoning path duplicates routing logic. Worth unifying when touching WCCA next.
+6. ~~**web_search resilience**~~ SHIPPED July 7 2026: `tools/web_search_tool.py` rewritten from a single dead endpoint into a provider fallback chain. Root cause was deeper than the 202 — the old tool only hit the DuckDuckGo **Instant Answer API** (`api.duckduckgo.com`), which is not a web search engine (it returns Wikipedia-style disambiguation "RelatedTopics" for a tiny set of queries and 202s under load), so most searches returned empty even when not blocked. New chain: **Tavily** (if `TAVILY_API_KEY`) → **Brave** (if `BRAVE_SEARCH_API_KEY`) → **DuckDuckGo HTML** scrape → **DuckDuckGo Lite** scrape → Instant Answer API (last resort). The DDG scrape paths send a real browser User-Agent (the default aiohttp UA is what triggers the 202 bot wall), unwrap DDG's `/l/?uddg=` redirect links, and retry on 202/429 with exponential backoff. Keyless works out of the box (verified live — real organic results with snippets); keys just improve quality. New `web_search` config section (`provider`/`max_results`/`timeout`/`region`/`safesearch`); keys injected from `.env`, never config.yaml. Tool now takes `set_dependencies(config, ...)`. Tests in `tests/tools/test_web_search_tool.py` (8 cases: HTML parse, redirect-unwrap, max_results, 202→Lite fallthrough, Tavily-preferred, all-fail); suite 226 passed / 2 skipped.
+7. ~~**MCP tool discovery / marketplace**~~ SHIPPED July 7 2026: WITS can now find and add *new* capabilities on demand from the official MCP registry (registry.modelcontextprotocol.io), instead of only using pre-configured servers. New `core/mcp_registry_search.py` queries the registry and derives a runnable stdio command per package (npm → `npx -y pkg@ver`, pypi → `uvx pkg==ver`), surfaces required env vars, dedupes by `isLatest`, and — because the registry matches `search` as a literal phrase — falls back from a multi-word query to individual keywords, merging + relevance-ranking the results. Two ways in: (a) agent-facing read-only tool `search_mcp_tools` (`tools/mcp_discovery_tool.py`, auto-registered) so WITS can look up a server when no installed tool fits; (b) `/mcp` web page "Discover servers" search box with one-click **Install** (writes the config entry + required-env inputs) then the existing **Connect** button runs it. New web routes `GET /api/mcp/registry/search` + `POST /api/mcp/registry/install`; new `tool_system.mcp_registry_url` config. **Security boundary:** searching is read-only and safe; *installing/connecting downloads and runs third-party code*, so that stays a deliberate human click in the web UI — the agent can discover but never self-installs. Tests in `tests/core/test_mcp_registry_search.py` (12: command derivation for npm/pypi/non-stdio/oci, env-var + isLatest handling, keyword fallback, HTTP-error). Verified live against the real registry (postgres/slack/gmail/spotify all return installable servers with correct commands). Suite 238 passed / 2 skipped.
+8. ~~**Friendlier "Ollama is down" handling**~~ SHIPPED July 7 2026 (Composer branch): friendly errors in web UI.
+9. ~~**Intent-handler cleanup**~~ SHIPPED July 7 2026: `direct_response`/`clarification_question` now use the intent JSON text instead of a second casual-chat LLM call; `_requires_orchestrator_for_input()` unifies doc + web-search guards; misclassified `direct_response` on tool-needed queries is overridden to orchestrator. Tests in `tests/agents/test_wcca_routing.py`.
+10. ~~**Save conversation/story to file**~~ SHIPPED July 7 2026 (Composer branch): log analysis showed `write_file` never ran — save requests hit direct-response or ReAct JSON broke when the model embedded file bodies in reasoning JSON. Fixes: WCCA `_needs_file_write()` routes save/export phrasing to orchestrator; orchestrator injects `conversation_history` into `read_conversation_history`; auto-fills `write_file` content from observations or session; strips >300-char `content` from ReAct JSON; `write_file` kwarg aliases (`path`→`file_path`, `text`/`body`→`content`); two-step prompt (read history → write file, never embed body in JSON). Tests in `tests/agents/test_orchestrator_save_file.py`, `tests/core/test_tool_registry_kwargs.py`, `tests/agents/test_wcca_routing.py`.
+11. **MCP discovery follow-ups** (optional): support OCI/Docker packages (currently npm+pypi only); a "Browse tools before install" preview; and let `search_mcp_tools` results deep-link the user straight to the /mcp discover box.
 
 ### Parked (explicitly out of scope for now)
 - Docker packaging, Supabase cloud sync
-- PyQt6 GUI (`gui/`) — works but Richard dislikes it; the web UI is the replacement
+- PyQt6 GUI — archived July 7 2026 to `planning/archive/gui/` (was `gui/`); web UI is the replacement
 
 ---
 
 ## 4. Suggested next steps (in order)
 
-1. Merge `fix/revive-2026-07` to `main` (branch is pushed; merge or PR is Richard's call).
-2. Do the two manual items (revoke Supabase token, add Anthropic key).
-3. Orchestrator JSON robustness (#5) — `format=json` on reasoning calls + repair-reparse.
-4. web_search fallback (#6) as a standalone small task.
-5. Expose model_routing in the /settings web page.
+1. Optionally add `ANTHROPIC_API_KEY` if the ask-Claude escalation should work. Brave key: DONE (`BRAVE_SEARCH_API_KEY` added; `web_search` merges Tavily+Brave). Supabase token: N/A, no project exists anymore.
+2. **Re-test save-to-file** after restart: *"Save a log of our conversations as exports/chat_log.txt"* — expect orchestrator → `read_conversation_history` → `write_file`, not JSON parse loops.
+3. ~~Merge `composer/orchestrator-search-quality` → `main`~~ DONE July 7 2026: `claude/tier2-tier3-cleanup-2026-07` (superset of `composer/orchestrator-search-quality` plus Tier 2/3 cleanup below) fast-forward merged into `fix/revive-2026-07`.
+4. Optional roadmap #11: MCP OCI/Docker install, browse-before-install preview, deep-link from `search_mcp_tools` to `/mcp`.
+5. Optional quality follow-up from logs: WCCA intent JSON repair-reparse (same pattern as orchestrator). Embedding input truncation is DONE (`7660664`).
+
+### Whole-repo audit backlog (July 7, 2026)
+
+A read-only pass over the entire codebase (beyond the search/MCP work) produced a
+prioritized backlog of "obviously missing" items — CI, tooling-config
+de-duplication, dead/dormant code (neural web tools, `adaptive_llm_interface`,
+`gui/`, `*_fixed.py`/`*_updated.py`), uncollected root-level tests, and the
+500-line-rule violations. **Tiers 1–3 shipped July 7 2026** (CI + tooling
+config consolidation by the Cursor session; doc truth pass + neural-web-tools
+wiring + dead-code archival/deletion by Claude — see the **"Codebase audit —
+obviously missing / suggested additions"** section in
+`planning/roadmap/composer-orchestrator-search-quality-2026-07.md` for the
+full list). **Tier 4** (500-line-rule violations, `self_repair_agent` test
+coverage, MCP submodule footprint) remains open — schedule deliberately.

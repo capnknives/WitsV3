@@ -130,6 +130,27 @@ def test_chat_reuses_session(client_noauth):
     assert len(system.session_histories[session_id].messages) == 4
 
 
+class OllamaDownControlCenter:
+    async def run(self, user_input, conversation_history=None, session_id=None):
+        yield StreamData(
+            type="error",
+            content="An error occurred during orchestration: Failed to connect to Ollama at http://localhost:11434.",
+            source="orchestrator",
+            error_details="Failed to connect to Ollama at http://localhost:11434. Please ensure Ollama is running.",
+        )
+
+
+def test_chat_ollama_down_shows_friendly_error(client_noauth):
+    client, system = client_noauth
+    system.control_center = OllamaDownControlCenter()
+    events = _parse_sse(client.post("/api/chat", json={"message": "hello"}).text)
+    error_events = [d for e, d in events if e == "stream" and d.get("type") == "error"]
+    assert error_events
+    assert error_events[0]["user_error"]["code"] == "ollama_unavailable"
+    assert "Can't reach Ollama" in error_events[0]["content"]
+    assert "ollama serve" in error_events[0]["user_error"]["hint"]
+
+
 # ------------------------------------------------------------------ info endpoints
 
 def test_status(client_noauth):
@@ -326,6 +347,27 @@ def test_settings_get(client_settings):
     assert body["escalation_model"] == "claude-opus-4-8"
     assert "claude-opus-4-8" in body["escalation_models"]
     assert isinstance(body["anthropic_key_configured"], bool)
+    mr = body["model_routing"]
+    assert mr["enabled"] is system.config.model_routing.enabled
+    assert mr["trivial_model"] == system.config.model_routing.trivial_model
+    assert mr["code_model"] == system.config.model_routing.code_model
+
+
+def test_settings_post_model_routing(client_settings):
+    client, system, tmp_path = client_settings
+    res = client.post("/api/settings", json={
+        "routing_enabled": False,
+        "routing_trivial_model": "llama3.2:3b",
+        "routing_code_model": "qwen2.5-coder:7b",
+        "routing_complex_model": "qwen3:8b",
+        "routing_trivial_max_chars": 100,
+    })
+    assert res.status_code == 200
+    assert system.config.model_routing.enabled is False
+    assert system.config.model_routing.trivial_max_chars == 100
+    overrides = (tmp_path / "config.local.yaml").read_text()
+    assert "model_routing:" in overrides
+    assert "enabled: false" in overrides
 
 
 def test_settings_post_applies_live_and_persists(client_settings):
@@ -489,3 +531,25 @@ def test_mcp_add_and_remove_server(client_mcp):
 def test_mcp_tools_requires_connection(client_mcp):
     client, _, _ = client_mcp
     assert client.get("/api/mcp/servers/demo/tools").status_code == 409
+
+
+def test_mcp_status_and_search_providers(client_mcp):
+    client, _, _ = client_mcp
+    status = client.get("/api/mcp/status").json()
+    assert status["configured_servers"] == 1
+    assert status["connected_servers"] == 0
+
+    providers = client.get("/api/search/providers").json()
+    assert providers["provider_mode"] == "auto"
+    assert "brave_configured" in providers
+
+
+def test_mcp_all_tools_empty_when_disconnected(client_mcp):
+    client, _, _ = client_mcp
+    assert client.get("/api/mcp/tools").json() == {"tools": []}
+
+
+def test_mcp_invoke_unknown_tool(client_mcp):
+    client, _, _ = client_mcp
+    res = client.post("/api/mcp/tools/unknown_tool/invoke", json={"arguments": {}})
+    assert res.status_code == 409

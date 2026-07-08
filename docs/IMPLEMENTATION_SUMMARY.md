@@ -1,5 +1,7 @@
 # WITS Synthetic Brain Implementation - Summary
 
+> **Historical.** Superseded — see [`SYNTHETIC_BRAIN.md`](SYNTHETIC_BRAIN.md) for current status.
+
 ## Implementation Status
 
 As of June 12, 2025, we have successfully implemented and committed Phase 1 of the WITS Synthetic Brain Expansion Plan. The implementation consists of two main commits:

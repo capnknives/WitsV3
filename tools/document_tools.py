@@ -90,6 +90,52 @@ def _chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
     return [c for c in chunks if c.strip()]
 
 
+def _coerce_file_filters(*values: Any) -> List[str]:
+    """Normalize LLM file filter args (file_name, file_names, source_files, …)."""
+    out: List[str] = []
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str):
+            if value.strip():
+                out.append(value.strip())
+            continue
+        if isinstance(value, (list, tuple, set)):
+            for item in value:
+                if isinstance(item, str) and item.strip():
+                    out.append(item.strip())
+    # Preserve order while de-duplicating (case-insensitive).
+    seen: set = set()
+    unique: List[str] = []
+    for name in out:
+        key = name.lower()
+        if key not in seen:
+            seen.add(key)
+            unique.append(name)
+    return unique
+
+
+def _file_matches_filter(file_path: str, filters: List[str]) -> bool:
+    """True when *file_path* matches any basename or substring filter."""
+    if not filters:
+        return True
+    path_lower = (file_path or "").lower()
+    base_lower = Path(file_path).name.lower()
+    for filt in filters:
+        fl = filt.lower()
+        if fl in (path_lower, base_lower):
+            return True
+        if fl in path_lower or base_lower.endswith(fl) or path_lower.endswith(fl):
+            return True
+    return False
+
+
+def _default_query_from_filename(file_name: str) -> str:
+    """Build a searchable query when the LLM only passes a file name."""
+    stem = Path(file_name).stem.replace("_", " ").replace("-", " ").strip()
+    return stem or file_name
+
+
 class _DocumentToolBase(BaseTool):
     """Shared dependency plumbing for the document tools."""
 
@@ -99,7 +145,7 @@ class _DocumentToolBase(BaseTool):
         self.llm_interface = None
         self.memory_manager = None
 
-    def set_dependencies(self, config, llm_interface, memory_manager) -> None:
+    def set_dependencies(self, config, llm_interface, memory_manager, **kwargs) -> None:
         """Called by WitsV3System after startup wiring."""
         self.config = config
         self.llm_interface = llm_interface
@@ -283,21 +329,51 @@ class DocumentSearchTool(_DocumentToolBase):
             )
         )
 
-    async def execute(self, query: str = "", max_results: int = 5, min_relevance: float = 0.3) -> Dict[str, Any]:
+    async def execute(
+        self,
+        query: str = "",
+        max_results: int = 5,
+        min_relevance: float = 0.3,
+        file_name: Optional[str] = None,
+        file_names: Optional[List[str]] = None,
+        **extra: Any,
+    ) -> Dict[str, Any]:
         not_ready = self._not_ready()
         if not_ready:
             return not_ready
 
-        if not query.strip():
+        file_filters = _coerce_file_filters(
+            file_name,
+            file_names,
+            extra.get("filename"),
+            extra.get("file"),
+            extra.get("source_files"),
+        )
+
+        explicit_query = bool((query or "").strip())
+        query = (query or "").strip()
+        if not query and file_filters:
+            query = _default_query_from_filename(file_filters[0])
+        if not query:
             return {"success": False, "error": "query must not be empty", "results": []}
 
         try:
-            segments = await self.memory_manager.search_memory(
-                query_text=query,
-                limit=max_results,
-                min_relevance=min_relevance,
-                filter_dict={"type": DOCUMENT_SEGMENT_TYPE},
-            )
+            if file_filters and not explicit_query:
+                segments = await self._segments_for_files(file_filters, max_results)
+            else:
+                segments = await self.memory_manager.search_memory(
+                    query_text=query,
+                    limit=max_results if not file_filters else max(max_results, max_results * 3),
+                    min_relevance=min_relevance,
+                    filter_dict={"type": DOCUMENT_SEGMENT_TYPE},
+                )
+                segments = [
+                    seg
+                    for seg in segments
+                    if _file_matches_filter(
+                        seg.metadata.get("file_path", seg.source), file_filters
+                    )
+                ][:max_results]
 
             results = [
                 {
@@ -312,6 +388,8 @@ class DocumentSearchTool(_DocumentToolBase):
             return {
                 "success": True,
                 "query": query,
+                "file_name": file_filters[0] if len(file_filters) == 1 else None,
+                "file_names": file_filters or None,
                 "result_count": len(results),
                 "results": results,
             }
@@ -319,6 +397,26 @@ class DocumentSearchTool(_DocumentToolBase):
         except Exception as e:
             self.logger.error(f"Document search failed: {e}")
             return {"success": False, "error": str(e), "results": []}
+
+    async def _segments_for_files(
+        self, file_filters: List[str], max_results: int
+    ) -> List[Any]:
+        """Return ordered chunks for file-scoped browse (summarize-by-filename)."""
+        all_segments = await self.memory_manager.get_recent_memory(
+            limit=1_000_000, filter_dict={"type": DOCUMENT_SEGMENT_TYPE}
+        )
+        matched = [
+            seg
+            for seg in all_segments
+            if _file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
+        ]
+        matched.sort(
+            key=lambda s: (
+                s.metadata.get("file_path", ""),
+                s.metadata.get("chunk_index", 0),
+            )
+        )
+        return matched[:max_results]
 
     def get_schema(self) -> Dict[str, Any]:
         return {
@@ -340,6 +438,14 @@ class DocumentSearchTool(_DocumentToolBase):
                         "type": "number",
                         "description": "Minimum similarity score (0-1) for a passage to be included",
                         "default": 0.3
+                    },
+                    "file_name": {
+                        "type": "string",
+                        "description": (
+                            "Optional: limit results to this ingested file (basename or path). "
+                            "Always include query too; if you only know the filename, use its "
+                            "title words as query."
+                        ),
                     },
                 },
                 "required": ["query"],

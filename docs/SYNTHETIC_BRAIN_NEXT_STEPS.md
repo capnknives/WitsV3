@@ -1,5 +1,7 @@
 # 🧠 WITS Synthetic Brain Next Steps
 
+> **Historical.** Superseded — see [`SYNTHETIC_BRAIN.md`](SYNTHETIC_BRAIN.md) for current status.
+
 ## Phase 1 Completion Plan
 
 To complete Phase 1 of the WITS Synthetic Brain implementation, the following tasks need to be addressed:
