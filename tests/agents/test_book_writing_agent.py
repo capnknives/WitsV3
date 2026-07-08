@@ -45,7 +45,7 @@ class PromptRoutedLLM(BaseLLMInterface):
                 '{"task_type": "create_book", "genre": "fantasy", "style": "narrative", '
                 '"topic": "a knight", "length": 900, "filename": null, "parameters": {}}'
             )
-        if "Create a detailed structure" in prompt:
+        if "Plan the chapter-by-chapter structure" in prompt:
             return (
                 "Chapter 1: The Beginning\nA knight starts his journey.\n"
                 "Chapter 2: The Middle\nThe knight faces trials.\n"
@@ -53,7 +53,9 @@ class PromptRoutedLLM(BaseLLMInterface):
             )
         if "Create a detailed outline" in prompt:
             return "1. Opening hook\n2. Rising action\n3. Closing summary"
-        if "Continue writing the" in prompt:
+        if "Write a detailed scene-by-scene outline" in prompt:
+            return "- Scene 1: setup\n- Scene 2: conflict\n- Scene 3: resolution"
+        if "Chapter outline (follow this)" in prompt:
             self.chapter_calls += 1
             return f"Chapter prose number {self.chapter_calls}. " * 20
         return "generic response"
@@ -274,3 +276,263 @@ async def test_run_continuation_followup_resumes_same_book(agent):
         assert resolve_within_project(f"workspace/{slug}/{slug}.md").exists()
     finally:
         _cleanup(slug)
+
+
+# ------------------------------------------------- point-of-view consistency
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("I walked to the door. My hands were shaking. I opened it.", "first"),
+        ("He walked to the door. His hands were shaking. She watched him.", "third"),
+        ("", None),
+    ],
+)
+def test_detect_pov_from_continuity_text(agent, text, expected):
+    pov = agent._detect_pov(text, "")
+    if expected is None:
+        assert pov is None
+    else:
+        assert (expected == "first") == ("first person" in (pov or ""))
+
+
+def test_detect_pov_falls_back_to_world_bible_when_no_prior_text(agent):
+    assert "first person" in agent._detect_pov("", "Primary perspective is first person.")
+    assert agent._detect_pov("", "Told in third person throughout.") == "third person"
+    assert agent._detect_pov("", "No POV notes here.") is None
+
+
+@pytest.mark.asyncio
+async def test_write_full_book_enforces_pov_across_chapters(agent):
+    """2026-07-08 live-model finding: a first-person prologue/Chapter 1 was
+    followed by Chapter 2 silently drifting into third person — "matching
+    the voice already established" alone wasn't a strong enough
+    instruction. Once there's first-person continuity text on disk, later
+    planning/writing prompts must carry an explicit POV directive."""
+    slug = "scratch_pov_test"
+    try:
+        book_id = "book-pov"
+        agent.current_books[book_id] = BookStructure(
+            title="POV Test",
+            genre="drama",
+            target_length=900,
+            chapters=[
+                {"id": "c1", "title": "One", "outline": "x", "status": "planned"},
+                {"id": "c2", "title": "Two", "outline": "y", "status": "planned"},
+            ],
+        )
+        await agent.seed_existing_chapter(
+            book_id, "sess-pov", "Prologue", "I stood alone. My hands shook.", filename=slug
+        )
+        async for _ in agent._handle_write_full_book(book_id, "sess-pov", filename=slug):
+            pass
+
+        planning_calls = [
+            c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c
+        ]
+        writing_calls = [
+            c for c in agent.llm_interface.calls if "Chapter outline (follow this)" in c
+        ]
+        assert any("Narrate in first person" in c for c in writing_calls)
+        assert any("point of view" in c.lower() for c in planning_calls)
+    finally:
+        _cleanup(slug)
+
+
+def test_strip_leading_title_echo_removes_repeated_title(agent):
+    content = "Rick Discovers His Powers\n\nThe sky was still dark when..."
+    result = agent._strip_leading_title_echo(content, "Rick Discovers His Powers")
+    assert result.strip().startswith("The sky was still dark")
+
+
+def test_strip_leading_title_echo_leaves_real_prose_alone(agent):
+    content = "The sky was still dark when Rick woke up."
+    result = agent._strip_leading_title_echo(content, "Rick Discovers His Powers")
+    assert result == content
+
+
+# --------------------------------------------------- outline expansion & continuity
+
+
+@pytest.mark.asyncio
+async def test_write_full_book_expands_outline_before_writing_prose(agent):
+    """Each chapter should get a dedicated "plan it" call before the "write
+    it" call — a one-liner alone produced thin, disconnected scenes."""
+    slug = "scratch_outline_expansion"
+    try:
+        book_id = "book-outline"
+        agent.current_books[book_id] = BookStructure(
+            title="Outline Expansion Test",
+            genre="fantasy",
+            target_length=900,
+            chapters=[
+                {"id": "c1", "title": "Arrival", "outline": "x", "status": "planned"},
+            ],
+        )
+        async for _ in agent._handle_write_full_book(book_id, "sess-outline", filename=slug):
+            pass
+
+        planning_calls = [
+            c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c
+        ]
+        writing_calls = [
+            c for c in agent.llm_interface.calls if "Chapter outline (follow this)" in c
+        ]
+        assert len(planning_calls) == 1
+        assert len(writing_calls) == 1
+        # The prose call must actually be grounded in the expanded outline,
+        # not just the original one-line summary.
+        assert "Scene 1: setup" in writing_calls[0]
+    finally:
+        _cleanup(slug)
+
+
+@pytest.mark.asyncio
+async def test_write_full_book_passes_continuity_tail_between_chapters(agent):
+    """The second chapter's prompts must include text from the first
+    chapter's saved output, so chapter 2 continues chapter 1 instead of
+    starting a disconnected scene."""
+    slug = "scratch_continuity_test"
+    try:
+        book_id = "book-continuity"
+        agent.current_books[book_id] = BookStructure(
+            title="Continuity Test",
+            genre="fantasy",
+            target_length=900,
+            chapters=[
+                {"id": "c1", "title": "Chapter One", "outline": "x", "status": "planned"},
+                {"id": "c2", "title": "Chapter Two", "outline": "y", "status": "planned"},
+            ],
+        )
+        async for _ in agent._handle_write_full_book(book_id, "sess-continuity", filename=slug):
+            pass
+
+        planning_calls = [
+            c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c
+        ]
+        assert len(planning_calls) == 2
+        # Chapter 1 has nothing before it; chapter 2's planning call must see
+        # chapter 1's actual generated text as "STORY SO FAR" context.
+        assert "STORY SO FAR" not in planning_calls[0]
+        assert "STORY SO FAR" in planning_calls[1]
+        assert "Chapter prose number 1" in planning_calls[1]
+    finally:
+        _cleanup(slug)
+
+
+@pytest.mark.asyncio
+async def test_write_full_book_injects_world_bible_into_prompts(agent):
+    slug = "scratch_world_bible_injection"
+    try:
+        book_id = "book-bible"
+        agent.current_books[book_id] = BookStructure(
+            title="Bible Injection Test",
+            genre="fantasy",
+            target_length=900,
+            chapters=[{"id": "c1", "title": "Arrival", "outline": "x", "status": "planned"}],
+            world_bible="Protagonist: Rick. Powers are tied to belief and pressure.",
+        )
+        async for _ in agent._handle_write_full_book(book_id, "sess-bible", filename=slug):
+            pass
+
+        planning_calls = [
+            c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c
+        ]
+        writing_calls = [
+            c for c in agent.llm_interface.calls if "Chapter outline (follow this)" in c
+        ]
+        assert "Powers are tied to belief and pressure" in planning_calls[0]
+        assert "Powers are tied to belief and pressure" in writing_calls[0]
+    finally:
+        _cleanup(slug)
+
+
+# ------------------------------------------------------------- seeding existing content
+
+
+@pytest.mark.asyncio
+async def test_seed_existing_chapter_writes_immediately_and_is_skipped_later(agent):
+    """An already-written prologue the user supplies must land on disk right
+    away and never be regenerated by _handle_write_full_book."""
+    slug = "scratch_seed_test"
+    try:
+        book_id = "book-seed"
+        agent.current_books[book_id] = BookStructure(
+            title="Seed Test", genre="fantasy", target_length=900, chapters=[]
+        )
+        await agent.seed_existing_chapter(
+            book_id, "sess-seed", "Prologue", "The night was still.", filename=slug
+        )
+        agent.current_books[book_id].chapters.append(
+            {"id": "c2", "title": "Chapter One", "outline": "x", "status": "planned"}
+        )
+
+        output_path = resolve_within_project(f"workspace/{slug}/{slug}.md")
+        assert "The night was still." in output_path.read_text(encoding="utf-8")
+        assert agent.current_books[book_id].chapters[0]["status"] == "written"
+
+        async for _ in agent._handle_write_full_book(book_id, "sess-seed", filename=slug):
+            pass
+
+        # Only the real (non-seeded) chapter should have triggered generation.
+        writing_calls = [
+            c for c in agent.llm_interface.calls if "Chapter outline (follow this)" in c
+        ]
+        assert len(writing_calls) == 1
+        # And the seeded prologue text must show up as continuity context.
+        planning_calls = [
+            c for c in agent.llm_interface.calls if "Write a detailed scene-by-scene outline" in c
+        ]
+        assert "The night was still." in planning_calls[0]
+    finally:
+        _cleanup(slug)
+
+
+# ------------------------------------------------------------- world bible creation
+
+
+@pytest.mark.asyncio
+async def test_handle_create_world_bible_saves_file_and_attaches_to_session(agent):
+    slug = "scratch_bible_gen"
+    try:
+        streams = [
+            s
+            async for s in agent._handle_create_world_bible(
+                {"filename": slug, "topic": "rick notes"},
+                "Rick is a Texas man who develops powers tied to belief and pressure.",
+                "sess-bible-gen",
+            )
+        ]
+        bible_path = resolve_within_project(f"workspace/{slug}/world_bible.md")
+        assert bible_path.exists()
+        assert agent.writing_sessions["sess-bible-gen"]["world_bible"]
+        assert any(s.type == "result" and "saved to" in s.content for s in streams)
+    finally:
+        shutil.rmtree(PROJECT_ROOT / "workspace" / slug, ignore_errors=True)
+
+
+@pytest.mark.asyncio
+async def test_world_bible_request_routes_before_normal_classification(agent):
+    """A "turn my notes into a world bible" message must not be classified
+    as a normal writing task — it's a standalone reference document. With
+    no active book and no explicit filename, it saves under the plain
+    "world_bible" default rather than a slug derived from the raw notes."""
+    try:
+        async for _ in agent.run(
+            "Please organize these notes into a story bible: Rick has powers tied to belief.",
+            session_id="sess-bible-route",
+        ):
+            pass
+        assert "world_bible" in agent.writing_sessions["sess-bible-route"]
+        assert not any("Analyze this book writing request" in c for c in agent.llm_interface.calls)
+    finally:
+        _cleanup("world_bible")
+
+
+def test_wants_world_bible_creation_matches_expected_phrasing():
+    from agents.book_writing_helpers import wants_world_bible_creation
+
+    assert wants_world_bible_creation("turn these notes into a world bible") is True
+    assert wants_world_bible_creation("organize these ramblings into a story bible") is True
+    assert wants_world_bible_creation("write a story about a dragon") is False

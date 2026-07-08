@@ -66,6 +66,22 @@ def is_continuation_phrase(text: str) -> bool:
     return bool(_CONTINUATION_RE.match(text.strip()))
 
 
+# Bonus feature: let the user dictate loose notes and have them organized
+# into a structured story bible, rather than requiring a hand-authored
+# reference document up front.
+_WORLD_BIBLE_RE = re.compile(
+    r"\b(world bible|story bible|organize (this|these|my) (notes|ideas|ramblings?)|"
+    r"turn (this|these) into a (world|story) bible|structure my notes|"
+    r"clean up (this|these) notes into)\b",
+    re.IGNORECASE,
+)
+
+
+def wants_world_bible_creation(text: str) -> bool:
+    """True for an explicit "turn my notes into a story bible" request."""
+    return bool(_WORLD_BIBLE_RE.search(text))
+
+
 # Matches "Chapter 1: ...", "### Chapter 2 - ...", "Ch. 3: ..." — deliberately
 # requires the "chapter"/"ch." word AND a following number, unlike the old
 # bare `line.startswith("#")` check, which misparsed unrelated markdown

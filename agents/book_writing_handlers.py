@@ -25,6 +25,19 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         # Generate book structure
         book_id = str(uuid.uuid4())
 
+        # A story bible attached to this session (either from an earlier
+        # "turn my notes into a world bible" request, or set programmatically)
+        # grounds the initial chapter breakdown in established characters/
+        # themes/rules instead of the topic string alone.
+        session_state = self.writing_sessions.setdefault(session_id, {})
+        world_bible = (session_state.get("world_bible") or "").strip()
+        world_bible_block = (
+            f"\n        STORY BIBLE — use this as authoritative context, do not contradict it:\n"
+            f"        {world_bible}\n"
+            if world_bible
+            else ""
+        )
+
         # 2026-07-08 finding: a prompt that also asked for title/audience/
         # themes/research/style produced section headers ("### Target
         # Audience", "### Research Requirements", ...) that _extract_chapters
@@ -36,7 +49,7 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         structure_prompt = f"""
         Plan the chapter-by-chapter structure for a {task_analysis['genre']} book about
         {task_analysis['topic']}, approximately {task_analysis.get('length', 50000)} words total.
-
+        {world_bible_block}
         List each chapter using EXACTLY this format and nothing else — no title, subtitle,
         target audience, themes, research notes, or style guidelines, chapters only:
 
@@ -55,9 +68,10 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
 
         # Create book structure object
         book_structure = BookStructure(
-            title=f"Book about {task_analysis['topic']}",  # Will be refined
+            title=task_analysis.get("filename") or f"Book about {task_analysis['topic']}",
             genre=task_analysis["genre"],
             target_length=task_analysis.get("length", 50000),
+            world_bible=world_bible,
         )
 
         # Parse structure response to create chapters
@@ -65,7 +79,7 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         book_structure.chapters = chapters
 
         self.current_books[book_id] = book_structure
-        self.writing_sessions.setdefault(session_id, {})["active_book_id"] = book_id
+        session_state["active_book_id"] = book_id
 
         # Store in memory
         await self.store_memory(

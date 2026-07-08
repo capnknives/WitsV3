@@ -16,6 +16,10 @@ class BookStructure:
     chapters: list[dict[str, Any]] = field(default_factory=list)
     style_guide: dict[str, Any] = field(default_factory=dict)
     research_notes: list[str] = field(default_factory=list)
+    # Persistent story-bible text (characters, themes, POV, established
+    # rules/lore) injected into every outline/chapter generation prompt for
+    # this book so long-form content stays consistent chapter to chapter.
+    world_bible: str = ""
 
     def __post_init__(self):
         if self.chapters is None:

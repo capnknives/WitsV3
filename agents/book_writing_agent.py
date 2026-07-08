@@ -17,8 +17,10 @@ from agents.book_writing_helpers import (
     extract_requested_filename,
     is_continuation_phrase,
     wants_full_book_now,
+    wants_world_bible_creation,
 )
 from agents.book_writing_models import BookStructure, Chapter
+from agents.book_writing_worldbible import BookWritingWorldBibleMixin
 from agents.book_writing_writer import BookWritingWriterMixin
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
@@ -30,7 +32,9 @@ from core.schemas import ConversationHistory, StreamData
 __all__ = ["BookWritingAgent", "BookStructure", "Chapter"]
 
 
-class BookWritingAgent(BookWritingWriterMixin, BookWritingHandlersMixin, BaseAgent):
+class BookWritingAgent(
+    BookWritingWorldBibleMixin, BookWritingWriterMixin, BookWritingHandlersMixin, BaseAgent
+):
     """
     Specialized agent for book writing and long-form content creation
     """
@@ -124,6 +128,19 @@ class BookWritingAgent(BookWritingWriterMixin, BookWritingHandlersMixin, BaseAge
         ):
             yield self.stream_thinking("Continuing the book already in progress...")
             async for stream in self._handle_write_full_book(active_book_id, session_id):
+                yield stream
+            return
+
+        # An explicit "turn these notes into a world bible" request bypasses
+        # normal task classification the same way — it's not book creation
+        # or chapter writing, it's a standalone reference document that gets
+        # attached to whatever book is (or later becomes) active.
+        if wants_world_bible_creation(user_input):
+            async for stream in self._handle_create_world_bible(
+                {"filename": extract_requested_filename(user_input)},
+                user_input,
+                session_id,
+            ):
                 yield stream
             return
 

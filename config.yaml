@@ -29,8 +29,13 @@ agents:
     # Per-chapter generation bound (the book is written one chapter per LLM
     # call), not a whole-book budget — keep this comfortably under the
     # model's context window so a chapter finishes instead of truncating.
-    max_tokens: 1600
-    model: qwen3:8b
+    # 2600 gives headroom for ~1200-1800 word novella-length chapters.
+    max_tokens: 2600
+    # hermes3:8b (Nous Research) over the system default qwen3:8b: tuned for
+    # long-context narrative coherence and multi-turn roleplay, and unlike
+    # qwen3 it doesn't spend part of max_tokens on hidden <think> reasoning
+    # before the actual prose — pull with `ollama pull hermes3:8b`.
+    model: hermes3:8b
     story_structure_patterns:
       - hero_journey
       - three_act

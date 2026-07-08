@@ -37,11 +37,18 @@ class ContentFallbackManager:
         self.llm_interface = llm_interface
         self.config = config
 
-        # Fallback model hierarchy
+        # Fallback model hierarchy. 2026-07-08 finding: this previously
+        # pointed at "llama2-uncensored"/"openhermes"/"llama3" — none of
+        # which were ever pulled, so every fallback attempt errored out and
+        # the whole feature was silently dead. dolphin3:8b is a modern,
+        # actively-maintained, genuinely uncensored model; hermes3:8b is a
+        # permissive second choice with strong prose quality; llama3.2:3b is
+        # the one model in this list guaranteed to already be installed
+        # (WitsV3's own default fast model), so the chain can't fully fail.
         self.uncensored_models = [
-            "llama2-uncensored",
-            "openhermes",  # Generally less restrictive
-            "llama3",  # Final fallback
+            "dolphin3:8b",
+            "hermes3:8b",
+            "llama3.2:3b",
         ]
 
         # Content refusal detection patterns
