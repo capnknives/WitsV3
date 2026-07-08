@@ -54,6 +54,7 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         book_structure.chapters = chapters
 
         self.current_books[book_id] = book_structure
+        self.writing_sessions.setdefault(session_id, {})["active_book_id"] = book_id
 
         # Store in memory
         await self.store_memory(

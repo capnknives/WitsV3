@@ -161,6 +161,33 @@ async def test_story_request_routes_to_book_writing(wcca_with_specialists):
     assert agent.name == "book_writing"
 
 
+@pytest.mark.asyncio
+async def test_live_transcript_story_request_routes_to_book_writing(wcca_with_specialists):
+    """2026-07-08 finding: this exact live request matched none of the
+    original multi-word story phrases (the comma after "story" broke the
+    "story about" substring match), fell through to the generic
+    orchestrator, and got a fabricated "has been created" reply with
+    nothing written to disk."""
+    agent = await wcca_with_specialists._select_specialized_agent(
+        "Please write the equivalent to a 100 page story, about a knight in a "
+        "medieval town that develops powers"
+    )
+    assert agent.name == "book_writing"
+
+
+def test_needs_story_writing_matches_live_finding(wcca_with_specialists):
+    assert (
+        wcca_with_specialists._needs_story_writing(
+            "Please write the equivalent to a 100 page story, about a knight"
+        )
+        is True
+    )
+
+
+def test_needs_story_writing_ignores_unrelated_chat(wcca_with_specialists):
+    assert wcca_with_specialists._needs_story_writing("what's the story with this bug?") is False
+
+
 # -------------------------------------------- unambiguous bug-hunt override
 
 
@@ -211,7 +238,77 @@ async def test_bug_hunt_request_reaches_self_repair_despite_clarification_classi
     assert any("self_repair ran" in s.content for s in streams)
 
 
+@pytest.mark.asyncio
+async def test_story_request_reaches_book_writing_despite_conversation_classification(
+    wcca_with_specialists,
+):
+    """2026-07-08 live-chat finding: the LLM intent step classified this
+    story request as ordinary conversation, which returns before
+    specialized-agent routing is ever considered — _needs_story_writing must
+    force delegation to book_writing anyway, the same way _needs_self_repair
+    already does for bug-hunt requests. Before this fix, the generic
+    orchestrator handled the turn and fabricated a "has been created" reply
+    without writing anything to disk."""
+    book_agent = _FakeSpecializedAgent("book_writing")
+    wcca_with_specialists.specialized_agents["book_writing"] = book_agent
+
+    intent_analysis = {
+        "type": "conversation",
+        "complexity": "simple",
+        "suggested_response": "direct",
+        "requires_tools": False,
+    }
+    live_request = (
+        "Please write the equivalent to a 100 page story, about a knight in a "
+        "medieval town that develops powers like dbz characters and takes over "
+        "the surrounding area. Save the story as TheBigStory01"
+    )
+    streams = [
+        item
+        async for item in wcca_with_specialists._handle_intent_response(
+            intent_analysis, live_request, None, "sess-story"
+        )
+    ]
+    assert book_agent.received_input == live_request
+    assert any("book_writing ran" in s.content for s in streams)
+
+
+@pytest.mark.asyncio
+async def test_continuation_followup_resumes_previous_specialized_agent(wcca_with_specialists):
+    """2026-07-08 finding: "Okay, so make it." after a story request carries
+    no keywords of its own, so keyword-based specialized-agent selection
+    finds nothing — the session must remember which agent handled the
+    previous turn and resume it directly instead of falling through to
+    casual chat or an unrelated fresh orchestrator run."""
+    book_agent = _FakeSpecializedAgent("book_writing")
+    wcca_with_specialists.specialized_agents["book_writing"] = book_agent
+    session_id = "sess-book-continuation"
+
+    async for _ in wcca_with_specialists.run("write a story about a dragon", session_id=session_id):
+        pass
+    assert wcca_with_specialists._active_specialized_agent[session_id] == "book_writing"
+
+    book_agent.received_input = None
+    streams = [
+        item
+        async for item in wcca_with_specialists._handle_intent_response(
+            {
+                "type": "conversation",
+                "complexity": "simple",
+                "suggested_response": "direct",
+                "requires_tools": False,
+            },
+            "Okay, so make it.",
+            None,
+            session_id,
+        )
+    ]
+    assert book_agent.received_input == "Okay, so make it."
+    assert any("book_writing ran" in s.content for s in streams)
+
+
 # --------------------------------------- conversation-history-aware follow-ups
+
 
 @pytest.mark.asyncio
 async def test_clarification_question_records_pending_state(wcca_with_specialists):

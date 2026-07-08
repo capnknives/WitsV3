@@ -13,7 +13,13 @@ from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.book_writing_handlers import BookWritingHandlersMixin
+from agents.book_writing_helpers import (
+    extract_requested_filename,
+    is_continuation_phrase,
+    wants_full_book_now,
+)
 from agents.book_writing_models import BookStructure, Chapter
+from agents.book_writing_writer import BookWritingWriterMixin
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
@@ -24,7 +30,7 @@ from core.schemas import ConversationHistory, StreamData
 __all__ = ["BookWritingAgent", "BookStructure", "Chapter"]
 
 
-class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
+class BookWritingAgent(BookWritingWriterMixin, BookWritingHandlersMixin, BaseAgent):
     """
     Specialized agent for book writing and long-form content creation
     """
@@ -103,6 +109,24 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
         if not session_id:
             session_id = str(uuid.uuid4())
 
+        # A bare "make it" / "write it all" / "continue" reply has no content
+        # of its own — resume the book already in progress for this session
+        # instead of re-analyzing it as an unrelated fresh request. This is
+        # what the 2026-07-08 live-chat "Okay, so make it." follow-up needed:
+        # it produced a completely different, shorter outline instead of
+        # continuing the story already outlined in the previous turn.
+        session_state = self.writing_sessions.setdefault(session_id, {})
+        active_book_id = session_state.get("active_book_id")
+        if (
+            active_book_id
+            and active_book_id in self.current_books
+            and is_continuation_phrase(user_input)
+        ):
+            yield self.stream_thinking("Continuing the book already in progress...")
+            async for stream in self._handle_write_full_book(active_book_id, session_id):
+                yield stream
+            return
+
         yield self.stream_thinking("Analyzing book writing request...")
 
         # Parse the request to understand what type of book writing task this is
@@ -114,6 +138,17 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
         if task_analysis["task_type"] == "create_book":
             async for stream in self._handle_book_creation(task_analysis, session_id):
                 yield stream
+
+            # If the request already asked to write everything and save it
+            # (not just sketch a structure), keep going in the same turn
+            # instead of waiting for a separate follow-up message.
+            new_book_id = self.writing_sessions.get(session_id, {}).get("active_book_id")
+            if new_book_id and (wants_full_book_now(user_input) or task_analysis.get("filename")):
+                yield self.stream_thinking("Writing the full story and saving it to disk...")
+                async for stream in self._handle_write_full_book(
+                    new_book_id, session_id, filename=task_analysis.get("filename")
+                ):
+                    yield stream
 
         elif task_analysis["task_type"] == "write_chapter":
             async for stream in self._handle_chapter_writing(task_analysis, session_id):
@@ -135,6 +170,19 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
             async for stream in self._handle_general_writing(task_analysis, session_id):
                 yield stream
 
+    @staticmethod
+    def _estimate_requested_length(request: str, default: int) -> int:
+        """Parse an explicit page/word count out of the request, e.g. "100
+        page story" -> ~25,000 words (250 words/page is a common estimate).
+        Falls back to `default` when nothing is stated."""
+        page_match = re.search(r"\b(\d+)\s*-?\s*page\b", request, re.IGNORECASE)
+        if page_match:
+            return int(page_match.group(1)) * 250
+        word_match = re.search(r"\b(\d+)\s*-?\s*words?\b", request, re.IGNORECASE)
+        if word_match:
+            return int(word_match.group(1))
+        return default
+
     async def _analyze_writing_task(self, request: str) -> dict[str, Any]:
         """Analyze the writing request to determine task type and parameters"""
 
@@ -150,47 +198,79 @@ class BookWritingAgent(BookWritingHandlersMixin, BaseAgent):
             "style": "narrative" | "expository" | "academic" | etc.,
             "topic": "main topic or theme",
             "length": estimated length in words,
+            "filename": "explicit save/file name if the user mentioned one (e.g. 'save it as X'), else null",
             "parameters": {{additional specific parameters}}
         }}
         """
 
+        result: dict[str, Any] | None = None
         try:
             response = await self.generate_response(analysis_prompt, temperature=0.3)
             # Extract JSON from response
             json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
-                return json.loads(json_match.group(0))
+                result = json.loads(json_match.group(0))
         except Exception as e:
             self.logger.warning(f"Failed to parse task analysis: {e}")
 
-        # Fallback analysis with better genre detection
-        genre = "non-fiction"
-        if any(
-            keyword in request.lower() for keyword in ["horror", "scary", "thriller", "suspense"]
-        ):
-            genre = "horror"
-        elif any(
-            keyword in request.lower()
-            for keyword in ["fiction", "novel", "story", "fantasy", "sci-fi", "romance"]
-        ):
-            genre = "fiction"
+        if result is None:
+            # Fallback analysis with better genre detection
+            genre = "non-fiction"
+            if any(
+                keyword in request.lower()
+                for keyword in ["horror", "scary", "thriller", "suspense"]
+            ):
+                genre = "horror"
+            elif any(
+                keyword in request.lower()
+                for keyword in ["fiction", "novel", "story", "fantasy", "sci-fi", "romance"]
+            ):
+                genre = "fiction"
 
-        # Detect if this is a book creation request
-        task_type = "general_writing"
-        if any(
-            phrase in request.lower()
-            for phrase in ["write a book", "create a book", "make a book", "write me a book"]
-        ):
-            task_type = "create_book"
+            # Detect if this is a book/story creation request. Story-shaped
+            # phrasing (not just "write a book") must also count — a request
+            # like "write ... a 100 page story ... about a knight" fell
+            # through to general_writing (a single unstructured LLM call,
+            # no chapters) whenever the LLM JSON parse failed, which is part
+            # of why the 2026-07-08 live transcript never produced anything
+            # close to the requested length.
+            task_type = "general_writing"
+            if any(
+                phrase in request.lower()
+                for phrase in [
+                    "write a book",
+                    "create a book",
+                    "make a book",
+                    "write me a book",
+                    "write a story",
+                    "write me a story",
+                    "create a story",
+                    "tell a story",
+                ]
+            ) or re.search(r"\bstory\b", request, re.IGNORECASE):
+                task_type = "create_book"
 
-        return {
-            "task_type": task_type,
-            "genre": genre,
-            "style": "narrative" if genre in ["horror", "fiction"] else "expository",
-            "topic": request[:100],
-            "length": 10000 if task_type == "create_book" else 1000,
-            "parameters": {},
-        }
+            result = {
+                "task_type": task_type,
+                "genre": genre,
+                "style": "narrative" if genre in ["horror", "fiction"] else "expository",
+                "topic": request[:100],
+                "length": self._estimate_requested_length(
+                    request, 10000 if task_type == "create_book" else 1000
+                ),
+                "filename": None,
+                "parameters": {},
+            }
+
+        # The regex extractor is deterministic and cheap — use it as an
+        # authoritative overlay whenever it finds an explicit filename, since
+        # the LLM's own "filename" field is unreliable to count on alone.
+        detected_filename = extract_requested_filename(request)
+        if detected_filename:
+            result["filename"] = detected_filename
+        result.setdefault("filename", None)
+        result["length"] = self._estimate_requested_length(request, result.get("length") or 10000)
+        return result
 
     async def get_writing_statistics(self, session_id: str | None = None) -> dict[str, Any]:
         """Get writing statistics and progress"""

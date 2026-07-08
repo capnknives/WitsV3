@@ -192,6 +192,50 @@ class OrchestratorRoutingMixin:
         lowered = message.lower()
         return any(sig in lowered for sig in self._SELF_REPAIR_SIGNALS)
 
+    # Same short-circuit idea as _needs_self_repair, for story/book requests.
+    # 2026-07-08 finding: "write the equivalent to a 100 page story, about a
+    # knight..." was classified by the LLM intent step as ordinary
+    # conversation/direct_response, which returns before specialized-agent
+    # routing is ever considered — this forces delegation to book_writing
+    # regardless of that classification, the same way _needs_self_repair
+    # already does for bug-hunt requests.
+    # A bare fiction noun isn't enough on its own — "what's the story with
+    # this bug?" is ordinary chat, not a writing request — so this requires
+    # an authoring verb to co-occur with a fiction noun anywhere in the
+    # message.
+    _STORY_NOUN_RE = re.compile(
+        r"\b(story|novel|screenplay|fanfiction|fan fiction|short story|poem|tale)\b",
+        re.IGNORECASE,
+    )
+    _AUTHORING_VERB_RE = re.compile(
+        r"\b(write|writing|wrote|create|creating|compose|composing|tell|telling|"
+        r"craft|crafting|pen|penning)\b",
+        re.IGNORECASE,
+    )
+
+    def _needs_story_writing(self, message: str) -> bool:
+        """True for an unambiguous creative-writing request."""
+        return bool(self._STORY_NOUN_RE.search(message) and self._AUTHORING_VERB_RE.search(message))
+
+    # Short follow-ups that mean "keep going with what we were just doing" —
+    # meaningless on their own, but should resume whichever specialized agent
+    # handled the previous turn in this session rather than being judged in
+    # isolation (which was landing on casual chat or a fresh, unrelated
+    # orchestrator run). Mirrors the _pending_clarifications merge pattern.
+    _AGENT_CONTINUATION_RE = re.compile(
+        r"^\s*(okay,?\s*|ok,?\s*|alright,?\s*|so\s+)*"
+        r"(please\s+)?"
+        r"(make it|do it|write it( all)?|go ahead|finish it|finish (it|the (story|book|chapter))|"
+        r"continue( writing)?|keep (going|writing)|"
+        r"write the (whole|entire|full) (story|book|thing)|"
+        r"save (it|this)( now)?( to disk)?)\s*\.?\s*$",
+        re.IGNORECASE,
+    )
+
+    def _is_agent_continuation_phrase(self, message: str) -> bool:
+        """True for a short "keep going" reply with no new content of its own."""
+        return bool(self._AGENT_CONTINUATION_RE.match(message.strip()))
+
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
         """True when answering requires tools (ingested docs or live web search)."""
         if self._needs_file_write(user_input):

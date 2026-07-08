@@ -20,9 +20,16 @@ adaptive_llm:
     enable_caching: true
     similarity_threshold: 0.92
 agents:
+  # NOTE: only model/temperature/max_tokens are wired to BookWritingAgentSettings
+  # (core/config.py) and actually take effect. enable_narrative_intelligence and
+  # story_structure_patterns are not read by any loader and currently do nothing —
+  # see planning/roadmap/config-surface-truth-2026-07.md.
   book_writing_agent:
     enable_narrative_intelligence: true
-    max_tokens: 16384
+    # Per-chapter generation bound (the book is written one chapter per LLM
+    # call), not a whole-book budget — keep this comfortably under the
+    # model's context window so a chapter finishes instead of truncating.
+    max_tokens: 1600
     model: qwen3:8b
     story_structure_patterns:
       - hero_journey

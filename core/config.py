@@ -64,6 +64,28 @@ class LLMInterfaceSettings(BaseModel):
     streaming_enabled: bool = Field(default=True)
 
 
+class BookWritingAgentSettings(BaseModel):
+    """Generation bounds for the book-writing agent's chapter-by-chapter
+    writing loop. `max_tokens` is what actually keeps a single chapter call
+    from being truncated by the model's context window — previously this
+    lived only as an unwired `agents.book_writing_agent.*` YAML block that
+    Pydantic silently dropped (nested unknown keys under `agents:` vanish)."""
+
+    model: str | None = Field(
+        default=None, description="Model override for chapter generation (falls back to default)"
+    )
+    temperature: float = Field(default=0.8, ge=0.0, le=2.0)
+    max_tokens: int = Field(
+        default=1600,
+        gt=0,
+        description="Max tokens per chapter-generation call — kept well under typical "
+        "Ollama context windows so a chapter completes instead of being cut off",
+    )
+
+    class Config:
+        validate_assignment = True
+
+
 class AgentSettings(BaseModel):
     default_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_iterations: int = Field(default=15, gt=0)
@@ -73,6 +95,7 @@ class AgentSettings(BaseModel):
         le=100,
         description="How many recent conversation messages are included in the prompt",
     )
+    book_writing_agent: BookWritingAgentSettings = Field(default_factory=BookWritingAgentSettings)
 
     class Config:
         validate_assignment = True

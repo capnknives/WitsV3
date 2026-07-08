@@ -66,6 +66,12 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         # casual chat, never reaching task/specialized-agent routing at all.
         self._pending_clarifications: dict[str, str] = {}
 
+        # session_id -> agent_type ("book_writing", "coding", "self_repair")
+        # of the specialized agent that handled the most recent turn in this
+        # session, so a bare follow-up like "okay, make it" or "write it all"
+        # resumes that agent instead of being judged as standalone chat.
+        self._active_specialized_agent: dict[str, str] = {}
+
         # Use control center specific model
         self.model_name = config.ollama_settings.control_center_model
 
@@ -109,12 +115,24 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         lowered = message.lower()
         words = set(re.findall(r"[a-z']+", lowered))
         casual_words = {
-            "hello", "hi", "hey", "thanks", "appreciate",
-            "nice", "cool", "great", "bye", "goodbye",
+            "hello",
+            "hi",
+            "hey",
+            "thanks",
+            "appreciate",
+            "nice",
+            "cool",
+            "great",
+            "bye",
+            "goodbye",
         }
         casual_phrases = (
-            "how are you", "what's up", "how's it going",
-            "thank you", "see you", "talk to you",
+            "how are you",
+            "what's up",
+            "how's it going",
+            "thank you",
+            "see you",
+            "talk to you",
         )
         return bool(words & casual_words) or any(phrase in lowered for phrase in casual_phrases)
 
@@ -281,6 +299,29 @@ User input: {user_input}
             requires_tools = True
             suggested_response = "specialized"
 
+        # Same idea for unambiguous story/book requests — 2026-07-08 finding:
+        # a live "write ... a 100 page story ... save as X" request was
+        # classified as ordinary conversation, never reached specialized-agent
+        # routing, and the generic orchestrator fabricated a "created" message
+        # without writing anything to disk.
+        elif self._needs_story_writing(user_input):
+            intent_type = "goal_defined"
+            complexity = "moderate"
+            requires_tools = True
+            suggested_response = "specialized"
+
+        # A short "make it" / "write it all" / "continue" reply is
+        # meaningless judged in isolation — resume whichever specialized
+        # agent handled the previous turn in this session instead of letting
+        # it fall to casual chat or a fresh, unrelated orchestrator run.
+        elif session_id in self._active_specialized_agent and self._is_agent_continuation_phrase(
+            user_input
+        ):
+            intent_type = "goal_defined"
+            complexity = "moderate"
+            requires_tools = True
+            suggested_response = "specialized"
+
         yield self.stream_thinking(
             f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}"
         )
@@ -327,13 +368,22 @@ User input: {user_input}
         # unconditionally `return` once entered, so a specialized agent match
         # checked afterward would never actually be reached in practice.
         if suggested_response == "specialized" or complexity in ["moderate", "complex", "research"]:
-            specialized_agent = await self._select_specialized_agent(user_input)
+            # A continuation phrase ("make it", "write it all") carries no
+            # keywords of its own — resume the agent that handled the
+            # previous turn in this session instead of running it through
+            # keyword matching, which would find nothing and miss.
+            resumed_agent_type = self._active_specialized_agent.get(session_id)
+            if resumed_agent_type and self._is_agent_continuation_phrase(user_input):
+                specialized_agent = self.specialized_agents.get(resumed_agent_type)
+            else:
+                specialized_agent = await self._select_specialized_agent(user_input)
 
             if specialized_agent:
                 agent_type = next(
                     (k for k, v in self.specialized_agents.items() if v == specialized_agent),
                     "specialized",
                 )
+                self._active_specialized_agent[session_id] = agent_type
                 yield self.stream_thinking(f"Using {agent_type} agent for: {user_input}")
 
                 async for stream_data in specialized_agent.run(
@@ -502,40 +552,12 @@ ASSISTANT:"""
             self-repair on 2026-07-08."""
             return any(re.search(rf"\b{re.escape(kw)}\b", goal_lower) for kw in keywords)
 
-        # Check for book writing / story related tasks. Deliberately NOT
-        # "write me a" alone — it's a substring of any "write me a <thing>"
-        # request (e.g. "write me a python script"), which misrouted plain
-        # coding requests to the book-writing agent before this fix.
-        story_keywords = [
-            "write a story",
-            "write a book",
-            "story about",
-            "write me a story",
-            "write me a novel",
-            "write me a poem",
-            "create a story",
-            "tell a story",
-            "novel",
-            "fiction",
-            "narrative",
-            "tale",
-        ]
-
-        if _matches(story_keywords):
-            self.logger.info("Story writing task detected with keyword match")
-            if (
-                "book_writing" in self.specialized_agents
-                and self.specialized_agents["book_writing"]
-            ):
-                self.logger.info("Selected book writing agent for task")
-                return self.specialized_agents["book_writing"]
-            else:
-                self.logger.warning("Book writing agent requested but not available")
-
-        # Check for system repair tasks BEFORE generic coding tasks — "fix",
+        # Check for system repair tasks BEFORE story/coding tasks — "fix",
         # "bug", etc. are a much stronger and more specific signal than the
-        # broad coding keyword list below, so a message like "find and fix
-        # bugs in the codebase" should land on self-repair, not coding.
+        # broader keyword lists below, so a message like "find and fix
+        # bugs in the codebase" should land on self-repair, not coding, and
+        # a stray "story" in a bug report ("what's the story with this
+        # crash") shouldn't preempt it either.
         repair_keywords = [
             "fix",
             "repair",
@@ -556,6 +578,49 @@ ASSISTANT:"""
                 return self.specialized_agents["self_repair"]
             else:
                 self.logger.warning("Self-repair agent requested but not available")
+
+        # Check for book writing / story related tasks. Deliberately NOT
+        # "write me a" alone — it's a substring of any "write me a <thing>"
+        # request (e.g. "write me a python script"), which misrouted plain
+        # coding requests to the book-writing agent before this fix.
+        #
+        # 2026-07-08 finding: a live request — "write the equivalent to a
+        # 100 page story, about a knight..." — matched none of the original
+        # multi-word phrases (the comma after "story" broke the "story
+        # about" substring) and fell through to the generic orchestrator,
+        # which then fabricated "TheBigStory01 has been created" without
+        # writing anything to disk. Standalone "story"/"poem"/"screenplay"
+        # close that gap; \b...\b matching means punctuation around the
+        # word doesn't matter.
+        story_keywords = [
+            "write a story",
+            "write a book",
+            "story about",
+            "write me a story",
+            "write me a novel",
+            "write me a poem",
+            "create a story",
+            "tell a story",
+            "novel",
+            "fiction",
+            "narrative",
+            "tale",
+            "story",
+            "poem",
+            "screenplay",
+            "fanfiction",
+        ]
+
+        if _matches(story_keywords):
+            self.logger.info("Story writing task detected with keyword match")
+            if (
+                "book_writing" in self.specialized_agents
+                and self.specialized_agents["book_writing"]
+            ):
+                self.logger.info("Selected book writing agent for task")
+                return self.specialized_agents["book_writing"]
+            else:
+                self.logger.warning("Book writing agent requested but not available")
 
         # Check for coding related tasks
         coding_keywords = [

@@ -8,6 +8,63 @@ from typing import Any
 
 from core.schemas import StreamData
 
+_FILENAME_RE = re.compile(
+    r"(?:save\s+(?:it|this|the\s+story|the\s+book)?\s*as|"
+    r"call\s+it|name\s+it|named)\s+"
+    r"([A-Za-z0-9_][A-Za-z0-9 _-]{1,60}?)"
+    r"(?:\.(?:txt|md|docx?)\b)?"
+    r"(?=[.,!?;:]|\s+(?:and|with|please)\b|$)",
+    re.IGNORECASE,
+)
+
+# Phrases that mean "write the complete thing now and save it" rather than
+# "just sketch an outline" — used so a single request that already contains
+# enough detail (topic + length + save intent) doesn't stall after producing
+# only a structure/outline the way the 2026-07-08 live-chat transcript did.
+_FULL_BOOK_NOW_RE = re.compile(
+    r"\b(save (it|this|the story|the book)|save (it |this )?to disk|"
+    r"write (it all|the whole|the entire|the full)|write it\b|make it\b)",
+    re.IGNORECASE,
+)
+
+
+def extract_requested_filename(text: str) -> str | None:
+    """Pull a user-requested save name out of free text, e.g. "save the
+    story as TheBigStory01" -> "TheBigStory01". Returns None if no explicit
+    filename was requested."""
+    match = _FILENAME_RE.search(text)
+    if not match:
+        return None
+    name = match.group(1).strip()
+    return name or None
+
+
+def wants_full_book_now(text: str) -> bool:
+    """True when the request asks to write everything and save it now,
+    rather than just producing an outline/structure."""
+    return bool(_FULL_BOOK_NOW_RE.search(text))
+
+
+# A short "keep going" reply carries no new content of its own — treated as
+# "continue writing the book already in progress for this session" rather
+# than re-analyzed as a fresh, unrelated request (which is how a follow-up
+# like "Okay, so make it." ended up producing a completely different,
+# shorter outline in the 2026-07-08 live-chat transcript).
+_CONTINUATION_RE = re.compile(
+    r"^\s*(okay,?\s*|ok,?\s*|alright,?\s*|so\s+)*"
+    r"(please\s+)?"
+    r"(make it|do it|write it( all)?|go ahead|finish it|finish (it|the (story|book|chapter))|"
+    r"continue( writing)?|keep (going|writing)|"
+    r"write the (whole|entire|full) (story|book|thing)|"
+    r"save (it|this)( now)?( to disk)?)\s*\.?\s*$",
+    re.IGNORECASE,
+)
+
+
+def is_continuation_phrase(text: str) -> bool:
+    """True for a short "keep going" reply with no new content of its own."""
+    return bool(_CONTINUATION_RE.match(text.strip()))
+
 
 class BookWritingHelpersMixin:
     """Extracted helpers to keep handler mixin under the 500-line limit."""
