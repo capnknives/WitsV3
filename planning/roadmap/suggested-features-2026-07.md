@@ -2,7 +2,7 @@
 
 **Last updated:** July 8, 2026  
 **Working branch tip:** `cursor/iron-delta-w0r5` (merges into `fix/revive-2026-07`)  
-**Test suite:** 406 collected (403 passed / 2 skipped / 1 failing on last full run — re-check before claiming green)
+**Test suite:** 406 collected — re-run `pytest tests/ -q --no-cov` before claiming green
 
 This is the **canonical forward roadmap**: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
@@ -28,6 +28,8 @@ Feature work → **`fix/revive-2026-07`** → Richard merges to **`main`** after
 | MCP registry discover/install + OCI/Docker + browse-before-install | ✅ Shipped |
 | Tier 1–4 repo hygiene (CI, dead-code cleanup, splits, MCP on-demand) | ✅ Shipped |
 | Coding agent + self-repair (verified-edit pipeline, daily schedule) | ✅ Shipped July 8 |
+| Routing bugfixes (keyword word-boundaries, whole-codebase scan fallback, clarification-bypass) | ✅ Shipped July 8 |
+| Dual self-repair schedule fix (Docker bg agent off by default) | ✅ Shipped July 8 |
 | Docs pass (README install guide, redirects, roadmap truth) | ✅ Shipped July 8 |
 | July revival feature backlog | ✅ **Closed** — polish + optional features remain |
 
@@ -54,7 +56,7 @@ Summary of what landed (detail also in README § Self-repair):
 - Shared pipeline: `core/safe_code_editor.py` (snapshot → write → pytest → commit or restore)
 - Tools: `diagnose_log_errors`, `run_test_suite`, `apply_code_fix`, `restart_app`
 - Agents: real `SelfRepairAgent` + coding agent disk writes / verified file fixes
-- Schedule: in-process daily cron + BackgroundAgent parity
+- Schedule: in-process daily cron + BackgroundAgent parity (`self_repair` task **disabled by default** in `config/background_agent.yaml` so running Docker bg + main app does not double-fire)
 - Path-guard fix on `write_file`; control-center specialized-agent routing fix
 
 **Honest follow-ups (not blocking):**
@@ -71,7 +73,7 @@ Summary of what landed (detail also in README § Self-repair):
 ### P0 — Verify & promote
 
 1. ~~Complete manual tests A–F~~ ✅  
-2. Re-run full `pytest` and fix the one known failure (`test_parse_traceback_issues_extracts_traceback_with_file_and_line`) before marketing “all green”  
+2. Keep the suite green (including traceback remapping across sibling worktree log paths)  
 3. Merge `fix/revive-2026-07` → `main` when satisfied  
 
 ### P1 — High leverage
@@ -81,6 +83,7 @@ Summary of what landed (detail also in README § Self-repair):
 | Orchestrator synthesis guard | Ground answers in tool observations | Medium | ✅ Done |
 | Friendlier Ollama-down (CLI) | Match web UX | Small | ✅ Done |
 | Conversation export UX | One-click export in web UI | Small–Medium | ✅ Done |
+| Conversation-history-aware intent | Short replies after a clarifying question misclassified as casual chat | Medium | Open |
 | Expand CI lint | Full ruff/black blocked by legacy noise | Medium (incremental) | Open |
 | Docs / README modernity | Install + honest status | Medium | ✅ Done July 8 |
 | Clutter cleanup wave 1 | Delete orphans listed in clutter catalog (`self_repair_handlers*`, `run_backup.py`, …) | Small–Medium | Open |
@@ -150,7 +153,7 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 ```
 planning/roadmap/
 ├── suggested-features-2026-07.md   ← YOU ARE HERE (what's next)
-├── revival-2026-07.md              ← what shipped
+├── revival-2026-07.md              ← what shipped + error triage log
 ├── clutter-catalog-2026-07.md      ← dead/dormant inventory
 ├── tool-registry-reality-2026-07.md
 ├── config-surface-truth-2026-07.md
@@ -159,14 +162,17 @@ planning/roadmap/
 └── README.md                       ← index
 ```
 
+The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix for Docker bg `self_repair` is documented in [`config-surface-truth-2026-07.md`](config-surface-truth-2026-07.md) §7.
+
 ---
 
 ## 6. Suggested next chunk
 
-1. Fix remaining pytest failure + promote `fix/revive-2026-07` → `main` when ready  
+1. Promote `fix/revive-2026-07` → `main` when ready  
 2. Clutter cleanup wave 1 (orphans from catalog §1)  
-3. Incremental lint hygiene until CI can enforce fuller ruff/black  
-4. Optional: memory browser / multi-session chat  
+3. Conversation-history-aware intent classification  
+4. Incremental lint hygiene until CI can enforce fuller ruff/black  
+5. Optional: memory browser / multi-session chat  
 
 ---
 

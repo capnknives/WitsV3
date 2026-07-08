@@ -9,7 +9,8 @@ import os
 import yaml
 import psutil
 import aiohttp
-from datetime import datetime, timedelta
+from aiohttp import web
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, AsyncGenerator, cast
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
 from apscheduler.triggers.cron import CronTrigger  # type: ignore
@@ -160,26 +161,39 @@ class BackgroundAgent(BaseAgent):
                 del self.active_tasks[task_name]
 
     async def _maintain_memory(self, settings: Dict[str, Any]):
-        """Maintain memory by pruning and optimizing"""
+        """Maintain memory by pruning old and low-importance segments."""
         if not self.memory_manager:
             return
 
-        # Prune old and low-importance segments
-        cutoff_date = datetime.now() - timedelta(days=settings["max_age_days"])
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=settings["max_age_days"])
         segments = await self.memory_manager.get_recent_memory(
             limit=settings["batch_size"]
         )
 
+        removed = 0
         for segment in segments:
-            if (segment.timestamp < cutoff_date or
-                segment.importance < settings["min_importance_threshold"]):
-                # Remove segment
-                pass  # Implement segment removal
+            timestamp = segment.timestamp
+            if timestamp is not None and timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=timezone.utc)
+            is_old = timestamp is not None and timestamp < cutoff_date
+            is_low_importance = (segment.importance or 0.0) < settings["min_importance_threshold"]
+            if is_old or is_low_importance:
+                removed += await self.memory_manager.delete_segments({"id": segment.id})
+
+        logger.info(
+            "Memory maintenance: removed %d segment(s) (older than %dd or importance < %.2f)",
+            removed, settings["max_age_days"], settings["min_importance_threshold"],
+        )
 
     async def _optimize_semantic_cache(self, settings: Dict[str, Any]):
-        """Optimize semantic cache by cleaning and reorganizing"""
-        # Implement cache optimization
-        pass
+        """Not implemented — the semantic cache belongs to the deprecated
+        adaptive-LLM stack (see planning/archive/adaptive_llm/README.md).
+        Disabled by default in config/background_agent.yaml; logs rather
+        than silently reporting success on a no-op."""
+        logger.warning(
+            "semantic_cache_optimization is not implemented (adaptive LLM stack "
+            "is deprecated in favor of core/model_router.py) — skipping"
+        )
 
     async def _monitor_system(self, settings: Dict[str, Any]):
         """Monitor system resources and Ollama health"""
@@ -225,9 +239,14 @@ class BackgroundAgent(BaseAgent):
             self.metrics.record_error("system_monitoring")
 
     async def _build_knowledge_graph(self, settings: Dict[str, Any]):
-        """Build semantic knowledge graph from memory segments"""
-        # Implement knowledge graph construction
-        pass
+        """Not implemented — knowledge graph construction belongs to the
+        dormant neural-web stack (only active when memory_manager.backend:
+        neural). Disabled by default in config/background_agent.yaml; logs
+        rather than silently reporting success on a no-op."""
+        logger.warning(
+            "knowledge_graph_construction is not implemented (neural web stack "
+            "is dormant unless memory_manager.backend: neural) — skipping"
+        )
 
     async def _run_self_repair(self, settings: Dict[str, Any]):
         """Run the self-repair agent's autonomous scan-and-fix (Docker-deployment
@@ -263,28 +282,65 @@ class BackgroundAgent(BaseAgent):
                 logger.error(f"Error in system monitoring loop: {e}")
                 await asyncio.sleep(60)  # Wait before retrying
 
+_BACKGROUND_AGENT_KEY: web.AppKey["BackgroundAgent"] = web.AppKey("background_agent", BackgroundAgent)
+
+
+async def _health_handler(request):
+    """Real /health endpoint for the docker-compose healthcheck — previously
+    nothing listened on port 8000 at all, so the healthcheck failed forever."""
+    agent: "BackgroundAgent" = request.app[_BACKGROUND_AGENT_KEY]
+    return web.json_response({
+        "status": "ok",
+        "running": agent.running,
+        "active_tasks": list(agent.active_tasks.keys()),
+    })
+
+
+async def _start_health_server(agent: "BackgroundAgent", host: str = "0.0.0.0", port: int = 8000):
+    """Minimal aiohttp server — just enough for the compose healthcheck and
+    a manual `curl http://host:8000/health`, not a full API."""
+    app = web.Application()
+    app[_BACKGROUND_AGENT_KEY] = agent
+    app.router.add_get("/health", _health_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host, port)
+    await site.start()
+    logger.info(f"Background agent health endpoint listening on http://{host}:{port}/health")
+    return runner
+
+
 async def main():
     """Main function to run the background agent"""
-    # Load configuration
-    config_path = os.path.join("config", "background_agent.yaml")
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-
     # Initialize components
     app_config = WitsV3Config.from_yaml("config.yaml")
     llm_interface = OllamaInterface(app_config)
     memory_manager = MemoryManager(app_config, llm_interface)
+    await memory_manager.initialize()
+
+    # A real ToolRegistry, wired the same way run.py wires it — previously
+    # main() passed no tool_registry at all, so self_repair (if enabled here)
+    # would silently degrade to a plain LLM passthrough with none of its
+    # actual diagnose/fix/verify capability.
+    tool_registry = ToolRegistry()
+    for tool in tool_registry.tools.values():
+        if hasattr(tool, "set_dependencies"):
+            tool.set_dependencies(app_config, llm_interface, memory_manager, tool_registry=tool_registry)
 
     # Create and start background agent
-    agent = BackgroundAgent("background", app_config, llm_interface, memory_manager)
+    agent = BackgroundAgent("background", app_config, llm_interface, memory_manager, tool_registry=tool_registry)
     await agent.start()
+    health_runner = await _start_health_server(agent)
 
     try:
         # Keep the agent running
         while True:
             await asyncio.sleep(1)
     except KeyboardInterrupt:
+        pass
+    finally:
         await agent.stop()
+        await health_runner.cleanup()
 
 if __name__ == "__main__":
     asyncio.run(main())
