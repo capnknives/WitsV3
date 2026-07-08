@@ -2,172 +2,118 @@
 
 ## Overview
 
-WitsV3's agent system is the core of its LLM orchestration capabilities. The system follows a hierarchical design with specialized agents handling specific tasks, all coordinated through a central control mechanism.
+WitsV3 agents are the routing and reasoning layer of a local LLM orchestration system.  
+Users typically chat through the **Web UI** (`run_web.py`) or CLI (`run.py`); the control center decides intent and delegates.
 
-## Agent Architecture
+## Agent architecture
 
 ```
 BaseAgent (abstract)
-├── WitsControlCenterAgent (main entry point)
-├── BaseOrchestratorAgent (abstract)
-│   └── LLMDrivenOrchestrator (ReAct pattern implementation)
-├── BackgroundAgent (scheduled tasks)
-├── AdvancedCodingAgent (code generation & analysis)
-└── BookWritingAgent (content creation)
+├── WitsControlCenterAgent     # main entry — intent + routing
+├── BaseOrchestratorAgent      # ReAct loop
+│   └── LLMDrivenOrchestrator  # tool calling + synthesis guard
+├── BackgroundAgent            # scheduled maintenance (optional / Docker path)
+├── AdvancedCodingAgent        # scaffolds + verified file edits
+├── SelfRepairAgent            # log/test diagnose → verified fixes
+└── BookWritingAgent           # long-form content
 ```
 
-## Core Agent Classes
+## Core classes
 
 ### BaseAgent
 
-The abstract base class that all agents inherit from, providing:
+Abstract base providing:
 
-- Communication with LLMs via the `llm_interface`
-- Memory management with `memory_manager`
-- Streaming response infrastructure (thinking, action, observation, result)
-- Configuration handling
-- Standard logging patterns
+- LLM access via `llm_interface`
+- Memory via `memory_manager`
+- Streaming helpers (thinking / action / observation / result)
+- Config + logging
 
 ```python
 class BaseAgent(ABC):
     @abstractmethod
     async def run(self, user_input: str, **kwargs) -> AsyncGenerator[StreamData, None]:
-        """Main entry point for all agents to process user requests"""
+        """Main entry point for all agents to process user requests."""
         pass
 ```
 
 ### WitsControlCenterAgent
 
-The main entry point for user interactions, responsible for:
+Entry point for user turns:
 
-- Parsing user intent
-- Delegating to specialized agents
-- Managing conversation flow
-- Handling enhanced meta-reasoning when available
+- Parses intent
+- Routes to specialized agents **before** generic enhanced paths (specialists are not dead code)
+- Delegates tool-heavy work to the orchestrator
+- Manages conversation flow
 
-### BaseOrchestratorAgent
+### BaseOrchestratorAgent / LLMDrivenOrchestrator
 
-Abstract agent implementing the ReAct (Reason-Act-Observe) pattern:
+ReAct (Reason → Act → Observe):
 
-- Reasoning about user requests and system state
-- Executing appropriate tools
-- Observing results
-- Making decisions on next steps
-
-### LLMDrivenOrchestrator
-
-Concrete implementation of BaseOrchestratorAgent that uses LLMs for decision-making:
-
-- Generates reasoning based on current state
-- Selects appropriate tools to use
-- Interprets tool outputs
-- Determines when to complete a request
-
-## Specialized Agents
+- Plan, call tools, read observations
+- **Synthesis guard** rejects final answers that ignore usable search observations (retry once, then auto-synthesize when needed)
+- JSON robustness for local models (`format=json`, repair-reparse)
 
 ### BackgroundAgent
 
-Handles scheduled tasks and system maintenance:
+Optional scheduled tasks (memory maintenance, metrics, self-repair parity). Prefer the **in-process** daily self-repair schedule on `run.py` / `run_web.py` for local use; this agent is mainly for the Docker background path.
 
-- Memory pruning and optimization
-- System health monitoring
-- Periodic tasks via AsyncIOScheduler
-- Metric collection and reporting
+## Specialized agents
 
 ### AdvancedCodingAgent
 
-Specialized agent for software development tasks:
+- Project scaffolds written under `workspace/<name>/` with `py_compile` checks
+- Requests that name an existing project file use the same verified-edit pipeline as self-repair (`core/safe_code_editor.py`)
 
-- Code generation for multiple languages and frameworks
-- Project structure creation
-- Code analysis and quality assessment
-- Integration with neural web for enhanced reasoning (when available)
+### SelfRepairAgent
+
+1. Target a named file, or scan `logs/witsv3.log` (then failing tests if needed)  
+2. Ask the LLM for a full corrected file  
+3. Apply via `apply_code_fix` (pytest gate + git commit or full revert)  
+4. Optionally restart if `self_repair.restart_after_fix` is enabled  
 
 ### BookWritingAgent
 
-Agent designed for long-form content creation:
+Outlining, chapters, research synthesis, revision — content-focused, not the verified filesystem edit path.
 
-- Book outlining and chapter planning
-- Content writing with narrative structure
-- Research synthesis
-- Revision and improvement
-- Character and world development
+## Communication
 
-## Agent Communication Patterns
+All agents stream `StreamData` so clients can show progressive thinking, tool actions, and final results.
 
-All agents use the `StreamData` system for communication, which allows for:
+## Memory
 
-1. **Progressive output** - Clients see interim results (thinking, actions, observations)
-2. **Structured data** - Different message types for different purposes
-3. **Unified interface** - Consistent across all agent types
+Agents store and retrieve segments through the memory manager so context survives across turns and (depending on backend) sessions.
 
-## Memory System Integration
+## Creating a new agent
 
-Agents use the memory system to:
-
-- Store important context from interactions
-- Retrieve relevant past information
-- Build coherent mental models across sessions
-- Share knowledge with other agents
-
-## Creating New Agents
-
-When creating a new agent:
-
-1. Inherit from `BaseAgent` (or a specialized agent class)
-2. Implement the required `run()` method
-3. Use the streaming helpers (`stream_thinking`, `stream_action`, etc.)
-4. Place the agent in the `agents/` directory
-5. Register in `__init__.py` if needed for importing
-
-Example skeleton:
+1. Inherit from `BaseAgent`  
+2. Implement `async def run(...)`  
+3. Use stream helpers  
+4. Place under `agents/`  
+5. Wire routing from the control center when it should be user-reachable  
 
 ```python
 class YourNewAgent(BaseAgent):
-    """
-    Specialized agent for [purpose].
-    """
-
-    def __init__(
-        self,
-        agent_name: str,
-        config: WitsV3Config,
-        llm_interface: BaseLLMInterface,
-        memory_manager: Optional[MemoryManager] = None
-    ):
-        super().__init__(agent_name, config, llm_interface, memory_manager)
-        # Additional initialization
-
     async def run(
         self,
         user_input: str,
         conversation_history: Optional[ConversationHistory] = None,
         session_id: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
-        """
-        Process requests specific to this agent.
-        """
-        # Implementation
         yield self.stream_thinking("Processing request...")
         # ...
         yield self.stream_result("Final result")
 ```
 
-## Testing Agents
+## Testing
 
-All agents have corresponding tests in the `tests/agents/` directory. When creating a new agent, include:
+Mirror under `tests/agents/`: happy path, errors, memory/tool integration where relevant.
 
-- Basic functionality tests
-- Exception handling tests
-- Integration with memory system tests
-- Sample conversation flow tests
+## Best practices
 
-## Best Practices
-
-1. **Async First**: All agent methods should be async
-2. **Stream Progress**: Use the stream helpers to show work
-3. **Memory Integration**: Store important context in memory
-4. **Error Handling**: Gracefully handle exceptions with good user feedback
-5. **Modularity**: Break complex agents into smaller methods
-6. **Documentation**: Include docstrings for all methods
+1. Async I/O everywhere  
+2. Stream progress generously  
+3. Persist important context  
+4. Fail gracefully with clear user-facing messages (`core/user_errors.py` for LLM outages)  
+5. Keep files under ~500 lines; share pipelines (e.g. safe code editor) instead of forking logic  

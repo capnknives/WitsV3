@@ -1,14 +1,14 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
-**Branch:** `fix/revive-2026-07` @ `14adeed` (July 6–7 2026; merged to `main` at 1a555f2; integration work continues on the branch)
-**Test suite:** 337 collected (329 passed / 2 skipped on last full run)
-**Last updated:** July 7, 2026
+**Branch tip (tracking):** `fix/revive-2026-07` / feature work on `cursor/iron-delta-w0r5`  
+**Test suite:** 406 collected (re-run `pytest` — treat README figures as authoritative when they disagree)  
+**Last updated:** July 8, 2026
 
-This document tracks the July 2026 revival effort: what was worked on, what
-broke along the way, how each issue was fixed, and what was closed.
+This document is the **shipped-work log** for the July 2026 revival: what landed,
+what broke, and how it was fixed. It is **not** the forward backlog.
 
-**Forward-looking roadmap (what to do next):**
-[`suggested-features-2026-07.md`](suggested-features-2026-07.md)
+**What's next:** [`suggested-features-2026-07.md`](suggested-features-2026-07.md)  
+**How to install/run:** [`../../README.md`](../../README.md)
 
 ### Git workflow (integration branch)
 
@@ -131,8 +131,10 @@ work, and remove/archive candidates live in the forward roadmap:
 
 Quick gates before promoting `fix/revive-2026-07` → `main`:
 
-1. Run manual tests **A–F** in [`composer-orchestrator-search-quality-2026-07.md`](composer-orchestrator-search-quality-2026-07.md) (especially **F**: save-to-file).
-2. Optionally add `ANTHROPIC_API_KEY` for ask-Claude escalation — now documented in `.env.example`; still requires supplying the real key.
+1. ~~Run manual tests **A–F**~~ — ✅ DONE July 8 2026 (see suggested-features G1/G3).
+2. Optionally add `ANTHROPIC_API_KEY` for ask-Claude escalation — still owner's call.
+3. Re-run full pytest and clear any remaining failures before calling the branch green.
+4. Docs/install authenticity pass — ✅ README + planning indexes updated July 8 2026.
 
 ### Whole-repo audit (Tiers 1–4) — complete
 

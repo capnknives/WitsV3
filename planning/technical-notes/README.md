@@ -1,34 +1,25 @@
 ---
 title: "WitsV3 Technical Notes Documentation"
 created: "2025-06-09"
-last_updated: "2025-06-09"
-status: "active"
+last_updated: "2026-07-08"
+status: "historical"
 ---
+
 # WitsV3 Technical Notes
 
-This directory contains debug information, fixes, and technical notes for the WitsV3 project.
+> Debug and fix write-ups from the 2025 era. Prefer July 2026 sources for current
+> truth: [`../roadmap/revival-2026-07.md`](../roadmap/revival-2026-07.md),
+> root [`README.md`](../../README.md).
 
-## Documents
+## Best single entry (still useful)
 
-- **[consolidated-system-fixes.md](consolidated-system-fixes.md)** - Comprehensive technical documentation including all fixes and improvements
+- **[consolidated-system-fixes.md](consolidated-system-fixes.md)** — older consolidated fix dump
 
-### Individual Documents (Legacy)
+## Legacy individual notes
 
-These individual documents have been consolidated into the main document above, but are kept for reference:
+- [system-fixes.md](system-fixes.md), [interpreter-fixes.md](interpreter-fixes.md),
+  [system-improvements.md](system-improvements.md), [setup-completion.md](setup-completion.md),
+  [authentication-status.md](authentication-status.md)
 
-- **[system-fixes.md](system-fixes.md)** - System fixes and improvements
-- **[interpreter-fixes.md](interpreter-fixes.md)** - Interpreter fixes
-- **[system-improvements.md](system-improvements.md)** - System improvements
-- **[setup-completion.md](setup-completion.md)** - Setup completion status
-- **[authentication-status.md](authentication-status.md)** - Authentication status
-
-## Document Guidelines
-
-- Document all system fixes with clear problem/solution descriptions
-- Include error messages and stack traces where appropriate
-- Link to relevant code changes
-- Update when fixes are applied or improved
-
-## Preferred Format
-
-For future technical notes, please add them to the consolidated document rather than creating individual files.
+New operational incidents should be logged in the revival doc or a dated file under
+`planning/roadmap/`, not quietly appended here only.

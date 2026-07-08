@@ -1,10 +1,16 @@
 ---
-title: "WitsV3 Planning Document"
+title: "WitsV3 System Architecture"
 created: "2025-06-09"
-last_updated: "2025-06-09"
-status: "active"
+last_updated: "2026-07-08"
+status: "reference"
 ---
-# WitsV3 Planning Document
+# WitsV3 System Architecture
+
+> **Status note (2026-07-08):** This document remains a useful **component map**, but
+> sections labeled “PRODUCTION READY” / mid-2025 metrics are **historical**. For how to
+> run the product and what shipped recently, use [`README.md`](../../README.md) and
+> [`planning/roadmap/suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md).
+> The primary user interface is now the **Web UI**, not CLI-only.
 
 ## Table of Contents
 

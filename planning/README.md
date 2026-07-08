@@ -1,93 +1,57 @@
 ---
 title: "WitsV3 Planning Documentation"
 created: "2025-06-09"
-last_updated: "2025-06-09"
+last_updated: "2026-07-08"
 status: "active"
 ---
 
 # WitsV3 Planning Documentation
 
-This directory contains all planning, architectural, and technical documentation for the WitsV3 project.
+Design notes, roadmaps, and historical material for WitsV3.  
+**Product install and day-to-day usage live in the root [`README.md`](../README.md).**
 
-## Documentation Organization
+## Start here
 
-### Key Consolidated Documents
+| Need | Document |
+|------|----------|
+| **What's next** | [`roadmap/suggested-features-2026-07.md`](roadmap/suggested-features-2026-07.md) |
+| **What shipped (July 2026)** | [`roadmap/revival-2026-07.md`](roadmap/revival-2026-07.md) |
+| **Architecture** | [`architecture/system-architecture.md`](architecture/system-architecture.md) *(mark as historical where dates say 2025)* |
+| **Dead/dormant code** | [`roadmap/clutter-catalog-2026-07.md`](roadmap/clutter-catalog-2026-07.md) |
+| **Tool registry truth** | [`roadmap/tool-registry-reality-2026-07.md`](roadmap/tool-registry-reality-2026-07.md) |
+| **Config surface truth** | [`roadmap/config-surface-truth-2026-07.md`](roadmap/config-surface-truth-2026-07.md) |
 
-- **[DOCUMENTATION_REORGANIZATION.md](DOCUMENTATION_REORGANIZATION.md)** - Summary of the documentation reorganization project
-- **[technical-notes/consolidated-system-fixes.md](technical-notes/consolidated-system-fixes.md)** - Comprehensive technical documentation covering all system fixes, improvements, and setup details
-- **[architecture/system-architecture.md](architecture/system-architecture.md)** - Complete system architecture and component design
-- **[roadmap/neural-web-roadmap.md](roadmap/neural-web-roadmap.md)** - Future enhancement roadmap for neural web architecture
-- **[tasks/task-management.md](tasks/task-management.md)** - Current task status and backlog
+Root redirects: [`TASK.md`](../TASK.md), [`PLANNING.md`](../PLANNING.md).
 
-### Directory Structure
+## Directory structure
 
-- **[architecture/](architecture/)** - System architecture and design documents
-- **[implementation/](implementation/)** - Implementation details and summaries
-- **[roadmap/](roadmap/)** - Future plans and enhancement roadmaps
-- **[tasks/](tasks/)** - Task tracking and management
-- **[technical-notes/](technical-notes/)** - Debug information, fixes, and technical notes
-- **[archive/](archive/)** - Archive of original documentation files
+| Folder | Contents |
+|--------|----------|
+| [`architecture/`](architecture/) | System design |
+| [`roadmap/`](roadmap/) | Forward roadmap + July revival logs + audits |
+| [`implementation/`](implementation/) | Implementation write-ups (many historical) |
+| [`tasks/`](tasks/) | Superseded task lists → use roadmap |
+| [`technical-notes/`](technical-notes/) | Debug / fix notes (prefer consolidated) |
+| [`archive/`](archive/) | Originals, parked GUI, future-task dumps |
 
-## Documentation Maintenance
+## Documentation standards
 
-### Documentation Tools
+New planning docs should:
 
-The following scripts are available in the `scripts/` directory to help maintain documentation:
+1. Live under the right subdirectory  
+2. Use `lowercase-with-hyphens.md` (include `YYYY-MM` when time-sensitive)  
+3. Carry YAML front matter (`title`, `created`/`last_updated`, `status`)  
+4. Get linked from this README and/or [`roadmap/README.md`](roadmap/README.md)  
+5. Prefer updating the canonical roadmap over duplicating “what’s next” elsewhere  
 
-- **`doc_maintenance.py`** - Main documentation maintenance tool with the following commands:
-  - `list` - Lists all documentation files with their titles
-  - `create` - Creates a new document with proper metadata
-  - `update` - Updates metadata in an existing document
-  - `archive` - Archives a document by moving it to the archive directory
+Supersede by marking status + pointing to the replacement; don’t delete history casually.
 
-Examples:
+### Optional tooling
 
 ```bash
-# List all documentation
 python scripts/doc_maintenance.py list
-
-# Create a new document
-python scripts/doc_maintenance.py create planning/tasks/new-task.md "New Task Title"
-
-# Update document metadata
-python scripts/doc_maintenance.py update planning/tasks/some-file.md --status "draft"
-
-# Archive a document
-python scripts/doc_maintenance.py archive planning/tasks/obsolete-task.md
+python scripts/doc_maintenance.py create planning/tasks/new-note.md "Title"
+python scripts/doc_maintenance.py archive planning/path/obsolete.md
 ```
 
-### Other Documentation Scripts
-
-- **`migrate_docs.py`** - Used for initial migration of documentation (historical)
-- **`standardize_format.py`** - Standardizes document format (historical)
-- **`fix_metadata_format.py`** - Fixes metadata format issues (historical)
-- **`cleanup_backups.py`** - Cleans up backup files (historical)
-- **`cleanup_originals.py`** - Cleans up original files after migration (historical)
-
-## Documentation Standards
-
-### Metadata Format
-
-All documents should include the following metadata at the top:
-
-```
----
-title: "Document Title"
-created: "YYYY-MM-DD"
-last_updated: "YYYY-MM-DD"
-status: "active|archived|draft"
----
-```
-
-### Document Guidelines
-
-- All new planning documents should be added to the appropriate subdirectory
-- Use lowercase filenames with hyphens for spaces
-- Include date in filename for time-sensitive documents (YYYY-MM-DD-title.md)
-- Add metadata to the top of each document (title, created date, last updated date)
-
-### Document Lifecycle
-
-- Archive outdated documents to `planning/archive/` directory
-- Update README index files when adding new documents
-- Keep document section in main README.md updated
+Older one-shot migration scripts under `scripts/` (`migrate_docs.py`, etc.) are historical.

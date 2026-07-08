@@ -1,49 +1,31 @@
-# Docker Setup Instructions
+# Docker notes (parked)
 
-## Building the Container
+> **Not the recommended way to run WitsV3.** Day-to-day use is local:
+> `python run_web.py` (or `run.py`). Docker packaging is explicitly **parked** on the
+> roadmap — see [`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md) §4.
 
-To build a container with the correct dependencies:
+What exists for experimental / background use:
 
-`ash
-# Basic build
-docker build -t witsv3:latest .
+| Artifact | Purpose |
+|----------|---------|
+| `Dockerfile` | Image for the main app (not actively productized) |
+| `Dockerfile.background` | Background agent image |
+| `docker-compose.background.yml` | Compose file for the background agent path |
 
-# Or with BuildKit for better caching
-DOCKER_BUILDKIT=1 docker build -t witsv3:latest .
-`
+There is **no** root `docker-compose.yml` for a full stack. Prefer local venv + Ollama.
 
-## Running in Docker
+### Background agent (optional)
 
-To run WitsV3 in a Docker container:
+```bash
+DOCKER_BUILDKIT=1 docker build -f Dockerfile.background -t witsv3-background:latest .
+docker compose -f docker-compose.background.yml up -d
+```
 
-`ash
-# Interactive mode
-docker run -it --rm witsv3:latest
+Daily self-repair does **not** require Docker: `run_web.py` / `run.py` schedule it
+in-process when `self_repair.daily_schedule_enabled` is true.
 
-# With volume mount for data persistence
-docker run -it --rm -v /path/to/data:/app/data witsv3:latest
+### Troubleshooting
 
-# As a background service
-docker run -d --name witsv3-service witsv3:latest
-`
-
-## Using Docker Compose
-
-`ash
-# Start the service
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop the service
-docker-compose down
-`
-
-## Troubleshooting
-
-If you encounter dependency issues in the container:
-
-1. Try rebuilding with the --no-cache flag
-2. Ensure the requirements.lock file is up to date
-3. Check for platform-specific dependencies
+1. Rebuild with `--no-cache` if dependency layers go stale  
+2. Keep `requirements.lock` aligned with the Python version you use  
+3. Mount a volume over `/app/data` if you need persistence across container restarts  

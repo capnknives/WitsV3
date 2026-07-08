@@ -1,7 +1,15 @@
 Welcome to WitsV3's documentation!
 ================================
 
-WitsV3 is an LLM orchestration system with a CLI-first approach, ReAct pattern, and tool registry.
+.. warning::
+
+   These Sphinx pages are **secondary** and largely historical. The canonical,
+   maintained product guide is the repository root ``README.md``
+   (Web UI first, Ollama local, July 2026 status). Forward work lives in
+   ``planning/roadmap/suggested-features-2026-07.md``.
+
+WitsV3 is a local-first LLM orchestration system: control center + ReAct
+orchestrator + tools + memory, primarily used via ``python run_web.py``.
 
 .. toctree::
    :maxdepth: 2
@@ -9,60 +17,23 @@ WitsV3 is an LLM orchestration system with a CLI-first approach, ReAct pattern, 
 
    installation
    quickstart
-   architecture
-   tools/index
-   agents/index
-   core/index
-   api/index
-   development
-   contributing
-   changelog
 
-Features
---------
+Features (current)
+------------------
 
-* CLI-first approach for easy integration
-* ReAct pattern for agent reasoning
-* Tool registry for extensibility
-* Neural web architecture
-* Adaptive LLM system
-* Background agent support
-* Comprehensive testing suite
+* Web UI (FastAPI + SSE) and CLI
+* ReAct orchestrator with tool registry (~26 built-in tools)
+* Document RAG, multi-provider web search, MCP discovery
+* Verified code-edit pipeline (coding + self-repair agents)
+* Optional neural-web memory backend and adaptive stacks (not default)
 
-Installation
------------
+Quick run
+---------
 
 .. code-block:: bash
 
-   pip install witsv3
-
-For development installation:
-
-.. code-block:: bash
-
-   git clone https://github.com/yourusername/witsv3.git
-   cd witsv3
-   make install-dev
-
-Quick Start
-----------
-
-.. code-block:: python
-
-   from witsv3 import WitsV3
-
-   # Initialize the system
-   wits = WitsV3()
-
-   # Run a command
-   result = wits.run("What is the weather in New York?")
-
-   # Get the response
-   print(result)
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search` 
+   python -m venv .venv
+   # activate venv, then:
+   pip install -r requirements.txt
+   copy .env.example .env   # set WITSV3_WEB_TOKEN
+   python run_web.py

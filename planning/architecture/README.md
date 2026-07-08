@@ -1,20 +1,21 @@
 ---
 title: "WitsV3 Architecture Documentation"
 created: "2025-06-09"
-last_updated: "2025-06-09"
+last_updated: "2026-07-08"
 status: "active"
 ---
-# WitsV3 Architecture Documentation
 
-This directory contains architectural documentation for the WitsV3 project.
+# WitsV3 Architecture Documentation
 
 ## Documents
 
-- **[system-architecture.md](system-architecture.md)** - Core system architecture and components
+- **[system-architecture.md](system-architecture.md)** — component overview (treat mid-2025 “status” sections as historical)
 
-## Document Guidelines
+For live product status and install steps use the root [`README.md`](../../README.md).
+For what to build next use [`../roadmap/suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md).
 
-- Add new architectural designs and diagrams to this directory
-- Include comprehensive component descriptions
-- Use diagrams where appropriate (stored in diagrams/ subfolder)
-- Link to relevant implementation documents
+## Guidelines
+
+- Prefer updating the roadmap and README for user-facing changes  
+- Add new durable design notes here; date them in the filename when transient  
+- Link implementation docs under `../implementation/` when relevant  

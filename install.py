@@ -42,11 +42,11 @@ def check_ollama():
             return True
         else:
             print("⚠️  Ollama not found - please install Ollama first")
-            print("   Visit: https://ollama.ai/download")
+            print("   Visit: https://ollama.com")
             return False
     except FileNotFoundError:
         print("⚠️  Ollama not found - please install Ollama first")
-        print("   Visit: https://ollama.ai/download")
+        print("   Visit: https://ollama.com")
         return False
 
 def main():
@@ -91,18 +91,19 @@ def main():
     print("\n" + "=" * 50)
     print("🎉 WitsV3 Installation Complete!")
     print("\n📋 Next Steps:")
-    print("1. Save your authentication token (displayed during setup)")
-    print("2. Start Ollama: ollama serve")
-    print("3. Run WitsV3: python run.py")
-    print("4. Run tests: pytest tests/ -v")
+    print("1. Copy .env.example → .env and set WITSV3_WEB_TOKEN (save any auth token shown)")
+    print("2. Ensure Ollama is running (ollama serve) with the models above pulled")
+    print("3. Start the Web UI: python run_web.py   (or start_web_ui.bat on Windows)")
+    print("4. Optional CLI: python run.py")
+    print("5. Verify: pytest tests/ -q --no-cov")
 
     if not ollama_available:
         print("\n⚠️  Remember to install Ollama:")
-        print("   Visit: https://ollama.ai/download")
-        print("   Then run: ollama pull qwen3:8b")
+        print("   Visit: https://ollama.com")
+        print("   Then pull: qwen3:8b, qwen2.5-coder:7b, llama3.2:3b, nomic-embed-text")
 
     print("\n📚 Documentation: README.md")
-    print("🔧 Configuration: config.yaml")
+    print("🔧 Configuration: config.yaml  |  Secrets: .env")
 
 if __name__ == "__main__":
     main()

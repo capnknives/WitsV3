@@ -1,6 +1,7 @@
 # WITS Synthetic Brain
 
-> **Historical.** Superseded — see [`SYNTHETIC_BRAIN.md`](SYNTHETIC_BRAIN.md) for current status.
+> **Historical.** Not the current WitsV3 product. Canonical archive entry:
+> [`SYNTHETIC_BRAIN.md`](SYNTHETIC_BRAIN.md). For the live system see [`../README.md`](../README.md).
 
 ## Overview
 

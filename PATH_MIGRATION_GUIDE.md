@@ -1,13 +1,18 @@
 ---
 title: "WitsV3 Path Migration Guide"
 created: "2025-06-10"
-last_updated: "2025-06-10"
-status: "active"
+last_updated: "2026-07-08"
+status: "historical"
 ---
 
 # WitsV3 Path Migration Guide
 
-This document serves as a reference for mapping between previous file locations and the current project structure. Use this guide when updating imports, resolving references in older documentation, or understanding the organizational changes in WitsV3.
+> **Historical.** Captures the 2025 documentation reorganization. Root `TASK.md` /
+> `PLANNING.md` are now **redirect stubs** (not full copies under `planning/tasks/`).
+> For current layout see [`FILE_STRUCTURE.md`](FILE_STRUCTURE.md) and [`README.md`](README.md).
+
+This document maps previous file locations to the reorganized structure. Use it when
+updating old imports or reading archived docs.
 
 ## Table of Contents
 

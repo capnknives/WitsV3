@@ -1,21 +1,16 @@
 # WitsV3 — Suggested Features & Roadmap
 
-**Last updated:** July 7, 2026  
-**Integration branch:** `fix/revive-2026-07` @ `14adeed`  
-**Staging branch:** `cursor/iron-delta-w0r5` (synced with integration)  
-**Test suite:** 337 collected (329 passed / 2 skipped on last full run)
+**Last updated:** July 8, 2026  
+**Working branch tip:** `cursor/iron-delta-w0r5` (merges into `fix/revive-2026-07`)  
+**Test suite:** 406 collected (403 passed / 2 skipped / 1 failing on last full run — re-check before claiming green)
 
-This is the **forward-looking** roadmap: what to add, improve, or remove next.  
-For **what already shipped** during the July 2026 revival, see
-[`revival-2026-07.md`](revival-2026-07.md). For **manual regression tests**
-before promoting to `main`, see
-[`composer-orchestrator-search-quality-2026-07.md`](composer-orchestrator-search-quality-2026-07.md)
-§ "Suggested manual test plan" (tests A–F).
+This is the **canonical forward roadmap**: what to add, improve, or remove next.  
+For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
+For audits (clutter / tools / config), see the July 8 catalog docs in this folder.
 
 ### Git workflow
 
-All agent/feature work lands on **`fix/revive-2026-07`** first. Richard merges
-→ **`main`** after manual testing looks good.
+Feature work → **`fix/revive-2026-07`** → Richard merges to **`main`** after manual verification.
 
 ---
 
@@ -23,125 +18,51 @@ All agent/feature work lands on **`fix/revive-2026-07`** first. Richard merges
 
 | Area | Status |
 |------|--------|
-| Web UI (chat, settings, personality, MCP manager) | ✅ Shipped |
+| Web UI (chat, settings, personality, MCP manager, chat export) | ✅ Shipped |
 | Document RAG + `document_search` | ✅ Shipped |
-| Smart model routing (`core/model_router.py` + `/settings` UI) | ✅ Shipped |
+| Smart model routing (`core/model_router.py` + `/settings`) | ✅ Shipped |
 | Orchestrator JSON robustness + WCCA intent JSON repair | ✅ Shipped |
+| Orchestrator result synthesis guard | ✅ Shipped (`4e37d6a`) |
+| Friendlier Ollama-down errors (Web + CLI) | ✅ Shipped |
 | Web search multi-provider (Tavily → Brave → DDG) | ✅ Shipped |
 | MCP registry discover/install + OCI/Docker + browse-before-install | ✅ Shipped |
-| Tier 1–4 repo hygiene (CI, dead-code cleanup, 500-line splits, MCP on-demand-only) | ✅ Shipped |
-| Coding agent + self-repair (verified edit pipeline, daily schedule) | ✅ Shipped July 8 2026 — see §1a |
-| July revival feature backlog | ✅ **Closed** — only gates + polish remain |
+| Tier 1–4 repo hygiene (CI, dead-code cleanup, splits, MCP on-demand) | ✅ Shipped |
+| Coding agent + self-repair (verified-edit pipeline, daily schedule) | ✅ Shipped July 8 |
+| Docs pass (README install guide, redirects, roadmap truth) | ✅ Shipped July 8 |
+| July revival feature backlog | ✅ **Closed** — polish + optional features remain |
 
 ---
 
 ## 1. Gates before `main` promotion
 
-These are **human verification**, not code tasks.
+Human verification, not code tasks.
 
 | # | Action | Notes |
 |---|--------|-------|
-| G1 | ~~Run manual tests **A–F**~~ | ✅ DONE July 8 2026 — driven live against a dedicated `claude/work` instance (no browser available): A (model routing toggle), B (Ollama-down friendly card, verified via a deliberately-unreachable Ollama URL rather than killing the real service), C (single `web_search` call, numbered sources, grounded answer), D (document upload + question answered via the orchestrator's automatic `search_memory` context injection, not a stray `web_search`), E (107 passed), F (save-to-file wrote a real file with correct USER/ASSISTANT lines). Test residue (uploaded doc, memory segments, exported log) was cleaned up afterward via the real `delete_segments` API. |
-| G2 | Optional: add `ANTHROPIC_API_KEY` | Required only for ask-Claude escalation — still open, Richard's call |
-| G3 | ~~Watch logs on document Q&A~~ | ✅ DONE July 8 2026 — verified with an unguessable planted codeword (`ZEBRA-QUASAR-77`) in an uploaded test document; the orchestrator answered correctly, which is only possible if it actually used the retrieved content rather than hallucinating. |
+| G1 | ~~Manual tests A–F~~ | ✅ DONE July 8 2026 — see revival / composer handoff notes |
+| G2 | Optional: `ANTHROPIC_API_KEY` | Ask-Claude only — still open, owner's call |
+| G3 | ~~Document Q&A grounded answers~~ | ✅ DONE July 8 2026 |
 
-**Already done (no action):** Tavily key, Brave key, Supabase token revoke (N/A — no project),
-WCCA JSON repair, MCP follow-ups, Tier 4 splits, G1/G3 manual verification.
+**Already done:** Tavily/Brave keys (when available), WCCA JSON repair, MCP follow-ups, Tier 4 splits, G1/G3.
 
 ---
 
-## 1a. Coding agent & self-repair — from stub to real (SHIPPED July 8 2026)
+## 1a. Coding agent & self-repair — SHIPPED July 8 2026
 
-**Audit finding (before this work):** both `AdvancedCodingAgent` and `SelfRepairAgent`
-were LLM-prose generators with no filesystem/process I/O at all. The coding agent's
-"project creation" built a `CodeProject.files` dict from **hardcoded scaffold
-template strings**, held only in memory — never written to disk, never compiled,
-never tested. Its debugging/refactoring handlers asked the LLM to write a generic
-guide as prose. `SelfRepairAgent.run()` was a literal 2-line LLM passthrough: send
-the raw user message to the LLM, stream back whatever came out — no log parsing,
-no diagnosis, no fix, no verification. The more elaborate `self_repair_handlers.py`/
-`self_repair_utils.py` "fix" functions were dead code (never imported by the live
-agent) and were themselves simulations (`await asyncio.sleep(0.5); return True`).
-Separately, `FileWriteTool` had a real path-guard check in source, but it was
-**unreachable dead code** — two full `try/except` blocks back to back, where the
-first always returned before the second (which held the only safety check) could
-run — so `write_file` had zero enforced path restriction in practice. Process
-restart existed (`run.py`'s file-watcher-triggered relaunch) but was off by
-default and never invoked by any agent. Scheduling infrastructure was real
-(APScheduler + cron config) but lived only in a Docker-only, normally-unstarted
-`BackgroundAgent`, with no repair task defined.
+Summary of what landed (detail also in README § Self-repair):
 
-**Plan:** build one shared, safety-first verified-edit pipeline and give both
-agents (and the tool registry generally) a real detect → diagnose → fix → verify
-→ (optionally) restart loop on top of it, then wire a scheduled autonomous run.
+- Shared pipeline: `core/safe_code_editor.py` (snapshot → write → pytest → commit or restore)
+- Tools: `diagnose_log_errors`, `run_test_suite`, `apply_code_fix`, `restart_app`
+- Agents: real `SelfRepairAgent` + coding agent disk writes / verified file fixes
+- Schedule: in-process daily cron + BackgroundAgent parity
+- Path-guard fix on `write_file`; control-center specialized-agent routing fix
 
-**Shipped:**
+**Honest follow-ups (not blocking):**
 
-1. **`core/safe_code_editor.py`** — the shared pipeline every code-writing path
-   now goes through: snapshot original bytes → write candidate → run pytest →
-   commit to git *only* on a passing verification, or restore the exact original
-   bytes (or delete a new file) on failure. A failed attempt never leaves stray
-   git state and is never left broken in the working tree. `resolve_within_project()`
-   is the one enforced boundary — refuses any path escaping the project directory.
-2. **`tools/self_repair_tools.py`** — four new registry tools any agent can call:
-   `diagnose_log_errors` (parses `logs/witsv3.log` tracebacks for file/line,
-   read-only), `run_test_suite` (pytest wrapper), `apply_code_fix` (the verified
-   pipeline above), `restart_app` (deliberately schedules a relaunch a few
-   seconds out so the current response can finish streaming first — reuses the
-   same `subprocess.Popen` + process-exit pattern as the existing file-watcher
-   restart, just triggered on purpose instead of on any `.py` save).
-3. **`agents/self_repair_agent.py` rewritten**: if the request names a real
-   existing file, targets it directly; otherwise scans recent logs via
-   `diagnose_log_errors`. For each actionable issue, reads the file, asks the LLM
-   for a full corrected version, and applies it through `apply_code_fix` — verified
-   fixes are reported with their commit sha, failed ones report that the file was
-   reverted, never silently swallowed. Optional restart after a verified fix,
-   gated by `self_repair.restart_after_fix` (default off).
-4. **`AdvancedCodingAgent` gets two real capabilities**: project creation now
-   writes generated files to `workspace/<project_name>/` and runs `py_compile` on
-   each `.py` file, reporting per-file syntax status instead of leaving everything
-   as an in-memory string; and a request naming a real existing file (e.g. "fix
-   the bug in agents/foo.py") routes straight to a new `_handle_fix_existing_file`
-   that reuses the exact same verify-before-commit pipeline as self-repair —
-   so "coding agent" and "self-repair agent" share one trustworthy edit path
-   rather than two different half-measures.
-5. **`FileWriteTool` dead-code bug fixed** — collapsed the two duplicate
-   try/except blocks into one, now actually enforced via
-   `resolve_within_project()`, with a regression test locking in the fix.
-6. **Daily autonomous schedule**: `self_repair.daily_schedule_enabled` (default
-   on, cron `0 3 * * *`) runs the scan-and-fix loop from inside `WitsV3System`
-   itself (`run.py`, APScheduler — no Docker required), plus a matching
-   `self_repair` task added to the Docker-only `BackgroundAgent` dispatcher for
-   deployment parity.
-7. **New config section** `self_repair` in `core/config.py`/`config.yaml`:
-   `enabled`, `daily_schedule_enabled`, `daily_schedule_cron`, `max_issues_per_run`,
-   `log_scan_lines`, `restart_after_fix` (default `false`), `test_timeout_seconds`.
-
-**Tests:** `tests/core/test_safe_code_editor.py` (9), `tests/tools/test_self_repair_tools.py` (8),
-`tests/agents/test_self_repair_agent.py` (12, rewritten), `tests/agents/test_advanced_coding_agent.py`
-(5, new), `tests/tools/test_file_tools.py` (2, new — locks in the path-guard fix),
-`tests/agents/test_background_agent.py` (+2), `tests/test_run_self_repair_schedule.py` (5, new).
-
-**Known limitations / honest next steps** (not done here — good follow-ups):
-
-- The LLM is asked for a **full corrected file**, not a diff/patch — reliable for
-  small-to-medium files, but large files risk truncation or an expensive
-  regeneration. A diff-based apply path would scale better.
-- `diagnose_log_errors` only resolves file/line from a real Python traceback
-  (`Traceback (most recent call last): ... File "...", line N`). Bare
-  `ERROR`/`CRITICAL` log lines without a traceback are surfaced but marked
-  non-actionable — nothing tries to guess a file for those.
-- FAISS/neural/Supabase memory backends never wired `_prune_if_needed()`-style
-  hooks into their own `add_segment`, and likewise nothing here extends
-  self-repair awareness into those backends specifically (out of scope — `basic`
-  is the configured default).
-- Process restart is still the same blunt `subprocess.Popen` + process-exit
-  primitive that predates this work — ungraceful for the uvicorn web-server path
-  (no in-flight-request draining). Fine for a CLI/dev restart; a production
-  supervisor process would be a better foundation if this needs to be graceful.
-- `restart_after_fix` defaults to `false` for the *scheduled* daily run
-  specifically so it can never surprise someone using the app live; it's fully
-  wired and tested, just off by default.
+- Full-file LLM rewrite (diff/patch path would scale better for large files)
+- Log diagnosis needs real Python tracebacks (bare ERROR lines stay non-actionable)
+- Restart is still blunt `Popen` + exit (fine for CLI/dev; not a graceful uvicorn drain)
+- `restart_after_fix` defaults **off** so scheduled runs never interrupt a live session
 
 ---
 
@@ -149,136 +70,104 @@ agents (and the tool registry generally) a real detect → diagnose → fix → 
 
 ### P0 — Verify & promote
 
-1. Complete manual tests A–F on `fix/revive-2026-07` / `cursor/iron-delta-w0r5`.
-2. Merge `fix/revive-2026-07` → `main` when satisfied.
+1. ~~Complete manual tests A–F~~ ✅  
+2. Re-run full `pytest` and fix the one known failure (`test_parse_traceback_issues_extracts_traceback_with_file_and_line`) before marketing “all green”  
+3. Merge `fix/revive-2026-07` → `main` when satisfied  
 
-### P1 — High leverage (code)
+### P1 — High leverage
 
-| Item | Why | Effort |
-|------|-----|--------|
-| **Orchestrator result synthesis guard** | Logs still occasionally show answers that ignore tool observations; add explicit post-tool check or synthesis prompt tightening | Medium |
-| **Expand CI lint** | CI runs critical ruff only; pre-commit has full ruff/black/isort but ~124 black files / ~3.7k ruff findings in legacy code block full CI enforcement | Medium (incremental) |
-| **Friendlier Ollama-down in CLI** | Web UI has `web/user_errors.py`; CLI still surfaces raw connection errors | Small |
-| **Conversation export UX** | Save-to-file works via orchestrator; add a one-click "Export chat" button or slash command in web UI | Small–Medium |
+| Item | Why | Effort | Status |
+|------|-----|--------|--------|
+| Orchestrator synthesis guard | Ground answers in tool observations | Medium | ✅ Done |
+| Friendlier Ollama-down (CLI) | Match web UX | Small | ✅ Done |
+| Conversation export UX | One-click export in web UI | Small–Medium | ✅ Done |
+| Expand CI lint | Full ruff/black blocked by legacy noise | Medium (incremental) | Open |
+| Docs / README modernity | Install + honest status | Medium | ✅ Done July 8 |
+| Clutter cleanup wave 1 | Delete orphans listed in clutter catalog (`self_repair_handlers*`, `run_backup.py`, …) | Small–Medium | Open |
 
 ### P2 — Structure & hygiene (second-pass splits)
 
-Files still over the 500-line rule (excluding archived GUI):
+Files still over ~500 lines (excluding archived GUI). Re-measure before splitting — several already dropped after July work:
 
-| Lines | File | Suggestion |
-|------:|------|------------|
-| 690 | `tools/enhanced_reasoning.py` | Split reasoning strategies vs. prompt builders |
-| 680 | `core/tool_composition.py` | Split composition engine vs. registry glue |
-| 649 | `tools/neural_web_visualization.py` | Split render/export from graph queries |
-| 631 | `core/neural_memory_backend.py` | Split persistence vs. query/index |
-| 614 | `agents/self_repair_handlers.py` | Split handler mixins by repair category |
-| 603 | `tools/neural_web_nlp.py` | Split NLP ops from visualization helpers |
-| 570 | `core/content_fallback_system.py` | Evaluate: wire up or archive if unused |
-| 567 | `core/response_parser.py` | Split format-specific parsers |
-| 531 | `core/knowledge_graph.py` | Split graph ops from serialization |
-| 527 | `core/enhanced_mcp_adapter.py` | Split transport vs. tool mapping |
-| 525 | `core/memory_manager.py` | Split backend factory from segment CRUD |
-| 513 | `core/concrete_meta_reasoning.py` | Split meta-reasoning steps |
+| Approx. lines | File | Suggestion |
+|-------------:|------|------------|
+| 735 | `tools/neural_web_nlp.py` | Split NLP ops from helpers |
+| 772 | `tools/neural_web_visualization.py` | Split render/export from graph queries |
+| 704 | `core/tool_composition.py` | Composition engine vs registry glue |
+| 632 | `agents/self_repair_handlers.py` | **Prefer delete** — orphan after rewrite (see clutter catalog) |
+| 607 | `core/memory_manager.py` | Backend factory vs segment CRUD |
+| ~500+ | `core/neural_memory_backend.py`, `knowledge_graph.py`, `response_parser.py`, … | Split or archive if unused |
 
-**Already under 500:** `llm_driven_orchestrator.py` (494), `wits_control_center_agent.py` (399), `web/server.py` (343).
+**Recently under control:** `enhanced_reasoning.py` split into models/patterns modules; `wits_control_center_agent.py` / `web/server.py` remain manageable.
 
 ### P3 — Features (when P0–P2 are boring)
 
 | Feature | Value | Notes |
 |---------|-------|-------|
-| **Scheduled background tasks UI** | Visibility into `BackgroundAgent` jobs | Read-only status page first |
-| **Memory browser in web UI** | Inspect/search/prune segments without CLI | Builds on existing memory APIs |
-| **Multi-session chat history** | Named sessions, resume later | Needs session store + UI |
-| **Tool usage analytics** | Which tools fire, latency, failure rate | Log aggregation or lightweight metrics |
-| **MCP server health dashboard** | Connection state, last error, restart | Extend `/mcp` page |
-| **Local model pull helper** | Web UI button to `ollama pull` missing models | Reduces "model not found" friction |
-| **Document upload via web** | Drag-drop into `documents/` + ingest | Complements folder drop |
-| **Streaming tool progress** | Richer SSE for long tool runs | Better UX for search/RAG |
+| Scheduled background tasks UI | Visibility into jobs | Read-only status first |
+| Memory browser in web UI | Inspect/prune without CLI | Builds on memory APIs |
+| Multi-session chat history | Named sessions | Session store + UI |
+| Tool usage analytics | Latency / failure rates | Lightweight metrics |
+| MCP server health dashboard | State + last error | Extend `/mcp` |
+| Local model pull helper | `ollama pull` from UI | Reduces friction |
+| Streaming tool progress | Richer SSE for long tools | UX for search/RAG |
+
+Document upload via web already exists in the UI side panel — prefer polish over a net-new feature.
 
 ### P4 — Neural web (only if actively using it)
 
-The neural web stack is **wired** (tools register, backend optional) but is not
-the primary user-facing path today. Before investing here, decide whether neural
-web remains a product direction or a research artifact.
-
-If continuing: see historical ideas in
-[`neural-web-roadmap.md`](neural-web-roadmap.md) — concept clustering, adaptive
-learning, Docker tool execution — but treat that doc as **2025-era design**, not
-current priority.
+Wired (tools register; `memory_manager.backend: neural` optional) but not the default path. Decide product vs research before investing. Historical ideas: [`neural-web-roadmap.md`](neural-web-roadmap.md).
 
 ---
 
-## 3. Remove, archive, or simplify (redundancy & defunct)
+## 3. Remove, archive, or simplify
 
-### Code — candidates for archive or deletion
+See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-registry-reality-2026-07.md`](tool-registry-reality-2026-07.md), [`config-surface-truth-2026-07.md`](config-surface-truth-2026-07.md).
 
-| Item | Verdict | Rationale |
-|------|---------|-----------|
-| `core/adaptive_llm_interface.py` | **Archive or delete** | Marked dormant; routes to non-existent on-disk "modules". Replaced by `core/model_router.py`. Safe to move to `planning/archive/` after confirming no imports in hot path |
-| `planning/archive/gui/` (PyQt6) | **Keep archived** | Web UI is permanent replacement; do not revive unless explicit new requirement |
-| Supabase memory backend + MCP | **Park / optional trim** | No active Supabase project; backend code can stay for opt-in users but remove from default docs/examples. `supabase-mcp` already removed from default `data/mcp_tools.json` |
-| `core/content_fallback_system.py` | **Audit usage** | 570 lines; grep for callers — archive if nothing in production path uses it |
-| `core/cognitive_architecture*.py` remnants | **Audit** | May overlap with enhanced reasoning; consolidate or archive |
-| Root-level duplicate configs | **Done** | pytest.ini, mypy.ini, etc. already removed (Tier 1) |
-
-### Documentation — consolidate to reduce confusion
-
-| Document | Verdict |
-|----------|---------|
-| **`suggested-features-2026-07.md`** (this file) | **Canonical forward roadmap** |
-| **`revival-2026-07.md`** | **Canonical history + shipped log** — keep, but do not duplicate "what's next" here |
-| **`composer-orchestrator-search-quality-2026-07.md`** | **Historical handoff** — keep for manual test plan A–F and Tier 1–4 audit detail; marked superseded for "what's next" |
-| **`neural-web-roadmap.md`** | **Historical** — 2025 design; header already flags this |
-| **`planning/tasks/task-management.md`** | **Supersede** — 2025 phases; redirect to this file |
-| **`TASK.md`** | **Redirect only** — point here + revival doc |
-| **Synthetic brain doc set** (`docs/SYNTHETIC_BRAIN.md` + archives) | **Keep with historical headers** — canonical entry is `docs/SYNTHETIC_BRAIN.md` |
-
-### Config / deps — optional cleanup
-
-| Item | Action |
-|------|--------|
-| `config.yaml` `supabase:` section | Keep but document as optional; ensure README says "skip if unused" |
-| `requirements.lock` still lists `supabase` | Keep for optional backend; or move to `[optional]` extra |
-| Gmail MCP entry in `data/mcp_tools.json` | Remove if not planning to connect; harmless config-only today |
-| `.cursorrules` PLANNING.md pointer | Verify still points at `planning/architecture/system-architecture.md` |
+| Item | Verdict |
+|------|---------|
+| Adaptive LLM stack | Dormant / superseded by `model_router.py` — archive when confirmed unused |
+| `planning/archive/gui/` | Keep archived; web UI is the client |
+| Supabase | Optional; skip in default install docs |
+| Synthetic brain doc set | Historical — entry [`docs/SYNTHETIC_BRAIN.md`](../../docs/SYNTHETIC_BRAIN.md) |
+| Root `TASK.md` / `PLANNING.md` | Redirects only |
+| `DOCKER_INSTRUCTIONS.md` | Parked / background-agent only |
 
 ---
 
-## 4. Parked (explicitly out of scope)
+## 4. Parked (out of scope unless requirements change)
 
-Do **not** start these unless requirements change:
-
-- **Docker packaging** — no container story yet; local dev + web UI is the path
-- **Supabase cloud sync** — no project; backend remains opt-in code only
-- **PyQt6 desktop GUI** — archived; web UI + PWA is the client
-- **Git submodules for MCP servers** — replaced by on-demand clone (`scripts/clone_mcp_servers.py`) + registry `npx`/`uvx`/`docker run`
-- **Phase 2 "Neural Web" as primary product** — research direction only until explicitly prioritized
+- Docker packaging as primary deploy path  
+- Supabase cloud sync as default  
+- PyQt6 desktop GUI revival  
+- Git submodules for MCP servers (replaced by on-demand install)  
+- Neural web as primary product surface  
 
 ---
 
-## 5. Quick reference — document map
+## 5. Document map
 
 ```
 planning/roadmap/
 ├── suggested-features-2026-07.md   ← YOU ARE HERE (what's next)
-├── revival-2026-07.md              ← what shipped + error triage log
-├── composer-orchestrator-search-quality-2026-07.md  ← manual tests A–F + Tier audit history
+├── revival-2026-07.md              ← what shipped
+├── clutter-catalog-2026-07.md      ← dead/dormant inventory
+├── tool-registry-reality-2026-07.md
+├── config-surface-truth-2026-07.md
+├── composer-orchestrator-search-quality-2026-07.md  ← historical handoff / tests A–F
 ├── neural-web-roadmap.md           ← historical (2025)
 └── README.md                       ← index
 ```
 
-**Workflow:** implement on feature branch → push/merge to `fix/revive-2026-07` → manual test → Richard merges to `main`.
+---
+
+## 6. Suggested next chunk
+
+1. Fix remaining pytest failure + promote `fix/revive-2026-07` → `main` when ready  
+2. Clutter cleanup wave 1 (orphans from catalog §1)  
+3. Incremental lint hygiene until CI can enforce fuller ruff/black  
+4. Optional: memory browser / multi-session chat  
 
 ---
 
-## 6. Suggested sprint order (if picking one chunk)
-
-1. **Day 1:** Manual tests A–F + promote to `main` if green.
-2. **Day 2–3:** Orchestrator synthesis guard + CLI Ollama-down errors.
-3. **Week 2:** Incremental ruff/black cleanup (10–20 files per PR) until CI can run full lint.
-4. **Week 3+:** Second-pass 500-line splits starting with `enhanced_reasoning.py` and `tool_composition.py`.
-5. **When bored:** Web export button, memory browser, document upload.
-
----
-
-*When this doc goes stale, update the header date and reconcile against `git log fix/revive-2026-07` and `pytest --collect-only`.*
+*When this doc goes stale: bump the header date, re-run `pytest --collect-only`, and reconcile shipped items against `git log`.*

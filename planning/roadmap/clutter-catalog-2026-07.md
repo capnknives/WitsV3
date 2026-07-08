@@ -38,6 +38,7 @@ Safe, high confusion / line-count wins:
 | 4 | `run_backup.py` | 287 | DEAD_ALT | **delete** — stale fork of `run.py` |
 | 5 | `run_clean.py` | 292 | DEAD_ALT | **delete** — same |
 | 6 | `agents/conversation_handler.py` | 190 | ORPHAN | **delete** — superseded by WCCA intent/routing mixins |
+| … | Sphinx under `docs/*.rst` | — | OBSOLETE_DOC | **keep stubbed** — `index`/`installation`/`quickstart` now point at root README (July 8 docs pass); remaining rst leaves still historical |
 | 7 | `tools/intent_analysis_tool.py` | 118 | DEAD_ALT | **delete** (or stop registering) — blocked on orchestrator; real intent is `wcca_intent_mixin.py` |
 | 8 | `create_dummy_model.py` | 40 | STUB | **delete** — fake `.safetensors` for dead adaptive experts |
 | 9 | `update_config.py` | 51 | ORPHAN | **delete** — one-shot “force ollama provider” migrator, already done |

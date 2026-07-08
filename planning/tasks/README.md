@@ -1,20 +1,20 @@
 ---
 title: "WitsV3 Task Management Documentation"
 created: "2025-06-09"
-last_updated: "2025-06-09"
-status: "active"
+last_updated: "2026-07-08"
+status: "superseded"
 ---
+
 # WitsV3 Task Management
 
-This directory contains task tracking and management documentation for the WitsV3 project.
+**Superseded.** Do not treat files in this directory as the live backlog.
 
-## Documents
+| Use this instead | Purpose |
+|------------------|---------|
+| [`../roadmap/suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md) | Forward roadmap |
+| [`../roadmap/revival-2026-07.md`](../roadmap/revival-2026-07.md) | What shipped |
+| [`../../TASK.md`](../../TASK.md) | Root redirect |
 
-- **[task-management.md](task-management.md)** - Current task status and backlog
+## Documents kept for history
 
-## Document Guidelines
-
-- Update task status regularly with dates
-- Add discovered tasks to the appropriate section
-- Link to relevant implementation documents
-- Include clear acceptance criteria
+- **[task-management.md](task-management.md)** — 2025 phase checklist (superseded header already in file)
