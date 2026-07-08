@@ -83,6 +83,63 @@ async def test_no_issues_found_reports_nothing_to_repair():
 
 
 @pytest.mark.asyncio
+async def test_falls_back_to_test_suite_when_no_file_named_and_no_log_issues():
+    """2026-07-08 finding: a vague 'find bugs in the codebase' request with no
+    resolvable log traceback previously had no path to inspect the codebase
+    at all. Falls back to running the real test suite and parsing failures
+    the same way as a logged traceback (run_pytest's --tb=native output)."""
+    import core.safe_code_editor as sce
+    scratch = sce.PROJECT_ROOT / "tests" / "agents" / "_scratch_target3.py"
+    scratch.write_text("def broken():\n    return 1 / 0\n", encoding="utf-8")
+
+    diagnose = AsyncMock(return_value={"issues": [], "message": "No issues."})
+    native_failure_output = (
+        "Traceback (most recent call last):\n"
+        f'  File "{scratch}", line 2, in broken\n'
+        "    return 1 / 0\n"
+        "ZeroDivisionError: division by zero\n"
+    )
+    test_suite = AsyncMock(return_value={"passed": False, "output": native_failure_output})
+    fix_execute = AsyncMock(return_value={
+        "success": True, "committed": True, "commit_sha": "def5678",
+        "message": "Edit applied and verified.", "test_output": "1 passed",
+    })
+    registry = _fake_registry({
+        "diagnose_log_errors": MagicMock(execute=diagnose),
+        "run_test_suite": MagicMock(execute=test_suite),
+        "apply_code_fix": MagicMock(execute=fix_execute),
+    })
+    llm = ScriptedLLM("```python\ndef broken():\n    return 0\n```")
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=registry)
+
+    try:
+        streams = [item async for item in agent.run("find and fix any bugs in the codebase")]
+    finally:
+        scratch.unlink(missing_ok=True)
+
+    test_suite.assert_awaited_once()
+    fix_execute.assert_awaited_once()
+    assert any("Repaired" in s.content for s in streams if s.type == "result")
+
+
+@pytest.mark.asyncio
+async def test_reports_nothing_when_test_suite_passes_and_no_other_issues():
+    diagnose = AsyncMock(return_value={"issues": [], "message": "No issues."})
+    test_suite = AsyncMock(return_value={"passed": True, "output": "5 passed"})
+    registry = _fake_registry({
+        "diagnose_log_errors": MagicMock(execute=diagnose),
+        "run_test_suite": MagicMock(execute=test_suite),
+        "apply_code_fix": MagicMock(execute=AsyncMock()),
+    })
+    agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), ScriptedLLM(), tool_registry=registry)
+
+    streams = [item async for item in agent.run("find and fix any bugs in the codebase")]
+
+    test_suite.assert_awaited_once()
+    assert any("nothing to repair" in s.content.lower() for s in streams)
+
+
+@pytest.mark.asyncio
 async def test_targets_a_file_named_in_the_request(tmp_path, monkeypatch):
     import core.safe_code_editor as sce
     scratch = sce.PROJECT_ROOT / "tests" / "agents" / "_scratch_target.py"

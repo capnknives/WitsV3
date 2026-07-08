@@ -5,8 +5,9 @@ The main entry point that handles user input and determines response strategy.
 """
 
 import json
+import re
 import uuid
-from typing import Any, Dict, Optional, AsyncGenerator
+from typing import Any, Dict, List, Optional, AsyncGenerator
 
 from agents.base_agent import BaseAgent
 from agents.wcca_intent_mixin import WCCAIntentMixin
@@ -212,6 +213,18 @@ User input: {user_input}
         suggested_response = intent_analysis.get("suggested_response", "direct")
         requires_tools = intent_analysis.get("requires_tools", False)
 
+        # An unambiguous "find/fix real bugs" request must reach the
+        # self-repair agent regardless of what the LLM intent classifier
+        # decided — 2026-07-08 finding: "find and fix any bugs in your code"
+        # was classified as clarification_question and "conversation" for a
+        # follow-up, both of which return before specialized-agent routing
+        # is ever considered below.
+        if self._needs_self_repair(user_input):
+            intent_type = "goal_defined"
+            complexity = "moderate"
+            requires_tools = True
+            suggested_response = "specialized"
+
         yield self.stream_thinking(f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}")
 
         # LLM-classified direct_response: use the intent JSON text, not a second
@@ -405,12 +418,24 @@ ASSISTANT:"""
         # Convert goal to lowercase for easier matching
         goal_lower = goal_statement.lower()
 
-        # Check for book writing / story related tasks
+        def _matches(keywords: List[str]) -> bool:
+            """Whole-word match — plain substring `in` checks false-positive
+            constantly (e.g. "codebase" contains "code", "description"
+            contains "script"), which is exactly what misrouted a live "find
+            bugs in the codebase" request to the coding agent instead of
+            self-repair on 2026-07-08."""
+            return any(re.search(rf"\b{re.escape(kw)}\b", goal_lower) for kw in keywords)
+
+        # Check for book writing / story related tasks. Deliberately NOT
+        # "write me a" alone — it's a substring of any "write me a <thing>"
+        # request (e.g. "write me a python script"), which misrouted plain
+        # coding requests to the book-writing agent before this fix.
         story_keywords = ["write a story", "write a book", "story about",
-                          "write me a", "create a story", "tell a story",
+                          "write me a story", "write me a novel", "write me a poem",
+                          "create a story", "tell a story",
                           "novel", "fiction", "narrative", "tale"]
 
-        if any(keyword in goal_lower for keyword in story_keywords):
+        if _matches(story_keywords):
             self.logger.info("Story writing task detected with keyword match")
             if "book_writing" in self.specialized_agents and self.specialized_agents["book_writing"]:
                 self.logger.info("Selected book writing agent for task")
@@ -418,30 +443,33 @@ ASSISTANT:"""
             else:
                 self.logger.warning("Book writing agent requested but not available")
 
-        # Check for coding related tasks
-        coding_keywords = ["code", "program", "develop", "script",
-                           "function", "class", "module", "api",
-                           "software", "application", "app", "website"]
-
-        if any(keyword in goal_lower for keyword in coding_keywords):
-            self.logger.info("Coding task detected with keyword match")
-            if "coding" in self.specialized_agents and self.specialized_agents["coding"]:
-                self.logger.info("Selected coding agent for task")
-                return self.specialized_agents["coding"]
-            else:
-                self.logger.warning("Coding agent requested but not available")
-
-        # Check for system repair tasks
+        # Check for system repair tasks BEFORE generic coding tasks — "fix",
+        # "bug", etc. are a much stronger and more specific signal than the
+        # broad coding keyword list below, so a message like "find and fix
+        # bugs in the codebase" should land on self-repair, not coding.
         repair_keywords = ["fix", "repair", "diagnose", "troubleshoot",
-                           "error", "issue", "problem", "bug", "crash"]
+                           "error", "issue", "problem", "bug", "bugs", "crash"]
 
-        if any(keyword in goal_lower for keyword in repair_keywords):
+        if _matches(repair_keywords):
             self.logger.info("System repair task detected with keyword match")
             if "self_repair" in self.specialized_agents and self.specialized_agents["self_repair"]:
                 self.logger.info("Selected self-repair agent for task")
                 return self.specialized_agents["self_repair"]
             else:
                 self.logger.warning("Self-repair agent requested but not available")
+
+        # Check for coding related tasks
+        coding_keywords = ["code", "program", "develop", "script",
+                           "function", "class", "module", "api",
+                           "software", "application", "app", "website"]
+
+        if _matches(coding_keywords):
+            self.logger.info("Coding task detected with keyword match")
+            if "coding" in self.specialized_agents and self.specialized_agents["coding"]:
+                self.logger.info("Selected coding agent for task")
+                return self.specialized_agents["coding"]
+            else:
+                self.logger.warning("Coding agent requested but not available")
 
         # No specialized agent matched
         self.logger.info("No specialized agent matched for this task")
