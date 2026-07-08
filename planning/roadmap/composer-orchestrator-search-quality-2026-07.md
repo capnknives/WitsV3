@@ -1,5 +1,10 @@
 # Composer branch — changes & test guide
 
+> **Status: historical handoff (July 7, 2026).** Tier 1–4 work merged into
+> `fix/revive-2026-07` @ `14adeed`. For **what to do next**, see
+> [`suggested-features-2026-07.md`](suggested-features-2026-07.md). This file
+> remains useful for the **manual test plan (A–F)** and Tier audit detail.
+
 **Branch:** `composer/orchestrator-search-quality` (Tier 1 CI/tooling work), then `claude/tier2-tier3-cleanup-2026-07` (Tier 2/3 cleanup, branched from the former)  
 **Base:** `fix/revive-2026-07` @ `856af3b` (Claude's July 7 revival work)  
 **Last updated:** July 7, 2026  
@@ -200,14 +205,17 @@ pytest tests/agents/test_orchestrator_save_file.py tests/core/test_tool_registry
 
 ## Not done yet (next on roadmap)
 
-Composer did **not** implement these — still open in `revival-2026-07.md`:
+**Superseded.** Open items moved to [`suggested-features-2026-07.md`](suggested-features-2026-07.md).
+
+Remaining gates before `main`:
 
 | # | Item | Notes |
 |---|------|-------|
-| — | Merge to `main` | `fix/revive-2026-07` merged into `main` when manual tests A–F look good (Richard's call) |
-| — | Manual ops | Add `ANTHROPIC_API_KEY` if using ask-Claude. Supabase token revoke: N/A, no project exists anymore |
+| G1 | Manual tests A–F below | Especially save-to-file (test F) |
+| G2 | Merge to `main` | Richard's call after G1 |
+| G3 | Optional | Add `ANTHROPIC_API_KEY` for ask-Claude |
 
-**Recently closed** (were on this list): WCCA intent JSON repair (`bd5e22a`), MCP discover follow-ups (`86c513d`), embedding truncation on large memory stores (shipped `7660664`), `BRAVE_SEARCH_API_KEY` support (shipped), the `set_dependencies(tool_registry=...)` startup crash (shipped `28f3c5c`), and merging `composer/orchestrator-search-quality` + Tier 2/3 cleanup into `fix/revive-2026-07` (shipped `dc7f813`, fast-forward, July 7).
+Everything else from the July revival backlog is closed (WCCA JSON repair, MCP follow-ups, Tier 4 splits, Brave key, etc.).
 
 ---
 
@@ -300,13 +308,10 @@ Full suite after Tier 2/3: **312 passed, 2 skipped**.
 
 ## Merge recommendation
 
-When manual tests A–F look good:
+**Done (July 7, 2026).** All tiers merged into `fix/revive-2026-07` @ `14adeed`.
 
-1. Merge `claude/tier2-tier3-cleanup-2026-07` → `fix/revive-2026-07` (or open a PR) — it's a superset of `composer/orchestrator-search-quality` (includes the Tier 1 CI commit) plus Tier 2/3.
-2. Update `revival-2026-07.md` §4 — model-routing settings, Ollama-down UX, save-to-file are shipped on branch.
-3. Keep Gmail MCP entry in `data/mcp_tools.json` only if you intend to connect it from `/mcp` — it does not auto-connect.
-4. ✅ Tier 4 complete (July 7 2026): 500-line splits for orchestrator/WCCA/book/coding/web
-   server; agent pytest coverage; MCP on-demand-only (no git submodules).
+Before promoting to `main`: run manual tests A–F below, then see
+[`suggested-features-2026-07.md`](suggested-features-2026-07.md) for post-merge work.
 
 ---
 

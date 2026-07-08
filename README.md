@@ -219,20 +219,27 @@ orchestrator uses the `document_search` tool to find relevant passages.
 
 ## Roadmap
 
-1. ~~**Web UI**~~ — ✅ shipped 2026-07-06 (see above), including Android/PWA access
-2. ~~**Document RAG**~~ — ✅ shipped 2026-07-06 (see above)
-3. ~~**Smart model routing**~~ — ✅ shipped 2026-07-07: `core/model_router.py` + `/settings` UI, trivial → `llama3.2:3b`, code → `qwen2.5-coder:7b`, complex → default model
-4. ~~**MCP tool discovery**~~ — ✅ shipped 2026-07-07: `search_mcp_tools` + `/mcp` discover/install from the official MCP registry
-5. Optional: MCP OCI/Docker package support, browse-before-install preview, WCCA intent JSON repair-reparse
-6. PyQt6 desktop GUI — archived (`planning/archive/gui/`), not planned for revival; web UI is the permanent replacement
+The July 2026 revival backlog is **closed**. See **[`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md)** for what to do next.
+
+Already shipped:
+
+1. ~~**Web UI**~~ — ✅ 2026-07-06 (FastAPI+SSE, PWA, settings, personality, MCP manager)
+2. ~~**Document RAG**~~ — ✅ 2026-07-06 (`documents/` drop folder + `document_search`)
+3. ~~**Smart model routing**~~ — ✅ 2026-07-07 (`core/model_router.py` + `/settings` UI)
+4. ~~**MCP tool discovery**~~ — ✅ 2026-07-07 (registry search, install, OCI/Docker, browse-before-install)
+5. ~~**Orchestrator + WCCA JSON robustness**~~ — ✅ 2026-07-07 (`format=json`, repair-reparse)
+6. ~~**Tier 1–4 repo hygiene**~~ — ✅ 2026-07-07 (CI, dead-code cleanup, 500-line splits, MCP on-demand-only)
+
+Parked: PyQt6 GUI (archived), Docker packaging, Supabase cloud sync.
 
 ## Documentation
 
 - [FILE_STRUCTURE.md](FILE_STRUCTURE.md) — file structure reference
 - [AGENTS.md](AGENTS.md) — agent architecture
 - [PATH_MIGRATION_GUIDE.md](PATH_MIGRATION_GUIDE.md) — path changes from previous versions
-- [planning/roadmap/revival-2026-07.md](planning/roadmap/revival-2026-07.md) — canonical current status doc (`TASK.md` now just redirects here)
-- [planning/roadmap/composer-orchestrator-search-quality-2026-07.md](planning/roadmap/composer-orchestrator-search-quality-2026-07.md) — search-quality work, whole-repo audit backlog (Tiers 1–4)
+- [planning/roadmap/suggested-features-2026-07.md](planning/roadmap/suggested-features-2026-07.md) — **forward roadmap** (what to do next)
+- [planning/roadmap/revival-2026-07.md](planning/roadmap/revival-2026-07.md) — July 2026 shipped work log (`TASK.md` redirects here)
+- [planning/roadmap/composer-orchestrator-search-quality-2026-07.md](planning/roadmap/composer-orchestrator-search-quality-2026-07.md) — manual regression tests A–F (historical handoff)
 - [planning/](planning/README.md) — architecture, implementation notes, roadmap, and technical notes
   - [System Architecture](planning/architecture/system-architecture.md)
   - [Neural Web Roadmap](planning/roadmap/neural-web-roadmap.md) *(historical — predates the July 2026 revival)*
@@ -248,7 +255,7 @@ WitsV3/
 ├── data/                # Local data (memory files, MCP tool definitions) — personal data gitignored
 ├── planning/            # Design docs, roadmaps, technical notes (includes archive/gui/ — parked PyQt6 desktop GUI)
 ├── scripts/             # Setup and maintenance scripts (manual_tests/ — standalone smoke scripts, not pytest)
-├── tests/               # Test suite (312 passing)
+├── tests/               # Test suite (337 collected)
 ├── tools/               # Tool implementations
 ├── web/                 # FastAPI + SSE web UI (run_web.py)
 ├── config.yaml          # Main configuration

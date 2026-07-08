@@ -1,12 +1,14 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
-**Branch:** `fix/revive-2026-07` (July 6–7 2026, merged to `main` at 1a555f2; later work continues on the branch)
-**Test suite:** 318 passed / 2 skipped (skips are external MCP-server integration tests)
+**Branch:** `fix/revive-2026-07` @ `14adeed` (July 6–7 2026; merged to `main` at 1a555f2; integration work continues on the branch)
+**Test suite:** 337 collected (329 passed / 2 skipped on last full run)
 **Last updated:** July 7, 2026
 
 This document tracks the July 2026 revival effort: what was worked on, what
-broke along the way, how each issue was fixed, what remains open, and the
-suggested next steps.
+broke along the way, how each issue was fixed, and what was closed.
+
+**Forward-looking roadmap (what to do next):**
+[`suggested-features-2026-07.md`](suggested-features-2026-07.md)
 
 ### Git workflow (integration branch)
 
@@ -93,13 +95,13 @@ looks good — that promotion step stays a deliberate human decision.
 - [x] ~~**Revoke the leaked `sbp_...` Supabase personal access token**~~ N/A confirmed July 7 2026 — Richard has no Supabase project anymore, so the leaked token has nothing to grant access to. No action needed; left in git history as a dead credential.
 - [ ] **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
 - [x] ~~**Get a Tavily web-search API key**~~ DONE July 7 2026 — key added to `.env` as `TAVILY_API_KEY`; verified live, `web_search` now routes through Tavily (returns synthesized answer + results).
-- [ ] **Get a Brave Search API key** at brave.com/search/api (free tier: 2000/mo) and add `BRAVE_SEARCH_API_KEY=...` to `.env`. Good second option / fallback. Neither key is required — `web_search` already returns real results keyless via DuckDuckGo.
+- [x] ~~**Get a Brave Search API key**~~ DONE July 7 2026 — `BRAVE_SEARCH_API_KEY` in `.env`; `web_search` merges Tavily+Brave when both keys present. Keyless DuckDuckGo still works as fallback.
 
 ### Repo hygiene
 - [x] ~~Push `fix/revive-2026-07` to GitHub and merge to `main`~~ DONE July 7 — branch pushed (with the mcp_servers repos registered as proper submodules) and merged to `main` (1a555f2) with Richard's authorization. Repo hygiene fully resolved.
 
 ### Roadmap (approved earlier)
-4. ~~Smart model routing~~ SHIPPED July 7 2026: new `core/model_router.py` + `model_routing` config section (enabled by default; trivial → llama3.2:3b, code → qwen2.5-coder:7b, complex → default). Routes on the **raw user message/goal only** — never full prompt templates, which always look complex. Wired at three points: WCCA casual-chat response, WCCA fallback direct response, and the orchestrator ReAct loop (routes once per goal in `run()`; `allow_trivial=False` so the 3b model never handles ReAct JSON; code goals go to qwen2.5-coder, which should also reduce the malformed-JSON failures). `core/adaptive_llm_interface.py` was NOT activated — it routes to on-disk neural "modules" that don't exist, not to Ollama models; the lean router replaces that idea. Tests in `tests/core/test_model_router.py`; suite 207 passed / 2 skipped. Note: routing config is not in the /settings web page yet (config.local.yaml can override it).
+4. ~~Smart model routing~~ SHIPPED July 7 2026: new `core/model_router.py` + `model_routing` config section (enabled by default; trivial → llama3.2:3b, code → qwen2.5-coder:7b, complex → default). Routes on the **raw user message/goal only** — never full prompt templates, which always look complex. Wired at three points: WCCA casual-chat response, WCCA fallback direct response, and the orchestrator ReAct loop (routes once per goal in `run()`; `allow_trivial=False` so the 3b model never handles ReAct JSON; code goals go to qwen2.5-coder, which should also reduce the malformed-JSON failures). `core/adaptive_llm_interface.py` was NOT activated — it routes to on-disk neural "modules" that don't exist, not to Ollama models; the lean router replaces that idea. Tests in `tests/core/test_model_router.py`. **Settings UI** shipped same day (Composer): `/settings` exposes toggle, three model dropdowns, and trivial max chars → `config.local.yaml`.
 5. ~~Orchestrator reasoning robustness~~ SHIPPED July 7 2026: three layers of defense against qwen3's malformed ReAct JSON. (a) **Ollama structured output**: reasoning calls now send `format=json` (new `format` param on `OllamaInterface.generate_text`/`_prepare_payload`, `response_format` on `BaseAgent.generate_response` — passed only when set, so other interfaces/test fakes are unaffected), which grammar-constrains generation to valid JSON. (b) **Robust parsing** in `LLMDrivenOrchestrator`: strips qwen3 `<think>` blocks, extracts candidates from markdown fences and string-aware balanced-brace scanning (the old greedy `\{.*\}` regex broke whenever a response had multiple `{...}` spans), completes truncated objects (closes open strings/braces), and applies conservative repairs (trailing commas, smart quotes, Python `True/False/None`). (c) **Repair-reparse round trip** in the ReAct loop: if parsing still fails, the fallback result is flagged `_parse_failed` and the model is asked once (also `format=json`) to rewrite its own output as valid JSON before keyword fallback is used. Tests in `tests/agents/test_orchestrator_json.py` (15 cases incl. the literal "Expecting ',' delimiter" failure); suite 222 passed / 2 skipped. Note: the related result-dismissing synthesis ("hallucinates instead of using document_search results") should also shrink — structured output stops think-block leakage into parsed thoughts — but watch the logs to confirm.
 
 ### Smaller quality items
@@ -117,26 +119,21 @@ looks good — that promotion step stays a deliberate human decision.
 
 ---
 
-## 4. Suggested next steps (in order)
+## 4. What's next
 
-1. Optionally add `ANTHROPIC_API_KEY` if the ask-Claude escalation should work. Brave key: DONE (`BRAVE_SEARCH_API_KEY` added; `web_search` merges Tavily+Brave). Supabase token: N/A, no project exists anymore.
-2. **Re-test save-to-file** after restart: *"Save a log of our conversations as exports/chat_log.txt"* — expect orchestrator → `read_conversation_history` → `write_file`, not JSON parse loops.
-3. ~~Merge `composer/orchestrator-search-quality` → `main`~~ DONE July 7 2026: `claude/tier2-tier3-cleanup-2026-07` (superset of `composer/orchestrator-search-quality` plus Tier 2/3 cleanup below) fast-forward merged into `fix/revive-2026-07`.
-4. ~~Optional roadmap #11: MCP OCI/Docker install, browse-before-install preview, deep-link from `search_mcp_tools` to `/mcp`.~~ DONE (`86c513d`).
-5. ~~WCCA intent JSON repair-reparse~~ SHIPPED July 7 2026 (`bd5e22a` on `main`; merged into `fix/revive-2026-07` with Tier 4 mixin split). Embedding input truncation is DONE (`7660664`).
+The July revival feature backlog is **closed**. Remaining gates, recommended
+work, and remove/archive candidates live in the forward roadmap:
 
-### Whole-repo audit backlog (July 7, 2026)
+→ **[`suggested-features-2026-07.md`](suggested-features-2026-07.md)**
 
-A read-only pass over the entire codebase (beyond the search/MCP work) produced a
-prioritized backlog of "obviously missing" items — CI, tooling-config
-de-duplication, dead/dormant code (neural web tools, `adaptive_llm_interface`,
-`gui/`, `*_fixed.py`/`*_updated.py`), uncollected root-level tests, and the
-500-line-rule violations. **Tiers 1–3 shipped July 7 2026** (CI + tooling
-config consolidation by the Cursor session; doc truth pass + neural-web-tools
-wiring + dead-code archival/deletion by Claude — see the **"Codebase audit —
-obviously missing / suggested additions"** section in
-`planning/roadmap/composer-orchestrator-search-quality-2026-07.md` for the
-full list). **Tier 4 complete (July 7 2026):** orchestrator/WCCA/book/coding/web
-500-line splits, agent pytest coverage, MCP on-demand-only (all submodules removed
-from git). Optional follow-up: other large core/tools modules not in the original
-Tier 4 worst-offender list.
+Quick gates before promoting `fix/revive-2026-07` → `main`:
+
+1. Run manual tests **A–F** in [`composer-orchestrator-search-quality-2026-07.md`](composer-orchestrator-search-quality-2026-07.md) (especially **F**: save-to-file).
+2. Optionally add `ANTHROPIC_API_KEY` for ask-Claude escalation.
+
+### Whole-repo audit (Tiers 1–4) — complete
+
+**Tiers 1–4 shipped July 7 2026.** Detail preserved in
+[`composer-orchestrator-search-quality-2026-07.md`](composer-orchestrator-search-quality-2026-07.md)
+(Tier audit section). Second-pass 500-line splits and CI lint expansion are
+tracked in [`suggested-features-2026-07.md`](suggested-features-2026-07.md) § P2–P3.
