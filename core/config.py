@@ -179,6 +179,27 @@ class CLISettings(BaseModel):
     show_tool_calls: bool = Field(default=True)
 
 
+class GuestAccessSettings(BaseModel):
+    """Family-tester / guest access on the LAN (see guest-tester-access roadmap)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Allow guests with WITSV3_GUEST_INVITE (requires invite + signing secret)",
+    )
+    allow_lan_only: bool = Field(
+        default=True, description="Reject guest registration from non-RFC1918 / non-loopback IPs"
+    )
+    token_ttl_hours: int = Field(
+        default=720, gt=0, description="Guest session token lifetime in hours"
+    )
+    max_message_rate_per_minute: int = Field(
+        default=20, gt=0, description="Per-device chat rate limit for guests"
+    )
+    allow_document_search: bool = Field(
+        default=False, description="Let guests use document_search on owner-ingested docs"
+    )
+
+
 class WebUISettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the web UI server")
     host: str = Field(
@@ -189,6 +210,7 @@ class WebUISettings(BaseModel):
     require_auth: bool = Field(
         default=True, description="Require the WITSV3_WEB_TOKEN bearer token for API access"
     )
+    guest_access: GuestAccessSettings = Field(default_factory=GuestAccessSettings)
 
 
 class DocumentRAGSettings(BaseModel):

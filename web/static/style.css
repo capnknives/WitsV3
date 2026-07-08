@@ -314,6 +314,48 @@ main#chat {
 .modal-card p { color: var(--fg-dim); font-size: 14px; }
 .modal-card form { display: flex; flex-direction: column; gap: 12px; }
 .modal-card .modal-error { color: #ff8f8f; font-size: 13px; }
+.modal-guest-hint { font-size: 13px; }
+.modal-guest-hint a { color: var(--accent); }
+
+/* ---------------------------------------------------------- guest join */
+body.join-page {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(1200px 600px at 20% -10%, #1a2744 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 100%, #14261f 0%, transparent 50%),
+    var(--bg);
+}
+.join-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-2);
+  border: 1px solid #2c3245;
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.join-brand { display: flex; align-items: center; gap: 10px; }
+.join-brand h1 { font-size: 1.35rem; font-weight: 650; letter-spacing: 0.02em; }
+.join-lead { color: var(--fg-dim); font-size: 14px; }
+.join-card label { font-size: 13px; color: var(--fg-dim); }
+.join-card input {
+  background: var(--bg-3); border: 1px solid #2c3245; color: var(--fg);
+  border-radius: 8px; padding: 11px 14px; font: inherit; width: 100%;
+}
+.join-card button {
+  background: var(--accent); border: none; color: #fff; border-radius: 8px;
+  padding: 12px; font: inherit; cursor: pointer; margin-top: 6px;
+}
+.join-card button:disabled { opacity: .6; cursor: wait; }
+.join-error { color: #ff8f8f; font-size: 13px; }
+.join-foot { font-size: 13px; color: var(--fg-dim); }
+.join-foot a { color: var(--accent); }
+body.guest-mode #header-settings-link,
+body.guest-mode #settings-link { display: none !important; }
 
 @media (min-width: 900px) {
   main#chat { padding-left: max(12px, calc(50vw - 430px)); padding-right: max(12px, calc(50vw - 430px)); }

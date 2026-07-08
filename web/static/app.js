@@ -10,30 +10,49 @@ const statusDot = $("#status-dot");
 
 let sessionId = localStorage.getItem("wits_session") || null;
 let token = localStorage.getItem("wits_token") || "";
+let guestToken = localStorage.getItem("wits_guest_token") || "";
+let guestName = localStorage.getItem("wits_guest_name") || "";
+let isGuest = Boolean(guestToken) && !token;
 let busy = false;
 
-// Magic login link: /?token=XYZ stores the token and cleans the URL,
-// so phones never have to type it manually.
+// Magic login link: /?token=XYZ stores the owner token and cleans the URL,
+// so phones never have to type it manually. Clears any guest session.
 const urlToken = new URLSearchParams(location.search).get("token");
 if (urlToken) {
   token = urlToken.trim();
   localStorage.setItem("wits_token", token);
+  localStorage.removeItem("wits_guest_token");
+  guestToken = "";
+  isGuest = false;
   history.replaceState(null, "", location.pathname);
 }
 
 /* ---------------------------------------------------------- helpers */
+function activeToken() {
+  return isGuest ? guestToken : token;
+}
+
 function authHeaders(extra = {}) {
-  return token ? { Authorization: `Bearer ${token}`, ...extra } : extra;
+  const t = activeToken();
+  return t ? { Authorization: `Bearer ${t}`, ...extra } : extra;
 }
 
 async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers: authHeaders(opts.headers || {}) });
   if (res.status === 401) {
-    // Whatever token we had is wrong - drop it so it can't stick around
+    if (isGuest) {
+      guestToken = "";
+      localStorage.removeItem("wits_guest_token");
+      location.href = "/join";
+      throw new Error("unauthorized");
+    }
     token = "";
     localStorage.removeItem("wits_token");
     showTokenModal();
     throw new Error("unauthorized");
+  }
+  if (res.status === 403 && isGuest) {
+    throw new Error("forbidden");
   }
   return res;
 }
@@ -51,8 +70,29 @@ function scrollDown() {
 
 /* ---------------------------------------------------------- token modal */
 function showTokenModal() {
+  if (isGuest || guestToken) {
+    location.href = "/join";
+    return;
+  }
   $("#token-modal").hidden = false;
   $("#token-input").focus();
+}
+
+function applyGuestChrome() {
+  if (!isGuest) return;
+  document.body.classList.add("guest-mode");
+  const settings = $("#header-settings-link");
+  if (settings) settings.hidden = true;
+  const panelSettings = $("#settings-link");
+  if (panelSettings) panelSettings.hidden = true;
+  const memTab = document.querySelector('.panel-tabs [data-tab="memory"]');
+  const docsTab = document.querySelector('.panel-tabs [data-tab="docs"]');
+  if (memTab) memTab.hidden = true;
+  if (docsTab) docsTab.hidden = true;
+  if (guestName) {
+    const title = document.querySelector(".title-text");
+    if (title) title.textContent = `WITS · ${guestName}`;
+  }
 }
 
 $("#token-form").addEventListener("submit", async (e) => {
@@ -76,6 +116,9 @@ $("#token-form").addEventListener("submit", async (e) => {
     if (res.ok) {
       token = candidate;
       localStorage.setItem("wits_token", token);
+      localStorage.removeItem("wits_guest_token");
+      guestToken = "";
+      isGuest = false;
       $("#token-input").value = "";
       errEl.hidden = true;
       $("#token-modal").hidden = true;
@@ -103,14 +146,23 @@ async function checkStatus() {
     const res = await api("/api/status");
     if (res.ok) {
       const s = await res.json();
+      if (s.role === "guest") {
+        isGuest = true;
+        if (s.display_name) {
+          guestName = s.display_name;
+          localStorage.setItem("wits_guest_name", guestName);
+        }
+        applyGuestChrome();
+      }
       if (s.ollama && s.ollama.available === false) {
         statusDot.className = "dot warn";
         statusDot.title = `Web UI OK — Ollama is not running (${s.ollama.url})`;
       } else {
         statusDot.className = "dot ok";
-        statusDot.title = `${s.project} v${s.version} — ${s.models.default}, ${s.tool_count} tools`;
+        const who = isGuest && guestName ? ` · ${guestName}` : "";
+        statusDot.title = `${s.project} v${s.version}${who} — ${s.models.default}, ${s.tool_count} tools`;
       }
-      checkEscalations();
+      if (!isGuest) checkEscalations();
       return;
     }
     statusDot.className = "dot bad";
@@ -728,6 +780,21 @@ $("#docs-reindex").addEventListener("click", async () => {
 });
 
 /* ---------------------------------------------------------- boot */
-addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
+applyGuestChrome();
+if (!activeToken()) {
+  if (localStorage.getItem("wits_guest_token")) {
+    location.href = "/join";
+  } else {
+    showTokenModal();
+  }
+} else if (isGuest) {
+  addAssistantMsg(
+    guestName
+      ? `Welcome back, ${guestName} — you're chatting as a guest tester.`
+      : "You're chatting as a guest tester. Ask me anything."
+  );
+} else {
+  addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
+}
 checkStatus();
 setInterval(checkStatus, 30000);

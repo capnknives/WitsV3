@@ -14,6 +14,7 @@ Revival status, forward plans, and audits.
 | Document | Purpose |
 |----------|---------|
 | **[suggested-features-2026-07.md](suggested-features-2026-07.md)** | **Forward roadmap** — start here for “what’s next” |
+| **[guest-tester-access-2026-07.md](guest-tester-access-2026-07.md)** | Guest / family-tester access (plan + safe MVP status) |
 | **[revival-2026-07.md](revival-2026-07.md)** | Shipped work log + error triage |
 | **[clutter-catalog-2026-07.md](clutter-catalog-2026-07.md)** | Dead / dormant / orphan inventory |
 | **[tool-registry-reality-2026-07.md](tool-registry-reality-2026-07.md)** | LIVE / BLOCKED / DEAD per tool |
