@@ -266,7 +266,10 @@ User input: {user_input}
         # LLM-classified direct_response: use the intent JSON text, not a second
         # casual-chat call — unless tools are required (misclassification guard).
         if intent_type == "direct_response":
-            if await self._requires_orchestrator_for_input(user_input):
+            routing_message = self._follow_up_routing_message(
+                user_input, conversation_history
+            )
+            if await self._requires_orchestrator_for_input(routing_message):
                 intent_type = "goal_defined"
                 complexity = "moderate"
                 requires_tools = True
@@ -290,11 +293,20 @@ User input: {user_input}
             return
 
         if intent_type == "conversation":
-            async for stream_data in self._stream_casual_chat_response(
+            routing_message = self._follow_up_routing_message(
                 user_input, conversation_history
-            ):
-                yield stream_data
-            return
+            )
+            if await self._requires_orchestrator_for_input(routing_message):
+                intent_type = "goal_defined"
+                complexity = "moderate"
+                requires_tools = True
+                suggested_response = "orchestrator"
+            else:
+                async for stream_data in self._stream_casual_chat_response(
+                    user_input, conversation_history
+                ):
+                    yield stream_data
+                return
 
         # Try a specialized agent (book writing / coding / self-repair) before
         # the generic enhanced-capabilities/orchestrator paths below — those
@@ -442,10 +454,18 @@ User input: {user_input}
         documents_context = self._documents_context(await self._get_document_inventory())
         personalization = getattr(self, "_guest_personalization_context", "")
         personalization_block = f"\n{personalization}\n" if personalization else ""
-        conversation_prompt = f"""{personality_prompt}
+        guest_rules_block = ""
+        if getattr(self, "_request_user_role", "owner") == "guest":
+            from core.content_policy import guest_system_prompt_slice
 
+            age_band = "teen"
+            guest_profile = getattr(self, "_request_guest_profile", None) or {}
+            if guest_profile.get("age_band"):
+                age_band = guest_profile["age_band"]
+            guest_rules_block = f"\n{guest_system_prompt_slice(age_band)}\n"
+        conversation_prompt = f"""{personality_prompt}
+{guest_rules_block}{personalization_block}
 You are having a casual conversation with the user. Respond in a friendly, helpful manner.
-{personalization_block}
 USER DOCUMENTS:
 {documents_context}
 

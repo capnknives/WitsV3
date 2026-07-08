@@ -16,7 +16,23 @@ from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.wits_control_center_agent import WitsControlCenterAgent
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
-from core.schemas import StreamData
+from core.schemas import ConversationHistory, StreamData
+
+
+def _history_with_clarification(question: str, user_reply: str) -> ConversationHistory:
+    history = ConversationHistory(session_id="sess-follow-up")
+    history.add_message("user", "summarize the audit report you have access to.")
+    history.add_message("assistant", question)
+    history.add_message("user", user_reply)
+    return history
+
+
+def _history_after_casual_chat(user_reply: str) -> ConversationHistory:
+    history = ConversationHistory(session_id="sess-casual")
+    history.add_message("user", "hi there, how are you doing today my friend")
+    history.add_message("assistant", "I'm doing well! How can I help you today?")
+    history.add_message("user", user_reply)
+    return history
 
 
 class DummyLLM(BaseLLMInterface):
@@ -77,6 +93,73 @@ def test_casual_word_requires_word_boundary(wcca):
 def test_greetings_still_casual(wcca):
     assert wcca._is_casual_conversation("hi there, how are you doing today my friend") is True
     assert wcca._is_casual_conversation("thanks!") is True
+
+
+def test_short_follow_up_after_clarification_is_not_casual(wcca):
+    history = _history_with_clarification("Which audit report?", "the megafauna one")
+    assert wcca._is_conversation_follow_up("the megafauna one", history) is True
+    assert wcca._is_casual_conversation("the megafauna one", history) is False
+
+
+def test_short_affirmative_after_task_context_is_follow_up(wcca):
+    history = _history_with_clarification(
+        "I can help with that. Which file should I summarize?", "yes"
+    )
+    assert wcca._is_conversation_follow_up("yes", history) is True
+
+
+def test_short_reply_after_casual_chat_can_still_be_casual(wcca):
+    history = _history_after_casual_chat("thanks!")
+    assert wcca._is_conversation_follow_up("thanks!", history) is False
+    assert wcca._is_casual_conversation("thanks!", history) is True
+
+
+@pytest.mark.asyncio
+async def test_summarize_it_follow_up_routes_to_orchestrator(wcca):
+    history = _history_with_clarification("Which audit report?", "summarize it")
+    intent = await wcca._analyze_user_intent("summarize it", history)
+    assert intent["suggested_response"] == "orchestrator"
+    assert intent["requires_tools"] is True
+
+
+@pytest.mark.asyncio
+async def test_yes_after_audit_question_routes_to_orchestrator(wcca):
+    history = _history_with_clarification(
+        "Which audit report would you like me to summarize?", "yes"
+    )
+    intent = await wcca._analyze_user_intent("yes", history)
+    assert intent["suggested_response"] == "orchestrator"
+    assert intent["requires_tools"] is True
+
+
+@pytest.mark.asyncio
+async def test_conversation_intent_overridden_for_follow_up_web_search(wcca):
+    wcca.orchestrator_agent = MockOrchestrator()
+    history = ConversationHistory(session_id="sess-web-follow-up")
+    history.add_message("user", "What famous musician died on june 14th 2026?")
+    history.add_message(
+        "assistant",
+        "I don't have that in my training data. Would you like me to look it up?",
+    )
+    history.add_message("user", "yes")
+
+    intent = {
+        "type": "conversation",
+        "complexity": "simple",
+        "requires_tools": False,
+        "suggested_response": "direct",
+    }
+    results = await _collect_handler_results(wcca, intent, "yes", history)
+    assert any(r.type == "result" and r.content == "orchestrator handled it" for r in results)
+
+
+async def _collect_handler_results(wcca, intent, user_input, conversation_history=None):
+    results = []
+    async for stream_data in wcca._handle_intent_response(
+        intent, user_input, conversation_history, "test-session"
+    ):
+        results.append(stream_data)
+    return results
 
 
 # ---------------------------------------------- specialized-agent selection
@@ -335,13 +418,6 @@ class TrackingLLM(DummyLLM):
 class MockOrchestrator:
     async def run(self, user_input, conversation_history=None, session_id=None, **kwargs):
         yield SimpleNamespace(type="result", content="orchestrator handled it", source="mock")
-
-
-async def _collect_handler_results(wcca, intent, user_input):
-    results = []
-    async for stream_data in wcca._handle_intent_response(intent, user_input, None, "test-session"):
-        results.append(stream_data)
-    return results
 
 
 @pytest.mark.asyncio
