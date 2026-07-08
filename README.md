@@ -128,7 +128,7 @@ Let someone on your LAN (e.g. a nephew) chat **without** your owner token:
 2. Set `web_ui.guest_access.enabled: true` in `config.yaml`
 3. They open `http://<your-lan-ip>:8000/join`, enter the invite code + their name
 
-Guests get chat-only UI, a filtered tool allowlist (no file write / self-repair / MCP / settings), and a remembered identity per browser/device. Full design: [`planning/roadmap/guest-tester-access-2026-07.md`](planning/roadmap/guest-tester-access-2026-07.md).
+Guests get chat-only UI, a filtered tool allowlist (no file write / self-repair / MCP / settings), and a remembered identity per browser/device. Owner manages testers on **`/settings`** (age band, profile view, revoke, merge duplicates). Content blocklists live in **`config/guest_policy.yaml`**. Full design: [`planning/roadmap/guest-tester-access-2026-07.md`](planning/roadmap/guest-tester-access-2026-07.md).
 
 Other entry points:
 

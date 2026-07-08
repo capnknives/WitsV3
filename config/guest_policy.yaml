@@ -1,0 +1,48 @@
+# Guest content policy blocklists (loaded by core/content_policy.py).
+# Edit here to tune family-tester filters without code changes.
+
+absolute_blocked_terms:
+  - child porn
+  - "cp "
+  - how to make meth
+  - how to make cocaine
+  - how to build a bomb
+  - make a bomb
+  - suicide method
+  - self harm method
+
+absolute_blocked_patterns:
+  - '\bhow\s+to\s+(make|build|synthesize)\s+(meth|cocaine|heroin|fentanyl)\b'
+
+family_blocked_terms:
+  - porn
+  - pornography
+  - xxx
+  - hentai
+  - nude
+  - nudes
+  - onlyfans
+  - strip club
+  - buy drugs
+  - sell drugs
+  - self harm
+  - kill myself
+
+family_blocked_patterns:
+  - '\b(buy|sell|get)\s+(weed|marijuana|cocaine|meth|heroin)\b'
+
+child_extra_terms:
+  - alcohol
+  - beer
+  - wine
+  - vodka
+  - whiskey
+  - cigarette
+  - cigarettes
+  - vape
+  - vaping
+  - hookup
+  - tinder
+  - dating app
+  - gore
+  - how to kill
