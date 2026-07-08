@@ -133,12 +133,15 @@ Silent cron “success” on empty jobs is worse than disabled jobs.
 
 ## 7. Dual self-repair schedule
 
-| Scheduler | Source | Cron |
-|-----------|--------|------|
-| In-process | `run.py` + `self_repair.daily_schedule_*` | `0 3 * * *` |
-| Background process | `config/background_agent.yaml` `tasks.self_repair` | `0 3 * * *` |
+**RESOLVED July 8 2026:** `config/background_agent.yaml`'s `self_repair` task is now
+`enabled: false` by default, with a comment pointing at `run.py`'s in-process
+scheduler as the owner. Only flip it on for a Docker-only deployment that
+doesn't also run `run.py`/`run_web.py`.
 
-If both processes run → **double repair**. Prefer one owner.
+| Scheduler | Source | Cron | Default |
+|-----------|--------|------|---------|
+| In-process | `run.py` + `self_repair.daily_schedule_*` | `0 3 * * *` | **on** (the owner) |
+| Background process | `config/background_agent.yaml` `tasks.self_repair` | `0 3 * * *` | off — enable only if not also running the main app |
 
 ---
 

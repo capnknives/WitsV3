@@ -57,7 +57,7 @@
 | `diagnose_log_errors` | `self_repair_tools.py` | auto | LIVE | `SelfRepairAgent` | keep; optional dump exclude |
 | `apply_code_fix` | `self_repair_tools.py` | auto | LIVE | SelfRepair + coding handlers | keep; optional dump exclude |
 | `restart_app` | `self_repair_tools.py` | auto | LIVE | SelfRepair (gated) | keep; optional dump exclude |
-| `run_test_suite` | `self_repair_tools.py` | auto | NEVER_PROMPTED | Unit test only; unused by agents | wire or demote |
+| `run_test_suite` | `self_repair_tools.py` | auto | LIVE | **Correction (July 8):** wired into `SelfRepairAgent.run()`'s whole-codebase fallback (no file named, no log errors → run the suite, parse failures) — not unused | keep |
 | `python_execute` | `python_execution_tool.py` | auto | NEVER_PROMPTED | Dump only | prompt or demote |
 | `math_operations` | `math_tool.py` | auto | NEVER_PROMPTED | Overlaps calculator | prune or prefer calculator |
 | `network_control` | `network_control_tool.py` | auto | NEVER_PROMPTED | Auth niche; setup_auth | keep niche; exclude from dump |
@@ -113,7 +113,7 @@ Web /mcp + ask_claude        ──► mcp_* + escalation
 2. **Delete or unblock** `tools/json_tool.py` — if deleting, remove WCCA composer `"data_analysis": "json_manipulate"` remnant.
 3. **Move** `tools/ollama_probe.py` → `scripts/ollama_probe.py`.
 4. **Exclude agent-owned tools from orchestrator dump:** `diagnose_log_errors`, `apply_code_fix`, `restart_app`, `run_test_suite` (still callable via `get_tool`).
-5. **Wire or demote** `run_test_suite` — either call from SelfRepairAgent, or stop registering as a general tool.
+5. ~~**Wire or demote** `run_test_suite`~~ — done; `SelfRepairAgent.run()`'s whole-codebase fallback calls it directly (see correction in the table above).
 6. **Update README** tool count / list.
 
 ### Wave B — Dump hygiene (optional)

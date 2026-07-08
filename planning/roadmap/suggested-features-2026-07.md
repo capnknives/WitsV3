@@ -1,9 +1,9 @@
 # WitsV3 — Suggested Features & Roadmap
 
-**Last updated:** July 7, 2026  
-**Integration branch:** `fix/revive-2026-07` @ `14adeed`  
+**Last updated:** July 8, 2026  
+**Integration branch:** `fix/revive-2026-07` @ `2a9044f`  
 **Staging branch:** `cursor/iron-delta-w0r5` (synced with integration)  
-**Test suite:** 337 collected (329 passed / 2 skipped on last full run)
+**Test suite:** 406 collected (404 passed / 2 skipped on last full run)
 
 This is the **forward-looking** roadmap: what to add, improve, or remove next.  
 For **what already shipped** during the July 2026 revival, see
@@ -31,6 +31,8 @@ All agent/feature work lands on **`fix/revive-2026-07`** first. Richard merges
 | MCP registry discover/install + OCI/Docker + browse-before-install | ✅ Shipped |
 | Tier 1–4 repo hygiene (CI, dead-code cleanup, 500-line splits, MCP on-demand-only) | ✅ Shipped |
 | Coding agent + self-repair (verified edit pipeline, daily schedule) | ✅ Shipped July 8 2026 — see §1a |
+| Orchestrator synthesis guard, CLI Ollama errors, chat export, adaptive-LLM deprecation | ✅ Shipped July 8 2026 (Cursor) — see updated §2 P1 |
+| 3 routing bugs (word-boundary keyword matching, whole-codebase scan fallback, clarification-bypass override) | ✅ Shipped July 8 2026 — see §1a note and README changelog |
 | July revival feature backlog | ✅ **Closed** — only gates + polish remain |
 
 ---
@@ -149,17 +151,21 @@ agents (and the tool registry generally) a real detect → diagnose → fix → 
 
 ### P0 — Verify & promote
 
-1. Complete manual tests A–F on `fix/revive-2026-07` / `cursor/iron-delta-w0r5`.
+1. Complete manual tests A–F on `fix/revive-2026-07` / `cursor/iron-delta-w0r5`. G1/G3 already verified live July 8 (see §1 table above) — remaining: G2 (Richard's `ANTHROPIC_API_KEY` call) and a final re-check of the merged state before promoting.
 2. Merge `fix/revive-2026-07` → `main` when satisfied.
+
+**Shipped July 8 2026 (Cursor session)** — no longer P1:
+- ~~Orchestrator result synthesis guard~~ — `agents/orchestrator_tool_helpers.py::_validate_final_answer_synthesis`, guards final answers against unused search observations with a bounded retry.
+- ~~Friendlier Ollama-down in CLI~~ — `core/user_errors.py::format_cli_error`, shared with the web UI's existing `format_chat_error`.
+- ~~Conversation export UX~~ — one-click `POST /api/export` writes the session transcript to `exports/`.
+- Also: `core/adaptive_llm_interface.py` formally deprecated (`llm_interface.default_provider: adaptive` now logs a warning and falls back to Ollama) and `tools/enhanced_reasoning.py` split under 500 lines (`enhanced_reasoning_models.py`, `enhanced_reasoning_patterns.py`).
 
 ### P1 — High leverage (code)
 
 | Item | Why | Effort |
 |------|-----|--------|
-| **Orchestrator result synthesis guard** | Logs still occasionally show answers that ignore tool observations; add explicit post-tool check or synthesis prompt tightening | Medium |
+| **Conversation-history-aware intent classification** | Documented limitation from the July 8 self-repair routing fix: a short reply to WITS's own clarifying question (e.g. "Specifically the wits v3 codebase") is judged in isolation and misclassified as casual chat, never reaching task routing. See §1b for the concrete plan. | Medium |
 | **Expand CI lint** | CI runs critical ruff only; pre-commit has full ruff/black/isort but ~124 black files / ~3.7k ruff findings in legacy code block full CI enforcement | Medium (incremental) |
-| **Friendlier Ollama-down in CLI** | Web UI has `web/user_errors.py`; CLI still surfaces raw connection errors | Small |
-| **Conversation export UX** | Save-to-file works via orchestrator; add a one-click "Export chat" button or slash command in web UI | Small–Medium |
 
 ### P2 — Structure & hygiene (second-pass splits)
 
@@ -263,9 +269,21 @@ planning/roadmap/
 ├── suggested-features-2026-07.md   ← YOU ARE HERE (what's next)
 ├── revival-2026-07.md              ← what shipped + error triage log
 ├── composer-orchestrator-search-quality-2026-07.md  ← manual tests A–F + Tier audit history
+├── clutter-catalog-2026-07.md       ← July 8 audit: orphan/dormant/dead code inventory + delete waves
+├── config-surface-truth-2026-07.md  ← July 8 audit: which config.yaml keys are actually live vs. silently ignored
+├── tool-registry-reality-2026-07.md ← July 8 audit: which registered tools are actually used vs. dead weight
 ├── neural-web-roadmap.md           ← historical (2025)
 └── README.md                       ← index
 ```
+
+The three July 8 audit docs are read-only inventories (no code changes implied by
+existing); their "cleanup waves" feed into §3 below. One finding was fixed
+immediately since it was a live correctness bug directly caused by this
+session's own work: `config/background_agent.yaml`'s `self_repair` task ran on
+the identical `0 3 * * *` cron as `run.py`'s in-process scheduler — running the
+Docker background agent alongside the main app would have fired self-repair
+twice. Now `enabled: false` by default; see
+[`config-surface-truth-2026-07.md`](config-surface-truth-2026-07.md) §7.
 
 **Workflow:** implement on feature branch → push/merge to `fix/revive-2026-07` → manual test → Richard merges to `main`.
 
