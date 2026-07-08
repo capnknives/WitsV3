@@ -1,7 +1,7 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
 **Branch:** `fix/revive-2026-07` (July 6–7 2026, merged to `main` at 1a555f2; later work continues on the branch)
-**Test suite:** 222 passed / 2 skipped (skips are external MCP-server integration tests)
+**Test suite:** 312 passed / 2 skipped (skips are external MCP-server integration tests)
 **Last updated:** July 7, 2026
 
 This document tracks the July 2026 revival effort: what was worked on, what
@@ -104,7 +104,7 @@ suggested next steps.
 
 ### Parked (explicitly out of scope for now)
 - Docker packaging, Supabase cloud sync
-- PyQt6 GUI (`gui/`) — works but Richard dislikes it; the web UI is the replacement
+- PyQt6 GUI — archived July 7 2026 to `planning/archive/gui/` (was `gui/`); web UI is the replacement
 
 ---
 
@@ -112,7 +112,7 @@ suggested next steps.
 
 1. Do the manual items (revoke Supabase token, add Anthropic key). Brave key: DONE (`BRAVE_SEARCH_API_KEY` added; `web_search` merges Tavily+Brave).
 2. **Re-test save-to-file** after restart: *"Save a log of our conversations as exports/chat_log.txt"* — expect orchestrator → `read_conversation_history` → `write_file`, not JSON parse loops.
-3. Merge `composer/orchestrator-search-quality` → `main` when smoke tests A–F (see `composer-orchestrator-search-quality-2026-07.md`) plus save-to-file test pass.
+3. ~~Merge `composer/orchestrator-search-quality` → `main`~~ DONE July 7 2026: `claude/tier2-tier3-cleanup-2026-07` (superset of `composer/orchestrator-search-quality` plus Tier 2/3 cleanup below) fast-forward merged into `fix/revive-2026-07`.
 4. Optional roadmap #11: MCP OCI/Docker install, browse-before-install preview, deep-link from `search_mcp_tools` to `/mcp`.
 5. Optional quality follow-up from logs: WCCA intent JSON repair-reparse (same pattern as orchestrator). Embedding input truncation is DONE (`7660664`).
 
@@ -122,8 +122,10 @@ A read-only pass over the entire codebase (beyond the search/MCP work) produced 
 prioritized backlog of "obviously missing" items — CI, tooling-config
 de-duplication, dead/dormant code (neural web tools, `adaptive_llm_interface`,
 `gui/`, `*_fixed.py`/`*_updated.py`), uncollected root-level tests, and the
-500-line-rule violations. See the **"Codebase audit — obviously missing / suggested
-additions"** section in
-`planning/roadmap/composer-orchestrator-search-quality-2026-07.md` for the full
-Tier 1–4 list. Highest leverage: **add project-level CI** (there is none at the
-repo root today) and **collapse the duplicated pytest/mypy/isort config**.
+500-line-rule violations. **Tiers 1–3 shipped July 7 2026** (CI + tooling
+config consolidation by the Cursor session; doc truth pass + neural-web-tools
+wiring + dead-code archival/deletion by Claude — see the **"Codebase audit —
+obviously missing / suggested additions"** section in
+`planning/roadmap/composer-orchestrator-search-quality-2026-07.md` for the
+full list). **Tier 4** (500-line-rule violations, `self_repair_agent` test
+coverage, MCP submodule footprint) remains open — schedule deliberately.
