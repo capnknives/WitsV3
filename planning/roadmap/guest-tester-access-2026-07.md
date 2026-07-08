@@ -2,7 +2,7 @@
 
 **Created:** July 8, 2026  
 **Last reviewed:** July 8, 2026 (plan review + safe-MVP merge)  
-**Status:** Safe MVP implemented (Phase 1+2); Phase 3 content policy + Phase 4 owner admin still open  
+**Status:** Safe MVP implemented (Phase 1+2); Phase 3 content policy partial; guest audit logging shipped; Phase 4 owner admin UI still open  
 **Priority:** P1 (user-requested)  
 **Branch target:** `cursor/work` → `fix/revive-2026-07`
 
@@ -220,20 +220,23 @@ Do **not** ship guest chat without tool/route locks.
 
 ### Phase 3 — Content safety (~1 session)
 
-- [ ] `core/content_policy.py` + `config/guest_policy.yaml`
-- [ ] Wire input/output checks on guest chat stream
+- [x] `core/content_policy.py` — teen blocklist + input/output preflight on guest chat
+- [x] Wire input/output checks on guest chat stream (`web/server.py`)
+- [x] Tests with blocked prompt fixtures (`tests/web/test_guest_audit.py`)
+- [ ] `config/guest_policy.yaml` (externalize blocklist)
 - [ ] Force strict safesearch for guest web_search
 - [ ] Guest-specific system prompt slice in WCCA/orchestrator
-- [ ] Tests with blocked prompt fixtures
 
 **Exit criteria:** Obvious inappropriate queries refused without tool calls.
+
+**Owner chat:** Ask e.g. "summarize TESTER's guest logs" — routes to `guest_audit_summary` tool; Wits discusses the digest.
 
 ### Phase 4 — Owner admin & polish (~1 session)
 
 - [ ] Settings panel: enable guest access, regenerate invite, guest list, revoke
 - [x] Startup banner: guest join URL + QR **without owner token** (July 8 security fix)
 - [ ] README + `.env.example` docs
-- [ ] Log guest actions at INFO for owner review
+- [x] Guest audit log: `data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl` + `scripts/guest_smoke_test.py`
 
 **Exit criteria:** Owner can manage testers without editing `.env` by hand.
 

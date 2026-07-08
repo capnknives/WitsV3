@@ -15,12 +15,15 @@ from core.guest_access import (
     is_private_lan_ip,
     issue_guest_token,
 )
+from core.guest_audit import GuestAuditLog
 from web.schemas import GuestRegisterRequest
 
 logger = logging.getLogger("WitsV3.WebUI")
 
 
-def register_guest_routes(app: FastAPI, system, guest_registry: GuestRegistry) -> None:
+def register_guest_routes(
+    app: FastAPI, system, guest_registry: GuestRegistry, guest_audit: GuestAuditLog
+) -> None:
     """Attach /api/guest/* endpoints."""
 
     @app.get("/api/guest/status")
@@ -74,6 +77,16 @@ def register_guest_routes(app: FastAPI, system, guest_registry: GuestRegistry) -
             "Guest registered: %s (device=%s…)",
             profile["display_name"],
             device_id[:8],
+        )
+        guest_audit.log(
+            guest_id=profile["guest_id"],
+            event_type="register",
+            display_name=profile["display_name"],
+            device_id=device_id,
+            meta={
+                "returning": bool(profile.get("_returning")),
+                "age_band": profile.get("age_band", "teen"),
+            },
         )
         return {
             "guest_token": token,
