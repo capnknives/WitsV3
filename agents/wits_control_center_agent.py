@@ -670,11 +670,10 @@ ASSISTANT:"""
                     # For now, delegate to orchestrator as we're not fully implementing workflow execution
                     if self.orchestrator_agent:
                         yield self.stream_thinking("Delegating to orchestrator for execution...")
-                        async for stream_data in self.orchestrator_agent.run(goal=user_input,  # Added by fix_wits.py
-            
-                            user_input=user_input,
+                        async for stream_data in self.orchestrator_agent.run(
+                            goal=user_input,
                             conversation_history=conversation_history,
-                            session_id=session_id
+                            session_id=session_id,
                         ):
                             yield stream_data
                         return
@@ -701,11 +700,10 @@ ASSISTANT:"""
         # Default: delegate to orchestrator for tool-based execution
         if self.orchestrator_agent and (requires_tools or suggested_response == "orchestrator"):
             yield self.stream_thinking("Delegating to orchestrator...")
-            async for stream_data in self.orchestrator_agent.run(goal=user_input,  # Added by fix_wits.py
-            
-                user_input=user_input,
+            async for stream_data in self.orchestrator_agent.run(
+                goal=user_input,
                 conversation_history=conversation_history,
-                session_id=session_id
+                session_id=session_id,
             ):
                 yield stream_data
             return
