@@ -12,12 +12,15 @@ Runs the watchdog every 10 minutes and once at logon, so a crashed
 
 ```powershell
 $action   = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\Users\capta\source\repos\capnknives\WitsV3-claude\scripts\witsv3_watchdog.ps1"'
+    -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\Users\capta\source\repos\capnknives\WitsV3\scripts\witsv3_watchdog.ps1"'
 $trigger1 = New-ScheduledTaskTrigger -AtLogOn
 $trigger2 = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 10) -RepetitionDuration (New-TimeSpan -Days 3650)
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBattery -DontStopIfGoingOnBatteries -StartWhenAvailable
 Register-ScheduledTask -TaskName "WitsV3 Watchdog" -Action $action -Trigger $trigger1,$trigger2 -Settings $settings -RunLevel Highest
 ```
+
+Point these tasks at your **personal runtime** folder (`WitsV3`), never at
+`WitsV3-cursor` or `WitsV3-claude` — see [`WORKTREES.md`](../WORKTREES.md).
 
 ## 2. Wake the PC before the 3am self-repair run
 
@@ -27,7 +30,7 @@ watchdog, so by 3am the app is guaranteed to be up for the scheduler to fire.
 
 ```powershell
 $action  = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\Users\capta\source\repos\capnknives\WitsV3-claude\scripts\witsv3_watchdog.ps1"'
+    -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\Users\capta\source\repos\capnknives\WitsV3\scripts\witsv3_watchdog.ps1"'
 $trigger = New-ScheduledTaskTrigger -Daily -At 2:55am
 $settings = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBattery -DontStopIfGoingOnBatteries
 Register-ScheduledTask -TaskName "WitsV3 Wake for Self-Repair" -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest

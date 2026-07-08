@@ -6,13 +6,15 @@ A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it
 **LLM backend:** [Ollama](https://ollama.com) on your machine.  
 **Status:** Actively maintained personal assistant stack — not a hosted SaaS product.
 
+**Local folders on this PC:** personal runtime = `WitsV3`, Cursor agent = `WitsV3-cursor`, Claude agent = `WitsV3-claude` — see [`WORKTREES.md`](WORKTREES.md).
+
 ---
 
 ## Current status (2026-07-08)
 
 | Area | State |
 |------|--------|
-| Test suite | **406 collected** (403 passed / 2 skipped / 1 failing as of 2026-07-08 — re-run `pytest tests/ -q --no-cov`) |
+| Test suite | **406 collected** — re-run `pytest tests/ -q --no-cov` for the live count |
 | Models (default) | `qwen3:8b` (general), `qwen2.5-coder:7b` (coding), `llama3.2:3b` (fast), `nomic-embed-text` (embeddings) |
 | GPU target | Configured models fit in ~8 GB VRAM when fully on-GPU |
 | Built-in tools | **26** auto-discovered (files, search, docs, MCP discovery, self-repair, neural-web helpers, …) |
@@ -227,6 +229,7 @@ WitsV3/
 | Doc | Role |
 |-----|------|
 | **This README** | Install, run, capabilities, config |
+| [`WORKTREES.md`](WORKTREES.md) | Personal vs Cursor vs Claude local folders |
 | [`AGENTS.md`](AGENTS.md) | Agent hierarchy and conventions |
 | [`FILE_STRUCTURE.md`](FILE_STRUCTURE.md) | Directory reference |
 | [`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md) | **What's next** (canonical) |

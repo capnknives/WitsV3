@@ -47,8 +47,9 @@ _LEVEL_LINE_RE = re.compile(
 
 
 # Package roots we accept when remapping frames from a sibling worktree or
-# relocated checkout (e.g. log paths under .../WitsV3-claude/... while running
-# from .../WitsV3/). Stdlib / site-packages never contain these as top segments.
+# relocated checkout (e.g. log paths under .../WitsV3-claude/... or
+# .../WitsV3-cursor/... while running from .../WitsV3/). Stdlib / site-packages
+# never contain these as top segments.
 _PROJECT_PATH_MARKERS = (
     "agents/",
     "core/",
