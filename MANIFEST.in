@@ -2,12 +2,8 @@ include LICENSE
 include README.md
 include requirements.txt
 include requirements-dev.txt
-include pytest.ini
-include .coveragerc
-include .flake8
-include .isort.cfg
-include mypy.ini
 include pyproject.toml
+include .pre-commit-config.yaml
 
 recursive-include tests *
 recursive-include docs *
@@ -15,6 +11,7 @@ recursive-include config *.yaml
 recursive-include tools *.py
 recursive-include core *.py
 recursive-include agents *.py
+recursive-include web *.py
 
 global-exclude *.pyc
 global-exclude *.pyo
@@ -32,4 +29,4 @@ global-exclude .idea
 global-exclude .vscode
 global-exclude *.egg-info
 global-exclude dist
-global-exclude build 
+global-exclude build

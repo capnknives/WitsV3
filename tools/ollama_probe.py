@@ -90,7 +90,7 @@ def print_results(results: List[Dict]):
                 try:
                     content = json.loads(result['content'])
                     print("Content:", json.dumps(content, indent=2))
-                except:
+                except Exception:
                     print("Content:", result['content'])
 
     # Print failed endpoints

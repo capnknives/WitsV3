@@ -103,7 +103,7 @@ class NeuralWebVisualizer:
             # Use spring layout for better organization
             try:
                 pos = nx.spring_layout(viz_graph, k=3, iterations=50)
-            except:
+            except Exception:
                 # Fallback to circular layout if spring fails
                 pos = nx.circular_layout(viz_graph)
 

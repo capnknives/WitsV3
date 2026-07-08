@@ -214,7 +214,7 @@ subprocess.check_output = restricted_subprocess
                     try:
                         process.kill()
                         await process.wait()
-                    except:
+                    except Exception:
                         pass  # Process might already be dead
                     return {
                         "success": False,

@@ -39,7 +39,10 @@ def resolve_max_embedding_chars(config_or_settings: Any) -> int:
     mm = getattr(config_or_settings, "memory_manager", config_or_settings)
     if mm is None:
         return DEFAULT_MAX_EMBEDDING_CHARS
-    return getattr(mm, "max_embedding_chars", DEFAULT_MAX_EMBEDDING_CHARS)
+    value = getattr(mm, "max_embedding_chars", DEFAULT_MAX_EMBEDDING_CHARS)
+    if not isinstance(value, int) or value <= 0:
+        return DEFAULT_MAX_EMBEDDING_CHARS
+    return value
 
 
 # --- Pydantic Models for Memory Segments ---

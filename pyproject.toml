@@ -20,6 +20,25 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 100
+skip = [".git", "__pycache__", "build", "dist", "*.egg-info", "venv", "env", ".venv", ".env", "mcp_servers"]
+known_first_party = ["tools", "core", "agents", "web"]
+known_third_party = ["pytest", "httpx", "numpy", "pandas", "scipy"]
+sections = ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
+default_section = "THIRDPARTY"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["mcp_servers", "gui", "coverage_html"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E203", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/**" = ["E203"]
+"conftest.py" = ["F401"]
 
 [tool.mypy]
 python_version = "3.10"
@@ -36,29 +55,63 @@ warn_no_return = true
 warn_unreachable = true
 strict_optional = true
 
+[[tool.mypy.overrides]]
+module = [
+    "pandas.*",
+    "scipy.*",
+    "matplotlib.*",
+    "seaborn.*",
+    "httpx.*",
+    "PyYAML.*",
+    "pytest.*",
+    "pytest_asyncio.*",
+    "numpy.*",
+]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "requires_ollama: marks tests that require Ollama to be running",
+    "requires_supabase: marks tests that require Supabase connection",
+]
 addopts = """
     --verbose
     --tb=short
+    --strict-markers
+    --strict-config
     --cov=tools
     --cov=core
     --cov=agents
+    --cov=web
     --cov-report=term-missing
-    --cov-report=html
+    --cov-report=html:coverage_html
+    --cov-report=xml:coverage.xml
     --no-cov-on-fail
+    --durations=10
 """
 log_cli = true
 log_cli_level = "INFO"
 log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
 log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+    "ignore::pytest.PytestDeprecationWarning",
+    "ignore::UserWarning:torch.*",
+]
 
 [tool.coverage.run]
-source = ["tools", "core", "agents"]
+source = ["tools", "core", "agents", "web"]
 omit = [
     "*/tests/*",
     "*/__init__.py",
@@ -68,7 +121,7 @@ omit = [
     "*/venv/*",
     "*/env/*",
     "*/.venv/*",
-    "*/.env/*"
+    "*/.env/*",
 ]
 
 [tool.coverage.report]
@@ -80,7 +133,7 @@ exclude_lines = [
     "pass",
     "raise ImportError",
     "except ImportError:",
-    "def main():"
+    "def main():",
 ]
 
 [tool.coverage.html]
@@ -88,4 +141,4 @@ directory = "coverage_html"
 title = "WitsV3 Test Coverage Report"
 
 [tool.coverage.xml]
-output = "coverage.xml" 
+output = "coverage.xml"

@@ -110,8 +110,20 @@ suggested next steps.
 
 ## 4. Suggested next steps (in order)
 
-1. Do the manual items (revoke Supabase token, add Anthropic key; optionally Brave key).
+1. Do the manual items (revoke Supabase token, add Anthropic key). Brave key: DONE (`BRAVE_SEARCH_API_KEY` added; `web_search` merges Tavily+Brave).
 2. **Re-test save-to-file** after restart: *"Save a log of our conversations as exports/chat_log.txt"* — expect orchestrator → `read_conversation_history` → `write_file`, not JSON parse loops.
-3. Merge `composer/orchestrator-search-quality` → `main` when smoke tests A–E (see `composer-orchestrator-search-quality-2026-07.md`) plus save-to-file test pass.
+3. Merge `composer/orchestrator-search-quality` → `main` when smoke tests A–F (see `composer-orchestrator-search-quality-2026-07.md`) plus save-to-file test pass.
 4. Optional roadmap #11: MCP OCI/Docker install, browse-before-install preview, deep-link from `search_mcp_tools` to `/mcp`.
-5. Optional quality follow-ups from logs: embedding input truncation on large memory stores (#7 in error triage); WCCA intent JSON repair-reparse (same pattern as orchestrator).
+5. Optional quality follow-up from logs: WCCA intent JSON repair-reparse (same pattern as orchestrator). Embedding input truncation is DONE (`7660664`).
+
+### Whole-repo audit backlog (July 7, 2026)
+
+A read-only pass over the entire codebase (beyond the search/MCP work) produced a
+prioritized backlog of "obviously missing" items — CI, tooling-config
+de-duplication, dead/dormant code (neural web tools, `adaptive_llm_interface`,
+`gui/`, `*_fixed.py`/`*_updated.py`), uncollected root-level tests, and the
+500-line-rule violations. See the **"Codebase audit — obviously missing / suggested
+additions"** section in
+`planning/roadmap/composer-orchestrator-search-quality-2026-07.md` for the full
+Tier 1–4 list. Highest leverage: **add project-level CI** (there is none at the
+repo root today) and **collapse the duplicated pytest/mypy/isort config**.

@@ -82,7 +82,7 @@ class MathTool(BaseTool):
             try:
                 mode_result = stats.mode(arr, keepdims=True)
                 mode_value = float(mode_result.mode[0])
-            except:
+            except Exception:
                 # If mode calculation fails, use the first value as fallback
                 mode_value = float(arr[0])
 

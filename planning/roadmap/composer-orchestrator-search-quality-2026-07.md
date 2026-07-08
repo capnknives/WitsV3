@@ -181,7 +181,87 @@ Composer did **not** implement these — still open in `revival-2026-07.md`:
 | 11 | MCP discover follow-ups | OCI/Docker packages, browse-before-install preview |
 | — | Merge composer branch | PR into `fix/revive-2026-07` or `main` when tests A–F look good |
 | — | Manual ops | Revoke leaked Supabase token; add `ANTHROPIC_API_KEY` if using ask-Claude |
-| — | Optional log follow-ups | Embedding truncation on large memory stores; WCCA intent JSON repair |
+| — | WCCA intent JSON repair | Same repair-reparse pattern as the orchestrator, applied to WCCA intent parsing |
+
+**Recently closed** (were on this list): embedding truncation on large memory stores (shipped `7660664`), `BRAVE_SEARCH_API_KEY` support (shipped), and the `set_dependencies(tool_registry=...)` startup crash (shipped `28f3c5c`).
+
+---
+
+## Codebase audit — obviously missing / suggested additions (July 7, 2026)
+
+A read-only pass over the whole repo (not just the search/MCP work) surfaced the
+gaps below. None are blockers for the current branch merge, but they're the
+obvious next investments. Ordered by leverage-to-effort.
+
+### Tier 1 — cheap, high value (do next)
+
+**SHIPPED July 7, 2026** (Composer session):
+
+1. ✅ **Project-level CI** — `.github/workflows/ci.yml`: tests on Python 3.10/3.11 (`python -m pytest`), coverage artifact upload, critical ruff gate (`F821,E9,E722`).
+2. ✅ **De-duplicated tooling config** — single source in `pyproject.toml`; removed `pytest.ini`, `mypy.ini`, `.isort.cfg`, `.coveragerc`, `.flake8`.
+3. ✅ **`[tool.ruff]` + `.pre-commit-config.yaml`** — ruff/black/isort + basic hygiene hooks. Install: `pip install pre-commit && pre-commit install`.
+4. ✅ **`web/` under coverage** — `--cov=web` in pytest addopts and `[tool.coverage.run] source`.
+5. ✅ **`.cursorrules` PLANNING.md pointer** — now points at `planning/architecture/system-architecture.md` + revival roadmap.
+
+Also fixed while wiring CI: `resolve_max_embedding_chars()` ignores non-int MagicMock values (FAISS tests), missing `import os` in `file_tools.py`, four bare `except:` → `except Exception:`.
+
+**Follow-up (not Tier 1):** expand CI lint to full ruff/black/isort once the legacy baseline (~124 black files, ~3.7k ruff findings) is cleaned up — pre-commit enforces on new commits locally until then.
+
+### Tier 2 — documentation truth (low effort, avoids confusion)
+
+6. **Retire or redirect `TASK.md`.** Root `TASK.md` (last real update
+   2025-06-12) still shows "Phase 2 Neural Web — ACTIVE" and duplicates
+   `planning/tasks/task-management.md`. It contradicts the July 2026 revival
+   docs. Make `planning/roadmap/revival-2026-07.md` the canonical status doc and
+   leave `TASK.md` as a one-line redirect.
+7. **Flag stale roadmaps.** `planning/roadmap/neural-web-roadmap.md` (2025-06)
+   predates the revival; add a header noting it's historical.
+8. **Note the doc footprint.** ~96 `.md` files repo-wide (many inside
+   submodules). The `docs/` synthetic-brain set overlaps heavily
+   (`IMPLEMENTATION_STATUS.md`, `IMPLEMENTATION_SUMMARY.md`, `REMAINING_TASKS.md`,
+   `README_SYNTHETIC_BRAIN.md`) — consolidate to one.
+
+### Tier 3 — dead / dormant code (decide: wire up, archive, or delete)
+
+9. **Neural web tools are built but unreachable.** `tools/enhanced_reasoning.py`
+   (831 lines), `tools/neural_web_nlp.py` (673), `tools/neural_web_visualization.py`
+   (739) are **not auto-registered** — the registry only auto-discovers tools
+   with zero required constructor args, and these need `(config, llm_interface)`.
+   Also `NeuralWebVisualizationTool.__init__` calls `super().__init__(config)`
+   but `BaseTool.__init__` expects `(name, description)` — it would fail if
+   instantiated. Either add a DI path (like document/web-search tools use
+   `set_dependencies`) or explicitly mark them experimental.
+10. **`core/adaptive_llm_interface.py` (371 lines) is dormant.** Only loaded when
+    `default_provider: adaptive`; superseded by `core/model_router.py`. Mark
+    experimental or remove.
+11. **Parallel `*_fixed.py` / `*_updated.py` files.** e.g.
+    `memory_handler.py` + `_fixed.py` + `_updated.py`,
+    `cognitive_architecture.py` + `_updated.py`,
+    `neural_memory_backend.py` + `_fixed.py`. Keep the live one, delete the
+    orphans (grep shows some `_fixed` variants are imported nowhere).
+12. **`gui/` (29 files, `matrix_ui.py` 932 lines) is parked.** Web UI replaced
+    it. Move to `planning/archive/` or a separate branch to shrink the tree.
+13. **~14 root-level `test_*.py` are never collected.** `pyproject.toml` sets
+    `testpaths = tests`, so `test_enhanced_reasoning.py`,
+    `test_neural_web_nlp.py`, `test_authentication.py`, etc. at the repo root run
+    zero times. Move the useful ones into `tests/`, delete the rest.
+
+### Tier 4 — structure & hygiene (larger, schedule deliberately)
+
+14. **500-line rule is widely violated.** 20+ files exceed it; worst offenders:
+    `agents/advanced_coding_agent.py` (1,482), `agents/wits_control_center_agent.py`
+    (905), `agents/base_orchestrator_agent.py` (909), `web/server.py` (877). The
+    orchestrator especially would benefit from splitting the guardrail/observation
+    helpers into a mixin.
+15. **`self_repair_agent` test is a 3-line stub.** Add real coverage for the
+    self-repair path; also no dedicated tests for `book_writing_agent` or
+    `neural_orchestrator_agent`.
+16. **MCP submodule footprint.** Three vendored submodules (`servers`,
+    `supabase-mcp`, `Ollama-mcp`) add 266+ files. Consider on-demand clone via
+    the existing `scripts/clone_mcp_servers.py` instead of vendoring, to shrink
+    the working tree.
+17. **Confirm the Supabase `sbp_...` token was revoked.** Still an open manual
+    item in the revival doc; it may remain valid in git history.
 
 ---
 
