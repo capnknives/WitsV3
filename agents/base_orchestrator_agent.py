@@ -114,6 +114,13 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         # Get relevant context from memory
         relevant_memories = await self.search_memory(goal, limit=5)
         context = self._build_context_from_memories(relevant_memories)
+        flush_context = ""
+        if conversation_history and self.memory_manager and not self._skip_global_memory_store:
+            from core.conversation_compaction import get_session_flush_context
+
+            flush_context = await get_session_flush_context(
+                self.memory_manager, conversation_history.session_id
+            )
         doc_inventory = await self._get_document_inventory()
         guest_profile = kwargs.get("guest_profile") or {}
         guest_age_band = guest_profile.get("age_band") or "teen"
@@ -129,6 +136,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         react_state = {
             "goal": goal,
             "context": context,
+            "flush_context": flush_context,
             "documents_context": self._format_documents_context(doc_inventory),
             "conversation_history": conversation_history,
             "history": conversation_history.to_llm_format() if conversation_history else [],

@@ -417,6 +417,7 @@ class ConversationHistory(BaseModel):
     """Complete conversation history."""
 
     session_id: str = Field(description="Unique session identifier")
+    title: str = Field(default="New chat", description="Display name in session list")
     messages: list[ConversationMessage] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
