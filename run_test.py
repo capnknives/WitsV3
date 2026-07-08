@@ -55,7 +55,7 @@ def run_tests(args):
 
     # LLM Interface Test
     if args.llm or args.all:
-        tests.append(("python llm_diagnostic_basic.py", "Basic LLM Interface Diagnostic"))
+        tests.append(("python scripts/llm_diagnostic_basic.py", "Basic LLM Interface Diagnostic"))
 
     # Run.py Test Mode
     if args.run or args.all:
