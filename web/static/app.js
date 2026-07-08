@@ -401,12 +401,18 @@ $("#menu-btn").addEventListener("click", openPanel);
 $("#panel-close").addEventListener("click", closePanel);
 backdrop.addEventListener("click", closePanel);
 
+let memLoadedOnce = false;
 document.querySelectorAll(".panel-tabs button").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".panel-tabs button").forEach((b) => b.classList.remove("active"));
     document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
     btn.classList.add("active");
     $(`#tab-${btn.dataset.tab}`).classList.add("active");
+    if (btn.dataset.tab === "memory" && !memLoadedOnce) {
+      memLoadedOnce = true;
+      memRecentOffset = 0;
+      loadRecentMemory();
+    }
   });
 });
 
@@ -443,39 +449,63 @@ $("#memory-go").addEventListener("click", async () => {
   } catch (e) { /* handled */ }
 });
 
-$("#memory-recent-go").addEventListener("click", async () => {
+let memRecentOffset = 0;
+
+function memRecentLimit() {
+  return Math.max(1, Math.min(parseInt($("#memory-recent-limit").value, 10) || 20, 100));
+}
+
+async function loadRecentMemory() {
+  const box = $("#memory-recent-results");
   try {
-    const limit = Math.max(1, parseInt($("#memory-recent-limit").value, 10) || 20);
-    const offset = Math.max(0, parseInt($("#memory-recent-offset").value, 10) || 0);
+    const limit = memRecentLimit();
     const segmentType = ($("#memory-recent-type").value || "").trim();
     const source = ($("#memory-recent-source").value || "").trim();
 
-    const qs = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    const qs = new URLSearchParams({ limit: String(limit), offset: String(memRecentOffset) });
     if (segmentType) qs.set("segment_type", segmentType);
     if (source) qs.set("source", source);
 
     const res = await api(`/api/memory/recent?${qs.toString()}`);
     const body = await res.json();
-    const box = $("#memory-recent-results");
+    const results = body.results || [];
     box.innerHTML = "";
 
-    if (!body.results || !body.results.length) {
-      box.appendChild(el("div", "mem-item", "No recent memory segments."));
-      return;
+    if (!results.length) {
+      box.appendChild(el("div", "mem-item", memRecentOffset > 0 ? "No more segments." : "No recent memory segments."));
+    } else {
+      for (const r of results) {
+        const item = el("div", "mem-item");
+        item.appendChild(el("div", "meta", `${r.type || "?"} · ${r.source || "?"} · ${r.timestamp || ""}`));
+        const lines = [];
+        if (r.tool_name) lines.push(`tool: ${r.tool_name}`);
+        if (r.text) lines.push(r.text);
+        item.appendChild(el("div", null, lines.join("\n\n")));
+        box.appendChild(item);
+      }
     }
 
-    for (const r of body.results) {
-      const item = el("div", "mem-item");
-      item.appendChild(el("div", "meta", `${r.type || "?"} · ${r.source || "?"} · ${r.timestamp || ""}`));
-      const lines = [];
-      if (r.tool_name) lines.push(`tool: ${r.tool_name}`);
-      if (r.text) lines.push(r.text);
-      item.appendChild(el("div", null, lines.join("\n\n")));
-      box.appendChild(item);
-    }
+    $("#memory-recent-pageinfo").textContent = results.length
+      ? `${memRecentOffset + 1}–${memRecentOffset + results.length}`
+      : "—";
+    $("#memory-recent-prev").disabled = memRecentOffset <= 0;
+    $("#memory-recent-next").disabled = !body.has_more;
   } catch (e) {
     /* handled by api() */
   }
+}
+
+$("#memory-recent-go").addEventListener("click", () => {
+  memRecentOffset = 0;
+  loadRecentMemory();
+});
+$("#memory-recent-prev").addEventListener("click", () => {
+  memRecentOffset = Math.max(0, memRecentOffset - memRecentLimit());
+  loadRecentMemory();
+});
+$("#memory-recent-next").addEventListener("click", () => {
+  memRecentOffset += memRecentLimit();
+  loadRecentMemory();
 });
 
 $("#memory-prune-go").addEventListener("click", async () => {
@@ -513,8 +543,8 @@ $("#memory-prune-go").addEventListener("click", async () => {
       $("#memory-prune-confirm").value = "";
 
       // Reload the list (best-effort).
-      $("#memory-recent-offset").value = "0";
-      $("#memory-recent-go").click();
+      memRecentOffset = 0;
+      loadRecentMemory();
     } else {
       const body = await res.json().catch(() => ({}));
       status.textContent = body.detail || `Prune failed (HTTP ${res.status}).`;

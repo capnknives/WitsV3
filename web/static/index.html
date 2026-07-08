@@ -57,28 +57,43 @@
 
       <div class="mem-section-title">Recent memory</div>
       <div class="row">
-        <input id="memory-recent-type" type="text" placeholder="Type filter… (optional)">
+        <input id="memory-recent-type" list="mem-types" type="text" placeholder="Type filter… (optional)">
         <input id="memory-recent-source" type="text" placeholder="Source filter… (optional)">
       </div>
       <div class="row">
-        <input id="memory-recent-limit" type="number" min="1" value="20">
-        <input id="memory-recent-offset" type="number" min="0" value="0">
+        <input id="memory-recent-limit" type="number" min="1" max="100" value="20" title="Page size">
         <button id="memory-recent-go">Load</button>
       </div>
       <div id="memory-recent-results"></div>
+      <div class="mem-pager">
+        <button id="memory-recent-prev" disabled>‹ Prev</button>
+        <span id="memory-recent-pageinfo" class="mem-pageinfo">—</span>
+        <button id="memory-recent-next" disabled>Next ›</button>
+      </div>
 
       <hr class="panel-sep">
 
-      <div class="mem-section-title">Prune (delete)</div>
+      <div class="mem-section-title mem-danger-title">Prune (delete)</div>
       <div class="row">
-        <input id="memory-prune-type" type="text" placeholder="Type (optional)">
+        <input id="memory-prune-type" list="mem-types" type="text" placeholder="Type (optional)">
         <input id="memory-prune-source" type="text" placeholder="Source (optional)">
       </div>
       <div class="row">
         <input id="memory-prune-confirm" type="text" placeholder="Type PRUNE to confirm">
-        <button id="memory-prune-go">Prune</button>
+        <button id="memory-prune-go" class="danger-btn">Prune</button>
       </div>
       <div id="memory-prune-status" class="mem-prune-status"></div>
+
+      <datalist id="mem-types">
+        <option value="conversation"></option>
+        <option value="user_input"></option>
+        <option value="agent_response"></option>
+        <option value="thinking"></option>
+        <option value="goal_defined"></option>
+        <option value="tool_output"></option>
+        <option value="observation"></option>
+        <option value="result"></option>
+      </datalist>
     </section>
     <section id="tab-docs" class="tab">
       <label class="upload-btn">
