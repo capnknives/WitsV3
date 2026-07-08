@@ -1,11 +1,22 @@
 # Composer branch — changes & test guide
 
-**Branch:** `composer/orchestrator-search-quality`  
+**Branch:** `composer/orchestrator-search-quality` (Tier 1 CI/tooling work), then `claude/tier2-tier3-cleanup-2026-07` (Tier 2/3 cleanup, branched from the former)  
 **Base:** `fix/revive-2026-07` @ `856af3b` (Claude's July 7 revival work)  
 **Last updated:** July 7, 2026  
-**Author:** Composer (Cursor agent session)
+**Author:** Composer (Cursor agent session) + Claude (Tier 1 CI commit co-authored; Tier 2/3 cleanup)
 
 This file is the handoff doc for Richard. It lists **what Composer changed on this branch**, what was already on the shared revival base, and **what to manually test** before merging anything.
+
+> **Note on concurrent editing:** the Cursor/Composer session and a Claude
+> Code session both worked in this checkout at points on July 7. The Cursor
+> session committed Tier 1 (CI/tooling) directly to
+> `composer/orchestrator-search-quality` as `3080da2`. Claude Code's Tier 2/3
+> work stacked on top as `90c7460`, then moved to its own branch
+> `claude/tier2-tier3-cleanup-2026-07` to avoid further collisions — that
+> branch currently contains everything from both sessions. If merging, treat
+> `claude/tier2-tier3-cleanup-2026-07` as the up-to-date tip unless the
+> Cursor session has since pushed more commits to
+> `composer/orchestrator-search-quality` that need reconciling.
 
 ---
 
@@ -14,13 +25,23 @@ This file is the handoff doc for Richard. It lists **what Composer changed on th
 | Branch | Purpose |
 |--------|---------|
 | `fix/revive-2026-07` | Claude's ongoing revival work — keep clean |
-| `composer/orchestrator-search-quality` | Composer experiments + web UI polish — **work here** |
+| `composer/orchestrator-search-quality` | Composer experiments + web UI polish + Tier 1 CI/tooling |
+| `claude/tier2-tier3-cleanup-2026-07` | Tier 2/3 cleanup, branched from the above — **current tip** |
 
-Composer commits (newest first):
+Commits on `composer/orchestrator-search-quality` (newest first):
 
 ```
+3080da2  Add CI, consolidate tooling config, and wire web coverage. (Cursor)
+28f3c5c  Enhance MCP tool integration and orchestrator functionality
+7660664  Fix embedding truncation config lookup and ship revival orchestrator/MCP work.
 ab0936b  Web UI: model routing settings and friendly Ollama-down errors
 e2f538f  Improve ReAct search quality: lower reasoning temp, richer observations, merged providers
+```
+
+`claude/tier2-tier3-cleanup-2026-07` adds on top:
+
+```
+90c7460  Tier 2/3 cleanup: doc truth pass, wire up neural web tools, archive dead code
 ```
 
 Everything below `856af3b` on this branch is shared revival history (orchestrator JSON, web search rewrite, MCP registry, WCCA routing, etc.) — see `planning/roadmap/revival-2026-07.md` for Claude's log.
@@ -209,42 +230,50 @@ Also fixed while wiring CI: `resolve_max_embedding_chars()` ignores non-int Magi
 
 ### Tier 2 — documentation truth (low effort, avoids confusion)
 
-6. **Retire or redirect `TASK.md`.** Root `TASK.md` (last real update
-   2025-06-12) still shows "Phase 2 Neural Web — ACTIVE" and duplicates
-   `planning/tasks/task-management.md`. It contradicts the July 2026 revival
-   docs. Make `planning/roadmap/revival-2026-07.md` the canonical status doc and
-   leave `TASK.md` as a one-line redirect.
-7. **Flag stale roadmaps.** `planning/roadmap/neural-web-roadmap.md` (2025-06)
-   predates the revival; add a header noting it's historical.
-8. **Note the doc footprint.** ~96 `.md` files repo-wide (many inside
-   submodules). The `docs/` synthetic-brain set overlaps heavily
-   (`IMPLEMENTATION_STATUS.md`, `IMPLEMENTATION_SUMMARY.md`, `REMAINING_TASKS.md`,
-   `README_SYNTHETIC_BRAIN.md`) — consolidate to one.
+**SHIPPED July 7, 2026** (Claude session, branch `claude/tier2-tier3-cleanup-2026-07`):
+
+6. ✅ **`TASK.md` retired** — now a one-line redirect to `revival-2026-07.md`.
+7. ✅ **`neural-web-roadmap.md` flagged historical** — header note added.
+8. ✅ **Synthetic-brain doc set consolidated** — new `docs/SYNTHETIC_BRAIN.md`
+   is canonical; `IMPLEMENTATION_STATUS.md`, `IMPLEMENTATION_SUMMARY.md`,
+   `REMAINING_TASKS.md`, `SYNTHETIC_BRAIN_NEXT_STEPS.md`, `SYNTHETIC_BRAIN_PR.md`,
+   `README_SYNTHETIC_BRAIN.md` kept for archival detail with a historical
+   header pointing back at it.
 
 ### Tier 3 — dead / dormant code (decide: wire up, archive, or delete)
 
-9. **Neural web tools are built but unreachable.** `tools/enhanced_reasoning.py`
-   (831 lines), `tools/neural_web_nlp.py` (673), `tools/neural_web_visualization.py`
-   (739) are **not auto-registered** — the registry only auto-discovers tools
-   with zero required constructor args, and these need `(config, llm_interface)`.
-   Also `NeuralWebVisualizationTool.__init__` calls `super().__init__(config)`
-   but `BaseTool.__init__` expects `(name, description)` — it would fail if
-   instantiated. Either add a DI path (like document/web-search tools use
-   `set_dependencies`) or explicitly mark them experimental.
-10. **`core/adaptive_llm_interface.py` (371 lines) is dormant.** Only loaded when
-    `default_provider: adaptive`; superseded by `core/model_router.py`. Mark
-    experimental or remove.
-11. **Parallel `*_fixed.py` / `*_updated.py` files.** e.g.
-    `memory_handler.py` + `_fixed.py` + `_updated.py`,
-    `cognitive_architecture.py` + `_updated.py`,
-    `neural_memory_backend.py` + `_fixed.py`. Keep the live one, delete the
-    orphans (grep shows some `_fixed` variants are imported nowhere).
-12. **`gui/` (29 files, `matrix_ui.py` 932 lines) is parked.** Web UI replaced
-    it. Move to `planning/archive/` or a separate branch to shrink the tree.
-13. **~14 root-level `test_*.py` are never collected.** `pyproject.toml` sets
-    `testpaths = tests`, so `test_enhanced_reasoning.py`,
-    `test_neural_web_nlp.py`, `test_authentication.py`, etc. at the repo root run
-    zero times. Move the useful ones into `tests/`, delete the rest.
+**SHIPPED July 7, 2026** (Claude session, branch `claude/tier2-tier3-cleanup-2026-07`):
+
+9. ✅ **Neural web tools wired up.** `EnhancedReasoningTool`, `NeuralWebNLPTool`,
+   `NeuralWebVisualizationTool` now use zero-arg constructors + `set_dependencies()`
+   (same DI pattern as `document_tools.py`/`web_search_tool.py`), so
+   `tool_registry` auto-discovery actually picks them up. Fixed the
+   `super().__init__(config)` vs `BaseTool.__init__(name, description)`
+   mismatch — it turned out to affect **all three** tools, not just the
+   visualization one. They now prefer the live `NeuralWeb` from
+   `memory_manager.backend` when the neural backend is active instead of an
+   always-empty scratch instance. `tests/tools/test_neural_web_tools.py` added.
+10. ✅ **`core/adaptive_llm_interface.py` marked dormant/experimental** in its
+    module docstring (not removed — still imports cleanly, `core/adaptive`
+    turned out to be a package, not a missing file as first assumed).
+11. ✅ **Orphaned `*_fixed.py` / `*_updated.py` files deleted** —
+    `core/memory_handler_fixed.py`, `core/memory_handler_updated.py`,
+    `core/neural_memory_backend_fixed.py`, `core/tool_registry_fixed.py`,
+    `core/cognitive_architecture_updated.py` — plus their two standalone
+    tests, which only tested the orphans themselves.
+12. ✅ **`gui/` archived** to `planning/archive/gui/` (git history preserved
+    via `git mv`).
+13. ✅ **Root-level `test_*.py` cleaned up.** 9 still-valid standalone smoke
+    scripts (`test_authentication.py`, `test_automatic_pruning.py`,
+    `test_enhanced_features.py`, `test_enhanced_validation.py`, `test_fixes.py`,
+    `test_memory_pruning.py`, `test_model_reliability.py`,
+    `test_streaming_context.py`, `test_witsv3.py`) moved to
+    `scripts/manual_tests/`. 4 deleted because they no longer match the
+    current implementation and error out under pytest
+    (`test_enhanced_reasoning.py`, `test_neural_web_nlp.py`,
+    `test_neural_web_visualization.py`, plus empty `test_enhanced_streaming.py`).
+
+Full suite after Tier 2/3: **312 passed, 2 skipped**.
 
 ### Tier 4 — structure & hygiene (larger, schedule deliberately)
 
@@ -269,9 +298,10 @@ Also fixed while wiring CI: `resolve_max_embedding_chars()` ignores non-int Magi
 
 When manual tests A–F look good:
 
-1. Merge `composer/orchestrator-search-quality` → `fix/revive-2026-07` (or open a PR).
+1. Merge `claude/tier2-tier3-cleanup-2026-07` → `fix/revive-2026-07` (or open a PR) — it's a superset of `composer/orchestrator-search-quality` (includes the Tier 1 CI commit) plus Tier 2/3.
 2. Update `revival-2026-07.md` §4 — model-routing settings, Ollama-down UX, save-to-file are shipped on branch.
 3. Keep Gmail MCP entry in `data/mcp_tools.json` only if you intend to connect it from `/mcp` — it does not auto-connect.
+4. Tier 4 (structure & hygiene — 500-line rule, self_repair_agent test coverage, MCP submodule footprint, confirming the Supabase token revocation) is still open; schedule deliberately, none of it blocks this merge.
 
 ---
 
