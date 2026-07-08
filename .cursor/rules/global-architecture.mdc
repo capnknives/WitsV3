@@ -8,6 +8,7 @@ alwaysApply: true
 ## Worktrees & docs
 
 - Work from **`WitsV3-cursor`** (branch `cursor/work` or `cursor/*`). Personal runtime = sibling `WitsV3`; Claude = `WitsV3-claude` — see `WORKTREES.md`
+- **Edits here are NOT live in the runtime.** After changes (especially `web/` static assets — no build step), commit and fast-forward `WitsV3` (`git -C ...\WitsV3 merge --ff-only cursor/work`), then hard-refresh. See `WORKTREES.md`.
 - **Always read** `planning/roadmap/suggested-features-2026-07.md` for priorities and `README.md` for how it runs today
 - Architecture ref: `planning/architecture/system-architecture.md` (many sections mid-2025 — trust README/roadmap for status)
 - Shipped log: `planning/roadmap/revival-2026-07.md`

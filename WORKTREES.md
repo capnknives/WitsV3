@@ -25,6 +25,20 @@ C:\Users\capta\source\repos\capnknives\WitsV3-claude
 4. Agents push feature branches → merge into `fix/revive-2026-07` → you pull that into `WitsV3` for personal use → promote to `main` when ready.
 5. Do not commit `.env`, `data/`, or memory files. Agent worktrees may share the personal `.venv` via a directory junction; that is intentional.
 
+> ⚠️ **Edits made in `WitsV3-cursor` are NOT live in your runtime.** The Web UI /
+> CLI you actually run come from **`WitsV3`**. After finishing changes here
+> (especially `web/` static assets, which have no build step and are served
+> as-is), sync them into `WitsV3` or they won't show up:
+>
+> ```powershell
+> # from WitsV3-cursor: commit, then fast-forward the runtime worktree
+> git -C C:\Users\capta\source\repos\capnknives\WitsV3-cursor add -A
+> git -C C:\Users\capta\source\repos\capnknives\WitsV3-cursor commit -m "..."
+> git -C C:\Users\capta\source\repos\capnknives\WitsV3 merge --ff-only cursor/work
+> ```
+>
+> Then hard-refresh the browser (static assets are cached).
+
 ## Recreate / list
 
 From any checkout:
