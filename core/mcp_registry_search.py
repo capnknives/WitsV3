@@ -38,7 +38,12 @@ DEFAULT_REGISTRY_URL = "https://registry.modelcontextprotocol.io"
 _RUNTIME_FOR_REGISTRY = {
     "npm": "npx",
     "pypi": "uvx",
+    "oci": "docker",
 }
+
+# Flags every one-shot docker-run stdio server needs: interactive stdin, and
+# clean up the container on exit so repeated connects don't pile up.
+_DOCKER_BASE_ARGS = ["run", "-i", "--rm"]
 
 
 def _arg_values(args: Optional[List[Dict[str, Any]]]) -> List[str]:
@@ -66,6 +71,13 @@ def _arg_values(args: Optional[List[Dict[str, Any]]]) -> List[str]:
 
 def _package_spec(registry_type: str, identifier: str, version: Optional[str]) -> str:
     """Build the versioned package token for the runtime (e.g. pkg@1.2.3)."""
+    if registry_type == "oci":
+        # Image ref may already carry a tag/digest (":" or "@sha256:" after the
+        # last path segment) — only append one if the identifier doesn't.
+        last_segment = identifier.rsplit("/", 1)[-1]
+        if not version or ":" in last_segment or "@" in identifier:
+            return identifier
+        return f"{identifier}:{version}"
     if not version:
         return identifier
     if registry_type == "npm":
@@ -88,16 +100,28 @@ def build_stdio_command(package: Dict[str, Any]) -> Optional[List[str]]:
     registry_type = package.get("registryType", "")
     runtime = package.get("runtimeHint") or _RUNTIME_FOR_REGISTRY.get(registry_type)
     if not runtime:
-        return None  # oci/docker/etc. — not auto-installable, needs manual setup
+        return None  # unknown registry type with no runtimeHint — needs manual setup
 
     identifier = package.get("identifier", "")
     if not identifier:
         return None
 
     runtime_args = _arg_values(package.get("runtimeArguments"))
-    # npx must be non-interactive or it prompts to install and hangs the server.
-    if runtime == "npx" and "-y" not in runtime_args and "--yes" not in runtime_args:
-        runtime_args.insert(0, "-y")
+    if runtime == "npx":
+        # npx must be non-interactive or it prompts to install and hangs the server.
+        if "-y" not in runtime_args and "--yes" not in runtime_args:
+            runtime_args.insert(0, "-y")
+    elif runtime == "docker":
+        for flag in reversed(_DOCKER_BASE_ARGS):
+            if flag not in runtime_args:
+                runtime_args.insert(0, flag)
+        # A plain subprocess inherits the host env automatically; a container
+        # does not. `-e NAME` (no value) tells docker to forward that var from
+        # the process env we already set (see MCPServer.env), so declared
+        # env vars still reach the server without baking secrets into argv.
+        for ev in _env_vars(package):
+            if ev["name"] not in runtime_args:
+                runtime_args += ["-e", ev["name"]]
 
     spec = _package_spec(registry_type, identifier, package.get("version"))
     package_args = _arg_values(package.get("packageArguments"))
@@ -152,6 +176,10 @@ def normalize_server(raw: Dict[str, Any]) -> Dict[str, Any]:
         "is_latest": bool(meta.get("isLatest", True)),
         "packages": packages,
         "install": install,  # None => remote-only or needs manual setup
+        # Every locally-runnable package option, so the UI can let the user
+        # pick between e.g. an npm and a docker build instead of only ever
+        # offering the first one silently chosen as `install`.
+        "install_options": [p for p in packages if p["command"] is not None],
         "remotes": [r.get("url") for r in (server.get("remotes") or []) if r.get("url")],
     }
 

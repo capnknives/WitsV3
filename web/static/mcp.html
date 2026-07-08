@@ -354,14 +354,15 @@
       } catch (e) { /* handled */ }
     }
 
-    async function installFromRegistry(entry, card, btn, andConnect) {
+    async function installFromRegistry(entry, card, btn, andConnect, getSelected) {
       btn.disabled = true;
       btn.textContent = andConnect ? "Installing…" : "Installing…";
+      const pkg = (getSelected && getSelected()) || entry.install;
       const env = {};
       card.querySelectorAll("input.env-input").forEach((inp) => {
         if (inp.value.trim()) env[inp.dataset.name] = inp.value.trim();
       });
-      const body = { name: entry.name, command: entry.install.command, connect: andConnect };
+      const body = { name: entry.name, command: pkg.command, connect: andConnect };
       if (Object.keys(env).length) body.env = env;
       try {
         const res = await api("/api/mcp/registry/install", {
@@ -390,6 +391,10 @@
       }
     }
 
+    function packageLabel(pkg) {
+      return `${pkg.registry_type || "?"}${pkg.version ? " · " + pkg.identifier + "@" + pkg.version : " · " + pkg.identifier}`;
+    }
+
     function renderDiscoverCard(entry) {
       const card = el("div", "mcp-card");
       const head = el("div", "mcp-card-head");
@@ -399,7 +404,44 @@
       card.appendChild(head);
 
       if (entry.description) card.appendChild(el("div", "mcp-cmd", entry.description));
-      if (entry.install) card.appendChild(el("div", "mcp-cmd", "$ " + entry.install.command.join(" ")));
+
+      // Browse-before-install: let the user see (and, when there's more than
+      // one runnable packaging, choose) exactly what will execute before
+      // clicking Install — nothing here runs anything.
+      let selected = entry.install;
+      const options = entry.install_options || (entry.install ? [entry.install] : []);
+      if (options.length > 1) {
+        const pickWrap = el("div"); pickWrap.style.marginTop = "8px";
+        pickWrap.appendChild(el("div", "hint", "Package:"));
+        const sel = el("select");
+        options.forEach((opt, i) => sel.appendChild(new Option(packageLabel(opt), String(i))));
+        sel.addEventListener("change", () => { selected = options[Number(sel.value)]; renderSelected(); });
+        pickWrap.appendChild(sel);
+        card.appendChild(pickWrap);
+      }
+
+      const cmdBox = el("div", "mcp-cmd");
+      const envBox = el("div");
+      function renderSelected() {
+        if (!selected) { cmdBox.textContent = ""; envBox.innerHTML = ""; return; }
+        cmdBox.textContent = "$ " + selected.command.join(" ") +
+          (selected.registry_type === "oci" ? "  (runs in a Docker container)" : "");
+        envBox.innerHTML = "";
+        for (const ev of selected.env_vars.filter((v) => v.required)) {
+          const wrap = el("div"); wrap.style.marginTop = "8px";
+          wrap.appendChild(el("div", "mcp-cmd", `${ev.name}${ev.secret ? " (secret)" : ""} — ${ev.description || "required"}`));
+          const inp = el("input", "env-input");
+          inp.dataset.name = ev.name;
+          inp.placeholder = ev.name;
+          if (ev.secret) inp.type = "password";
+          wrap.appendChild(inp);
+          envBox.appendChild(wrap);
+        }
+      }
+      card.appendChild(cmdBox);
+      card.appendChild(envBox);
+      renderSelected();
+
       if (entry.repository) {
         const repo = el("div", "mcp-cmd");
         const a = el("a", null, entry.repository);
@@ -409,25 +451,36 @@
         card.appendChild(repo);
       }
 
-      const requiredEnv = (entry.install ? entry.install.env_vars : []).filter((v) => v.required);
-      for (const ev of requiredEnv) {
-        const wrap = el("div"); wrap.style.marginTop = "8px";
-        wrap.appendChild(el("div", "mcp-cmd", `${ev.name}${ev.secret ? " (secret)" : ""} — ${ev.description || "required"}`));
-        const inp = el("input", "env-input");
-        inp.dataset.name = ev.name;
-        inp.placeholder = ev.name;
-        if (ev.secret) inp.type = "password";
-        wrap.appendChild(inp);
-        card.appendChild(wrap);
+      // Full raw package/transport list — visible before any install decision.
+      if (entry.packages && entry.packages.length) {
+        const details = document.createElement("details");
+        details.style.marginTop = "10px";
+        const summary = document.createElement("summary");
+        summary.textContent = `Details (${entry.packages.length} package${entry.packages.length === 1 ? "" : "s"})`;
+        summary.style.cursor = "pointer";
+        summary.style.color = "var(--fg-dim)";
+        summary.style.fontSize = "13px";
+        details.appendChild(summary);
+        for (const pkg of entry.packages) {
+          details.appendChild(el(
+            "div", "mcp-cmd",
+            `${packageLabel(pkg)} · transport: ${pkg.transport}` +
+              (pkg.command ? "" : " · not auto-installable — manual setup needed")
+          ));
+        }
+        for (const url of entry.remotes || []) {
+          details.appendChild(el("div", "mcp-cmd", "remote: " + url));
+        }
+        card.appendChild(details);
       }
 
       const actions = el("div", "mcp-actions");
       if (entry.install && !entry.already_added) {
         const installBtn = el("button", "primary", "Install");
-        installBtn.addEventListener("click", () => installFromRegistry(entry, card, installBtn, false));
+        installBtn.addEventListener("click", () => installFromRegistry(entry, card, installBtn, false, () => selected));
         actions.appendChild(installBtn);
         const icBtn = el("button", null, "Install & connect");
-        icBtn.addEventListener("click", () => installFromRegistry(entry, card, icBtn, true));
+        icBtn.addEventListener("click", () => installFromRegistry(entry, card, icBtn, true, () => selected));
         actions.appendChild(icBtn);
       }
       card.appendChild(actions);
@@ -480,7 +533,18 @@
       }
     });
 
+    // Deep link from search_mcp_tools (chat) — /mcp?discover=<query> jumps
+    // straight to the Discover tab with the search already run.
+    function openDiscoverFromQuery() {
+      const q = new URLSearchParams(location.search).get("discover");
+      if (!q) return;
+      document.querySelector('[data-tab="discover"]').click();
+      $("#discover-q").value = q;
+      discover(q);
+    }
+
     load();
+    openDiscoverFromQuery();
   </script>
 </body>
 </html>

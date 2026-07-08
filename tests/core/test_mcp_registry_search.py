@@ -60,8 +60,64 @@ def test_build_command_non_stdio_returns_none():
 
 
 def test_build_command_unsupported_registry_returns_none():
-    pkg = {"registryType": "oci", "identifier": "some/image", "transport": {"type": "stdio"}}
+    pkg = {"registryType": "cargo", "identifier": "some-crate", "transport": {"type": "stdio"}}
     assert reg.build_stdio_command(pkg) is None
+
+
+def test_build_command_oci_uses_docker_run():
+    pkg = {
+        "registryType": "oci",
+        "identifier": "mcp/postgres",
+        "version": "1.4.0",
+        "transport": {"type": "stdio"},
+    }
+    assert reg.build_stdio_command(pkg) == ["docker", "run", "-i", "--rm", "mcp/postgres:1.4.0"]
+
+
+def test_build_command_oci_keeps_existing_tag_or_digest():
+    pkg = {
+        "registryType": "oci",
+        "identifier": "mcp/postgres:latest",
+        "version": "1.4.0",
+        "transport": {"type": "stdio"},
+    }
+    assert reg.build_stdio_command(pkg) == ["docker", "run", "-i", "--rm", "mcp/postgres:latest"]
+
+
+def test_build_command_oci_forwards_declared_env_vars():
+    pkg = {
+        "registryType": "oci",
+        "identifier": "mcp/db",
+        "version": "1.0.0",
+        "transport": {"type": "stdio"},
+        "environmentVariables": [
+            {"name": "DB_URL", "isRequired": True},
+            {"name": "DB_DEBUG"},
+        ],
+    }
+    # docker's `-e` flags are OPTIONS and must precede the image reference.
+    assert reg.build_stdio_command(pkg) == [
+        "docker", "run", "-i", "--rm", "-e", "DB_URL", "-e", "DB_DEBUG", "mcp/db:1.0.0",
+    ]
+
+
+def test_build_command_oci_does_not_duplicate_base_flags():
+    pkg = {
+        "registryType": "oci",
+        "identifier": "mcp/db",
+        "version": "1.0.0",
+        "transport": {"type": "stdio"},
+        "runtimeArguments": [
+            {"value": "run", "type": "positional"},
+            {"value": "-i", "type": "positional"},
+            {"value": "--rm", "type": "positional"},
+            {"value": "--pull", "type": "positional"},
+            {"value": "always", "type": "positional"},
+        ],
+    }
+    assert reg.build_stdio_command(pkg) == [
+        "docker", "run", "-i", "--rm", "--pull", "always", "mcp/db:1.0.0",
+    ]
 
 
 def test_normalize_picks_first_installable_and_env():

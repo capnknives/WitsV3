@@ -12,7 +12,8 @@ tells the user what's available and how to add it; it never self-installs.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+from urllib.parse import quote
 
 from core.base_tool import BaseTool
 from core.mcp_registry_search import DEFAULT_REGISTRY_URL, search_registry
@@ -84,15 +85,18 @@ class SearchMCPToolsTool(BaseTool):
             )
 
         installable = sum(1 for r in results if r["installable"])
+        deep_link = f"/mcp?discover={quote(query)}"
         return {
             "success": True,
             "count": len(results),
             "results": results,
+            "deep_link": deep_link,
             "message": (
                 f"Found {len(results)} MCP server(s), {installable} installable locally. "
-                "To add one, open the MCP page (/mcp) in the WITS web UI, use "
-                "'Discover servers', and click Install — installing runs the "
-                "server's code on this machine, so it needs your confirmation."
+                f"To add one, open {deep_link} in the WITS web UI — it opens straight "
+                "to these search results in the Discover tab — and click Install. "
+                "Installing runs the server's code on this machine, so it needs your "
+                "confirmation there."
             ),
         }
 
