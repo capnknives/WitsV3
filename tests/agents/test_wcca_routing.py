@@ -5,11 +5,14 @@ chat ("hi" substring-matched inside "things") or to clarification loops
 because the intent analyzer had no knowledge of ingested documents.
 """
 
+import inspect
 from types import SimpleNamespace
 from typing import AsyncGenerator
 
 import pytest
 
+from agents.advanced_coding_agent import AdvancedCodingAgent
+from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.wits_control_center_agent import WitsControlCenterAgent
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
@@ -134,6 +137,105 @@ def test_goal_defined_routes_to_orchestrator(wcca):
     assert parsed["complexity"] == "moderate"
 
 
+def test_direct_response_intent_metadata(wcca):
+    parsed = wcca._parse_intent_response(
+        '{"type": "direct_response", "direct_response": "Hey there!"}'
+    )
+    assert parsed["suggested_response"] == "direct"
+    assert parsed["requires_tools"] is False
+    assert parsed["direct_response"] == "Hey there!"
+
+
+def test_clarification_intent_metadata(wcca):
+    parsed = wcca._parse_intent_response(
+        '{"type": "clarification_question", "clarification_question": "Which file?"}'
+    )
+    assert parsed["suggested_response"] == "clarification"
+    assert parsed["requires_tools"] is False
+    assert parsed["clarification_question"] == "Which file?"
+
+
+# ---------------------------------------- intent handler (no double LLM)
+
+class TrackingLLM(DummyLLM):
+    """Records generate_text calls so handler tests can assert zero extra LLM work."""
+
+    def __init__(self):
+        self.calls = []
+
+    async def generate_text(self, prompt: str, **kwargs) -> str:
+        self.calls.append(prompt)
+        return "unexpected llm output"
+
+
+class MockOrchestrator:
+    async def run(self, user_input, conversation_history=None, session_id=None, **kwargs):
+        yield SimpleNamespace(type="result", content="orchestrator handled it", source="mock")
+
+
+async def _collect_handler_results(wcca, intent, user_input):
+    results = []
+    async for stream_data in wcca._handle_intent_response(
+        intent, user_input, None, "test-session"
+    ):
+        results.append(stream_data)
+    return results
+
+
+@pytest.mark.asyncio
+async def test_handle_direct_response_uses_intent_text_without_llm(wcca):
+    tracking = TrackingLLM()
+    wcca.llm_interface = tracking
+    intent = wcca._parse_intent_response(
+        '{"type": "direct_response", "direct_response": "Hello from intent JSON"}'
+    )
+    results = await _collect_handler_results(wcca, intent, "thanks!")
+    assert not tracking.calls
+    assert any(r.type == "result" and r.content == "Hello from intent JSON" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_handle_clarification_uses_intent_question_without_llm(wcca):
+    tracking = TrackingLLM()
+    wcca.llm_interface = tracking
+    intent = wcca._parse_intent_response(
+        '{"type": "clarification_question", "clarification_question": "Which audit report?"}'
+    )
+    results = await _collect_handler_results(wcca, intent, "summarize it")
+    assert not tracking.calls
+    assert any(r.type == "result" and r.content == "Which audit report?" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_direct_response_overridden_when_web_search_needed(wcca):
+    tracking = TrackingLLM()
+    wcca.llm_interface = tracking
+    wcca.orchestrator_agent = MockOrchestrator()
+    intent = wcca._parse_intent_response(
+        '{"type": "direct_response", "direct_response": "From memory: nobody"}'
+    )
+    results = await _collect_handler_results(
+        wcca, intent, "What famous musician died on june 14th 2026?"
+    )
+    assert not tracking.calls
+    assert any(r.type == "result" and r.content == "orchestrator handled it" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_conversation_still_calls_llm_once(wcca):
+    tracking = TrackingLLM()
+    wcca.llm_interface = tracking
+    intent = {
+        "type": "conversation",
+        "complexity": "simple",
+        "requires_tools": False,
+        "suggested_response": "direct",
+    }
+    await _collect_handler_results(wcca, intent, "hi there!")
+    assert len(tracking.calls) == 1
+    assert "casual conversation" in tracking.calls[0].lower()
+
+
 # ------------------------------------------------------- documents context
 
 def test_documents_context_lists_files(wcca):
@@ -144,3 +246,15 @@ def test_documents_context_lists_files(wcca):
 
 def test_documents_context_empty():
     assert "No user documents" in WitsControlCenterAgent._documents_context({})
+
+
+# ---------------------------------------- agent delegation contract
+
+def test_orchestrator_and_coding_agents_use_user_input_param():
+    """WCCA delegates with user_input=; all BaseAgent subclasses must accept it."""
+    orch_params = inspect.signature(BaseOrchestratorAgent.run).parameters
+    coding_params = inspect.signature(AdvancedCodingAgent.run).parameters
+    assert "user_input" in orch_params
+    assert "goal" not in orch_params
+    assert "user_input" in coding_params
+    assert "request" not in coding_params

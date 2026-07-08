@@ -329,12 +329,14 @@ Respond ONLY with valid JSON."""
                 j += 1
 
             if depth > 0:
-                # Truncated object: close any open string, trim a dangling
-                # comma, and close the remaining braces.
+                # Truncated object: trim a dangling comma, close any open
+                # string, then close the remaining braces. Comma removal must
+                # happen before the closing quote — otherwise `{"k": "x,` becomes
+                # `{"k": "x,"}` (comma trapped inside the string).
                 fragment = text[start:n].rstrip()
+                fragment = re.sub(r',\s*$', '', fragment)
                 if in_string:
                     fragment += '"'
-                fragment = re.sub(r',\s*$', '', fragment)
                 objects.append(fragment + '}' * depth)
                 break
 

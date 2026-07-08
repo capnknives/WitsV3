@@ -121,6 +121,15 @@ def test_completes_truncated_json(orchestrator):
     assert parsed["tool_args"]["query"].startswith("megafauna audit")
 
 
+def test_completes_truncated_json_unclosed_string_with_trailing_comma(orchestrator):
+    # Truncated inside a string value that ends with a comma — comma must be
+    # stripped before the closing quote, not after.
+    response = '{"thought": "t", "action_type": "final_answer", "final_answer": "hello,'
+    parsed = orchestrator._parse_reasoning_response(response)
+    assert parsed["action_type"] == "final_answer"
+    assert parsed["final_answer"] == "hello"
+
+
 def test_missing_tool_args_defaults_to_empty(orchestrator):
     response = '{"thought": "t", "action_type": "tool_call", "tool_name": "think"}'
     parsed = orchestrator._parse_reasoning_response(response)
@@ -164,8 +173,8 @@ async def test_prepare_payload_includes_format():
 
 # ------------------------------------------------------------ react loop
 
-async def run_to_completion(orchestrator, goal="Summarize the audit report"):
-    return [sd async for sd in orchestrator.run(goal)]
+async def run_to_completion(orchestrator, user_input="Summarize the audit report"):
+    return [sd async for sd in orchestrator.run(user_input)]
 
 
 @pytest.mark.asyncio

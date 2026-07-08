@@ -145,7 +145,7 @@ class AdvancedCodingAgent(BaseAgent):
 
     async def run(
         self,
-        request: str,
+        user_input: str,
         conversation_history: Optional[ConversationHistory] = None,
         session_id: Optional[str] = None,
         **kwargs
@@ -159,7 +159,7 @@ class AdvancedCodingAgent(BaseAgent):
         yield self.stream_thinking("Analyzing coding request...")
 
         # Parse the request to understand the coding task
-        task_analysis = await self._analyze_coding_task(request)
+        task_analysis = await self._analyze_coding_task(user_input)
 
         yield self.stream_thinking(f"Identified task: {task_analysis['task_type']}")
 

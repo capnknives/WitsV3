@@ -66,7 +66,7 @@ class BaseOrchestratorAgent(BaseAgent):
     
     async def run(
         self,
-        goal: str,
+        user_input: str,
         conversation_history: Optional[ConversationHistory] = None,
         session_id: Optional[str] = None,
         **kwargs
@@ -75,7 +75,7 @@ class BaseOrchestratorAgent(BaseAgent):
         Execute the ReAct loop to achieve the given goal.
         
         Args:
-            goal: The goal to achieve
+            user_input: The goal or user request to achieve
             conversation_history: Optional conversation context
             session_id: Optional session identifier
             **kwargs: Additional parameters
@@ -83,6 +83,7 @@ class BaseOrchestratorAgent(BaseAgent):
         Yields:
             StreamData objects showing the reasoning and action process
         """
+        goal = user_input
         self.current_iteration = 0
 
         # Route the whole ReAct session on the goal: code goals go to the

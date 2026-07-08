@@ -202,51 +202,24 @@ User input: {user_input}
         Returns:
             Intent analysis with response strategy
         """
-        # Requests that reference the user's documents, files, or stored memory
-        # always need tool access - route straight to the orchestrator instead
-        # of letting complexity analysis land on a (tool-less) direct response.
-        # This runs BEFORE the casual-conversation heuristic: "check the audit
-        # again" is a document request, not small talk.
-        doc_inventory = await self._get_document_inventory()
-        tool_hints = (
-            "document", "my notes", "my files", "search my", "in my memory",
-            "remember", "ingest", "uploaded", "read the file", "look up",
-            "the file", "attachment", "attached",
-        )
-        lowered = user_input.lower()
-        doc_hints = set()
-        for path in doc_inventory:
-            name = Path(path).name.lower()
-            doc_hints.add(name)
-            # Words from the filename ("audit", "report", ...) so loose
-            # references like "check the audit again" still route to tools.
-            doc_hints.update(
-                w for w in re.split(r"[\W_]+", Path(path).stem.lower()) if len(w) >= 4
-            )
-        if any(hint in lowered for hint in tool_hints) or any(hint in lowered for hint in doc_hints):
+        # Document + web-search routing runs BEFORE the casual heuristic so
+        # short factual questions and file references never get a tool-less reply.
+        if await self._requires_orchestrator_for_input(user_input):
+            needs_web = self._needs_web_search(user_input)
             return {
                 "type": "task",
                 "complexity": "moderate",
                 "requires_tools": True,
                 "suggested_response": "orchestrator",
-                "notes": "References user documents/files/memory - routing to orchestrator for tool use.",
-                "confidence": 0.85
+                "notes": (
+                    "Needs current/external info or an explicit lookup - routing to orchestrator for web_search."
+                    if needs_web
+                    else "References user documents/files/memory - routing to orchestrator for tool use."
+                ),
+                "confidence": 0.8 if needs_web else 0.85,
             }
 
-        # Questions that need current, real-time, or post-training-cutoff
-        # information (or an explicit "look it up") must reach the web_search
-        # tool. This runs BEFORE the casual heuristic, which would otherwise
-        # flag a short factual question ("who died on june 14 2026?") as small
-        # talk and answer it from the model's stale memory.
-        if self._needs_web_search(user_input):
-            return {
-                "type": "task",
-                "complexity": "moderate",
-                "requires_tools": True,
-                "suggested_response": "orchestrator",
-                "notes": "Needs current/external info or an explicit lookup - routing to orchestrator for web_search.",
-                "confidence": 0.8,
-            }
+        doc_inventory = await self._get_document_inventory()
 
         # Check if this is casual conversation with a simple heuristic
         is_casual = self._is_casual_conversation(user_input)
@@ -350,6 +323,13 @@ User input: {user_input}
             "have no record of them:\n" + listing
         )
 
+    # Phrases in user messages that imply document_search / file access.
+    _DOCUMENT_TOOL_HINTS = (
+        "document", "my notes", "my files", "search my", "in my memory",
+        "remember", "ingest", "uploaded", "read the file", "look up",
+        "the file", "attachment", "attached",
+    )
+
     # Phrases that signal the user wants live/external info fetched. Kept
     # deliberately precise so ordinary chat ("how are you today") is NOT routed
     # to the slow orchestrator — "today"/"current" alone are too weak to trust.
@@ -386,6 +366,53 @@ User input: {user_input}
         if has_question and re.search(r"\b(202[4-9]|20[3-9]\d)\b", lowered):
             return True
         return False
+
+    def _doc_routing_hints(self, doc_inventory: Dict[str, int]) -> set:
+        """Filename and stem tokens that imply a document/tool request."""
+        hints: set = set()
+        for path in doc_inventory:
+            name = Path(path).name.lower()
+            hints.add(name)
+            hints.update(
+                w for w in re.split(r"[\W_]+", Path(path).stem.lower()) if len(w) >= 4
+            )
+        return hints
+
+    async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
+        """True when answering requires tools (ingested docs or live web search)."""
+        doc_inventory = await self._get_document_inventory()
+        lowered = user_input.lower()
+        doc_hints = self._doc_routing_hints(doc_inventory)
+        if any(h in lowered for h in self._DOCUMENT_TOOL_HINTS) or any(
+            h in lowered for h in doc_hints
+        ):
+            return True
+        return self._needs_web_search(user_input)
+
+    def _normalize_parsed_intent(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+        """Fill routing metadata so the handler does not rely on loose defaults."""
+        intent_type = parsed.get("type", "goal_defined")
+        if intent_type == "goal_defined":
+            parsed.setdefault("complexity", "moderate")
+            parsed["requires_tools"] = True
+            parsed["suggested_response"] = "orchestrator"
+        elif intent_type == "clarification_question":
+            parsed.setdefault("complexity", "simple")
+            parsed["requires_tools"] = False
+            parsed["suggested_response"] = "clarification"
+        elif intent_type == "direct_response":
+            parsed.setdefault("complexity", "simple")
+            parsed["requires_tools"] = False
+            parsed["suggested_response"] = "direct"
+        elif intent_type == "conversation":
+            parsed.setdefault("complexity", "simple")
+            parsed["requires_tools"] = False
+            parsed["suggested_response"] = "direct"
+        else:
+            parsed.setdefault("complexity", "moderate")
+            parsed.setdefault("requires_tools", False)
+            parsed.setdefault("suggested_response", "direct")
+        return parsed
 
     def _is_casual_conversation(self, message: str) -> bool:
         """
@@ -509,12 +536,7 @@ Respond ONLY with valid JSON."""
                 # handler picks the orchestrator from complexity/requires_tools
                 # — without these, every LLM-classified goal defaulted to
                 # "simple" and got a tool-less direct response.
-                if parsed["type"] == "goal_defined":
-                    parsed.setdefault("complexity", "moderate")
-                    parsed["requires_tools"] = True
-                    parsed["suggested_response"] = "orchestrator"
-
-                return parsed
+                return self._normalize_parsed_intent(parsed)
             else:
                 raise ValueError("No JSON found in response")
 
@@ -537,26 +559,25 @@ Respond ONLY with valid JSON."""
 
         # Simple heuristics for intent detection
         if any(word in response_lower for word in ["unclear", "clarify", "question", "what do you mean"]):
-            return {
+            return self._normalize_parsed_intent({
                 "type": "clarification_question",
                 "confidence": 0.6,
                 "reasoning": "Response suggests need for clarification",
-                "clarification_question": "Could you please provide more details about what you'd like me to help you with?"
-            }
-        elif any(word in response_lower for word in ["hello", "hi", "how are you", "what can you do"]):
-            return {
+                "clarification_question": "Could you please provide more details about what you'd like me to help you with?",
+            })
+        if any(word in response_lower for word in ["hello", "hi", "how are you", "what can you do"]):
+            return self._normalize_parsed_intent({
                 "type": "direct_response",
                 "confidence": 0.8,
                 "reasoning": "Greeting or general question",
-                "direct_response": "Hello! I'm WITS, your AI assistant. I can help you with various tasks and questions."
-            }
-        else:
-            return {
-                "type": "goal_defined",
-                "confidence": 0.5,
-                "reasoning": "Defaulting to task delegation",
-                "goal_statement": response
-            }
+                "direct_response": "Hello! I'm WITS, your AI assistant. I can help you with various tasks and questions.",
+            })
+        return self._normalize_parsed_intent({
+            "type": "goal_defined",
+            "confidence": 0.5,
+            "reasoning": "Defaulting to task delegation",
+            "goal_statement": response,
+        })
 
     async def _handle_intent_response(
         self,
@@ -584,53 +605,39 @@ Respond ONLY with valid JSON."""
 
         yield self.stream_thinking(f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}")
 
-        # For casual conversation, respond directly
-        if intent_type == "conversation" or complexity == "simple":
-            yield self.stream_thinking("Generating direct response...")
-
-            # Use a more conversational approach for casual chat
-            from core.personality_manager import get_personality_manager
-            personality_manager = get_personality_manager()
-
-            if conversation_history and conversation_history.messages:
-                # Format conversation history — window size is configurable
-                # from the web UI settings page (agents.history_window)
-                history_text = "\n".join([
-                    f"{msg.role.upper()}: {msg.content}"
-                    for msg in conversation_history.get_recent_messages(self.config.agents.history_window)
-                ])
+        # LLM-classified direct_response: use the intent JSON text, not a second
+        # casual-chat call — unless tools are required (misclassification guard).
+        if intent_type == "direct_response":
+            if await self._requires_orchestrator_for_input(user_input):
+                intent_type = "goal_defined"
+                complexity = "moderate"
+                requires_tools = True
+                suggested_response = "orchestrator"
             else:
-                history_text = ""
+                direct_text = (intent_analysis.get("direct_response") or "").strip()
+                if direct_text:
+                    yield self.stream_result(direct_text)
+                    return
+                async for stream_data in self._stream_casual_chat_response(
+                    user_input, conversation_history
+                ):
+                    yield stream_data
+                return
 
-            personality_prompt = personality_manager.get_system_prompt()
-            documents_context = self._documents_context(await self._get_document_inventory())
-            conversation_prompt = f"""{personality_prompt}
-
-You are having a casual conversation with the user. Respond in a friendly, helpful manner.
-
-USER DOCUMENTS:
-{documents_context}
-
-CONVERSATION HISTORY:
-{history_text}
-
-USER: {user_input}
-ASSISTANT:"""
-
-            try:
-                # Route on the raw user message, not the assembled prompt —
-                # short casual chat goes to the small fast model
-                routed_model = self.model_router.route(user_input, default=self.get_model_name())
-                response = await self.generate_response(
-                    conversation_prompt, model_name=routed_model, temperature=0.7
+        if intent_type == "clarification_question":
+            question = (intent_analysis.get("clarification_question") or "").strip()
+            if not question:
+                question = (
+                    "Could you please provide more details about what you'd like me to help you with?"
                 )
-                yield self.stream_result(response)
-            except Exception as e:
-                self.logger.error(f"Error generating direct response: {e}")
-                yield self.stream_error(
-                    "I'm having trouble generating a response right now. Could you try again?",
-                    details=str(e)
-                )
+            yield self.stream_result(question)
+            return
+
+        if intent_type == "conversation":
+            async for stream_data in self._stream_casual_chat_response(
+                user_input, conversation_history
+            ):
+                yield stream_data
             return
 
         # For complex tasks, use enhanced capabilities if available
@@ -671,7 +678,7 @@ ASSISTANT:"""
                     if self.orchestrator_agent:
                         yield self.stream_thinking("Delegating to orchestrator for execution...")
                         async for stream_data in self.orchestrator_agent.run(
-                            goal=user_input,
+                            user_input=user_input,
                             conversation_history=conversation_history,
                             session_id=session_id,
                         ):
@@ -701,7 +708,7 @@ ASSISTANT:"""
         if self.orchestrator_agent and (requires_tools or suggested_response == "orchestrator"):
             yield self.stream_thinking("Delegating to orchestrator...")
             async for stream_data in self.orchestrator_agent.run(
-                goal=user_input,
+                user_input=user_input,
                 conversation_history=conversation_history,
                 session_id=session_id,
             ):
@@ -716,6 +723,55 @@ ASSISTANT:"""
             temperature=0.7
         )
         yield self.stream_result(response)
+
+    async def _stream_casual_chat_response(
+        self,
+        user_input: str,
+        conversation_history: Optional[ConversationHistory],
+    ) -> AsyncGenerator[StreamData, None]:
+        """Generate a friendly chat reply (heuristic conversation path only)."""
+        yield self.stream_thinking("Generating direct response...")
+
+        from core.personality_manager import get_personality_manager
+        personality_manager = get_personality_manager()
+
+        if conversation_history and conversation_history.messages:
+            history_text = "\n".join([
+                f"{msg.role.upper()}: {msg.content}"
+                for msg in conversation_history.get_recent_messages(
+                    self.config.agents.history_window
+                )
+            ])
+        else:
+            history_text = ""
+
+        personality_prompt = personality_manager.get_system_prompt()
+        documents_context = self._documents_context(await self._get_document_inventory())
+        conversation_prompt = f"""{personality_prompt}
+
+You are having a casual conversation with the user. Respond in a friendly, helpful manner.
+
+USER DOCUMENTS:
+{documents_context}
+
+CONVERSATION HISTORY:
+{history_text}
+
+USER: {user_input}
+ASSISTANT:"""
+
+        try:
+            routed_model = self.model_router.route(user_input, default=self.get_model_name())
+            response = await self.generate_response(
+                conversation_prompt, model_name=routed_model, temperature=0.7
+            )
+            yield self.stream_result(response)
+        except Exception as e:
+            self.logger.error(f"Error generating direct response: {e}")
+            yield self.stream_error(
+                "I'm having trouble generating a response right now. Could you try again?",
+                details=str(e),
+            )
 
     async def _select_specialized_agent(self, goal_statement: str) -> Optional[Any]:
         """
