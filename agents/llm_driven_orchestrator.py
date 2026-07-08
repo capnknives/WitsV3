@@ -313,6 +313,12 @@ Respond ONLY with valid JSON."""
             "read_conversation_history",
             "analyze_conversation",
             "ingest_documents",
+            # These tools are blocked in the orchestrator, but the model may
+            # still emit their *names* as action_type by mistake. Keeping them
+            # here preserves coercion behavior even if the tool module is not
+            # registered (e.g., during clutter cleanup).
+            "intent_analysis",
+            "json_manipulate",
             "think",
             "calculator",
             "search_mcp_tools",
