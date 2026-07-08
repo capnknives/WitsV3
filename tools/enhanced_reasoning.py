@@ -23,6 +23,20 @@ from core.cross_domain_learning import CrossDomainLearning
 logger = logging.getLogger(__name__)
 
 
+def _resolve_neural_web(memory_manager) -> Optional[NeuralWeb]:
+    """Pull the live NeuralWeb out of memory_manager when the neural backend is active."""
+    if memory_manager is None:
+        return None
+    try:
+        from core.neural_memory_backend import NeuralMemoryBackend
+        backend = getattr(memory_manager, "backend", None)
+        if isinstance(backend, NeuralMemoryBackend):
+            return backend.neural_web
+    except ImportError:
+        pass
+    return None
+
+
 class ReasoningType(Enum):
     """Types of reasoning patterns available."""
     DEDUCTIVE = "deductive"
@@ -694,55 +708,75 @@ class EnhancedReasoningEngine:
 
 
 class EnhancedReasoningTool(BaseTool):
-    """Tool for enhanced reasoning with domain-specific patterns."""
+    """Tool for enhanced reasoning with domain-specific patterns.
 
-    def __init__(self, config: WitsV3Config, llm_interface: BaseLLMInterface):
-        super().__init__(config)
+    Dependencies (config, llm_interface, and — when the neural memory
+    backend is active — a live NeuralWeb) are injected lazily via
+    set_dependencies(), the same pattern document/web-search tools use.
+    This lets the tool_registry auto-discover it (zero required
+    constructor args) and wire it up after the real system is built.
+    """
+
+    def __init__(self):
+        super().__init__(
+            name="enhanced_reasoning",
+            description="Apply enhanced reasoning patterns with domain-specific knowledge",
+        )
+        self.config: Optional[WitsV3Config] = None
+        self.llm_interface: Optional[BaseLLMInterface] = None
+        self._neural_web: Optional[NeuralWeb] = None
+
+    def set_dependencies(self, config: WitsV3Config, llm_interface=None, memory_manager=None, **kwargs) -> None:
+        """Wire in shared system dependencies (called by WitsV3System startup)."""
+        self.config = config
         self.llm_interface = llm_interface
-        self.name = "enhanced_reasoning"
-        self.description = "Apply enhanced reasoning patterns with domain-specific knowledge"
+        self._neural_web = _resolve_neural_web(memory_manager)
 
     def get_schema(self) -> Dict[str, Any]:
         return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "goal": {
-                            "type": "string",
-                            "description": "The reasoning goal or question to address"
-                        },
-                        "domain": {
-                            "type": "string",
-                            "description": "The knowledge domain (e.g., 'technology', 'science', 'business')"
-                        },
-                        "reasoning_types": {
-                            "type": "array",
-                            "items": {
-                                "type": "string",
-                                "enum": ["deductive", "inductive", "analogical", "causal", "creative"]
-                            },
-                            "description": "Specific reasoning types to apply"
-                        },
-                        "confidence_threshold": {
-                            "type": "number",
-                            "description": "Minimum confidence threshold for results (0.0-1.0)"
-                        },
-                        "synthesize_results": {
-                            "type": "boolean",
-                            "description": "Whether to synthesize multiple reasoning results"
-                        }
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "goal": {
+                        "type": "string",
+                        "description": "The reasoning goal or question to address"
                     },
-                    "required": ["goal", "domain"]
-                }
+                    "domain": {
+                        "type": "string",
+                        "description": "The knowledge domain (e.g., 'technology', 'science', 'business')"
+                    },
+                    "reasoning_types": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["deductive", "inductive", "analogical", "causal", "creative"]
+                        },
+                        "description": "Specific reasoning types to apply"
+                    },
+                    "confidence_threshold": {
+                        "type": "number",
+                        "description": "Minimum confidence threshold for results (0.0-1.0)"
+                    },
+                    "synthesize_results": {
+                        "type": "boolean",
+                        "description": "Whether to synthesize multiple reasoning results"
+                    }
+                },
+                "required": ["goal", "domain"]
             }
         }
 
     async def execute(self, **kwargs) -> ToolResult:
         try:
+            if self.config is None or self.llm_interface is None:
+                return ToolResult(
+                    success=False,
+                    result=None,
+                    error="enhanced_reasoning tool has no dependencies wired (set_dependencies was never called)"
+                )
+
             goal = kwargs.get("goal", "")
             domain = kwargs.get("domain", "general")
             reasoning_type_names = kwargs.get("reasoning_types", [])
@@ -763,8 +797,10 @@ class EnhancedReasoningTool(BaseTool):
                 except ValueError:
                     self.logger.warning(f"Unknown reasoning type: {name}")
 
-            # Create reasoning engine (simplified for demo)
-            neural_web = NeuralWeb()  # In production, get from system
+            # Reason over the live Neural Web when the neural memory backend
+            # is active; otherwise fall back to a scratch instance so the
+            # tool still works for one-off reasoning over the given goal.
+            neural_web = self._neural_web if self._neural_web is not None else NeuralWeb()
             reasoning_engine = EnhancedReasoningEngine(
                 self.config, neural_web, self.llm_interface
             )

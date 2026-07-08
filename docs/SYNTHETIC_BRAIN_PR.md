@@ -1,5 +1,7 @@
 # WITS Synthetic Brain Implementation - Pull Request
 
+> **Historical.** Superseded — see [`SYNTHETIC_BRAIN.md`](SYNTHETIC_BRAIN.md) for current status.
+
 ## Overview
 
 This pull request represents the initial implementation of the WITS Synthetic Brain Expansion Plan as outlined in `docs/WITS_Synthetic_Brain_Expansion_Guide_With_Emojis.md`. The implementation focuses on Phase 1 (Core Cognitive Layer Integration), establishing the foundation needed for the more advanced features planned in later phases.

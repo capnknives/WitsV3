@@ -211,9 +211,12 @@ Contains test files mirroring the main package structure:
   - `doc_maintenance.py`: Documentation maintenance tools
   - Various utility and maintenance scripts
 
-## 8. GUI Components (`gui/`)
+## 8. GUI Components (`planning/archive/gui/`) — archived
 
-Contains GUI implementations:
+The PyQt6 desktop GUI and book-writing interface are parked; the web UI
+(`web/`) replaced them. Moved out of the active tree on 2026-07-07 (see
+`planning/roadmap/composer-orchestrator-search-quality-2026-07.md` Tier 3
+§12) rather than deleted, in case anyone revives desktop support:
 
 - `book_writing_gui/`: Book writing interface
   - `api/`: Backend API endpoints

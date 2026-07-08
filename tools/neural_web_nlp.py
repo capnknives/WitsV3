@@ -21,6 +21,20 @@ from core.llm_interface import BaseLLMInterface, LLMMessage
 logger = logging.getLogger(__name__)
 
 
+def _resolve_neural_web(memory_manager) -> Optional[NeuralWeb]:
+    """Pull the live NeuralWeb out of memory_manager when the neural backend is active."""
+    if memory_manager is None:
+        return None
+    try:
+        from core.neural_memory_backend import NeuralMemoryBackend
+        backend = getattr(memory_manager, "backend", None)
+        if isinstance(backend, NeuralMemoryBackend):
+            return backend.neural_web
+    except ImportError:
+        pass
+    return None
+
+
 @dataclass
 class ExtractedConcept:
     """Represents a concept extracted from text."""
@@ -551,50 +565,71 @@ class RelationshipExtractor:
 
 
 class NeuralWebNLPTool(BaseTool):
-    """Tool for NLP-based concept and relationship extraction for Neural Web."""
+    """Tool for NLP-based concept and relationship extraction for Neural Web.
 
-    def __init__(self, config: WitsV3Config, llm_interface: BaseLLMInterface):
-        super().__init__(config)
+    Dependencies are injected lazily via set_dependencies() (same pattern
+    document/web-search tools use) so tool_registry auto-discovery — which
+    only instantiates tools with zero required constructor args — can find
+    it, and startup can wire in the real config/llm_interface/neural_web
+    afterward.
+    """
+
+    def __init__(self):
+        super().__init__(
+            name="neural_web_nlp_extract",
+            description="Extract concepts and relationships from text for Neural Web integration",
+        )
+        self.config: Optional[WitsV3Config] = None
+        self.llm_interface: Optional[BaseLLMInterface] = None
+        self.concept_extractor: Optional[ConceptExtractor] = None
+        self.relationship_extractor: Optional[RelationshipExtractor] = None
+        self._neural_web = None
+
+    def set_dependencies(self, config: WitsV3Config, llm_interface=None, memory_manager=None, **kwargs) -> None:
+        """Wire in shared system dependencies (called by WitsV3System startup)."""
+        self.config = config
         self.llm_interface = llm_interface
-        self.name = "neural_web_nlp_extract"
-        self.description = "Extract concepts and relationships from text for Neural Web integration"
-
         self.concept_extractor = ConceptExtractor(config, llm_interface)
         self.relationship_extractor = RelationshipExtractor(config, llm_interface)
+        self._neural_web = _resolve_neural_web(memory_manager)
 
     def get_schema(self) -> Dict[str, Any]:
         return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "text": {
-                            "type": "string",
-                            "description": "Text to analyze for concepts and relationships"
-                        },
-                        "domain_hint": {
-                            "type": "string",
-                            "description": "Optional domain hint to guide extraction (e.g., 'technology', 'science')"
-                        },
-                        "extract_relationships": {
-                            "type": "boolean",
-                            "description": "Whether to extract relationships between concepts"
-                        },
-                        "add_to_neural_web": {
-                            "type": "boolean",
-                            "description": "Whether to add extracted concepts to the Neural Web"
-                        }
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Text to analyze for concepts and relationships"
                     },
-                    "required": ["text"]
-                }
+                    "domain_hint": {
+                        "type": "string",
+                        "description": "Optional domain hint to guide extraction (e.g., 'technology', 'science')"
+                    },
+                    "extract_relationships": {
+                        "type": "boolean",
+                        "description": "Whether to extract relationships between concepts"
+                    },
+                    "add_to_neural_web": {
+                        "type": "boolean",
+                        "description": "Whether to add extracted concepts to the Neural Web"
+                    }
+                },
+                "required": ["text"]
             }
         }
 
     async def execute(self, **kwargs) -> ToolResult:
         try:
+            if self.concept_extractor is None or self.relationship_extractor is None:
+                return ToolResult(
+                    success=False,
+                    result=None,
+                    error="neural_web_nlp_extract tool has no dependencies wired (set_dependencies was never called)"
+                )
+
             text = kwargs.get("text", "")
             domain_hint = kwargs.get("domain_hint")
             extract_relationships = kwargs.get("extract_relationships", True)
@@ -664,10 +699,37 @@ class NeuralWebNLPTool(BaseTool):
     async def _add_to_neural_web(self, concepts: List[ExtractedConcept],
                                relationships: List[ExtractedRelationship]):
         """Add extracted concepts and relationships to the Neural Web."""
+        if self._neural_web is None:
+            logger.info(
+                "Neural Web backend not active (memory_manager.backend must be "
+                "'neural') — skipping add_to_neural_web for %d concepts, %d relationships",
+                len(concepts), len(relationships),
+            )
+            return
+
         try:
-            # For now, this is a placeholder
-            # In production, this would integrate with the actual Neural Web instance
-            logger.info(f"Would add {len(concepts)} concepts and {len(relationships)} relationships to Neural Web")
+            concept_ids: Dict[str, str] = {}
+            for concept in concepts:
+                concept_id = re.sub(r"[^a-z0-9]+", "_", concept.text.lower()).strip("_") or None
+                node = await self._neural_web.add_concept(
+                    concept_id,
+                    concept.text,
+                    concept.concept_type,
+                    {"domain": concept.domain, **(concept.metadata or {})},
+                )
+                concept_ids[concept.text] = node.id
+
+            for relationship in relationships:
+                source_id = concept_ids.get(relationship.source_concept)
+                target_id = concept_ids.get(relationship.target_concept)
+                if source_id is None or target_id is None:
+                    continue
+                await self._neural_web.connect_concepts(
+                    source_id, target_id, relationship.relationship_type,
+                    strength=relationship.strength, confidence=relationship.confidence,
+                )
+
+            logger.info(f"Added {len(concept_ids)} concepts and {len(relationships)} relationships to Neural Web")
 
         except Exception as e:
             logger.error(f"Error adding to Neural Web: {e}")

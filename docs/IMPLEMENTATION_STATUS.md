@@ -1,5 +1,7 @@
 # 🧠 WITS Synthetic Brain Implementation Status
 
+> **Historical.** Superseded — see [`SYNTHETIC_BRAIN.md`](SYNTHETIC_BRAIN.md) for current status.
+
 ## Current Implementation Status
 *Last Updated: 2025-06-12*
 
