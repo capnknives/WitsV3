@@ -241,6 +241,7 @@ class BookWritingWriterMixin:
         detailed_outline: str,
         target_words: int,
         book_settings,
+        prior_book_text: str = "",
     ) -> str:
         """Generate the actual prose for one chapter, one outline beat per
         LLM call, with the story bible and prior text as grounding context.
@@ -337,7 +338,9 @@ class BookWritingWriterMixin:
             if segment:
                 chapter_so_far = f"{chapter_so_far.rstrip()}\n\n{segment}".strip()
 
-        return self._dedupe_repeated_paragraphs(self._strip_meta_commentary(chapter_so_far))
+        return self._dedupe_repeated_paragraphs(
+            self._strip_meta_commentary(chapter_so_far), reference=prior_book_text
+        )
 
     # Matches a paragraph where the model breaks character to comment on its
     # own generation process instead of writing story prose -- 2026-07-08
@@ -382,17 +385,31 @@ class BookWritingWriterMixin:
         return stripped[:end]
 
     @staticmethod
-    def _dedupe_repeated_paragraphs(content: str, similarity_threshold: float = 0.8) -> str:
-        """Drop paragraphs that near-duplicate an earlier paragraph in the
-        same chapter. 2026-07-08 live-model finding: beat-by-beat generation
+    def _dedupe_repeated_paragraphs(
+        content: str, similarity_threshold: float = 0.8, reference: str = ""
+    ) -> str:
+        """Drop paragraphs that near-duplicate an earlier paragraph, either
+        within the same chapter or (via `reference`) already written
+        earlier in the book. 2026-07-08 finding: beat-by-beat generation
         occasionally produced a near-verbatim repeat of an earlier beat's
-        resolution (e.g. two beats both landing on the same "agrees to
-        mentor him" exchange, word-for-word across six consecutive
-        paragraphs) instead of progressing the story, even though each beat
-        was generated from a distinct outline bullet."""
+        resolution within one chapter (e.g. two beats both landing on the
+        same "agrees to mentor him" exchange, word-for-word across six
+        consecutive paragraphs).
+
+        2026-07-08, second finding: the same thing happened *across*
+        chapters — the model's "bring the chapter to a close" instruction
+        produces a formulaic inspirational-monologue ending, and because
+        the next chapter's prompt includes the previous chapter's tail as
+        "story so far" context, the model sometimes reproduced that same
+        ten-paragraph closing block almost word-for-word one chapter
+        later. Passing the book's prior text as `reference` catches that
+        case too, not just repeats within the current chapter."""
+        reference_normalized = [
+            re.sub(r"\s+", " ", p.strip().lower()) for p in reference.split("\n\n") if p.strip()
+        ]
         paragraphs = [p for p in content.split("\n\n") if p.strip()]
         kept: list[str] = []
-        normalized_kept: list[str] = []
+        normalized_kept: list[str] = list(reference_normalized)
         for para in paragraphs:
             normalized = re.sub(r"\s+", " ", para.strip().lower())
             if any(
@@ -454,6 +471,9 @@ class BookWritingWriterMixin:
                 continue
 
             continuity_tail = self._read_continuity_tail(output_path)
+            prior_book_text = (
+                output_path.read_text(encoding="utf-8") if output_path.exists() else ""
+            )
 
             yield self.stream_action(
                 f"Planning chapter {idx}/{len(chapters)}: {chapter['title']}..."
@@ -481,6 +501,7 @@ class BookWritingWriterMixin:
                     detailed_outline,
                     per_chapter_target,
                     book_settings,
+                    prior_book_text=prior_book_text,
                 )
             except Exception as e:
                 yield self.stream_error(f"Failed to generate chapter {idx}: {e}")

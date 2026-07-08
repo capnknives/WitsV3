@@ -538,6 +538,20 @@ def test_dedupe_repeated_paragraphs_keeps_distinct_content(agent):
     assert agent._dedupe_repeated_paragraphs(content) == content
 
 
+def test_dedupe_repeated_paragraphs_drops_matches_against_reference(agent):
+    """2026-07-08, second finding: the model's "bring the chapter to a
+    close" instruction produces a formulaic inspirational-monologue
+    ending, and since the next chapter's prompt includes the previous
+    chapter's tail as "story so far" context, it sometimes reproduced that
+    same closing block almost word-for-word one chapter later -- a repeat
+    *across* chapters, which per-chapter-only dedup couldn't catch."""
+    ending = "And so, with renewed determination, he stepped into the unknown once more."
+    reference = f"Some earlier chapter content.\n\n{ending}"
+    new_chapter = f"Fresh new content for this chapter.\n\n{ending}"
+    result = agent._dedupe_repeated_paragraphs(new_chapter, reference=reference)
+    assert result == "Fresh new content for this chapter."
+
+
 # --------------------------------------------- incomplete-sentence trimming
 
 
