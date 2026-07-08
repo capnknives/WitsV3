@@ -23,6 +23,13 @@ from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from core.schemas import ConversationHistory, StreamData
+from web.owner_controls import (
+    owner_auth_detail,
+    owner_auth_failure,
+    owner_command_reply,
+    parse_owner_command,
+    schedule_owner_action,
+)
 from web.routes_mcp import register_mcp_routes
 from web.routes_personality import register_personality_routes
 from web.schemas import (
@@ -30,6 +37,7 @@ from web.schemas import (
     EscalationDecision,
     ExportRequest,
     MemoryPruneRequest,
+    OwnerControlRequest,
     SettingsUpdate,
 )
 from web.user_errors import format_chat_error
@@ -146,7 +154,7 @@ def create_app(system) -> FastAPI:
         return payload
 
     @app.post("/api/chat")
-    async def chat(body: ChatRequest):
+    async def chat(body: ChatRequest, request: Request):
         session_id = body.session_id or str(uuid.uuid4())
 
         if session_id not in system.session_histories:
@@ -154,11 +162,44 @@ def create_app(system) -> FastAPI:
         conversation = system.session_histories[session_id]
         conversation.add_message("user", body.message)
 
+        owner_action = parse_owner_command(body.message)
+
         async def event_stream():
             def sse(event: str, data: dict[str, Any]) -> str:
                 return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
             yield sse("session", {"session_id": session_id})
+
+            # Exact slash commands bypass the agent so the owner can kill a hung UI.
+            if owner_action:
+                denied = owner_auth_detail(request)
+                if denied is not None:
+                    conversation.add_message("assistant", denied)
+                    yield sse(
+                        "stream",
+                        {"type": "error", "content": denied, "source": "web"},
+                    )
+                    yield sse("done", {"final": denied})
+                    return
+
+                reply = owner_command_reply(owner_action)
+                conversation.add_message("assistant", reply)
+                yield sse(
+                    "stream",
+                    {
+                        "type": "result",
+                        "content": reply,
+                        "source": "web",
+                        "owner_action": owner_action,
+                    },
+                )
+                yield sse("done", {"final": reply, "owner_action": owner_action})
+                try:
+                    schedule_owner_action(owner_action, delay_seconds=1.0)
+                except Exception as e:
+                    logger.error(f"Failed to schedule owner {owner_action}: {e}", exc_info=True)
+                return
+
             result_parts = []
             try:
                 async for stream_data in system.control_center.run(
@@ -239,6 +280,37 @@ def create_app(system) -> FastAPI:
             "message_count": len(conversation.messages),
             "message": f"Exported {len(conversation.messages)} messages to {out_path}",
         }
+
+    # ---------------------------------------------------- owner controls
+    @app.post("/api/owner/shutdown")
+    async def owner_shutdown(request: Request, body: OwnerControlRequest | None = None):
+        """Force-stop the web process. Requires WITSV3_WEB_TOKEN + confirm SHUTDOWN."""
+        denied = owner_auth_failure(request)
+        if denied is not None:
+            return denied
+        confirm = (body.confirm if body else "") or ""
+        if confirm.strip().upper() != "SHUTDOWN":
+            return JSONResponse(
+                {"detail": "missing/incorrect confirm (type SHUTDOWN)"},
+                status_code=400,
+            )
+        delay = body.delay_seconds if body and body.delay_seconds is not None else 1.0
+        return schedule_owner_action("shutdown", delay_seconds=delay)
+
+    @app.post("/api/owner/restart")
+    async def owner_restart(request: Request, body: OwnerControlRequest | None = None):
+        """Relaunch the web process. Requires WITSV3_WEB_TOKEN + confirm RESTART."""
+        denied = owner_auth_failure(request)
+        if denied is not None:
+            return denied
+        confirm = (body.confirm if body else "") or ""
+        if confirm.strip().upper() != "RESTART":
+            return JSONResponse(
+                {"detail": "missing/incorrect confirm (type RESTART)"},
+                status_code=400,
+            )
+        delay = body.delay_seconds if body and body.delay_seconds is not None else 1.0
+        return schedule_owner_action("restart", delay_seconds=delay)
 
     # ------------------------------------------------------------- info
     @app.get("/api/status")

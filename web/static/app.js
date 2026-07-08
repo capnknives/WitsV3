@@ -295,6 +295,13 @@ async function sendMessage(text) {
             sawResult = true;
           }
         } else if (event === "done") {
+          if (payload.owner_action === "shutdown") {
+            statusDot.className = "dot bad";
+            statusDot.title = "WITS is shutting down…";
+          } else if (payload.owner_action === "restart") {
+            statusDot.className = "dot warn";
+            statusDot.title = "WITS is restarting…";
+          }
           if (!sawResult && payload.final) {
             if (payload.final.includes("Can't reach Ollama")) {
               addErrorMsg(payload.final.split("\n\n")[0], {
@@ -546,6 +553,6 @@ $("#doc-file").addEventListener("change", async (e) => {
 });
 
 /* ---------------------------------------------------------- boot */
-addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents.");
+addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
 checkStatus();
 setInterval(checkStatus, 30000);

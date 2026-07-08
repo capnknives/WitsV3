@@ -40,6 +40,13 @@ class MemoryPruneRequest(BaseModel):
     confirm: str
 
 
+class OwnerControlRequest(BaseModel):
+    """Chat/API owner process controls (shutdown or restart)."""
+
+    confirm: str
+    delay_seconds: float | None = 1.0
+
+
 class MCPServerAdd(BaseModel):
     name: str
     command: str
