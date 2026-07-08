@@ -48,15 +48,62 @@ INTEREST_KEYWORDS: dict[str, str] = {
     "hardcore": "Minecraft hardcore",
 }
 
-# Capture short self-reported facts from user phrasing.
+# Capture short self-reported facts from user phrasing. Capture up to sentence-ending
+# punctuation (not just \w\s) so clauses like "I am Richard's wife" aren't truncated
+# into a false claim ("I am Richard") at the apostrophe.
 _FACT_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bi(?:'m| am)\s+(?:a\s+)?(\w[\w\s]{2,40})", re.I),
-    re.compile(r"\bi like\s+(.{3,60})", re.I),
-    re.compile(r"\bi love\s+(.{3,60})", re.I),
-    re.compile(r"\bmy favorite\s+(.{3,60})", re.I),
-    re.compile(r"\bi play\s+(.{3,60})", re.I),
-    re.compile(r"\bi'm interested in\s+(.{3,60})", re.I),
+    re.compile(r"\bi(?:'m| am)\s+(?:a\s+)?([^.!?\n]{2,80})", re.I),
+    re.compile(r"\bi like\s+([^.!?\n]{3,80})", re.I),
+    re.compile(r"\bi love\s+([^.!?\n]{3,80})", re.I),
+    re.compile(r"\bmy favorite\s+([^.!?\n]{3,80})", re.I),
+    re.compile(r"\bi play\s+([^.!?\n]{3,80})", re.I),
+    re.compile(r"\bi'm interested in\s+([^.!?\n]{3,80})", re.I),
 )
+
+# Words that plausibly open a question, used to tell statements from questions
+# when logging a conversation-derived fact (see update_from_turn).
+_QUESTION_STARTERS: frozenset[str] = frozenset(
+    {
+        "who",
+        "what",
+        "when",
+        "where",
+        "why",
+        "how",
+        "which",
+        "whose",
+        "is",
+        "are",
+        "am",
+        "was",
+        "were",
+        "do",
+        "does",
+        "did",
+        "can",
+        "could",
+        "will",
+        "would",
+        "should",
+        "shall",
+        "may",
+        "might",
+        "has",
+        "have",
+        "had",
+    }
+)
+
+
+def _is_question(text: str) -> bool:
+    """Heuristic: trailing '?' or a leading interrogative word."""
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if stripped.endswith("?"):
+        return True
+    first_word = stripped.split(None, 1)[0].strip(".,!\"'").lower()
+    return first_word in _QUESTION_STARTERS
 
 
 def _now_iso() -> str:
@@ -231,7 +278,8 @@ class GuestUserProfileStore:
 
         if assistant_message and len(user_message) > 20:
             summary = user_message.strip()[:120]
-            note = f"Asked: {summary}"
+            label = "Asked" if _is_question(user_message) else "Said"
+            note = f"{label}: {summary}"
             if not any(f.get("text") == note for f in facts):
                 facts.append({"text": note, "ts": _now_iso(), "source": "conversation"})
             profile["facts"] = facts[-MAX_FACTS:]
@@ -242,6 +290,41 @@ class GuestUserProfileStore:
             display_name,
             profile["turn_count"],
             len(interests),
+        )
+        return profile
+
+    def set_facts(self, *, guest_id: str, display_name: str, facts: list[str]) -> dict[str, Any]:
+        """Owner-edited replacement of the facts list (e.g. to remove/correct a wrong entry).
+
+        Existing timestamp/source are preserved for facts whose text is unchanged;
+        new or edited lines are recorded with source "owner_edit".
+        """
+        from core.guest_access import GuestRegistry
+
+        reg = GuestRegistry()
+        acct = reg.find_by_display_name(display_name)
+        canonical_id = acct["guest_id"] if acct else guest_id
+        profile = self.load(canonical_id, display_name)
+        profile["display_name"] = display_name
+
+        existing_by_text = {f.get("text"): f for f in (profile.get("facts") or [])}
+        new_facts: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for raw in facts:
+            text = raw.strip()[:MAX_FACT_LEN]
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            prior = existing_by_text.get(text)
+            if prior:
+                new_facts.append(prior)
+            else:
+                new_facts.append({"text": text, "ts": _now_iso(), "source": "owner_edit"})
+        profile["facts"] = new_facts[-MAX_FACTS:]
+
+        self._save_canonical(profile, display_name)
+        logger.info(
+            "Owner edited facts for guest profile %s (count=%s)", display_name, len(new_facts)
         )
         return profile
 

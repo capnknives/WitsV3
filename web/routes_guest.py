@@ -21,6 +21,7 @@ from core.guest_user_profile import GuestUserProfileStore
 from web.access_log import owner_display_name
 from web.schemas import (
     GuestMergeRequest,
+    GuestProfileFactsUpdate,
     GuestRegisterRequest,
     GuestRevokeRequest,
     GuestSetAgeBandRequest,
@@ -243,6 +244,47 @@ def register_guest_routes(
                 display_name=acct.get("display_name"),
                 registry=guest_registry,
             ),
+        }
+
+    @app.patch("/api/guest/admin/profile/facts")
+    async def owner_edit_guest_profile_facts(body: GuestProfileFactsUpdate, request: Request):
+        """Owner-only: replace a guest's saved facts list (fix/remove wrong entries)."""
+        if getattr(request.state, "auth_role", None) != "owner":
+            return JSONResponse(
+                {"detail": "Only the owner can edit guest profiles."},
+                status_code=403,
+            )
+        if not body.guest_id and not body.display_name:
+            return JSONResponse(
+                {"detail": "guest_id or display_name is required."},
+                status_code=400,
+            )
+        acct = None
+        if body.guest_id:
+            acct = guest_registry.get(body.guest_id.strip())
+        elif body.display_name:
+            acct = guest_registry.find_by_display_name(body.display_name.strip())
+        if not acct:
+            return JSONResponse({"detail": "Guest not found."}, status_code=404)
+
+        store = GuestUserProfileStore()
+        name = acct.get("display_name", "Guest")
+        profile = store.set_facts(
+            guest_id=acct["guest_id"],
+            display_name=name,
+            facts=body.facts,
+        )
+        guest_audit.log(
+            guest_id=acct["guest_id"],
+            event_type="profile_facts_edited",
+            display_name=name,
+            meta={"fact_count": len(profile.get("facts") or []), "edited_by": "owner"},
+        )
+        logger.info("Owner edited profile facts for guest %s", name)
+        return {
+            "guest_id": profile.get("guest_id", acct["guest_id"]),
+            "display_name": name,
+            "profile": profile,
         }
 
     @app.delete("/api/guest/admin/account")

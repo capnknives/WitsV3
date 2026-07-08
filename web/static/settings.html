@@ -46,8 +46,15 @@
     .guest-actions button.merge { background: #3d5a7a; }
     .guest-dup-warn { color: #ffcf8f; font-size: 12.5px; margin-bottom: 8px; }
     .guest-profile-pre { background: #0a0c12; border: 1px solid #2c3245; border-radius: 6px;
-                         padding: 8px; font-size: 12px; max-height: 160px; overflow: auto;
-                         white-space: pre-wrap; margin-top: 8px; display: none; }
+                         padding: 8px; font-size: 12px; max-height: 260px; overflow: auto;
+                         margin-top: 8px; display: none; }
+    .guest-fact-row { display: flex; gap: 6px; margin-bottom: 6px; }
+    .guest-fact-row input { flex: 1; background: var(--bg-2, #12151f); border: 1px solid #2c3245;
+                            color: var(--fg); border-radius: 6px; padding: 5px 8px; font: inherit;
+                            font-size: 12.5px; }
+    .guest-fact-remove { background: #a63d3d; border: none; color: #fff; border-radius: 6px;
+                         width: 26px; cursor: pointer; font: inherit; }
+    .guest-facts-empty { color: var(--fg-dim); font-size: 12.5px; margin-bottom: 6px; }
     .actions { display: flex; gap: 10px; margin-top: 22px; }
     #save-btn { background: var(--accent); border: none; color: #fff; border-radius: 8px;
                 padding: 12px 18px; font: inherit; cursor: pointer; flex: 1; }
@@ -289,7 +296,13 @@
             <button type="button" class="danger guest-revoke" data-guest-id="${g.guest_id}" data-name="${g.display_name}">Revoke</button>
           </div>
           ${mergeBlock}
-          <pre class="guest-profile-pre"></pre>`;
+          <div class="guest-profile-pre">
+            <div class="guest-facts-list"></div>
+            <div class="guest-actions" style="margin-top:4px">
+              <button type="button" class="guest-add-fact">+ Add note</button>
+              <button type="button" class="guest-save-facts" data-guest-id="${g.guest_id}" data-name="${g.display_name}">Save notes</button>
+            </div>
+          </div>`;
         const sel = card.querySelector(".guest-band-select");
         sel.value = g.age_band || "teen";
         list.appendChild(card);
@@ -312,6 +325,24 @@
           finally { btn.disabled = false; }
         });
       });
+      function addFactRow(listEl, text) {
+        const row = document.createElement("div");
+        row.className = "guest-fact-row";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.value = text || "";
+        input.maxLength = 200;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "guest-fact-remove";
+        remove.textContent = "✕";
+        remove.addEventListener("click", () => row.remove());
+        row.appendChild(input);
+        row.appendChild(remove);
+        listEl.appendChild(row);
+        return row;
+      }
+
       list.querySelectorAll(".guest-view-profile").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const card = btn.closest(".guest-card");
@@ -324,8 +355,50 @@
           try {
             const res = await api(`/api/guest/admin/profile?display_name=${encodeURIComponent(btn.dataset.name)}`);
             const body = await res.json();
-            pre.textContent = body.summary || JSON.stringify(body.profile, null, 2);
+            const factsList = pre.querySelector(".guest-facts-list");
+            factsList.innerHTML = "";
+            const facts = (body.profile && body.profile.facts) || [];
+            if (!facts.length) {
+              factsList.innerHTML = '<div class="guest-facts-empty">No notes yet.</div>';
+            } else {
+              for (const f of facts) addFactRow(factsList, f.text || "");
+            }
             pre.style.display = "block";
+          } catch (e) { /* handled */ }
+          finally { btn.disabled = false; }
+        });
+      });
+      list.querySelectorAll(".guest-add-fact").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const pre = btn.closest(".guest-profile-pre");
+          const factsList = pre.querySelector(".guest-facts-list");
+          const empty = factsList.querySelector(".guest-facts-empty");
+          if (empty) empty.remove();
+          const row = addFactRow(factsList, "");
+          row.querySelector("input").focus();
+        });
+      });
+      list.querySelectorAll(".guest-save-facts").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const gid = btn.dataset.guestId;
+          const name = btn.dataset.name;
+          const pre = btn.closest(".guest-profile-pre");
+          const facts = [...pre.querySelectorAll(".guest-fact-row input")]
+            .map((i) => i.value.trim())
+            .filter(Boolean);
+          btn.disabled = true;
+          try {
+            const res = await api("/api/guest/admin/profile/facts", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ guest_id: gid, facts }),
+            });
+            if (res.ok) {
+              setStatus(`Saved notes for ${name}`, true);
+              loadGuests();
+            } else {
+              setStatus(`Save failed: ${(await res.json()).detail || res.status}`, false);
+            }
           } catch (e) { /* handled */ }
           finally { btn.disabled = false; }
         });

@@ -138,6 +138,62 @@ def test_owner_revoke_api(guest_env, tmp_path):
     assert reg.get(gid) is None
 
 
+def test_owner_edit_profile_facts_api(guest_env):
+    client, system = guest_env
+    r1 = client.post(
+        "/api/guest/register",
+        json={
+            "invite_code": "family-code",
+            "display_name": "Christina",
+            "device_id": "device-aaa-11111",
+        },
+    )
+    gid = r1.json()["guest_id"]
+    store = GuestUserProfileStore()
+    store.update_from_turn(
+        guest_id=gid,
+        display_name="Christina",
+        user_message="I am Richard's wife.",
+        assistant_message="Hi Christina!",
+    )
+
+    client2 = TestClient(create_app(system))
+    res = client2.patch(
+        "/api/guest/admin/profile/facts",
+        json={"guest_id": gid, "facts": ["Is Richard's wife"]},
+        headers={"Authorization": "Bearer owner-sekrit"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    facts = [f["text"] for f in body["profile"]["facts"]]
+    assert facts == ["Is Richard's wife"]
+
+    profile = store.load_merged_for_display_name("Christina")
+    assert [f["text"] for f in profile["facts"]] == ["Is Richard's wife"]
+
+
+def test_guest_cannot_edit_profile_facts_api(guest_env):
+    client, system = guest_env
+    r1 = client.post(
+        "/api/guest/register",
+        json={
+            "invite_code": "family-code",
+            "display_name": "Christina",
+            "device_id": "device-aaa-11111",
+        },
+    )
+    gid = r1.json()["guest_id"]
+    guest_token = r1.json()["guest_token"]
+
+    client2 = TestClient(create_app(system))
+    res = client2.patch(
+        "/api/guest/admin/profile/facts",
+        json={"guest_id": gid, "facts": ["whatever I want"]},
+        headers={"Authorization": f"Bearer {guest_token}"},
+    )
+    assert res.status_code == 403
+
+
 def test_profile_query_signals():
     probe = _RoutingProbe()
     assert probe._needs_guest_profile_review("what does the system know about TESTER")

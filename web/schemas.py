@@ -32,6 +32,14 @@ class GuestMergeRequest(BaseModel):
     source_guest_id: str
 
 
+class GuestProfileFactsUpdate(BaseModel):
+    """Owner-edited replacement for a guest's saved facts list."""
+
+    facts: list[str]
+    guest_id: str | None = None
+    display_name: str | None = None
+
+
 class ExportRequest(BaseModel):
     session_id: str | None = None
     file_path: str | None = None

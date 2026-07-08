@@ -85,6 +85,47 @@ async def test_guest_user_profile_summary_denied_for_guest():
     assert "only available to the owner" in report
 
 
+def test_possessive_self_report_not_truncated_into_false_identity(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    store = GuestUserProfileStore()
+    profile = store.update_from_turn(
+        guest_id="gid-christina",
+        display_name="Christina",
+        user_message="I am Richard's wife.",
+        assistant_message="Nice to meet you, Christina!",
+    )
+    facts = [f["text"] for f in profile["facts"]]
+    assert not any(f == "I am Richard" for f in facts)
+    assert any("Richard's wife" in f for f in facts)
+
+
+def test_statement_is_not_labeled_as_a_question(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    store = GuestUserProfileStore()
+    profile = store.update_from_turn(
+        guest_id="gid-christina2",
+        display_name="Christina",
+        user_message="I am Richard's wife, just so you know who I am.",
+        assistant_message="Got it!",
+    )
+    facts = [f["text"] for f in profile["facts"]]
+    assert not any(f.startswith("Asked:") for f in facts)
+    assert any(f.startswith("Said:") for f in facts)
+
+
+def test_real_question_is_still_labeled_as_asked(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    store = GuestUserProfileStore()
+    profile = store.update_from_turn(
+        guest_id="gid-q",
+        display_name="Alex",
+        user_message="What is the weather like today where you are?",
+        assistant_message="I can't check live weather.",
+    )
+    facts = [f["text"] for f in profile["facts"]]
+    assert any(f.startswith("Asked:") for f in facts)
+
+
 @pytest.mark.asyncio
 async def test_wcca_routes_guest_profile_questions_to_orchestrator():
     probe = _RoutingProbe()

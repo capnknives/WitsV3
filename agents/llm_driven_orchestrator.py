@@ -215,6 +215,7 @@ Important:
 - When your observations contain web_search results, they include a "summary" line plus numbered SOURCES. The summary is usually the correct, already-extracted answer — make your final_answer that summary, phrased to address the exact question. Only override it if a source clearly contradicts it. Do NOT discard a correct summary just because the sources are broad "list of everyone who died in 2026" pages — those lists are noisy and easy to misread.
 - Answer only the specific thing asked. If the question is "who did X on <date>", give the single correct person for that exact date as a direct sentence, not a long list of many names and dates.
 - Do not claim you cannot access information a tool could retrieve; call the tool instead.
+- For questions about the WitsV3 system itself — who has signed up / joined, guest or family-tester accounts, a specific user's recent activity, server/system status, or recent errors — do NOT use document_search or web_search (they cannot see this). Use guest_accounts_list (who has joined / active accounts), guest_audit_summary (what a specific guest/user did recently), and diagnose_log_errors (recent errors/tracebacks in the running system) instead, and combine their results in your final_answer.
 
 Respond ONLY with valid JSON."""
 
