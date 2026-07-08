@@ -40,6 +40,7 @@ Practical map of the repo as of July 2026. Prefer this + [`README.md`](README.md
 | `setup_auth.py` | Writes `WITSV3_AUTH_TOKEN_HASH` into `.env` |
 | `config.yaml` | Main configuration |
 | `.env.example` | Secrets template → copy to `.env` |
+| `WORKTREES.md` | Personal vs Cursor vs Claude local folder roles |
 | `requirements.txt` / `requirements.lock` | Dependencies |
 | `pyproject.toml` | Project / tool config (single source; no separate pytest.ini / mypy.ini) |
 | `start_web_ui.bat` | Windows launcher using project `.venv` |
