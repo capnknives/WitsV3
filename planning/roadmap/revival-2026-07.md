@@ -114,7 +114,7 @@ suggested next steps.
 2. **Re-test save-to-file** after restart: *"Save a log of our conversations as exports/chat_log.txt"* — expect orchestrator → `read_conversation_history` → `write_file`, not JSON parse loops.
 3. ~~Merge `composer/orchestrator-search-quality` → `main`~~ DONE July 7 2026: `claude/tier2-tier3-cleanup-2026-07` (superset of `composer/orchestrator-search-quality` plus Tier 2/3 cleanup below) fast-forward merged into `fix/revive-2026-07`.
 4. Optional roadmap #11: MCP OCI/Docker install, browse-before-install preview, deep-link from `search_mcp_tools` to `/mcp`.
-5. Optional quality follow-up from logs: WCCA intent JSON repair-reparse (same pattern as orchestrator). Embedding input truncation is DONE (`7660664`).
+5. ~~Optional quality follow-up from logs: WCCA intent JSON repair-reparse~~ SHIPPED July 7 2026 (`fix/wcca-intent-json-repair`): shared `core/json_llm_parser.py` (extract/repair used by orchestrator + WCCA); intent calls use `format=json`; repair-reparse round trip in `_analyze_user_intent`; tests in `tests/agents/test_wcca_intent_json.py`. Embedding input truncation is DONE (`7660664`).
 
 ### Whole-repo audit backlog (July 7, 2026)
 
