@@ -12,14 +12,17 @@
 </head>
 <body>
   <header>
-    <button id="menu-btn" title="Panels">☰</button>
+    <button id="menu-btn" class="icon-btn" title="Panels">☰</button>
     <div class="title">
-      <span class="logo">◆</span> WITS
+      <span class="logo">◆</span>
+      <span class="title-text">WITS</span>
       <span id="status-dot" class="dot" title="checking…"></span>
     </div>
-    <a id="header-settings-link" href="/settings" title="System settings">🎛</a>
-    <button id="export-btn" title="Export chat to file">⬇</button>
-    <button id="new-chat-btn" title="New chat">＋</button>
+    <div class="header-actions">
+      <a id="header-settings-link" class="icon-btn" href="/settings" title="System settings">🎛</a>
+      <button id="export-btn" class="icon-btn" title="Export chat to file">⬇</button>
+      <button id="new-chat-btn" class="icon-btn" title="New chat">＋</button>
+    </div>
   </header>
 
   <main id="chat"></main>
