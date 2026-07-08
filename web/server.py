@@ -25,6 +25,7 @@ from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from core.content_policy import check_guest_content
+from core.conversation_compaction import maybe_flush_conversation_memory
 from core.guest_access import (
     GuestRegistry,
     enrich_guest_payload,
@@ -57,6 +58,8 @@ from web.schemas import (
     ExportRequest,
     MemoryPruneRequest,
     OwnerControlRequest,
+    SessionCreateResponse,
+    SessionRenameRequest,
     SettingsUpdate,
 )
 from web.user_errors import format_chat_error
@@ -67,6 +70,44 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 # Paths that never require auth (the shell page + PWA assets load before the
 # user can enter a token; every /api/* call is protected).
+def _auto_session_title(message: str) -> str:
+    text = " ".join((message or "").strip().split())
+    if not text:
+        return "New chat"
+    if len(text) > 48:
+        return text[:45] + "..."
+    return text
+
+
+def _resolve_storage_session_id(raw_session: str, guest: dict | None) -> str:
+    if guest:
+        return guest_session_key(guest["guest_id"], raw_session)
+    return raw_session
+
+
+def _client_session_id(storage_id: str, guest: dict | None) -> str:
+    if guest:
+        prefix = f"guest:{guest['guest_id']}:"
+        if storage_id.startswith(prefix):
+            return storage_id[len(prefix) :]
+    return storage_id
+
+
+def _session_visible_to_request(storage_id: str, guest: dict | None) -> bool:
+    if not guest:
+        return not storage_id.startswith("guest:")
+    prefix = f"guest:{guest['guest_id']}:"
+    return storage_id.startswith(prefix)
+
+
+def _last_user_preview(conversation: ConversationHistory) -> str:
+    for msg in reversed(conversation.messages):
+        if msg.role == "user" and msg.content:
+            text = " ".join(msg.content.strip().split())
+            return text[:80] if len(text) > 80 else text
+    return ""
+
+
 PUBLIC_PATHS = {
     "/",
     "/join",
@@ -224,6 +265,8 @@ def create_app(system) -> FastAPI:
             system.session_histories[session_id] = ConversationHistory(session_id=session_id)
         conversation = system.session_histories[session_id]
         conversation.add_message("user", body.message)
+        if not conversation.title or conversation.title == "New chat":
+            conversation.title = _auto_session_title(body.message)
 
         def _guest_age_band() -> str:
             if not guest:
@@ -331,6 +374,14 @@ def create_app(system) -> FastAPI:
                     guest_registry,
                 )
             try:
+                await maybe_flush_conversation_memory(
+                    conversation,
+                    history_window=system.config.agents.history_window,
+                    memory_manager=system.memory_manager,
+                    llm_interface=getattr(system, "llm_interface", None),
+                    session_id=session_id,
+                    skip_global_store=bool(guest),
+                )
                 async for stream_data in system.control_center.run(
                     user_input=body.message,
                     conversation_history=conversation,
@@ -456,6 +507,70 @@ def create_app(system) -> FastAPI:
             "message_count": len(conversation.messages),
             "message": f"Exported {len(conversation.messages)} messages to {out_path}",
         }
+
+    # -------------------------------------------------------- sessions
+    @app.get("/api/sessions")
+    async def list_sessions(request: Request):
+        """List chat sessions visible to the current caller (owner or guest)."""
+        guest = getattr(request.state, "guest", None)
+        items = []
+        for storage_id, conv in system.session_histories.items():
+            if not _session_visible_to_request(storage_id, guest):
+                continue
+            items.append(
+                {
+                    "session_id": _client_session_id(storage_id, guest),
+                    "title": conv.title or "New chat",
+                    "updated_at": conv.updated_at.isoformat(),
+                    "message_count": len(conv.messages),
+                    "preview": _last_user_preview(conv),
+                }
+            )
+        items.sort(key=lambda row: row["updated_at"], reverse=True)
+        return {"sessions": items}
+
+    @app.post("/api/sessions")
+    async def create_session(request: Request):
+        """Start a new empty chat session."""
+        guest = getattr(request.state, "guest", None)
+        client_id = str(uuid.uuid4())
+        storage_id = _resolve_storage_session_id(client_id, guest)
+        conv = ConversationHistory(session_id=storage_id, title="New chat")
+        system.session_histories[storage_id] = conv
+        return SessionCreateResponse(session_id=client_id, title=conv.title)
+
+    @app.get("/api/sessions/{session_id}/messages")
+    async def get_session_messages(session_id: str, request: Request):
+        """Restore transcript when switching sessions in the UI."""
+        guest = getattr(request.state, "guest", None)
+        storage_id = _resolve_storage_session_id(session_id, guest)
+        if storage_id not in system.session_histories:
+            return JSONResponse({"detail": "session not found"}, status_code=404)
+        if not _session_visible_to_request(storage_id, guest):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        conv = system.session_histories[storage_id]
+        return {
+            "session_id": session_id,
+            "title": conv.title or "New chat",
+            "messages": [{"role": m.role, "content": m.content} for m in conv.messages],
+        }
+
+    @app.patch("/api/sessions/{session_id}")
+    async def rename_session(session_id: str, body: SessionRenameRequest, request: Request):
+        """Rename a session for the session list."""
+        guest = getattr(request.state, "guest", None)
+        storage_id = _resolve_storage_session_id(session_id, guest)
+        if storage_id not in system.session_histories:
+            return JSONResponse({"detail": "session not found"}, status_code=404)
+        if not _session_visible_to_request(storage_id, guest):
+            return JSONResponse({"detail": "forbidden"}, status_code=403)
+        title = (body.title or "").strip()
+        if not title:
+            return JSONResponse({"detail": "title required"}, status_code=400)
+        conv = system.session_histories[storage_id]
+        conv.title = title[:120]
+        conv.updated_at = datetime.now()
+        return {"session_id": session_id, "title": conv.title}
 
     # ---------------------------------------------------- owner controls
     @app.post("/api/owner/shutdown")

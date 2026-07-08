@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from core.schemas import ConversationHistory
+
 
 class OrchestratorRoutingMixin:
     """Document, web-search, and file-write routing for the control center."""
@@ -375,6 +377,181 @@ class OrchestratorRoutingMixin:
             return True
         return self._needs_web_search(user_input)
 
+    def _messages_before_current_turn(
+        self, conversation_history: ConversationHistory | None
+    ) -> list:
+        """History excluding the in-flight user message (already appended in web/CLI)."""
+        if not conversation_history or not conversation_history.messages:
+            return []
+        messages = conversation_history.messages
+        if messages[-1].role == "user":
+            return messages[:-1]
+        return messages
+
+    def _last_assistant_message(self, conversation_history: ConversationHistory | None) -> str:
+        for msg in reversed(self._messages_before_current_turn(conversation_history)):
+            if msg.role == "assistant":
+                return msg.content or ""
+        return ""
+
+    def _last_user_message_before_current(
+        self, conversation_history: ConversationHistory | None
+    ) -> str:
+        prior = self._messages_before_current_turn(conversation_history)
+        for msg in reversed(prior):
+            if msg.role == "user":
+                return msg.content or ""
+        return ""
+
+    _GENERIC_ASSISTANT_QUESTIONS = (
+        "how can i help",
+        "how may i assist",
+        "what can i do for you",
+        "anything else i can",
+        "how are you",
+        "what would you like to work on",
+    )
+
+    def _assistant_message_awaited_reply(self, text: str) -> bool:
+        """True when the assistant's last turn invited a task-shaping user answer."""
+        t = (text or "").strip()
+        if not t:
+            return False
+        lowered = t.lower()
+        if any(marker in lowered for marker in self._GENERIC_ASSISTANT_QUESTIONS):
+            return False
+        if t.endswith("?"):
+            return True
+        markers = (
+            "which one",
+            "could you clarify",
+            "please clarify",
+            "let me know",
+            "tell me which",
+            "what would you like",
+            "can you specify",
+            "more details",
+            "which file",
+            "which report",
+            "which document",
+            "what do you mean",
+            "look it up",
+            "would you like me to",
+        )
+        return any(marker in lowered for marker in markers)
+
+    @staticmethod
+    def _is_short_follow_up_reply(message: str) -> bool:
+        """Short reply that likely continues prior context instead of starting small talk."""
+        stripped = (message or "").strip()
+        if not stripped:
+            return False
+        words = stripped.split()
+        if len(words) > 12:
+            return False
+        lowered = stripped.lower().rstrip("!.,")
+        affirmatives = {
+            "yes",
+            "yeah",
+            "yep",
+            "yup",
+            "sure",
+            "ok",
+            "okay",
+            "no",
+            "nope",
+            "go ahead",
+            "do it",
+            "do that",
+        }
+        if lowered in affirmatives:
+            return True
+        referential_phrases = (
+            "summarize it",
+            "look it up",
+            "that one",
+            "this one",
+            "the same",
+            "the audit",
+            "the report",
+            "the file",
+            "the first",
+            "the second",
+            "same one",
+            "that report",
+            "that file",
+        )
+        if any(phrase in lowered for phrase in referential_phrases):
+            return True
+        if len(words) <= 6 and any(token in lowered for token in ("it", "that", "this", "one")):
+            return True
+        return False
+
+    def _prior_turn_was_task_context(
+        self, conversation_history: ConversationHistory | None
+    ) -> bool:
+        """Prior user turn looked like a task rather than pure small talk."""
+        prior_user = self._last_user_message_before_current(conversation_history)
+        if not prior_user:
+            return False
+        if self._needs_web_search(prior_user) or self._needs_file_write(prior_user):
+            return True
+        lowered = prior_user.lower()
+        task_verbs = (
+            "summarize",
+            "search",
+            "find",
+            "fix",
+            "write",
+            "read",
+            "analyze",
+            "explain",
+            "compare",
+            "list",
+            "show",
+            "check",
+            "audit",
+            "report",
+            "document",
+        )
+        return any(verb in lowered for verb in task_verbs)
+
+    def _is_conversation_follow_up(
+        self, user_input: str, conversation_history: ConversationHistory | None
+    ) -> bool:
+        """True when the current message continues an in-progress exchange."""
+        if not conversation_history or len(conversation_history.messages) < 2:
+            return False
+        last_assistant = self._last_assistant_message(conversation_history)
+        if not last_assistant:
+            return False
+        if self._assistant_message_awaited_reply(last_assistant):
+            return True
+        if self._is_short_follow_up_reply(user_input) and self._prior_turn_was_task_context(
+            conversation_history
+        ):
+            return True
+        return False
+
+    def _follow_up_routing_message(
+        self, user_input: str, conversation_history: ConversationHistory | None
+    ) -> str:
+        """Combine prior user turn with a short follow-up for routing heuristics."""
+        prior_user = self._last_user_message_before_current(conversation_history)
+        if prior_user and self._is_short_follow_up_reply(user_input):
+            return f"{prior_user} {user_input}"
+        return user_input
+
+    def _orchestrator_follow_up_intent(self, notes: str) -> dict[str, Any]:
+        return {
+            "type": "task",
+            "complexity": "moderate",
+            "requires_tools": True,
+            "suggested_response": "orchestrator",
+            "notes": notes,
+            "confidence": 0.85,
+        }
+
     def _normalize_parsed_intent(self, parsed: dict[str, Any]) -> dict[str, Any]:
         """Fill routing metadata so the handler does not rely on loose defaults."""
         intent_type = parsed.get("type", "goal_defined")
@@ -400,16 +577,27 @@ class OrchestratorRoutingMixin:
             parsed.setdefault("suggested_response", "direct")
         return parsed
 
-    def _is_casual_conversation(self, message: str) -> bool:
+    def _is_casual_conversation(
+        self,
+        message: str,
+        conversation_history: ConversationHistory | None = None,
+    ) -> bool:
         """
         Determine if a message is casual conversation.
 
         Args:
             message: The user's message
+            conversation_history: Optional prior turns (current user message may
+                already be appended)
 
         Returns:
             True if it's casual conversation
         """
+        if conversation_history and self._is_conversation_follow_up(
+            message, conversation_history
+        ):
+            return False
+
         lowered = message.lower()
         # Single words match on word boundaries only — a plain substring test
         # made "hi" match inside "things"/"this" and flagged real requests

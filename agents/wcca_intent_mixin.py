@@ -47,9 +47,20 @@ class WCCAIntentMixin:
                 "confidence": 0.8 if needs_web else 0.85,
             }
 
+        if conversation_history and self._is_conversation_follow_up(
+            user_input, conversation_history
+        ):
+            routing_message = self._follow_up_routing_message(
+                user_input, conversation_history
+            )
+            if await self._requires_orchestrator_for_input(routing_message):
+                return self._orchestrator_follow_up_intent(
+                    "Follow-up to a prior task — routing to orchestrator with conversation context."
+                )
+
         doc_inventory = await self._get_document_inventory()
 
-        is_casual = self._is_casual_conversation(user_input)
+        is_casual = self._is_casual_conversation(user_input, conversation_history)
 
         if is_casual:
             return {
@@ -186,6 +197,7 @@ Guidelines:
 - Use "goal_defined" for clear, actionable requests that need orchestration
 - Use "clarification_question" for ambiguous requests needing more information
 - Use "direct_response" for simple questions, greetings, or chat
+- Short follow-ups ("yes", "that one", "summarize it", "look it up") after a prior user task or after you asked a clarifying question are usually "goal_defined" — read CONVERSATION HISTORY and continue the same task; do NOT treat them as casual chat
 - If answering needs current, real-time, or post-training-cutoff information (news, recent or upcoming events, who won/died recently, prices, weather, sports results) OR the user says to "look it up"/"search", use "goal_defined" — the orchestrator has a web_search tool. Do NOT answer such questions from memory or claim a knowledge cutoff; route them so they get searched.
 - Any request about the user's documents or files is "goal_defined" (it needs the document_search tool). The USER DOCUMENTS list above is authoritative: if a document is listed there, it exists and is accessible — never ask the user to confirm it or claim there is no record of it.
 - For any request to 'remember', 'recall', or 'don't forget', use your semantic memory system (not file storage). Use the memory manager to store and retrieve facts for future conversations.

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from core.content_policy import check_guest_content, normalize_age_band
+from core.content_policy import (
+    check_guest_content,
+    guest_system_prompt_slice,
+    normalize_age_band,
+)
+from core.guest_policy_loader import load_guest_policy
 from core.guest_access import GuestRegistry
 from tests.web.test_guest_access import _register, guest_env
 from tools.guest_audit_tool import GuestSetAgeBandTool
@@ -98,3 +103,15 @@ async def test_guest_set_age_band_tool(tmp_path, monkeypatch):
     assert "Sean" in out
     assert "teen" in out
     assert reg.find_by_display_name("Sean")["age_band"] == "teen"
+
+
+def test_guest_policy_yaml_loads_blocklists():
+    policy = load_guest_policy()
+    assert "absolute_blocked_terms" in policy
+    assert "how to make meth" in policy["absolute_blocked_terms"]
+
+
+def test_guest_system_prompt_slice_mentions_age_band():
+    text = guest_system_prompt_slice("child")
+    assert "child" in text.lower()
+    assert "guest session" in text.lower()

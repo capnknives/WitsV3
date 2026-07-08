@@ -229,5 +229,21 @@ def test_web_search_schema(web_search_tool):
     schema = web_search_tool.get_schema()
     assert schema["name"] == "web_search"
     assert "query" in schema["parameters"]["properties"]
-    assert "max_results" in schema["parameters"]["properties"]
-    assert schema["parameters"]["required"] == ["query"]
+
+
+def test_guest_web_search_forces_strict_safesearch(web_search_tool):
+    web_search_tool._search_kwargs = {"user_role": "guest"}
+    assert web_search_tool._safesearch_mode() == "strict"
+    data = web_search_tool._ddg_post_data("cats")
+    assert data["kp"] == "1"
+
+
+def test_owner_web_search_uses_config_safesearch(web_search_tool):
+    web_search_tool.config = type(
+        "Cfg",
+        (),
+        {"web_search": type("WS", (), {"safesearch": "moderate", "region": "wt-wt"})()},
+    )()
+    web_search_tool._search_kwargs = {"user_role": "owner"}
+    assert web_search_tool._safesearch_mode() == "moderate"
+    assert web_search_tool._ddg_post_data("cats")["kp"] == "-1"

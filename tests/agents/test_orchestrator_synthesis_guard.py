@@ -73,3 +73,35 @@ def test_auto_synthesize_from_web_summary():
     text = h._auto_synthesize_from_observations(state)
     assert text is not None
     assert "Oliver Tree" in text
+
+
+def test_blocks_confident_answer_when_no_document_passages():
+    h = _harness()
+    state = {
+        "goal": "Summarize the audit report",
+        "observations": [
+            "document_search results (base your answer on the EXCERPTS below):\n"
+            "(no matching passages — try a broader query before giving up)"
+        ],
+        "synthesis_guard_retries": 0,
+    }
+    msg = h._validate_final_answer_synthesis(
+        "The audit shows revenue grew 40% and margins improved sharply.",
+        state,
+    )
+    assert msg is not None
+    assert "no strong excerpts" in msg
+
+
+def test_auto_synthesize_returns_insufficient_evidence_message():
+    h = _harness()
+    state = {
+        "goal": "Summarize the audit report",
+        "observations": [
+            "document_search results (base your answer on the EXCERPTS below):\n"
+            "(no matching passages — try a broader query before giving up)"
+        ],
+    }
+    text = h._auto_synthesize_from_observations(state)
+    assert text is not None
+    assert "didn't find passages" in text

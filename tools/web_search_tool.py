@@ -75,6 +75,23 @@ class WebSearchTool(BaseTool):
         settings = self._settings()
         return getattr(settings, attr, default) if settings is not None else default
 
+    def _safesearch_mode(self) -> str:
+        """Guest sessions always use strict safe-search."""
+        kwargs = getattr(self, "_search_kwargs", {}) or {}
+        if kwargs.get("user_role") == "guest":
+            return "strict"
+        mode = str(self._get("safesearch", "moderate")).lower()
+        if mode not in _SAFESEARCH_VQD:
+            return "moderate"
+        return mode
+
+    def _ddg_post_data(self, query: str) -> dict[str, str]:
+        data = {"q": query, "kl": self._get("region", "wt-wt")}
+        kp = _SAFESEARCH_VQD.get(self._safesearch_mode())
+        if kp is not None:
+            data["kp"] = kp
+        return data
+
     def _tavily_key(self) -> str:
         return self._get("tavily_api_key", "") or os.getenv("TAVILY_API_KEY", "")
 
@@ -83,7 +100,7 @@ class WebSearchTool(BaseTool):
 
     # --- entry point ----------------------------------------------------
 
-    async def execute(self, query: str, max_results: int = 5) -> dict[str, Any]:
+    async def execute(self, query: str, max_results: int = 5, **kwargs) -> dict[str, Any]:
         """Run a web search.
 
         In "auto" mode with both keys set, Tavily and Brave are queried
@@ -91,11 +108,15 @@ class WebSearchTool(BaseTool):
         summary (from Tavily) plus independent sources from both engines to
         cross-check it against. Returns {success, provider, results:
         [{title, link, snippet}], answer?, answer_provider?, error?}.
+
+        kwargs:
+            user_role: when ``guest``, forces strict safe-search filtering.
         """
         query = (query or "").strip()
         if not query:
             return {"success": False, "error": "Empty search query", "results": []}
 
+        self._search_kwargs = kwargs
         provider = str(self._get("provider", "auto")).lower()
         max_results = max(1, int(max_results or self._get("max_results", 5)))
 
@@ -283,13 +304,13 @@ class WebSearchTool(BaseTool):
 
     async def _search_ddg_html(self, query: str, max_results: int):
         """Scrape the DuckDuckGo HTML endpoint (real organic results, keyless)."""
-        data = {"q": query, "kl": self._get("region", "wt-wt")}
+        data = self._ddg_post_data(query)
         markup = await self._ddg_post("https://html.duckduckgo.com/html/", data)
         return self._parse_ddg_html(markup, max_results), None
 
     async def _search_ddg_lite(self, query: str, max_results: int):
         """Scrape the DuckDuckGo Lite endpoint — simpler markup, dodges walls."""
-        data = {"q": query, "kl": self._get("region", "wt-wt")}
+        data = self._ddg_post_data(query)
         markup = await self._ddg_post("https://lite.duckduckgo.com/lite/", data)
         return self._parse_ddg_lite(markup, max_results), None
 

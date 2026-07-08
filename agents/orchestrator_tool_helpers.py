@@ -422,6 +422,57 @@ class OrchestratorToolHelpersMixin:
                 return line.split(":", 1)[1].strip()
         return None
 
+    def _goal_expects_documents(self, goal: str) -> bool:
+        lowered = (goal or "").lower()
+        signals = (
+            "document",
+            "report",
+            "file",
+            "upload",
+            "audit",
+            "my notes",
+            "ingested",
+            "summarize",
+        )
+        return any(sig in lowered for sig in signals)
+
+    @staticmethod
+    def _document_search_weak(doc_obs: str) -> bool:
+        if not doc_obs:
+            return False
+        if "(no matching passages" in doc_obs or "(search failed:" in doc_obs:
+            return True
+        import re
+
+        scores = [float(m) for m in re.findall(r"relevance=([0-9.]+)", doc_obs)]
+        return bool(scores) and max(scores) < 0.25
+
+    @staticmethod
+    def _answer_acknowledges_gap(answer: str) -> bool:
+        lowered = (answer or "").lower()
+        gap_phrases = (
+            "not in your",
+            "couldn't find",
+            "could not find",
+            "no matching",
+            "don't have",
+            "do not have",
+            "not uploaded",
+            "insufficient",
+            "try uploading",
+            "broader query",
+            "didn't find",
+            "did not find",
+        )
+        return any(phrase in lowered for phrase in gap_phrases)
+
+    def _insufficient_document_evidence_message(self, goal: str) -> str:
+        return (
+            f"I searched your ingested documents for “{goal}” but didn't find passages "
+            "that clearly answer the question. Try rephrasing, naming a specific file, "
+            "or uploading the document if it isn't in the documents folder yet."
+        )
+
     def _validate_final_answer_synthesis(
         self, final_answer: str, state: dict[str, Any]
     ) -> str | None:
@@ -432,8 +483,18 @@ class OrchestratorToolHelpersMixin:
         if not observations or not final_answer or not str(final_answer).strip():
             return None
 
+        goal = state.get("goal", "")
         doc_obs = self._latest_observation_prefix(observations, "document_search results")
-        if doc_obs and "(no matching passages" not in doc_obs:
+        if doc_obs and self._document_search_weak(doc_obs) and self._goal_expects_documents(goal):
+            if not self._answer_acknowledges_gap(final_answer):
+                return (
+                    "document_search found no strong excerpts but the answer sounds definitive. "
+                    "Say clearly that the uploaded documents do not contain enough evidence."
+                )
+
+        if doc_obs and "(no matching passages" not in doc_obs and not self._document_search_weak(
+            doc_obs
+        ):
             if self._answer_denies_access(final_answer):
                 return (
                     "document_search returned excerpts but the answer claims no access. "
@@ -480,6 +541,9 @@ class OrchestratorToolHelpersMixin:
                 return f"Based on web search for your question: {lines[0]}"
 
         doc_obs = self._latest_observation_prefix(observations, "document_search results")
+        if doc_obs and self._document_search_weak(doc_obs):
+            return self._insufficient_document_evidence_message(goal)
+
         if doc_obs and "(no matching passages" not in doc_obs:
             excerpt_lines = [
                 ln.strip()
@@ -553,6 +617,9 @@ class OrchestratorToolHelpersMixin:
             "guest_set_age_band",
             "guest_user_profile_summary",
         ):
+            args.setdefault("user_role", state.get("user_role", "owner"))
+
+        if tool_name == "web_search":
             args.setdefault("user_role", state.get("user_role", "owner"))
 
         return args

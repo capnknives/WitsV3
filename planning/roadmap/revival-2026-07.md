@@ -136,12 +136,25 @@ Quick gates before promoting `fix/revive-2026-07` → `main`:
 3. Re-run full pytest and clear any remaining failures before calling the branch green.
 4. Docs/install authenticity pass — ✅ README + planning indexes updated July 8 2026.
 
+### Phase 1 — Trust & daily-use quality (July 8 2026)
+
+All six Phase 1 items from [`suggested-features-2026-07.md`](suggested-features-2026-07.md) §2:
+
+| Item | What shipped |
+|------|----------------|
+| 1.1 Conversation-history-aware intent | WCCA follow-up detection; short replies after clarifications route to orchestrator |
+| 1.2 Guest Phase 3–4 | `config/guest_policy.yaml`, strict guest web_search safesearch, guest rules in prompts |
+| 1.3 Hybrid document search | In-process BM25 + vector score fusion in `document_search` |
+| 1.4 Pre-compaction memory flush | `maybe_flush_conversation_memory` before agent runs (owner sessions) |
+| 1.5 Evidence sufficiency gate | Synthesis guard blocks confident answers when document retrieval is weak |
+| 1.6 Multi-session chat UI | `/api/sessions` list/create/rename/restore; **Chats** tab in side panel |
+
 ### Guest / family-tester access (July 8 2026)
 
 Safe MVP landed on `cursor/work`: `/join` invite flow, HMAC guest tokens, device
 registry (`data/guest_profiles.json`), owner-only API deny, orchestrator tool
-allowlist, no specialist-agent routing for guests. Plan + remaining Phase 3–4
-work: [`guest-tester-access-2026-07.md`](guest-tester-access-2026-07.md).
+allowlist, no specialist-agent routing for guests. Phase 3–4 content policy +
+admin UI complete — see [`guest-tester-access-2026-07.md`](guest-tester-access-2026-07.md).
 
 ### Whole-repo audit (Tiers 1–4) — complete
 

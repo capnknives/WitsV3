@@ -5,13 +5,15 @@ from __future__ import annotations
 import re
 from typing import Literal
 
+from core.guest_policy_loader import policy_patterns, policy_terms
+
 Direction = Literal["input", "output"]
 AgeBand = Literal["child", "teen", "adult"]
 
 VALID_AGE_BANDS: frozenset[str] = frozenset({"child", "teen", "adult"})
 
-# Shared illegal / harm blocklist (all tiers).
-_ABSOLUTE_BLOCKED_TERMS: tuple[str, ...] = (
+# Built-in defaults — used when config/guest_policy.yaml is missing or empty.
+_BUILTIN_ABSOLUTE_BLOCKED_TERMS: tuple[str, ...] = (
     "child porn",
     "cp ",
     "how to make meth",
@@ -22,12 +24,11 @@ _ABSOLUTE_BLOCKED_TERMS: tuple[str, ...] = (
     "self harm method",
 )
 
-_ABSOLUTE_BLOCKED_PATTERNS: tuple[re.Pattern[str], ...] = (
+_BUILTIN_ABSOLUTE_BLOCKED_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bhow\s+to\s+(make|build|synthesize)\s+(meth|cocaine|heroin|fentanyl)\b", re.I),
 )
 
-# Teen + child: family-friendly (no explicit adult content, drugs, etc.).
-_FAMILY_BLOCKED_TERMS: tuple[str, ...] = (
+_BUILTIN_FAMILY_BLOCKED_TERMS: tuple[str, ...] = (
     "porn",
     "pornography",
     "xxx",
@@ -42,12 +43,11 @@ _FAMILY_BLOCKED_TERMS: tuple[str, ...] = (
     "kill myself",
 )
 
-_FAMILY_BLOCKED_PATTERNS: tuple[re.Pattern[str], ...] = (
+_BUILTIN_FAMILY_BLOCKED_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\b(buy|sell|get)\s+(weed|marijuana|cocaine|meth|heroin)\b", re.I),
 )
 
-# Child: strictest — extra topics teens might discuss in supervised contexts.
-_CHILD_EXTRA_TERMS: tuple[str, ...] = (
+_BUILTIN_CHILD_EXTRA_TERMS: tuple[str, ...] = (
     "alcohol",
     "beer",
     "wine",
@@ -81,19 +81,25 @@ def normalize_age_band(value: str | None, *, default: str = "teen") -> str:
 
 def _terms_for_band(age_band: str) -> tuple[str, ...]:
     band = normalize_age_band(age_band)
-    terms = list(_ABSOLUTE_BLOCKED_TERMS)
+    terms = list(
+        policy_terms("absolute_blocked_terms", _BUILTIN_ABSOLUTE_BLOCKED_TERMS)
+    )
     if band in ("child", "teen"):
-        terms.extend(_FAMILY_BLOCKED_TERMS)
+        terms.extend(policy_terms("family_blocked_terms", _BUILTIN_FAMILY_BLOCKED_TERMS))
     if band == "child":
-        terms.extend(_CHILD_EXTRA_TERMS)
+        terms.extend(policy_terms("child_extra_terms", _BUILTIN_CHILD_EXTRA_TERMS))
     return tuple(terms)
 
 
 def _patterns_for_band(age_band: str) -> tuple[re.Pattern[str], ...]:
     band = normalize_age_band(age_band)
-    patterns = list(_ABSOLUTE_BLOCKED_PATTERNS)
+    patterns = list(
+        policy_patterns("absolute_blocked_patterns", _BUILTIN_ABSOLUTE_BLOCKED_PATTERNS)
+    )
     if band in ("child", "teen"):
-        patterns.extend(_FAMILY_BLOCKED_PATTERNS)
+        patterns.extend(
+            policy_patterns("family_blocked_patterns", _BUILTIN_FAMILY_BLOCKED_PATTERNS)
+        )
     return tuple(patterns)
 
 
@@ -148,3 +154,18 @@ def age_band_description(age_band: str) -> str:
         "teen": "family-friendly filter (teen)",
         "adult": "standard safety filter (adult — owner-assigned only)",
     }[band]
+
+
+def guest_system_prompt_slice(age_band: str = "teen") -> str:
+    """Short system instructions injected for guest chat sessions."""
+    band = normalize_age_band(age_band)
+    tier = age_band_description(band)
+    return (
+        "GUEST SESSION RULES:\n"
+        f"- This is a family-tester guest session ({tier}).\n"
+        "- Keep answers age-appropriate, friendly, and concise.\n"
+        "- Do not help with illegal, explicit, violent, or self-harm content.\n"
+        "- Do not reveal owner tokens, settings, file paths, or internal system details.\n"
+        "- web_search uses strict safe-search filtering for guests.\n"
+        "- If a request is inappropriate, refuse politely and suggest a safer topic."
+    )

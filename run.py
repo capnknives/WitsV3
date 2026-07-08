@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from core.config import load_config, WitsV3Config
+from core.conversation_compaction import maybe_flush_conversation_memory
 from core.llm_interface import OllamaInterface, BaseLLMInterface
 from core.memory_manager import MemoryManager, BasicMemoryBackend
 from core.tool_registry import ToolRegistry
@@ -448,6 +449,13 @@ class WitsV3System:
             raise RuntimeError("Control center not initialized")
 
         try:
+            await maybe_flush_conversation_memory(
+                conversation,
+                history_window=self.config.agents.history_window,
+                memory_manager=self.memory_manager,
+                llm_interface=self.llm_interface,
+                session_id=session_id,
+            )
             async for stream_data in self.control_center.run(
                 user_input=user_input,
                 conversation_history=conversation,

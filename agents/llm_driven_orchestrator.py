@@ -167,12 +167,22 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
         personalization = state.get("guest_personalization_context", "")
         personalization_block = f"\nGUEST PERSONALIZATION:\n{personalization}\n" if personalization else ""
 
+        guest_rules_block = ""
+        if state.get("user_role") == "guest":
+            from core.content_policy import guest_system_prompt_slice
+
+            guest_rules_block = (
+                f"\n{guest_system_prompt_slice(state.get('guest_age_band', 'teen'))}\n"
+            )
+
         prompt = f"""You are an AI orchestrator using the ReAct (Reason-Act-Observe) pattern to achieve goals.
 
 GOAL: {goal}
-{lookup_hint}{personalization_block}
+{lookup_hint}{guest_rules_block}{personalization_block}
 CONTEXT:
 {context}
+
+{state.get("flush_context", "")}
 
 USER DOCUMENTS:
 {documents_context}

@@ -33,6 +33,8 @@ def guest_may_call(path: str) -> bool:
         return True
     if path.startswith("/api/guest/"):
         return True
+    if path == "/api/sessions" or path.startswith("/api/sessions/"):
+        return True
     return False
 
 
