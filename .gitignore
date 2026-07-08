@@ -71,6 +71,7 @@ data/knowledge_graph.json
 data/guest_profiles.json
 data/guest_user_profiles/
 data/guest_audit/
+data/*_smoke_report.json
 data/*_backup.json
 data/faiss_index.*
 data/wits_faiss_index.*
