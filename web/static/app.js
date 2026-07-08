@@ -554,32 +554,177 @@ $("#memory-prune-go").addEventListener("click", async () => {
   }
 });
 
+const DOC_ICONS = {
+  pdf: "📕", md: "📝", txt: "📄", json: "🗂", csv: "📊",
+  py: "🐍", js: "📜", html: "🌐", docx: "📘", doc: "📘",
+};
+
+function docIcon(ext) {
+  return DOC_ICONS[(ext || "").toLowerCase()] || "📄";
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  } catch (e) {
+    return "";
+  }
+}
+
+function docStatus(msg, kind) {
+  const box = $("#doc-status");
+  if (!msg) { box.hidden = true; box.textContent = ""; return; }
+  box.hidden = false;
+  box.className = "doc-status" + (kind ? ` ${kind}` : "");
+  box.textContent = msg;
+}
+
 async function loadDocs() {
+  const box = $("#doc-list");
   try {
     const res = await api("/api/documents");
-    const { files } = await res.json();
-    const box = $("#doc-list");
+    const body = await res.json();
+    const files = body.files || [];
+    $("#docs-count").textContent = files.length
+      ? `${files.length} document${files.length === 1 ? "" : "s"} · ${body.total_chunks || 0} chunks`
+      : "No documents yet";
     box.innerHTML = "";
-    if (!files.length) box.appendChild(el("div", "doc-item", "No documents yet — upload one!"));
+    if (!files.length) {
+      box.appendChild(el("div", "doc-empty", "Nothing here yet. Upload a file to make it searchable."));
+      return;
+    }
     files.forEach((f) => {
       const item = el("div", "doc-item");
-      item.appendChild(el("div", null, f.name));
-      item.appendChild(el("div", "meta", `${(f.size / 1024).toFixed(1)} KB · ${f.chunks} chunks`));
+
+      const icon = el("div", "doc-icon", docIcon(f.ext));
+
+      const main = el("div", "doc-main");
+      main.appendChild(el("div", "doc-name", f.name));
+      const metaBits = [fmtSize(f.size), `${f.chunks} chunk${f.chunks === 1 ? "" : "s"}`];
+      if (f.modified) metaBits.push(fmtDate(f.modified));
+      main.appendChild(el("div", "meta", metaBits.join(" · ")));
+      if (!f.chunks) {
+        const warn = el("div", "doc-warn", "⚠ not indexed — try Re-index");
+        main.appendChild(warn);
+      }
+
+      const del = el("button", "doc-del", "🗑");
+      del.title = "Delete document";
+      del.addEventListener("click", () => confirmDeleteDoc(del, f.name));
+
+      item.appendChild(icon);
+      item.appendChild(main);
+      item.appendChild(del);
       box.appendChild(item);
     });
   } catch (e) { /* handled */ }
 }
 
-$("#doc-file").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const form = new FormData();
-  form.append("file", file);
+function confirmDeleteDoc(btn, name) {
+  if (btn.dataset.confirm === "1") {
+    deleteDoc(name);
+    return;
+  }
+  btn.dataset.confirm = "1";
+  btn.textContent = "Delete?";
+  btn.classList.add("confirming");
+  const reset = () => {
+    btn.dataset.confirm = "";
+    btn.textContent = "🗑";
+    btn.classList.remove("confirming");
+  };
+  btn._resetTimer = setTimeout(reset, 3500);
+  btn.addEventListener("blur", reset, { once: true });
+}
+
+async function deleteDoc(name) {
   try {
-    const res = await api("/api/documents/upload", { method: "POST", body: form });
-    if (res.ok) loadDocs();
-  } catch (err) { /* handled */ }
+    docStatus(`Deleting ${name}…`);
+    const res = await api("/api/documents/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      const body = await res.json();
+      docStatus(`Deleted ${name} (${body.removed_chunks} chunk${body.removed_chunks === 1 ? "" : "s"} removed).`, "ok");
+    } else {
+      const body = await res.json().catch(() => ({}));
+      docStatus(body.detail || `Delete failed (HTTP ${res.status}).`, "err");
+    }
+  } catch (e) {
+    /* handled by api() */
+  }
+  loadDocs();
+}
+
+async function uploadFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  let ok = 0;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    docStatus(`Uploading ${i + 1}/${files.length}: ${file.name}…`);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await api("/api/documents/upload", { method: "POST", body: form });
+      if (res.ok) ok++;
+    } catch (err) {
+      /* handled by api() */
+    }
+  }
+  docStatus(`Uploaded & indexed ${ok}/${files.length} file${files.length === 1 ? "" : "s"}.`, ok ? "ok" : "err");
+  loadDocs();
+}
+
+$("#doc-file").addEventListener("change", (e) => {
+  uploadFiles(e.target.files);
   e.target.value = "";
+});
+
+const dropZone = $("#doc-drop");
+["dragenter", "dragover"].forEach((ev) =>
+  dropZone.addEventListener(ev, (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  })
+);
+["dragleave", "drop"].forEach((ev) =>
+  dropZone.addEventListener(ev, (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+  })
+);
+dropZone.addEventListener("drop", (e) => {
+  if (e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files);
+});
+
+$("#docs-reindex").addEventListener("click", async () => {
+  try {
+    docStatus("Re-indexing all documents…");
+    const res = await api("/api/documents/reindex", { method: "POST" });
+    if (res.ok) {
+      const body = await res.json();
+      const ing = body.ingest || {};
+      docStatus(
+        ing.success === false
+          ? `Re-index failed: ${ing.error || "unknown error"}`
+          : `Re-indexed: ${ing.files_ingested ?? "?"} file(s), ${ing.chunks_added ?? "?"} chunk(s).`,
+        ing.success === false ? "err" : "ok"
+      );
+    }
+  } catch (e) {
+    /* handled by api() */
+  }
+  loadDocs();
 });
 
 /* ---------------------------------------------------------- boot */

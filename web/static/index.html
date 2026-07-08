@@ -96,10 +96,16 @@
       </datalist>
     </section>
     <section id="tab-docs" class="tab">
-      <label class="upload-btn">
-        Upload document
-        <input id="doc-file" type="file" hidden>
+      <div class="docs-toolbar">
+        <span id="docs-count" class="docs-count">—</span>
+        <button id="docs-reindex" class="ghost-btn" title="Re-scan &amp; re-embed all documents">↻ Re-index</button>
+      </div>
+      <label id="doc-drop" class="upload-zone">
+        <input id="doc-file" type="file" hidden multiple>
+        <span class="upload-zone-icon">⬆</span>
+        <span class="upload-zone-text">Drop files here or click to upload</span>
       </label>
+      <div id="doc-status" class="doc-status" hidden></div>
       <div id="doc-list"></div>
     </section>
     <div class="panel-links">

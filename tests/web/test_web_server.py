@@ -291,6 +291,48 @@ def test_upload_strips_path_traversal(client_noauth, tmp_path):
     assert ".." not in saved and "/" not in saved and "\\" not in saved
 
 
+def test_documents_list_includes_metadata(client_noauth, tmp_path):
+    client, _ = client_noauth
+    docs = tmp_path / "documents"
+    docs.mkdir()
+    (docs / "notes.md").write_text("hello")
+
+    body = client.get("/api/documents").json()
+    assert body["count"] == 1
+    assert body["total_chunks"] == 2
+    f = body["files"][0]
+    assert f["ext"] == "md"
+    assert "modified" in f and f["modified"]
+
+
+def test_document_delete_removes_file_and_chunks(client_noauth, tmp_path):
+    client, _ = client_noauth
+    docs = tmp_path / "documents"
+    docs.mkdir()
+    (docs / "notes.md").write_text("hello")
+
+    res = client.post("/api/documents/delete", json={"name": "notes.md"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["deleted"] == "notes.md"
+    assert body["removed_chunks"] == 2  # from FakeMemoryManager
+    assert body["file_removed"] is True
+    assert not (docs / "notes.md").exists()
+
+
+def test_document_delete_rejects_traversal(client_noauth, tmp_path):
+    client, _ = client_noauth
+    res = client.post("/api/documents/delete", json={"name": "../../evil.txt"})
+    assert res.status_code == 400
+
+
+def test_document_reindex(client_noauth, tmp_path):
+    client, _ = client_noauth
+    res = client.post("/api/documents/reindex")
+    assert res.status_code == 200
+    assert res.json()["ingest"]["success"] is True
+
+
 # ------------------------------------------------------------------ auth
 
 

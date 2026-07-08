@@ -47,6 +47,12 @@ class OwnerControlRequest(BaseModel):
     delay_seconds: float | None = 1.0
 
 
+class DocumentDeleteRequest(BaseModel):
+    """Remove a single ingested document file and its memory chunks."""
+
+    name: str
+
+
 class MCPServerAdd(BaseModel):
     name: str
     command: str

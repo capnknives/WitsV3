@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ from web.routes_mcp import register_mcp_routes
 from web.routes_personality import register_personality_routes
 from web.schemas import (
     ChatRequest,
+    DocumentDeleteRequest,
     EscalationDecision,
     ExportRequest,
     MemoryPruneRequest,
@@ -594,14 +596,20 @@ def create_app(system) -> FastAPI:
             for path in sorted(docs_dir.rglob("*")):
                 if path.is_file() and path.name != ".gitkeep":
                     rel = path.relative_to(docs_dir).as_posix()
+                    stat = path.stat()
                     files.append(
                         {
                             "name": rel,
-                            "size": path.stat().st_size,
+                            "size": stat.st_size,
                             "chunks": chunks_by_file.get(rel, 0),
+                            "ext": path.suffix.lower().lstrip("."),
+                            "modified": datetime.fromtimestamp(
+                                stat.st_mtime, tz=timezone.utc
+                            ).isoformat(),
                         }
                     )
-        return {"files": files}
+        total_chunks = sum(f["chunks"] for f in files)
+        return {"files": files, "count": len(files), "total_chunks": total_chunks}
 
     @app.post("/api/documents/upload")
     async def upload_document(file: UploadFile = File(...)):
@@ -620,6 +628,38 @@ def create_app(system) -> FastAPI:
             else {"success": False, "error": "ingest tool unavailable"}
         )
         return {"saved": safe_name, "ingest": summary}
+
+    @app.post("/api/documents/delete")
+    async def delete_document(body: DocumentDeleteRequest):
+        docs_dir = Path(system.config.document_rag.documents_path).resolve()
+        # Resolve within docs_dir; reject traversal or the dir itself.
+        target = (docs_dir / body.name).resolve()
+        if not target.is_relative_to(docs_dir) or target == docs_dir:
+            return JSONResponse({"detail": "invalid document name"}, status_code=400)
+
+        rel = target.relative_to(docs_dir).as_posix()
+        existed = target.is_file()
+        if existed:
+            target.unlink()
+
+        removed = await system.memory_manager.delete_segments(
+            {"type": "DOCUMENT_CHUNK", "file_path": rel}
+        )
+
+        if not existed and not removed:
+            return JSONResponse({"detail": "document not found"}, status_code=404)
+
+        return {"deleted": rel, "removed_chunks": removed, "file_removed": existed}
+
+    @app.post("/api/documents/reindex")
+    async def reindex_documents():
+        ingest_tool = system.tool_registry.get_tool("ingest_documents")
+        summary = (
+            await ingest_tool.execute()
+            if ingest_tool
+            else {"success": False, "error": "ingest tool unavailable"}
+        )
+        return {"ingest": summary}
 
     register_mcp_routes(app, system)
     register_personality_routes(app, system)
