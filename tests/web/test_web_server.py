@@ -531,3 +531,25 @@ def test_mcp_add_and_remove_server(client_mcp):
 def test_mcp_tools_requires_connection(client_mcp):
     client, _, _ = client_mcp
     assert client.get("/api/mcp/servers/demo/tools").status_code == 409
+
+
+def test_mcp_status_and_search_providers(client_mcp):
+    client, _, _ = client_mcp
+    status = client.get("/api/mcp/status").json()
+    assert status["configured_servers"] == 1
+    assert status["connected_servers"] == 0
+
+    providers = client.get("/api/search/providers").json()
+    assert providers["provider_mode"] == "auto"
+    assert "brave_configured" in providers
+
+
+def test_mcp_all_tools_empty_when_disconnected(client_mcp):
+    client, _, _ = client_mcp
+    assert client.get("/api/mcp/tools").json() == {"tools": []}
+
+
+def test_mcp_invoke_unknown_tool(client_mcp):
+    client, _, _ = client_mcp
+    res = client.post("/api/mcp/tools/unknown_tool/invoke", json={"arguments": {}})
+    assert res.status_code == 409

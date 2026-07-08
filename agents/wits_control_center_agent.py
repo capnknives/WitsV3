@@ -206,16 +206,19 @@ User input: {user_input}
         # short factual questions and file references never get a tool-less reply.
         if await self._requires_orchestrator_for_input(user_input):
             needs_web = self._needs_web_search(user_input)
+            needs_file = self._needs_file_write(user_input)
+            if needs_file:
+                notes = "Save/export to file - routing to orchestrator for read_conversation_history + write_file."
+            elif needs_web:
+                notes = "Needs current/external info or an explicit lookup - routing to orchestrator for web_search."
+            else:
+                notes = "References user documents/files/memory - routing to orchestrator for tool use."
             return {
                 "type": "task",
                 "complexity": "moderate",
                 "requires_tools": True,
                 "suggested_response": "orchestrator",
-                "notes": (
-                    "Needs current/external info or an explicit lookup - routing to orchestrator for web_search."
-                    if needs_web
-                    else "References user documents/files/memory - routing to orchestrator for tool use."
-                ),
+                "notes": notes,
                 "confidence": 0.8 if needs_web else 0.85,
             }
 
@@ -378,8 +381,34 @@ User input: {user_input}
             )
         return hints
 
+    # Phrases that signal saving/exporting content to disk.
+    _FILE_SAVE_SIGNALS = (
+        "save this conversation",
+        "save our conversation",
+        "save the conversation",
+        "save to file",
+        "save to a file",
+        "save to disk",
+        "write to file",
+        "write it to",
+        "export conversation",
+        "log of our conversation",
+        "save a log",
+        "save this chat",
+        "write the story",
+        "save the story",
+        "save as a file",
+    )
+
+    def _needs_file_write(self, message: str) -> bool:
+        """True when the user wants content written to a file on disk."""
+        lowered = message.lower()
+        return any(sig in lowered for sig in self._FILE_SAVE_SIGNALS)
+
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
         """True when answering requires tools (ingested docs or live web search)."""
+        if self._needs_file_write(user_input):
+            return True
         doc_inventory = await self._get_document_inventory()
         lowered = user_input.lower()
         doc_hints = self._doc_routing_hints(doc_inventory)

@@ -126,6 +126,29 @@ async def test_current_info_routes_to_orchestrator(wcca, message):
     assert intent["requires_tools"] is True
 
 
+# ------------------------------------------------------- save-to-file routing
+
+@pytest.mark.parametrize("message", [
+    "Please save this conversation to a file",
+    "Save a log of our conversations as a file",
+    "write the story to disk as goku.txt",
+])
+def test_save_to_file_needs_orchestrator(wcca, message):
+    assert wcca._needs_file_write(message) is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message", [
+    "Please save this conversation to exports/chat.txt",
+    "Save a log of our conversations as a file",
+])
+async def test_save_to_file_routes_to_orchestrator(wcca, message):
+    intent = await wcca._analyze_user_intent(message, None)
+    assert intent["suggested_response"] == "orchestrator"
+    assert intent["requires_tools"] is True
+    assert "write_file" in intent["notes"] or "save" in intent["notes"].lower()
+
+
 # ------------------------------------------------------- intent parsing
 
 def test_goal_defined_routes_to_orchestrator(wcca):

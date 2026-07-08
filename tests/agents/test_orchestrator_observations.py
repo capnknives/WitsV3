@@ -40,7 +40,7 @@ def test_web_search_result_uses_numbered_source_format():
     assert "https://example.com/obit" in text
 
 
-def test_document_search_result_stays_plain_dict():
+def test_document_search_result_uses_excerpt_format():
     harness = _harness()
     result = {
         "success": True,
@@ -48,17 +48,18 @@ def test_document_search_result_stays_plain_dict():
         "result_count": 1,
         "results": [
             {
-                "file": "audit.pdf",
-                "chunk": "1/3",
+                "file": "Pleistocene_Megafauna_Audit_Report.md",
+                "chunk": "1/16",
                 "relevance": 0.91,
                 "text": "Revenue increased 12% year over year.",
             }
         ],
     }
     text = harness._format_tool_observation("document_search", result)
-    assert text.startswith("Tool document_search result:")
-    assert "audit.pdf" in text
+    assert "EXCERPTS below" in text
+    assert "Pleistocene_Megafauna_Audit_Report.md" in text
     assert "Revenue increased" in text
+    assert "[1]" in text
     assert "SOURCES below" not in text
 
 
@@ -89,4 +90,8 @@ def test_is_web_search_result_requires_provider_or_web_hit_shape():
     assert not BaseOrchestratorAgent._is_web_search_result(
         "document_search",
         {"query": "x", "results": [{"file": "a.txt", "text": "hello"}]},
+    )
+    assert BaseOrchestratorAgent._is_document_search_result(
+        "document_search",
+        {"success": True, "query": "audit", "results": [{"file": "a.md", "text": "x"}]},
     )

@@ -126,11 +126,11 @@ main#chat {
 .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 14px; }
 .panel-header h2 { flex: 1; }
 .panel-header button { background: none; border: none; color: var(--fg); font-size: 18px; cursor: pointer; width: 40px; height: 40px; }
-#personality-link {
+#header-settings-link, #settings-link {
   color: var(--fg-dim); text-decoration: none; font-size: 18px;
   width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
 }
-#personality-link:hover { color: var(--fg); }
+#header-settings-link:hover, #settings-link:hover { color: var(--fg); }
 
 .panel-tabs { display: flex; border-bottom: 1px solid #262b3a; }
 .panel-tabs button {

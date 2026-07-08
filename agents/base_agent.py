@@ -178,8 +178,20 @@ class BaseAgent(ABC):
         if not self.memory_manager:
             return None
 
+        # nomic-embed-text rejects very long inputs; cap before persisting.
+        from core.memory_manager import (
+            MemorySegment,
+            MemorySegmentContent,
+            resolve_max_embedding_chars,
+            truncate_for_embedding,
+        )
+
+        max_chars = resolve_max_embedding_chars(self.config)
+        content = truncate_for_embedding(
+            content, max_chars, suffix="\n… [truncated for memory]"
+        )
+
         try:
-            from core.memory_manager import MemorySegment, MemorySegmentContent
 
             segment = MemorySegment(
                 type=segment_type,

@@ -74,7 +74,7 @@ suggested next steps.
 | "I don't have access to your report" despite successful search | ✅ Fixed (`ed0ef6c` + `277960d`) |
 | Document questions misrouted to chat/clarification unless phrased exactly | ✅ Fixed (`277960d`) |
 | `web_search` fails with DuckDuckGo status 202 (rate-limited/blocked) | ✅ Fixed July 7 — rewritten as a multi-provider tool: real DuckDuckGo HTML/Lite scraping (with a browser UA + 202/429 retry-backoff) instead of the useless Instant Answer API, plus optional Tavily/Brave via `.env` keys |
-| Orchestrator "Failed to parse reasoning response: Expecting ',' delimiter" (×15 in one session) | ✅ Fixed July 7 (orchestrator JSON robustness: `format=json` + robust parse + repair-reparse) |
+| Orchestrator "Failed to parse reasoning response" on save-to-file (×16, content embedded in JSON) | ✅ Fixed July 7 — save-to-file flow: WCCA routing, session injection, content auto-fill, strip large bodies from ReAct JSON |
 | Ollama connection refused (service not running) | ⚠️ Environmental — start the tray app; consider a friendlier UI error |
 
 ---
@@ -99,7 +99,8 @@ suggested next steps.
 7. ~~**MCP tool discovery / marketplace**~~ SHIPPED July 7 2026: WITS can now find and add *new* capabilities on demand from the official MCP registry (registry.modelcontextprotocol.io), instead of only using pre-configured servers. New `core/mcp_registry_search.py` queries the registry and derives a runnable stdio command per package (npm → `npx -y pkg@ver`, pypi → `uvx pkg==ver`), surfaces required env vars, dedupes by `isLatest`, and — because the registry matches `search` as a literal phrase — falls back from a multi-word query to individual keywords, merging + relevance-ranking the results. Two ways in: (a) agent-facing read-only tool `search_mcp_tools` (`tools/mcp_discovery_tool.py`, auto-registered) so WITS can look up a server when no installed tool fits; (b) `/mcp` web page "Discover servers" search box with one-click **Install** (writes the config entry + required-env inputs) then the existing **Connect** button runs it. New web routes `GET /api/mcp/registry/search` + `POST /api/mcp/registry/install`; new `tool_system.mcp_registry_url` config. **Security boundary:** searching is read-only and safe; *installing/connecting downloads and runs third-party code*, so that stays a deliberate human click in the web UI — the agent can discover but never self-installs. Tests in `tests/core/test_mcp_registry_search.py` (12: command derivation for npm/pypi/non-stdio/oci, env-var + isLatest handling, keyword fallback, HTTP-error). Verified live against the real registry (postgres/slack/gmail/spotify all return installable servers with correct commands). Suite 238 passed / 2 skipped.
 8. ~~**Friendlier "Ollama is down" handling**~~ SHIPPED July 7 2026 (Composer branch): friendly errors in web UI.
 9. ~~**Intent-handler cleanup**~~ SHIPPED July 7 2026: `direct_response`/`clarification_question` now use the intent JSON text instead of a second casual-chat LLM call; `_requires_orchestrator_for_input()` unifies doc + web-search guards; misclassified `direct_response` on tool-needed queries is overridden to orchestrator. Tests in `tests/agents/test_wcca_routing.py`.
-10. **MCP discovery follow-ups** (optional): support OCI/Docker packages (currently npm+pypi only); a "Browse tools before install" preview; and let `search_mcp_tools` results deep-link the user straight to the /mcp discover box.
+10. ~~**Save conversation/story to file**~~ SHIPPED July 7 2026 (Composer branch): log analysis showed `write_file` never ran — save requests hit direct-response or ReAct JSON broke when the model embedded file bodies in reasoning JSON. Fixes: WCCA `_needs_file_write()` routes save/export phrasing to orchestrator; orchestrator injects `conversation_history` into `read_conversation_history`; auto-fills `write_file` content from observations or session; strips >300-char `content` from ReAct JSON; `write_file` kwarg aliases (`path`→`file_path`, `text`/`body`→`content`); two-step prompt (read history → write file, never embed body in JSON). Tests in `tests/agents/test_orchestrator_save_file.py`, `tests/core/test_tool_registry_kwargs.py`, `tests/agents/test_wcca_routing.py`.
+11. **MCP discovery follow-ups** (optional): support OCI/Docker packages (currently npm+pypi only); a "Browse tools before install" preview; and let `search_mcp_tools` results deep-link the user straight to the /mcp discover box.
 
 ### Parked (explicitly out of scope for now)
 - Docker packaging, Supabase cloud sync
@@ -109,6 +110,8 @@ suggested next steps.
 
 ## 4. Suggested next steps (in order)
 
-1. Do the manual items (revoke Supabase token, add Anthropic key; optionally Tavily/Brave keys).
-2. Expose model_routing in the /settings web page.
-3. Friendlier "Ollama is down" error in the web UI (#8).
+1. Do the manual items (revoke Supabase token, add Anthropic key; optionally Brave key).
+2. **Re-test save-to-file** after restart: *"Save a log of our conversations as exports/chat_log.txt"* — expect orchestrator → `read_conversation_history` → `write_file`, not JSON parse loops.
+3. Merge `composer/orchestrator-search-quality` → `main` when smoke tests A–E (see `composer-orchestrator-search-quality-2026-07.md`) plus save-to-file test pass.
+4. Optional roadmap #11: MCP OCI/Docker install, browse-before-install preview, deep-link from `search_mcp_tools` to `/mcp`.
+5. Optional quality follow-ups from logs: embedding input truncation on large memory stores (#7 in error triage); WCCA intent JSON repair-reparse (same pattern as orchestrator).

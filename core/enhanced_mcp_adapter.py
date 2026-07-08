@@ -55,6 +55,18 @@ class EnhancedMCPAdapter(MCPAdapter):
         self.tool_workflows = {}
         self.ecosystem_config = {}
 
+    async def add_server(self, server_config: MCPServer) -> bool:
+        """Connect to an MCP server and sync the enhanced tool registry mirror."""
+        result = await super().add_server(server_config)
+        if result:
+            self._sync_tool_registry()
+        return result
+
+    async def remove_server(self, server_name: str) -> None:
+        """Disconnect from an MCP server and refresh the registry mirror."""
+        await super().remove_server(server_name)
+        self._sync_tool_registry()
+
     async def initialize_ecosystem(self):
         """Initialize the MCP ecosystem with automatic discovery"""
         await self.load_ecosystem_config()
@@ -360,11 +372,16 @@ class EnhancedMCPAdapter(MCPAdapter):
 
         return None
 
+    def _sync_tool_registry(self) -> None:
+        """Keep the enhanced registry mirror in sync with connected MCP tools."""
+        self.tool_registry.tools = dict(self.tools)
+
     async def build_capability_map(self):
         """Build a map of capabilities to tools"""
+        self._sync_tool_registry()
         self.tool_registry.capabilities.clear()
 
-        for tool_name, tool in self.tool_registry.tools.items():
+        for tool_name, tool in self.tools.items():
             # Extract capabilities from tool description and schema
             capabilities = self._extract_tool_capabilities(tool)
 
@@ -537,9 +554,10 @@ class EnhancedMCPAdapter(MCPAdapter):
 
     async def get_ecosystem_status(self) -> Dict[str, Any]:
         """Get the current status of the MCP ecosystem"""
+        self._sync_tool_registry()
         return {
             'connected_servers': len(self.clients),
-            'available_tools': len(self.tool_registry.tools),
+            'available_tools': len(self.tools),
             'capabilities': len(self.tool_registry.capabilities),
             'workflows': len(self.tool_workflows),
             'discovered_servers': len(self.available_servers),
@@ -556,7 +574,8 @@ class EnhancedMCPAdapter(MCPAdapter):
         task_lower = task_description.lower()
 
         # Score tools based on relevance to task
-        for tool_name, tool in self.tool_registry.tools.items():
+        self._sync_tool_registry()
+        for tool_name, tool in self.tools.items():
             score = 0
             tool_text = (tool.description + " " + tool.name).lower()
 

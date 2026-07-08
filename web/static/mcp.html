@@ -4,106 +4,99 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f1117">
-  <title>WITS — MCP Servers</title>
+  <title>WITS — MCP Tools</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
-  <style>
-    body { display: block; overflow: auto; }
-    .wrap { max-width: 680px; margin: 0 auto; padding: 18px 16px 60px; }
-    .wrap header { position: static; display: flex; align-items: center; gap: 10px;
-                   padding: 0 0 6px; background: none; border: none; }
-    .wrap header a { color: var(--fg-dim); text-decoration: none; font-size: 14px; }
-    .wrap header a:hover { color: var(--fg); }
-    h1 { font-size: 20px; margin: 0; }
-    p.lead { color: var(--fg-dim); font-size: 14px; margin: 6px 0 20px; }
-    .server { background: var(--bg-2); border: 1px solid #2c3245; border-radius: var(--radius);
-              padding: 14px 16px; margin-bottom: 12px; }
-    .server-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .server-name { font-weight: 600; word-break: break-all; flex: 1; min-width: 200px; }
-    .chip { font-size: 12px; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
-    .chip.on  { background: rgba(61,220,151,.15); color: var(--accent-2); }
-    .chip.off { background: var(--bg-3); color: var(--fg-dim); }
-    .server .cmd { color: var(--fg-dim); font-size: 12.5px; font-family: ui-monospace, monospace;
-                   margin-top: 6px; word-break: break-all; }
-    .server-actions { display: flex; gap: 8px; margin-top: 10px; }
-    .server-actions button {
-      background: var(--bg-3); border: 1px solid #2c3245; color: var(--fg);
-      border-radius: 8px; padding: 7px 14px; font: inherit; font-size: 13.5px; cursor: pointer;
-    }
-    .server-actions button.primary { background: var(--accent); border: none; color: #fff; }
-    .server-actions button:disabled { opacity: .5; cursor: wait; }
-    .tools { margin-top: 10px; border-top: 1px solid #232838; padding-top: 8px; }
-    .tools .tool { padding: 6px 0; border-bottom: 1px solid #232838; }
-    .tools .tool b { color: var(--accent); font-size: 13.5px; }
-    .tools .tool p { color: var(--fg-dim); font-size: 12.5px; margin: 2px 0 0; }
-    h2 { font-size: 15px; margin: 28px 0 10px; color: var(--fg-dim);
-         text-transform: uppercase; letter-spacing: 1px; }
-    #add-form { background: var(--bg-2); border: 1px solid #2c3245; border-radius: var(--radius);
-                padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-    #add-form label { font-weight: 600; font-size: 14px; }
-    #add-form input {
-      width: 100%; box-sizing: border-box; background: var(--bg-3); border: 1px solid #2c3245;
-      color: var(--fg); border-radius: 8px; padding: 10px 12px; font: inherit;
-    }
-    #add-form .hint { color: var(--fg-dim); font-size: 12.5px; margin-top: -6px; }
-    #add-btn { background: var(--accent); border: none; color: #fff; border-radius: 8px;
-               padding: 11px; font: inherit; cursor: pointer; }
-    #status { margin-top: 12px; font-size: 14px; }
-    #status.ok { color: #7dd68a; }
-    #status.bad { color: #ff8f8f; }
-  </style>
+  <link rel="stylesheet" href="/mcp.css">
 </head>
 <body>
-  <div class="wrap">
+  <div class="mcp-page">
     <header><a href="/">← back to chat</a></header>
-    <h1>◆ MCP Servers</h1>
-    <p class="lead">
-      MCP servers give WITS extra tools (filesystem, memory, APIs…). Connecting a server
-      starts its command locally and registers its tools with WITS immediately.
-    </p>
 
-    <div id="server-list"></div>
+    <div class="mcp-hero">
+      <h1>◆ MCP Tools</h1>
+      <p class="lead">
+        Browse the official MCP registry, install servers, connect them locally,
+        and try their tools. Installed tools become available to WITS in chat.
+      </p>
+    </div>
 
-    <h2>Discover servers</h2>
-    <p class="lead" style="margin-top:-4px">
-      Search the official MCP registry for new capabilities (e.g. “postgres”,
-      “slack”, “brave search”). Installing adds the server to your config;
-      you then click Connect to run it — that runs its code on this PC.
-    </p>
-    <form id="discover-form">
-      <div style="display:flex; gap:8px">
-        <input id="discover-q" placeholder="What do you want WITS to be able to do?"
-               autocomplete="off" style="flex:1; box-sizing:border-box; background:var(--bg-3);
-               border:1px solid #2c3245; color:var(--fg); border-radius:8px; padding:10px 12px; font:inherit">
-        <button id="discover-btn" type="submit" style="background:var(--accent); border:none;
-               color:#fff; border-radius:8px; padding:0 18px; font:inherit; cursor:pointer">Search</button>
+    <div class="mcp-stats" id="stats">
+      <div class="mcp-stat"><div class="label">Configured</div><div class="value" id="stat-configured">—</div></div>
+      <div class="mcp-stat"><div class="label">Connected</div><div class="value" id="stat-connected">—</div></div>
+      <div class="mcp-stat"><div class="label">Live tools</div><div class="value" id="stat-tools">—</div></div>
+      <div class="mcp-stat">
+        <div class="label">Web search</div>
+        <div class="provider-badges" id="search-providers">…</div>
       </div>
-    </form>
-    <div id="discover-results"></div>
+    </div>
 
-    <h2>Add a server</h2>
-    <form id="add-form">
-      <label for="add-name">Name</label>
-      <input id="add-name" placeholder="e.g. memory" autocomplete="off">
-      <label for="add-command">Command</label>
-      <input id="add-command" placeholder="e.g. npx -y @modelcontextprotocol/server-memory" autocomplete="off">
-      <div class="hint">The stdio command that starts the server. Runs on this PC.</div>
-      <label for="add-cwd">Working directory (optional)</label>
-      <input id="add-cwd" placeholder="e.g. C:\Users\capta\source\repos\my-mcp" autocomplete="off">
-      <button id="add-btn" type="submit">Add server</button>
-    </form>
-    <div id="status"></div>
+    <nav class="mcp-tabs" role="tablist">
+      <button class="mcp-tab active" data-tab="servers" role="tab">My servers</button>
+      <button class="mcp-tab" data-tab="discover" role="tab">Discover</button>
+      <button class="mcp-tab" data-tab="playground" role="tab">Try a tool</button>
+      <button class="mcp-tab" data-tab="add" role="tab">Add manual</button>
+    </nav>
+
+    <!-- My servers -->
+    <section class="mcp-panel active" id="panel-servers" role="tabpanel">
+      <div id="server-list"></div>
+    </section>
+
+    <!-- Discover -->
+    <section class="mcp-panel" id="panel-discover" role="tabpanel">
+      <p class="lead">Search the official MCP registry (e.g. “memory”, “postgres”, “brave”).</p>
+      <form id="discover-form" class="mcp-form">
+        <div class="mcp-search-row">
+          <input id="discover-q" placeholder="What capability do you need?" autocomplete="off">
+          <button type="submit" class="primary" id="discover-btn">Search</button>
+        </div>
+      </form>
+      <div id="discover-results"></div>
+    </section>
+
+    <!-- Playground -->
+    <section class="mcp-panel" id="panel-playground" role="tabpanel">
+      <p class="lead">Run a connected MCP tool with JSON arguments (for testing).</p>
+      <form id="play-form" class="mcp-form">
+        <label for="play-tool">Tool</label>
+        <select id="play-tool"><option value="">Connect a server first…</option></select>
+        <label for="play-args">Arguments (JSON)</label>
+        <textarea id="play-args" spellcheck="false">{}</textarea>
+        <div class="hint" id="play-schema"></div>
+        <button type="submit" class="primary" id="play-btn">Run tool</button>
+      </form>
+      <pre class="mcp-result" id="play-result" hidden></pre>
+    </section>
+
+    <!-- Manual add -->
+    <section class="mcp-panel" id="panel-add" role="tabpanel">
+      <form id="add-form" class="mcp-form mcp-card">
+        <label for="add-name">Name</label>
+        <input id="add-name" placeholder="e.g. memory" autocomplete="off">
+        <label for="add-command">Command</label>
+        <input id="add-command" placeholder="npx -y @modelcontextprotocol/server-memory" autocomplete="off">
+        <div class="hint">Stdio command that starts the server on this PC.</div>
+        <label for="add-cwd">Working directory (optional)</label>
+        <input id="add-cwd" placeholder="C:\path\to\server" autocomplete="off">
+        <button type="submit" class="primary">Add server</button>
+      </form>
+    </section>
+
+    <div id="status" class="mcp-status"></div>
   </div>
 
   <script>
     "use strict";
+
     const $ = (sel) => document.querySelector(sel);
     const token = localStorage.getItem("wits_token") || "";
+    let allTools = [];
 
     function setStatus(msg, ok) {
       const s = $("#status");
       s.textContent = msg;
-      s.className = ok ? "ok" : "bad";
+      s.className = "mcp-status " + (ok ? "ok" : "bad");
     }
 
     async function api(path, opts = {}) {
@@ -111,7 +104,7 @@
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(path, { ...opts, headers });
       if (res.status === 401) {
-        setStatus("Not logged in — open the chat page first and enter your token.", false);
+        setStatus("Not logged in — open chat and enter your token first.", false);
         throw new Error("unauthorized");
       }
       return res;
@@ -124,24 +117,142 @@
       return node;
     }
 
+    // Tabs
+    document.querySelectorAll(".mcp-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll(".mcp-tab").forEach((t) => t.classList.remove("active"));
+        document.querySelectorAll(".mcp-panel").forEach((p) => p.classList.remove("active"));
+        tab.classList.add("active");
+        $("#panel-" + tab.dataset.tab).classList.add("active");
+        if (tab.dataset.tab === "playground") refreshPlayground();
+      });
+    });
+
+    async function loadStatus() {
+      try {
+        const [mcpRes, searchRes] = await Promise.all([
+          api("/api/mcp/status"),
+          api("/api/search/providers"),
+        ]);
+        const mcp = await mcpRes.json();
+        const search = await searchRes.json();
+        $("#stat-configured").textContent = mcp.configured_servers;
+        $("#stat-connected").textContent = mcp.connected_servers;
+        $("#stat-tools").textContent = mcp.tool_count;
+
+        const badges = $("#search-providers");
+        badges.innerHTML = "";
+        const addBadge = (label, on) => {
+          badges.appendChild(el("span", "provider-badge " + (on ? "on" : "off"), label + (on ? " ✓" : "")));
+        };
+        addBadge("Tavily", search.tavily_configured);
+        addBadge("Brave", search.brave_configured);
+        addBadge("DDG fallback", true);
+      } catch (e) { /* handled */ }
+    }
+
+    async function refreshPlayground() {
+      try {
+        const res = await api("/api/mcp/tools");
+        const data = await res.json();
+        allTools = data.tools || [];
+        const sel = $("#play-tool");
+        sel.innerHTML = "";
+        if (!allTools.length) {
+          sel.appendChild(new Option("Connect a server first…", ""));
+          $("#play-schema").textContent = "";
+          return;
+        }
+        for (const t of allTools) {
+          sel.appendChild(new Option(`${t.registered_name} (${t.server})`, t.name));
+        }
+        updatePlaySchema();
+      } catch (e) { /* handled */ }
+    }
+
+    function updatePlaySchema() {
+      const name = $("#play-tool").value;
+      const tool = allTools.find((t) => t.name === name);
+      const hint = $("#play-schema");
+      if (!tool || !tool.input_schema) {
+        hint.textContent = "";
+        return;
+      }
+      hint.textContent = "Schema: " + JSON.stringify(tool.input_schema, null, 0);
+      if (tool.input_schema.properties) {
+        const sample = {};
+        for (const [k, v] of Object.entries(tool.input_schema.properties)) {
+          sample[k] = v.default !== undefined ? v.default : "";
+        }
+        $("#play-args").value = JSON.stringify(sample, null, 2);
+      }
+    }
+
+    $("#play-tool").addEventListener("change", updatePlaySchema);
+
+    $("#play-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const toolName = $("#play-tool").value;
+      if (!toolName) return;
+      let args = {};
+      try {
+        args = JSON.parse($("#play-args").value || "{}");
+      } catch {
+        setStatus("Arguments must be valid JSON.", false);
+        return;
+      }
+      const btn = $("#play-btn");
+      btn.disabled = true;
+      btn.textContent = "Running…";
+      const out = $("#play-result");
+      out.hidden = true;
+      try {
+        const res = await api(`/api/mcp/tools/${encodeURIComponent(toolName)}/invoke`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ arguments: args }),
+        });
+        const data = await res.json();
+        out.hidden = false;
+        out.textContent = JSON.stringify(data, null, 2);
+        setStatus(res.ok ? "Tool finished." : `Failed: ${data.detail || data.error}`, res.ok);
+      } catch (err) {
+        if (err.message !== "unauthorized") setStatus(`Run failed: ${err.message}`, false);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Run tool";
+      }
+    });
+
     async function showTools(card, name) {
-      const existing = card.querySelector(".tools");
+      const existing = card.querySelector(".mcp-tools-list");
       if (existing) { existing.remove(); return; }
       const res = await api(`/api/mcp/servers/${encodeURIComponent(name)}/tools`);
-      if (!res.ok) { setStatus("Could not list tools — is the server connected?", false); return; }
+      if (!res.ok) { setStatus("Could not list tools.", false); return; }
       const { tools } = await res.json();
-      const box = el("div", "tools");
-      if (!tools.length) box.appendChild(el("div", "tool", "No tools reported."));
+      const box = el("div", "mcp-tools-list");
+      if (!tools.length) box.appendChild(el("div", "mcp-empty", "No tools reported."));
       for (const t of tools) {
-        const item = el("div", "tool");
-        item.appendChild(el("b", null, t.name));
-        item.appendChild(el("p", null, t.description || ""));
-        box.appendChild(item);
+        const row = el("div", "mcp-tool-row");
+        const meta = el("div");
+        meta.appendChild(el("div", "name", t.registered_name || t.name));
+        meta.appendChild(el("div", "desc", t.description || ""));
+        row.appendChild(meta);
+        const tryBtn = el("button", null, "Try");
+        tryBtn.addEventListener("click", () => {
+          document.querySelector('[data-tab="playground"]').click();
+          setTimeout(() => {
+            $("#play-tool").value = t.name;
+            updatePlaySchema();
+          }, 50);
+        });
+        row.appendChild(tryBtn);
+        box.appendChild(row);
       }
       card.appendChild(box);
     }
 
-    async function connect(btn, name) {
+    async function connectServer(btn, name) {
       btn.disabled = true;
       btn.textContent = "Connecting…";
       setStatus(`Starting ${name}…`, true);
@@ -149,7 +260,7 @@
         const res = await api(`/api/mcp/servers/${encodeURIComponent(name)}/connect`, { method: "POST" });
         const body = await res.json().catch(() => ({}));
         if (res.ok) {
-          setStatus(`✅ Connected — ${body.tools.length} tools registered with WITS.`, true);
+          setStatus(`Connected — ${body.tools.length} tools registered.`, true);
           await load();
         } else {
           setStatus(`Connect failed: ${body.detail || res.status}`, false);
@@ -163,57 +274,73 @@
       }
     }
 
+    async function disconnectServer(name) {
+      const res = await api(`/api/mcp/servers/${encodeURIComponent(name)}/disconnect`, { method: "POST" });
+      if (res.ok) { setStatus("Disconnected.", true); await load(); }
+      else setStatus("Disconnect failed.", false);
+    }
+
     async function removeServer(name) {
-      if (!confirm(`Remove MCP server "${name}" from the config?`)) return;
+      if (!confirm(`Remove "${name}" from config?`)) return;
       const res = await api(`/api/mcp/servers/${encodeURIComponent(name)}`, { method: "DELETE" });
       if (res.ok) { setStatus("Removed.", true); await load(); }
       else setStatus("Remove failed.", false);
     }
 
+    function renderServerCard(s) {
+      const card = el("div", "mcp-card");
+      const head = el("div", "mcp-card-head");
+      head.appendChild(el("div", "mcp-card-title", s.name));
+      head.appendChild(el("span", `mcp-chip ${s.connected ? "on" : "off"}`,
+        s.connected ? `connected · ${s.tool_count} tools` : "not connected"));
+      card.appendChild(head);
+      const cmd = Array.isArray(s.command) ? s.command.join(" ") : (s.command || "");
+      card.appendChild(el("div", "mcp-cmd", cmd + (s.working_directory ? `\n↳ ${s.working_directory}` : "")));
+
+      const actions = el("div", "mcp-actions");
+      if (s.connected) {
+        const toolsBtn = el("button", null, "Browse tools");
+        toolsBtn.addEventListener("click", () => showTools(card, s.name));
+        actions.appendChild(toolsBtn);
+        const discBtn = el("button", null, "Disconnect");
+        discBtn.addEventListener("click", () => disconnectServer(s.name));
+        actions.appendChild(discBtn);
+      } else {
+        const connectBtn = el("button", "primary", "Connect");
+        connectBtn.addEventListener("click", () => connectServer(connectBtn, s.name));
+        actions.appendChild(connectBtn);
+      }
+      const removeBtn = el("button", "danger", "Remove");
+      removeBtn.addEventListener("click", () => removeServer(s.name));
+      actions.appendChild(removeBtn);
+      card.appendChild(actions);
+      return card;
+    }
+
     async function load() {
+      await loadStatus();
       try {
         const res = await api("/api/mcp/servers");
         const { servers } = await res.json();
         const list = $("#server-list");
         list.innerHTML = "";
-        if (!servers.length) list.appendChild(el("p", "lead", "No MCP servers configured yet — add one below."));
-        for (const s of servers) {
-          const card = el("div", "server");
-          const head = el("div", "server-head");
-          head.appendChild(el("div", "server-name", s.name));
-          head.appendChild(el("span", `chip ${s.connected ? "on" : "off"}`,
-            s.connected ? `connected · ${s.tool_count} tools` : "not connected"));
-          card.appendChild(head);
-          const cmd = Array.isArray(s.command) ? s.command.join(" ") : (s.command || "");
-          card.appendChild(el("div", "cmd", cmd + (s.working_directory ? `  (in ${s.working_directory})` : "")));
-
-          const actions = el("div", "server-actions");
-          if (s.connected) {
-            const toolsBtn = el("button", null, "Browse tools");
-            toolsBtn.addEventListener("click", (e) => { e.preventDefault(); showTools(card, s.name); });
-            actions.appendChild(toolsBtn);
-          } else {
-            const connectBtn = el("button", "primary", "Connect");
-            connectBtn.addEventListener("click", (e) => { e.preventDefault(); connect(connectBtn, s.name); });
-            actions.appendChild(connectBtn);
-          }
-          const removeBtn = el("button", null, "Remove");
-          removeBtn.addEventListener("click", (e) => { e.preventDefault(); removeServer(s.name); });
-          actions.appendChild(removeBtn);
-          card.appendChild(actions);
-          list.appendChild(card);
+        if (!servers.length) {
+          list.appendChild(el("p", "mcp-empty", "No servers yet — use Discover or Add manual."));
+        } else {
+          for (const s of servers) list.appendChild(renderServerCard(s));
         }
+        await refreshPlayground();
       } catch (e) { /* handled */ }
     }
 
-    async function installFromRegistry(entry, card, btn) {
+    async function installFromRegistry(entry, card, btn, andConnect) {
       btn.disabled = true;
-      btn.textContent = "Installing…";
+      btn.textContent = andConnect ? "Installing…" : "Installing…";
       const env = {};
       card.querySelectorAll("input.env-input").forEach((inp) => {
         if (inp.value.trim()) env[inp.dataset.name] = inp.value.trim();
       });
-      const body = { name: entry.name, command: entry.install.command };
+      const body = { name: entry.name, command: entry.install.command, connect: andConnect };
       if (Object.keys(env).length) body.env = env;
       try {
         const res = await api("/api/mcp/registry/install", {
@@ -223,34 +350,37 @@
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          setStatus(`✅ Installed "${entry.name}" — scroll up and click Connect to start it.`, true);
+          const msg = andConnect && data.connect?.connected
+            ? `Installed & connected — ${data.connect.tools?.length || 0} tools live.`
+            : `Installed "${entry.name}" — connect it from My servers.`;
+          setStatus("✅ " + msg, true);
           btn.textContent = "Installed ✓";
           await load();
-          window.scrollTo({ top: 0, behavior: "smooth" });
+          document.querySelector('[data-tab="servers"]').click();
         } else {
           setStatus(`Install failed: ${data.detail || res.status}`, false);
           btn.disabled = false;
-          btn.textContent = "Install";
+          btn.textContent = andConnect ? "Install & connect" : "Install";
         }
       } catch (e) {
         if (e.message !== "unauthorized") setStatus(`Install failed: ${e.message}`, false);
         btn.disabled = false;
-        btn.textContent = "Install";
+        btn.textContent = andConnect ? "Install & connect" : "Install";
       }
     }
 
     function renderDiscoverCard(entry) {
-      const card = el("div", "server");
-      const head = el("div", "server-head");
-      head.appendChild(el("div", "server-name", entry.name));
-      if (entry.already_added) head.appendChild(el("span", "chip on", "added"));
-      else if (!entry.install) head.appendChild(el("span", "chip off", "remote / manual"));
+      const card = el("div", "mcp-card");
+      const head = el("div", "mcp-card-head");
+      head.appendChild(el("div", "mcp-card-title", entry.name));
+      if (entry.already_added) head.appendChild(el("span", "mcp-chip on", "added"));
+      else if (!entry.install) head.appendChild(el("span", "mcp-chip warn", "remote / manual"));
       card.appendChild(head);
 
-      if (entry.description) card.appendChild(el("div", "cmd", entry.description));
-      if (entry.install) card.appendChild(el("div", "cmd", entry.install.command.join(" ")));
+      if (entry.description) card.appendChild(el("div", "mcp-cmd", entry.description));
+      if (entry.install) card.appendChild(el("div", "mcp-cmd", "$ " + entry.install.command.join(" ")));
       if (entry.repository) {
-        const repo = el("div", "cmd");
+        const repo = el("div", "mcp-cmd");
         const a = el("a", null, entry.repository);
         a.href = entry.repository; a.target = "_blank"; a.rel = "noopener noreferrer";
         a.style.color = "var(--accent-2)";
@@ -261,22 +391,23 @@
       const requiredEnv = (entry.install ? entry.install.env_vars : []).filter((v) => v.required);
       for (const ev of requiredEnv) {
         const wrap = el("div"); wrap.style.marginTop = "8px";
-        wrap.appendChild(el("div", "cmd", `${ev.name}${ev.secret ? " (secret)" : ""} — ${ev.description || "required"}`));
+        wrap.appendChild(el("div", "mcp-cmd", `${ev.name}${ev.secret ? " (secret)" : ""} — ${ev.description || "required"}`));
         const inp = el("input", "env-input");
         inp.dataset.name = ev.name;
         inp.placeholder = ev.name;
         if (ev.secret) inp.type = "password";
-        inp.style.cssText = "width:100%; box-sizing:border-box; margin-top:4px; background:var(--bg-3);" +
-          "border:1px solid #2c3245; color:var(--fg); border-radius:8px; padding:8px 10px; font:inherit";
         wrap.appendChild(inp);
         card.appendChild(wrap);
       }
 
-      const actions = el("div", "server-actions");
+      const actions = el("div", "mcp-actions");
       if (entry.install && !entry.already_added) {
         const installBtn = el("button", "primary", "Install");
-        installBtn.addEventListener("click", (e) => { e.preventDefault(); installFromRegistry(entry, card, installBtn); });
+        installBtn.addEventListener("click", () => installFromRegistry(entry, card, installBtn, false));
         actions.appendChild(installBtn);
+        const icBtn = el("button", null, "Install & connect");
+        icBtn.addEventListener("click", () => installFromRegistry(entry, card, icBtn, true));
+        actions.appendChild(icBtn);
       }
       card.appendChild(actions);
       return card;
@@ -285,16 +416,16 @@
     async function discover(query) {
       const box = $("#discover-results");
       box.innerHTML = "";
-      box.appendChild(el("p", "lead", "Searching the MCP registry…"));
+      box.appendChild(el("p", "mcp-empty", "Searching the MCP registry…"));
       try {
         const res = await api(`/api/mcp/registry/search?q=${encodeURIComponent(query)}&limit=12`);
         const data = await res.json().catch(() => ({}));
         box.innerHTML = "";
-        if (!res.ok) { box.appendChild(el("p", "lead", `Search failed: ${data.detail || res.status}`)); return; }
-        if (!data.results.length) { box.appendChild(el("p", "lead", "No matching servers found.")); return; }
+        if (!res.ok) { box.appendChild(el("p", "mcp-empty", `Search failed: ${data.detail || res.status}`)); return; }
+        if (!data.results.length) { box.appendChild(el("p", "mcp-empty", "No matching servers found.")); return; }
         for (const entry of data.results) box.appendChild(renderDiscoverCard(entry));
       } catch (e) {
-        if (e.message !== "unauthorized") box.innerHTML = `<p class="lead">Search failed: ${e.message}</p>`;
+        if (e.message !== "unauthorized") box.innerHTML = `<p class="mcp-empty">Search failed: ${e.message}</p>`;
       }
     }
 
@@ -319,8 +450,9 @@
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setStatus(`✅ Added "${name}" — hit Connect to start it.`, true);
+        setStatus(`Added "${name}" — connect it from My servers.`, true);
         $("#add-form").reset();
+        document.querySelector('[data-tab="servers"]').click();
         await load();
       } else {
         setStatus(`Add failed: ${data.detail || res.status}`, false);

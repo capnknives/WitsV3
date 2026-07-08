@@ -115,6 +115,8 @@ class ToolRegistry:
         Raises:
             Exception: If tool not found, validation fails, or execution fails
         """
+        kwargs = self._normalize_tool_kwargs(tool_name, kwargs)
+
         # First validate the tool call
         validation = self.validate_tool_call(tool_name, **kwargs)
 
@@ -129,10 +131,13 @@ class ToolRegistry:
                 self.logger.warning(warning)
 
         tool = validation["tool"]  # We know it exists from validation
+        exec_kwargs = self._filter_tool_kwargs(tool, kwargs)
 
         try:
-            self.logger.debug(f"Executing tool {tool_name} with validated args: {kwargs}")
-            result = await tool.execute(**kwargs)
+            self.logger.debug(
+                f"Executing tool {tool_name} with validated args: {exec_kwargs}"
+            )
+            result = await tool.execute(**exec_kwargs)
             self.logger.debug(f"Tool {tool_name} completed successfully")
             return result
         except Exception as e:
@@ -271,6 +276,8 @@ class ToolRegistry:
         Returns:
             Validation result with status and details
         """
+        kwargs = self._normalize_tool_kwargs(tool_name, kwargs)
+
         validation_result = {
             "valid": False,
             "errors": [],
@@ -302,6 +309,13 @@ class ToolRegistry:
                 if param not in kwargs:
                     missing_params.append(param)
 
+            # document_search can derive query from file_name when the LLM
+            # only passes a filename (common for "summarize report X").
+            if tool_name == "document_search" and "query" in missing_params:
+                file_hints = ("file_name", "file_names", "filename", "file", "source_files")
+                if any(k in kwargs for k in file_hints):
+                    missing_params.remove("query")
+
             if missing_params:
                 validation_result["errors"].append(
                     f"Missing required parameters for {tool_name}: {missing_params}"
@@ -326,6 +340,67 @@ class ToolRegistry:
             validation_result["errors"].append(f"Error validating tool call: {str(e)}")
 
         return validation_result
+
+    @staticmethod
+    def _normalize_tool_kwargs(tool_name: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """Map common LLM arg aliases before validation/execute."""
+        args = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ("tool_name", "name", "arg1", "arg2", "arg3")
+        }
+
+        if tool_name == "ingest_documents":
+            return {}
+
+        if tool_name == "read_file" and "file_path" not in args:
+            for alias in ("path", "filename", "file", "file_name"):
+                if alias in args:
+                    args["file_path"] = args.pop(alias)
+                    break
+
+        if tool_name == "list_directory" and "directory_path" not in args:
+            for alias in ("path", "directory", "dir", "folder"):
+                if alias in args:
+                    args["directory_path"] = args.pop(alias)
+                    break
+
+        if tool_name == "document_search":
+            if "max_results" not in args and "top_k" in args:
+                args["max_results"] = args.pop("top_k")
+
+        if tool_name == "write_file":
+            if "file_path" not in args:
+                for alias in ("path", "filename", "file", "file_name", "filepath"):
+                    if alias in args:
+                        args["file_path"] = args.pop(alias)
+                        break
+            if "content" not in args:
+                for alias in ("text", "body", "data", "contents"):
+                    if alias in args:
+                        args["content"] = args.pop(alias)
+                        break
+
+        return args
+
+    @staticmethod
+    def _filter_tool_kwargs(tool: Any, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """Drop LLM hallucinations and keep only schema-declared parameters."""
+        cleaned = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ("tool_name", "name")
+        }
+        try:
+            schema = tool.get_schema()
+            if "parameters" in schema and isinstance(schema["parameters"], dict):
+                schema = schema["parameters"]
+            properties = schema.get("properties") or {}
+            if properties:
+                cleaned = {k: v for k, v in cleaned.items() if k in properties}
+        except Exception:
+            pass
+        return cleaned
 
     def _register_builtin_tools(self) -> None:
         """Register built-in tools."""

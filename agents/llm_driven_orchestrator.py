@@ -26,6 +26,9 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
     3. Learn from previous iterations
     4. Adapt its approach based on results
     """
+
+    # Hide WCCA-internal tools from the ReAct tool list (model misuses them for search).
+    _ORCHESTRATOR_TOOL_EXCLUDE = frozenset({"intent_analysis", "json_manipulate"})
     
     def __init__(
         self,
@@ -77,6 +80,10 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
         tools = []
         try:
             tools = self.tool_registry.get_tools_for_llm()
+            tools = [
+                t for t in tools
+                if t.get("name") not in self._ORCHESTRATOR_TOOL_EXCLUDE
+            ]
             self.logger.info(f"Retrieved {len(tools)} tools from registry")
         except Exception as e:
             self.logger.warning(f"Error getting tools from registry: {e}")
@@ -108,6 +115,7 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
         """
         goal = state["goal"]
         context = state["context"]
+        documents_context = state.get("documents_context", "No user documents are currently ingested.")
         history = state["history"]
         observations = state["observations"]
         
@@ -120,6 +128,18 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
         observations_text = ""
         if observations:
             observations_text = "\n".join([f"- {obs}" for obs in observations[-3:]])
+
+        lookup_hint = ""
+        goal_lower = goal.lower()
+        if any(
+            sig in goal_lower
+            for sig in ("look up", "search for", "report on", "tell me about", "what is")
+        ):
+            lookup_hint = (
+                f"\nLOOKUP TARGET: Use the user's exact name/title verbatim in web_search "
+                f'query (quote multi-word titles). Do NOT substitute a different product '
+                f"from the same franchise. Goal wording: {goal}\n"
+            )
         
         # Build available tools text
         tools_text = ""
@@ -132,9 +152,12 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
         prompt = f"""You are an AI orchestrator using the ReAct (Reason-Act-Observe) pattern to achieve goals.
 
 GOAL: {goal}
-
+{lookup_hint}
 CONTEXT:
 {context}
+
+USER DOCUMENTS:
+{documents_context}
 
 CONVERSATION HISTORY:
 {history_text if history_text else "No conversation history"}
@@ -151,15 +174,25 @@ Respond with JSON in this format:
 {{
     "thought": "your reasoning about the current situation and what to do next",
     "action_type": "tool_call" | "final_answer",
-    "tool_name": "name of tool to use (if action_type is tool_call)",
-    "tool_args": {{"arg1": "value1"}} (if using a tool),
+    "tool_name": "name of tool to use (ONLY when action_type is tool_call — e.g. web_search, document_search)",
+    "tool_args": {{"query": "search terms"}} (if using a tool — use real parameter names from the tool schema, never arg1/arg2),
     "final_answer": "your final answer (if action_type is final_answer)"
 }}
 
 Important:
+- action_type must be exactly "tool_call" or "final_answer". NEVER put a tool name (web_search, document_search, write_file, etc.) in action_type — that field is not the tool name.
 - Use "tool_call" ONLY when you still lack information needed to answer. Use "final_answer" as soon as your observations are enough — do NOT repeat a search you already ran, and do NOT keep gathering once you can answer. One good web_search is usually enough.
+- For web_search: put the user's exact title/name in the query (e.g. \"Dragon Ball Advent Truth MUD\" not just \"Dragon Ball Legends\"). Include genre hints from the goal (MUD, text game, indie). If results do not mention the exact title, try ONE refined query with the full title before giving up. After web_search succeeds, your NEXT action MUST be final_answer — do not call other tools.
+- For web lookup goals: NEVER call document_search (private uploads are unrelated). Answer ONLY about the subject named in GOAL — do not respond as if the user pasted unrelated lists (e.g. trading cards) unless that text is literally in GOAL.
 - If the goal needs current, recent, or post-training information (news, events, dates, who did/won/died something, prices, weather) and web_search is available, you MUST call web_search. NEVER answer such questions from memory or refuse by citing a knowledge/training cutoff.
 - web_search is for the public web. document_search ONLY searches the user's own uploaded private files — do NOT use it for general knowledge, current events, or public figures; it returns unrelated personal documents and will mislead you.
+- When the goal asks about the user's documents, notes, files, or a named report, you MUST call document_search before answering. The USER DOCUMENTS list above is authoritative — if a file is listed there, it exists and is searchable; never claim it is missing or that you lack access. Use tool_args like {{"query": "summary main findings", "file_name": "Report.md"}} — query is required; file_name is optional to narrow to one file. NEVER use read_file, list_directory, or ingest_documents for ingested uploads — document_search already has the content.
+- ingest_documents takes NO arguments (empty tool_args {{}}). Do not pass arg1 or other placeholder keys.
+- read_file requires {{"file_path": "/path/to/file"}}. list_directory requires {{"directory_path": "/path/to/dir"}}. Do not call them without those keys.
+- To save/export conversation or chat to disk: call read_conversation_history once with empty tool_args {{}} — the system will auto-write to the path in the goal (if present) and finish. Do NOT call read_conversation_history repeatedly. Only call write_file yourself if auto-save did not run.
+- write_file requires {{"file_path": "...", "content": "..."}} but for save/export requests omit content in tool_args (it is injected). Use a sensible path under the project (e.g. exports/conversation_log.txt).
+- When observations contain document_search results, they include numbered EXCERPTS from the files. Write your final_answer from those excerpts. If excerpts were returned, NEVER say you do not have access or that nothing was uploaded.
+- If document_search returns no excerpts, try one broader query before concluding nothing matched.
 - When your observations contain web_search results, they include a "summary" line plus numbered SOURCES. The summary is usually the correct, already-extracted answer — make your final_answer that summary, phrased to address the exact question. Only override it if a source clearly contradicts it. Do NOT discard a correct summary just because the sources are broad "list of everyone who died in 2026" pages — those lists are noisy and easy to misread.
 - Answer only the specific thing asked. If the question is "who did X on <date>", give the single correct person for that exact date as a direct sentence, not a long list of many names and dates.
 - Do not claim you cannot access information a tool could retrieve; call the tool instead.
@@ -224,16 +257,123 @@ Respond ONLY with valid JSON."""
         if "action_type" not in parsed:
             raise ValueError("Missing 'action_type' field")
 
+        parsed = self._coerce_action_type(parsed)
+
         if parsed["action_type"] == "tool_call":
             if "tool_name" not in parsed:
                 raise ValueError("Missing 'tool_name' for tool_call action")
             if "tool_args" not in parsed or not isinstance(parsed.get("tool_args"), dict):
                 parsed["tool_args"] = {}
+            # Large write_file bodies in ReAct JSON cause parse failures — strip
+            # them; _prepare_tool_args fills content from session/observations.
+            if parsed.get("tool_name") == "write_file":
+                content = parsed["tool_args"].get("content")
+                if isinstance(content, str) and len(content) > 300:
+                    parsed["tool_args"].pop("content", None)
 
         elif parsed["action_type"] == "final_answer":
             if "final_answer" not in parsed:
                 raise ValueError("Missing 'final_answer' for final_answer action")
 
+        else:
+            raise ValueError(
+                f"Invalid action_type '{parsed.get('action_type')}' — use tool_call or final_answer"
+            )
+
+        return parsed
+
+    def _known_tool_names(self) -> set:
+        """Registered tool names the model might mistakenly use as action_type."""
+        names = set()
+        for tool in self.available_tools:
+            if isinstance(tool, dict) and tool.get("name"):
+                names.add(tool["name"])
+        if self.tool_registry:
+            try:
+                names.update(self.tool_registry.list_tool_names())
+            except Exception:
+                pass
+        names.update(self._BUILTIN_TOOL_NAMES)
+        return names
+
+    _ACTION_TYPE_TOOL_ALIASES = {
+        "search": "web_search",
+        "websearch": "web_search",
+        "web-search": "web_search",
+    }
+
+    # Tools the model often emits as action_type even when registry isn't wired (tests).
+    _BUILTIN_TOOL_NAMES = frozenset({
+        "web_search",
+        "document_search",
+        "read_file",
+        "write_file",
+        "list_directory",
+        "read_conversation_history",
+        "analyze_conversation",
+        "ingest_documents",
+        "think",
+        "calculator",
+        "search_mcp_tools",
+    })
+
+    _HOISTABLE_TOOL_ARG_KEYS = (
+        "query",
+        "file_path",
+        "file_name",
+        "directory_path",
+        "content",
+        "max_messages",
+        "path",
+    )
+
+    def _coerce_action_type(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
+        """Fix common qwen3 mistakes: tool name used as action_type, args at top level."""
+        action = parsed.get("action_type")
+        if action in ("tool_call", "final_answer"):
+            if action == "tool_call" and not parsed.get("tool_name"):
+                # {"action_type":"tool_call","web_search":...} or top-level query only
+                known = self._known_tool_names()
+                for name in known:
+                    if name in parsed:
+                        parsed["tool_name"] = name
+                        break
+            return self._hoist_tool_args(parsed)
+
+        known = self._known_tool_names()
+        tool_name = None
+        if isinstance(action, str):
+            if action in known:
+                tool_name = action
+            else:
+                alias = self._ACTION_TYPE_TOOL_ALIASES.get(action.lower())
+                if alias and alias in known:
+                    tool_name = alias
+                elif action.lower().replace("-", "_").replace(" ", "_") in known:
+                    tool_name = action.lower().replace("-", "_").replace(" ", "_")
+
+        if tool_name:
+            parsed["tool_name"] = tool_name
+            parsed["action_type"] = "tool_call"
+            return self._hoist_tool_args(parsed)
+
+        if isinstance(action, str) and action.lower() in ("answer", "respond", "response"):
+            parsed["action_type"] = "final_answer"
+            if "final_answer" not in parsed:
+                parsed["final_answer"] = parsed.pop("answer", parsed.get("response", ""))
+
+        return parsed
+
+    @classmethod
+    def _hoist_tool_args(cls, parsed: Dict[str, Any]) -> Dict[str, Any]:
+        """Move misplaced parameter keys from the top level into tool_args."""
+        if parsed.get("action_type") != "tool_call":
+            return parsed
+        if "tool_args" not in parsed or not isinstance(parsed.get("tool_args"), dict):
+            parsed["tool_args"] = {}
+        for key in cls._HOISTABLE_TOOL_ARG_KEYS:
+            if key in parsed and key not in parsed["tool_args"]:
+                parsed["tool_args"][key] = parsed.pop(key)
         return parsed
 
     def _strip_think_blocks(self, text: str) -> str:
@@ -430,12 +570,6 @@ Respond ONLY with valid JSON."""
                     "last_speaker": None,
                     "summary": "Starting new conversation"
                 }
-            elif tool_name == "list_directory":
-                # Return empty directory listing
-                return {"items": [], "status": "success"}
-            elif tool_name == "read_file":
-                # Return empty file content
-                return {"content": "", "status": "success"}
             elif tool_name == "intent_analysis":
                 # Return default intent analysis
                 return {
@@ -453,27 +587,48 @@ Respond ONLY with valid JSON."""
             "status": "error"
         }
 
-    async def _call_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
+    async def _call_tool(
+        self,
+        tool_name: str,
+        tool_args: Dict[str, Any],
+        state: Optional[Dict[str, Any]] = None,
+    ) -> Any:
         """
         Call a tool with error handling.
-        
+
         Args:
             tool_name: Name of the tool to call
             tool_args: Arguments for the tool
-            
+            state: Optional ReAct state for context injection
+
         Returns:
             Tool execution result
         """
         try:
             if not self.tool_registry:
                 raise ValueError("No tool registry available")
-            
+
+            if state is not None:
+                tool_args = await self._prepare_tool_args(tool_name, tool_args, state)
+
             result = await self.tool_registry.execute_tool(tool_name, **tool_args)
             return result
-            
+
         except Exception as e:
             # Handle the error gracefully
             return await self._handle_tool_failure(tool_name, e)
+
+    def _coerce_unknown_action(
+        self, parsed: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Apply action_type coercion for tool-name-as-action_type mistakes."""
+        try:
+            coerced = self._coerce_action_type(dict(parsed))
+            if coerced.get("action_type") in ("tool_call", "final_answer"):
+                return self._validate_reasoning(coerced)
+        except ValueError:
+            pass
+        return None
 
 
 # Test function

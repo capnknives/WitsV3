@@ -159,25 +159,38 @@ Expected: all pass (web suite was **31 passed** on July 7, 2026).
 
 ---
 
+### F. Save conversation to file (Composer — new)
+
+1. After a few chat turns, ask: **"Save a log of our conversations as exports/chat_log.txt"**
+2. Expect orchestrator delegation (not a direct "I saved it" reply with no tool).
+3. In thinking/logs: `read_conversation_history` then `write_file` with `file_path` only (content injected).
+4. Confirm `exports/chat_log.txt` exists with USER/ASSISTANT lines.
+
+```bash
+pytest tests/agents/test_orchestrator_save_file.py tests/core/test_tool_registry_kwargs.py -q -o addopts=
+```
+
+---
+
 ## Not done yet (next on roadmap)
 
 Composer did **not** implement these — still open in `revival-2026-07.md`:
 
 | # | Item | Notes |
 |---|------|-------|
-| 9 | WCCA intent-handler cleanup | `clarification_question` / `direct_response` still funnel through casual-chat prompt |
-| 10 | MCP discover follow-ups | OCI/Docker packages, browse-before-install preview |
-| — | Merge composer branch | PR into `fix/revive-2026-07` or `main` when tests above look good |
+| 11 | MCP discover follow-ups | OCI/Docker packages, browse-before-install preview |
+| — | Merge composer branch | PR into `fix/revive-2026-07` or `main` when tests A–F look good |
 | — | Manual ops | Revoke leaked Supabase token; add `ANTHROPIC_API_KEY` if using ask-Claude |
+| — | Optional log follow-ups | Embedding truncation on large memory stores; WCCA intent JSON repair |
 
 ---
 
 ## Merge recommendation
 
-When manual tests A–D look good:
+When manual tests A–F look good:
 
 1. Merge `composer/orchestrator-search-quality` → `fix/revive-2026-07` (or open a PR).
-2. Update `revival-2026-07.md` §4 to mark model-routing settings + Ollama-down UX as shipped.
+2. Update `revival-2026-07.md` §4 — model-routing settings, Ollama-down UX, save-to-file are shipped on branch.
 3. Keep Gmail MCP entry in `data/mcp_tools.json` only if you intend to connect it from `/mcp` — it does not auto-connect.
 
 ---

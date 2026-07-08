@@ -212,6 +212,59 @@ async def test_search_empty_query_rejected(rag_env):
     assert result["success"] is False
 
 
+@pytest.mark.asyncio
+async def test_search_accepts_file_name_kwarg(rag_env):
+    config, memory, ingest, search, docs_dir = rag_env
+    (docs_dir / "audit.md").write_text(
+        "The Pleistocene megafauna audit found significant population decline."
+    )
+    (docs_dir / "other.md").write_text("Unrelated space rockets content.")
+    await ingest.execute()
+
+    result = await search.execute(
+        query="megafauna audit population",
+        file_name="audit.md",
+        max_results=5,
+        min_relevance=0.0,
+    )
+
+    assert result["success"] is True
+    assert result["result_count"] >= 1
+    assert all(r["file"] == "audit.md" for r in result["results"])
+
+
+@pytest.mark.asyncio
+async def test_search_file_name_only_derives_query(rag_env):
+    config, memory, ingest, search, docs_dir = rag_env
+    (docs_dir / "Pleistocene_Megafauna_Audit_Report.md").write_text(
+        "Executive summary: megafauna populations declined during the Pleistocene."
+    )
+    await ingest.execute()
+
+    result = await search.execute(file_name="Pleistocene_Megafauna_Audit_Report.md")
+
+    assert result["success"] is True
+    assert result["query"] == "Pleistocene Megafauna Audit Report"
+    assert result["result_count"] >= 1
+    assert result["results"][0]["file"] == "Pleistocene_Megafauna_Audit_Report.md"
+
+
+@pytest.mark.asyncio
+async def test_search_file_names_alias(rag_env):
+    config, memory, ingest, search, docs_dir = rag_env
+    (docs_dir / "notes.md").write_text("Notes about cats.")
+    await ingest.execute()
+
+    result = await search.execute(
+        query="cats",
+        file_names=["notes.md"],
+        min_relevance=0.0,
+    )
+
+    assert result["success"] is True
+    assert result["results"][0]["file"] == "notes.md"
+
+
 # ---------------------------------------------------------------- wiring
 
 @pytest.mark.asyncio
@@ -230,7 +283,9 @@ def test_tool_schemas():
     assert ingest.get_schema()["name"] == "ingest_documents"
     schema = search.get_schema()
     assert schema["name"] == "document_search"
-    assert "query" in schema["parameters"]["properties"]
+    props = schema["parameters"]["properties"]
+    assert "query" in props
+    assert "file_name" in props
     assert schema["parameters"]["required"] == ["query"]
 
 

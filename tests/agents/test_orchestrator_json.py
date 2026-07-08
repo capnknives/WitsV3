@@ -136,6 +136,36 @@ def test_missing_tool_args_defaults_to_empty(orchestrator):
     assert parsed["tool_args"] == {}
 
 
+def test_coerces_tool_name_used_as_action_type(orchestrator):
+    response = (
+        '{"thought": "look it up", "action_type": "web_search", '
+        '"tool_args": {"query": "dragonball advent truth"}}'
+    )
+    parsed = orchestrator._parse_reasoning_response(response)
+    assert parsed["action_type"] == "tool_call"
+    assert parsed["tool_name"] == "web_search"
+    assert parsed["tool_args"]["query"] == "dragonball advent truth"
+    assert "_parse_failed" not in parsed
+
+
+def test_coerces_action_type_with_top_level_query(orchestrator):
+    response = (
+        '{"thought": "search", "action_type": "web_search", '
+        '"query": "dragonball advent truth game report"}'
+    )
+    parsed = orchestrator._parse_reasoning_response(response)
+    assert parsed["action_type"] == "tool_call"
+    assert parsed["tool_name"] == "web_search"
+    assert parsed["tool_args"]["query"] == "dragonball advent truth game report"
+
+
+def test_invalid_action_type_flags_failure(orchestrator):
+    parsed = orchestrator._parse_reasoning_response(
+        '{"thought": "hmm", "action_type": "definitely_not_a_valid_action"}'
+    )
+    assert parsed["_parse_failed"] is True
+
+
 def test_unparseable_response_flags_parse_failure(orchestrator):
     parsed = orchestrator._parse_reasoning_response("complete nonsense, no json here at all")
     assert parsed["_parse_failed"] is True

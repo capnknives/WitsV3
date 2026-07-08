@@ -71,6 +71,11 @@ class MemoryManagerSettings(BaseModel):
     max_results_per_search: int = Field(default=5)
     pruning_interval_seconds: int = Field(default=3600)
     max_memory_segments: int = Field(default=10000)
+    max_embedding_chars: int = Field(
+        default=6000,
+        gt=0,
+        description="Max characters sent to the embedding model (nomic-embed-text limit)",
+    )
 
     # Enhanced pruning settings
     enable_auto_pruning: bool = Field(default=True, description="Enable automatic memory pruning")
