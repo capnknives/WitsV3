@@ -24,9 +24,14 @@ This file is the handoff doc for Richard. It lists **what Composer changed on th
 
 | Branch | Purpose |
 |--------|---------|
-| `fix/revive-2026-07` | Claude's ongoing revival work — keep clean |
+| `fix/revive-2026-07` | **Integration branch** — all revival work merges and pushes here before Richard promotes to `main` |
 | `composer/orchestrator-search-quality` | Composer experiments + web UI polish + Tier 1 CI/tooling |
-| `claude/tier2-tier3-cleanup-2026-07` | Tier 2/3 cleanup, branched from the above — **current tip** |
+| `claude/tier2-tier3-cleanup-2026-07` | Tier 2/3 cleanup, branched from the above |
+| `cursor/*` | Cursor agent feature branches — merge into `fix/revive-2026-07` when done |
+
+> **Workflow (July 7, 2026):** Do not push directly to `main` from agent
+> sessions. Land work on `fix/revive-2026-07`; Richard merges to `main` after
+> manual testing.
 
 Commits on `composer/orchestrator-search-quality` (newest first):
 

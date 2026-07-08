@@ -1,12 +1,20 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
 **Branch:** `fix/revive-2026-07` (July 6–7 2026, merged to `main` at 1a555f2; later work continues on the branch)
-**Test suite:** 312 passed / 2 skipped (skips are external MCP-server integration tests)
+**Test suite:** 318 passed / 2 skipped (skips are external MCP-server integration tests)
 **Last updated:** July 7, 2026
 
 This document tracks the July 2026 revival effort: what was worked on, what
 broke along the way, how each issue was fixed, what remains open, and the
 suggested next steps.
+
+### Git workflow (integration branch)
+
+**All revival work lands on `fix/revive-2026-07` first.** Feature branches
+(e.g. `cursor/*`, `composer/*`, `claude/*`) merge there when a chunk of work is
+done; agents and sessions should **push to `fix/revive-2026-07`**, not directly
+to `main`. Richard merges `fix/revive-2026-07` → `main` when manual testing
+looks good — that promotion step stays a deliberate human decision.
 
 ---
 
