@@ -1,16 +1,22 @@
-# MCP server vendoring
+# MCP servers (on-demand)
 
-Git submodules under this directory (`Ollama-mcp`, `servers`) are optional local
-copies of upstream MCP server repos. Fresh clones can populate them on demand:
+WitsV3 does **not** vendor MCP server repos in git. Clone them locally when needed:
 
 ```bash
 python scripts/clone_mcp_servers.py
 ```
 
-That script reads `data/mcp_tools.json`, clones any GitHub `type: github` entries
-that are missing, installs dependencies, and updates working directories.
+That script reads `data/mcp_tools.json`, clones any GitHub `type: github` entries into
+this directory, installs dependencies, and updates working directories in the config.
 
-**Supabase MCP** was removed from the default config (July 2026): there is no
-active Supabase project, and the server added hundreds of vendored files with
-no runtime benefit. To use it again, add an entry back to `data/mcp_tools.json`
-and run the clone script.
+**Included by default in config** (after clone):
+
+- `Ollama-mcp` — Ollama MCP bridge
+- `servers` (modelcontextprotocol/servers) — sequential thinking + filesystem subdirs
+
+**Removed from default config (July 2026):** `supabase-mcp` — no active Supabase project;
+hundreds of vendored files with no runtime benefit. Re-add to `data/mcp_tools.json` and
+run the clone script if you need it again.
+
+Registry-based servers (Gmail, codebase-memory, etc.) use `npx`/`uvx` and do not need
+a local clone.

@@ -277,19 +277,16 @@ Full suite after Tier 2/3: **312 passed, 2 skipped**.
 
 ### Tier 4 — structure & hygiene (larger, schedule deliberately)
 
-14. **500-line rule is widely violated.** 20+ files exceed it; worst offenders:
-    `agents/advanced_coding_agent.py` (1,482), `agents/wits_control_center_agent.py`
-    (905), `web/server.py` (877). **Partial July 7 2026:** orchestrator guardrail/
-    observation helpers extracted to `agents/orchestrator_tool_helpers.py`
-    (`OrchestratorToolHelpersMixin`); `base_orchestrator_agent.py` now ~490 lines.
-    Remaining large files still need deliberate splits.
+14. ✅ **500-line rule — Tier 4 targets split** July 7 2026: orchestrator (`orchestrator_tool_helpers.py`),
+    WCCA (`wcca_*_mixin.py`), book writing (`book_writing_*`), advanced coding (`coding_*`),
+    web server (`web/schemas.py`, `web/routes_mcp.py`, `web/routes_personality.py`).
+    Other large files (core/tools, `llm_driven_orchestrator.py`) remain for a future pass.
 15. ✅ **`self_repair_agent` pytest coverage** July 7 2026 — `tests/agents/test_self_repair_agent.py`
     (streams thinking/result, LLM passthrough). Smoke tests for `book_writing_agent` and
     `neural_orchestrator_agent` in `tests/agents/test_specialized_agent_smoke.py`.
-16. **MCP submodule footprint (partial).** ✅ Removed unused `supabase-mcp` from
-    `data/mcp_tools.json`, `.gitmodules`, and the git index; added `mcp_servers/README.md`
-    documenting on-demand clone via `scripts/clone_mcp_servers.py`. `Ollama-mcp` and
-    `servers` submodules remain — full on-demand-only vendoring is still optional.
+16. ✅ **MCP submodule footprint** July 7 2026 — removed all git submodules (`Ollama-mcp`, `servers`,
+    `supabase-mcp`); `mcp_servers/` is on-demand via `scripts/clone_mcp_servers.py` only
+    (`mcp_servers/README.md`, `.gitignore` keeps clone dirs local).
 17. ✅ **Supabase `sbp_...` token risk resolved** July 7 2026 — N/A, Richard
     confirmed no Supabase project exists anymore, so the leaked token (still
     in git history) has nothing to grant access to. Given that, worth
@@ -305,9 +302,8 @@ When manual tests A–F look good:
 1. Merge `claude/tier2-tier3-cleanup-2026-07` → `fix/revive-2026-07` (or open a PR) — it's a superset of `composer/orchestrator-search-quality` (includes the Tier 1 CI commit) plus Tier 2/3.
 2. Update `revival-2026-07.md` §4 — model-routing settings, Ollama-down UX, save-to-file are shipped on branch.
 3. Keep Gmail MCP entry in `data/mcp_tools.json` only if you intend to connect it from `/mcp` — it does not auto-connect.
-4. Tier 4 partial (July 7 2026): orchestrator mixin split, agent tests, supabase-mcp
-   removed from default vendoring. Remaining: other 500-line files, optional full
-   MCP on-demand-only migration.
+4. ✅ Tier 4 complete (July 7 2026): 500-line splits for orchestrator/WCCA/book/coding/web
+   server; agent pytest coverage; MCP on-demand-only (no git submodules).
 
 ---
 
