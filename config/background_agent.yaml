@@ -50,7 +50,12 @@ tasks:
       update_interval_hours: 24
 
   self_repair:
-    enabled: true
+    # Off by default: run.py/run_web.py already own this schedule in-process
+    # (self_repair.daily_schedule_* in config.yaml, same "0 3 * * *" cron). This
+    # entry exists only for a deployment that runs the Docker BackgroundAgent
+    # WITHOUT the main app also running — enable it there, not alongside it,
+    # or self-repair fires twice a day against the same repo.
+    enabled: false
     schedule: "0 3 * * *" # Daily at 3am
     description: "Scan logs for real errors and apply verified, revert-on-failure fixes (see core/safe_code_editor.py)"
     settings: {}
