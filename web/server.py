@@ -328,6 +328,7 @@ def create_app(system) -> FastAPI:
                 guest_personalization = profile_store.personalization_block(
                     guest["guest_id"],
                     guest.get("display_name", "Guest"),
+                    guest_registry,
                 )
             try:
                 async for stream_data in system.control_center.run(

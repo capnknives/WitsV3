@@ -170,13 +170,35 @@ class GuestRegistry:
         return (fallback or "Guest").strip()[:80]
 
     def find_by_display_name(self, display_name: str) -> dict[str, Any] | None:
+        """Single active guest by join name (most recently seen if duplicates exist)."""
+        matches = self.find_all_by_display_name(display_name)
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return matches[0]
+        return max(matches, key=lambda g: float(g.get("last_seen") or 0))
+
+    def find_all_by_display_name(self, display_name: str) -> list[dict[str, Any]]:
         target = display_name.strip().lower()
+        if not target:
+            return []
+        out = []
         for guest in self._data["guests"].values():
             if guest.get("revoked"):
                 continue
             if (guest.get("display_name") or "").strip().lower() == target:
-                return guest
-        return None
+                out.append(guest)
+        return out
+
+    def duplicate_display_names(self) -> dict[str, list[dict[str, Any]]]:
+        """Active guests grouped by display_name where count > 1."""
+        by_name: dict[str, list[dict[str, Any]]] = {}
+        for guest in self.list_active_guests():
+            key = (guest.get("display_name") or "").strip().lower()
+            if not key:
+                continue
+            by_name.setdefault(key, []).append(guest)
+        return {k: v for k, v in by_name.items() if len(v) > 1}
 
     def register_or_update(
         self,
@@ -194,6 +216,19 @@ class GuestRegistry:
             # age_band is owner-assigned only — never changed on /join re-register.
             self._save()
             out = dict(existing)
+            out["_returning"] = True
+            return out
+
+        name = display_name.strip()[:80] or "Guest"
+        by_name = self.find_by_display_name(name)
+        if by_name:
+            devices = by_name.setdefault("device_ids", [])
+            if device_id not in devices:
+                devices.append(device_id)
+            by_name["display_name"] = name
+            by_name["last_seen"] = now
+            self._save()
+            out = dict(by_name)
             out["_returning"] = True
             return out
 
@@ -241,8 +276,36 @@ class GuestRegistry:
         if not guest:
             return False
         guest["revoked"] = True
+        guest["revoked_at"] = time.time()
         self._save()
         return True
+
+    def merge_guests(self, *, target_guest_id: str, source_guest_id: str) -> dict[str, Any] | None:
+        """Owner-only: fold source account into target (devices, timestamps); revoke source."""
+        if target_guest_id == source_guest_id:
+            return self.get(target_guest_id)
+        target = self._data["guests"].get(target_guest_id)
+        source = self._data["guests"].get(source_guest_id)
+        if not target or not source or target.get("revoked") or source.get("revoked"):
+            return None
+        now = time.time()
+        for device_id in source.get("device_ids") or []:
+            if device_id not in target.setdefault("device_ids", []):
+                target["device_ids"].append(device_id)
+        target["first_seen"] = min(
+            float(target.get("first_seen") or now),
+            float(source.get("first_seen") or now),
+        )
+        target["last_seen"] = max(
+            float(target.get("last_seen") or 0),
+            float(source.get("last_seen") or 0),
+        )
+        # Keep target display_name and age_band; unify casing from target.
+        source["revoked"] = True
+        source["revoked_at"] = now
+        source["merged_into"] = target_guest_id
+        self._save()
+        return dict(target)
 
     def list_guests(self) -> list[dict[str, Any]]:
         return list(self._data["guests"].values())

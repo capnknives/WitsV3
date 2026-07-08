@@ -86,6 +86,84 @@ class GuestUserProfileStore:
     def _path(self, guest_id: str) -> Path:
         return self.base_dir / f"{guest_id}.json"
 
+    @staticmethod
+    def _merge_profile_data(into: dict[str, Any], other: dict[str, Any]) -> None:
+        into["turn_count"] = int(into.get("turn_count", 0)) + int(other.get("turn_count", 0))
+        interests: dict[str, int] = into.setdefault("interests", {})
+        for label, count in (other.get("interests") or {}).items():
+            interests[label] = interests.get(label, 0) + int(count)
+        topics: list[str] = list(into.get("recent_topics") or [])
+        for topic in other.get("recent_topics") or []:
+            if topic not in topics:
+                topics.append(topic)
+        into["recent_topics"] = topics[-12:]
+        facts: list[dict[str, Any]] = list(into.get("facts") or [])
+        seen = {f.get("text") for f in facts}
+        for fact in other.get("facts") or []:
+            text = fact.get("text")
+            if text and text not in seen:
+                facts.append(fact)
+                seen.add(text)
+        into["facts"] = facts[-MAX_FACTS:]
+
+    def delete_profile(self, guest_id: str) -> bool:
+        path = self._path(guest_id)
+        if path.is_file():
+            path.unlink()
+            return True
+        return False
+
+    def merge_profiles(self, *, target_guest_id: str, source_guest_id: str, display_name: str) -> dict[str, Any]:
+        """Merge source profile JSON into target and remove source file."""
+        target = self.load(target_guest_id, display_name)
+        source = self.load(source_guest_id, display_name)
+        self._merge_profile_data(target, source)
+        target["guest_id"] = target_guest_id
+        target["display_name"] = display_name
+        self.save(target)
+        self.delete_profile(source_guest_id)
+        return target
+
+    def consolidate_for_display_name(self, registry: Any, display_name: str) -> dict[str, Any] | None:
+        """Merge duplicate account profiles into the canonical guest_id for this name."""
+        accounts = registry.find_all_by_display_name(display_name)
+        if not accounts:
+            return None
+        canonical = max(accounts, key=lambda g: float(g.get("last_seen") or 0))
+        cid = canonical["guest_id"]
+        name = canonical.get("display_name", display_name)
+        merged = self.load(cid, name)
+        for acct in accounts:
+            if acct["guest_id"] == cid:
+                continue
+            other = self.load(acct["guest_id"], name)
+            self._merge_profile_data(merged, other)
+            self.delete_profile(acct["guest_id"])
+        merged["guest_id"] = cid
+        merged["display_name"] = name
+        self.save(merged)
+        return merged
+
+    def load_merged_for_display_name(
+        self, display_name: str, registry: Any | None = None
+    ) -> dict[str, Any] | None:
+        from core.guest_access import GuestRegistry
+
+        reg = registry or GuestRegistry()
+        accounts = reg.find_all_by_display_name(display_name)
+        if not accounts:
+            return None
+        canonical = max(accounts, key=lambda g: float(g.get("last_seen") or 0))
+        name = canonical.get("display_name", display_name)
+        merged = self.load(canonical["guest_id"], name)
+        for acct in accounts:
+            if acct["guest_id"] == canonical["guest_id"]:
+                continue
+            self._merge_profile_data(merged, self.load(acct["guest_id"], name))
+        merged["guest_id"] = canonical["guest_id"]
+        merged["display_name"] = name
+        return merged
+
     def load(self, guest_id: str, display_name: str = "Guest") -> dict[str, Any]:
         path = self._path(guest_id)
         if not path.is_file():
@@ -120,7 +198,12 @@ class GuestUserProfileStore:
         assistant_message: str | None = None,
     ) -> dict[str, Any]:
         """Extract interests/facts from a completed guest turn."""
-        profile = self.load(guest_id, display_name)
+        from core.guest_access import GuestRegistry
+
+        reg = GuestRegistry()
+        acct = reg.find_by_display_name(display_name)
+        canonical_id = acct["guest_id"] if acct else guest_id
+        profile = self.load(canonical_id, display_name)
         profile["display_name"] = display_name
         profile["turn_count"] = int(profile.get("turn_count", 0)) + 1
 
@@ -153,7 +236,7 @@ class GuestUserProfileStore:
                 facts.append({"text": note, "ts": _now_iso(), "source": "conversation"})
             profile["facts"] = facts[-MAX_FACTS:]
 
-        self.save(profile)
+        self._save_canonical(profile, display_name)
         logger.info(
             "Updated guest user profile for %s (turns=%s, interests=%s)",
             display_name,
@@ -161,6 +244,19 @@ class GuestUserProfileStore:
             len(interests),
         )
         return profile
+
+    def _save_canonical(
+        self, profile: dict[str, Any], display_name: str, registry: Any | None = None
+    ) -> Path:
+        """Persist under the canonical guest_id for this display name."""
+        from core.guest_access import GuestRegistry
+
+        reg = registry or GuestRegistry()
+        acct = reg.find_by_display_name(display_name)
+        if acct:
+            profile["guest_id"] = acct["guest_id"]
+        profile["display_name"] = display_name
+        return self.save(profile)
 
     def _merge_llm_extraction(self, profile: dict[str, Any], extracted: dict[str, Any]) -> None:
         interests: dict[str, int] = profile.get("interests") or {}
@@ -248,7 +344,7 @@ class GuestUserProfileStore:
             )
             if parsed.get("interests") or parsed.get("facts"):
                 self._merge_llm_extraction(profile, parsed)
-                self.save(profile)
+                self._save_canonical(profile, display_name, registry=None)
                 logger.info(
                     "LLM profile extraction for %s: +%s interests, +%s facts",
                     display_name,
@@ -259,29 +355,38 @@ class GuestUserProfileStore:
             logger.warning("LLM guest profile extraction failed for %s: %s", display_name, e)
         return profile
 
-    def list_profile_summaries(self) -> list[dict[str, Any]]:
-        """All stored user profiles (for owner settings UI)."""
-        if not self.base_dir.is_dir():
-            return []
+    def list_profile_summaries(self, registry: Any | None = None) -> list[dict[str, Any]]:
+        """One summary per display_name (merged across duplicate guest_ids)."""
+        from core.guest_access import GuestRegistry
+
+        reg = registry or GuestRegistry()
+        seen_names: set[str] = set()
         out: list[dict[str, Any]] = []
-        for path in sorted(self.base_dir.glob("*.json")):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                interests: dict[str, int] = data.get("interests") or {}
-                top = sorted(interests.items(), key=lambda x: (-x[1], x[0]))[:5]
-                out.append(
-                    {
-                        "guest_id": data.get("guest_id", path.stem),
-                        "display_name": data.get("display_name", "Guest"),
-                        "turn_count": data.get("turn_count", 0),
-                        "updated_at": data.get("updated_at"),
-                        "top_interests": [{"label": k, "count": v} for k, v in top],
-                        "fact_count": len(data.get("facts") or []),
-                    }
-                )
-            except Exception as e:
-                logger.warning("Skipping corrupt profile %s: %s", path.name, e)
-        return out
+        for acct in reg.list_active_guests():
+            name = (acct.get("display_name") or "Guest").strip()
+            key = name.lower()
+            if key in seen_names:
+                continue
+            seen_names.add(key)
+            profile = self.load_merged_for_display_name(name, reg) or _empty_profile(
+                acct["guest_id"], name
+            )
+            interests: dict[str, int] = profile.get("interests") or {}
+            top = sorted(interests.items(), key=lambda x: (-x[1], x[0]))[:5]
+            dupes = reg.find_all_by_display_name(name)
+            out.append(
+                {
+                    "guest_id": profile.get("guest_id", acct["guest_id"]),
+                    "display_name": name,
+                    "turn_count": profile.get("turn_count", 0),
+                    "updated_at": profile.get("updated_at"),
+                    "top_interests": [{"label": k, "count": v} for k, v in top],
+                    "fact_count": len(profile.get("facts") or []),
+                    "duplicate_accounts": len(dupes),
+                    "account_ids": [g["guest_id"] for g in dupes],
+                }
+            )
+        return sorted(out, key=lambda x: x["display_name"].lower())
 
     def format_owner_summary(
         self,
@@ -303,9 +408,17 @@ class GuestUserProfileStore:
         if not acct:
             return f"No guest account found for {display_name or guest_id}."
 
-        gid = acct["guest_id"]
         name = acct.get("display_name", "Guest")
-        profile = self.load(gid, name)
+        if display_name and not guest_id:
+            profile = self.load_merged_for_display_name(name, reg) or self.load(
+                acct["guest_id"], name
+            )
+            dupes = reg.find_all_by_display_name(name)
+            if len(dupes) > 1:
+                profile = self.consolidate_for_display_name(reg, name) or profile
+        else:
+            profile = self.load(acct["guest_id"], name)
+        gid = profile.get("guest_id", acct["guest_id"])
         age = acct.get("age_band", "teen")
 
         if profile.get("turn_count", 0) == 0 and not profile.get("interests"):
@@ -341,9 +454,13 @@ class GuestUserProfileStore:
 
         return "\n".join(lines)
 
-    def personalization_block(self, guest_id: str, display_name: str = "Guest") -> str:
+    def personalization_block(
+        self, guest_id: str, display_name: str = "Guest", registry: Any | None = None
+    ) -> str:
         """Short context for guest chat personalization (not shown to guest)."""
-        profile = self.load(guest_id, display_name)
+        profile = self.load_merged_for_display_name(display_name, registry) or self.load(
+            guest_id, display_name
+        )
         interests: dict[str, int] = profile.get("interests") or {}
         if not interests and not profile.get("facts"):
             return ""

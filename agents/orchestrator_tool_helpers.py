@@ -48,6 +48,27 @@ class OrchestratorToolHelpersMixin:
                 f"Blocked {tool_name}: not available for guest users. "
                 f"Use web_search, math_operations, or datetime, or final_answer to respond."
             )
+        goal = state.get("goal", "")
+        from agents.wcca_routing_mixin import OrchestratorRoutingMixin
+
+        if state.get("user_role") == "owner" and OrchestratorRoutingMixin._needs_guest_profile_review(
+            OrchestratorRoutingMixin(), goal
+        ):
+            if tool_name == "web_search":
+                return (
+                    "Blocked web_search: guest profile questions must use "
+                    "guest_user_profile_summary (saved facts only, no online lookup)."
+                )
+            if tool_name not in (
+                "guest_user_profile_summary",
+                "guest_accounts_list",
+                "guest_audit_summary",
+                "guest_set_age_band",
+            ):
+                return (
+                    f"Blocked {tool_name}: for guest profile/interest questions use "
+                    "guest_user_profile_summary only."
+                )
 
         if tool_name in self.ORCHESTRATOR_BLOCKED_TOOLS:
             return (
