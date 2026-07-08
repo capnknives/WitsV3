@@ -82,7 +82,7 @@ suggested next steps.
 ## 3. What's left to do
 
 ### Richard's manual action items (browser/keys — can't be automated)
-- [ ] **Revoke the leaked `sbp_...` Supabase personal access token** at supabase.com/dashboard/account/tokens (leaked in git history before the secrets cleanup).
+- [x] ~~**Revoke the leaked `sbp_...` Supabase personal access token**~~ N/A confirmed July 7 2026 — Richard has no Supabase project anymore, so the leaked token has nothing to grant access to. No action needed; left in git history as a dead credential.
 - [ ] **Add `ANTHROPIC_API_KEY` to `.env`** if the ask-Claude escalation should work.
 - [x] ~~**Get a Tavily web-search API key**~~ DONE July 7 2026 — key added to `.env` as `TAVILY_API_KEY`; verified live, `web_search` now routes through Tavily (returns synthesized answer + results).
 - [ ] **Get a Brave Search API key** at brave.com/search/api (free tier: 2000/mo) and add `BRAVE_SEARCH_API_KEY=...` to `.env`. Good second option / fallback. Neither key is required — `web_search` already returns real results keyless via DuckDuckGo.
@@ -110,7 +110,7 @@ suggested next steps.
 
 ## 4. Suggested next steps (in order)
 
-1. Do the manual items (revoke Supabase token, add Anthropic key). Brave key: DONE (`BRAVE_SEARCH_API_KEY` added; `web_search` merges Tavily+Brave).
+1. Optionally add `ANTHROPIC_API_KEY` if the ask-Claude escalation should work. Brave key: DONE (`BRAVE_SEARCH_API_KEY` added; `web_search` merges Tavily+Brave). Supabase token: N/A, no project exists anymore.
 2. **Re-test save-to-file** after restart: *"Save a log of our conversations as exports/chat_log.txt"* — expect orchestrator → `read_conversation_history` → `write_file`, not JSON parse loops.
 3. ~~Merge `composer/orchestrator-search-quality` → `main`~~ DONE July 7 2026: `claude/tier2-tier3-cleanup-2026-07` (superset of `composer/orchestrator-search-quality` plus Tier 2/3 cleanup below) fast-forward merged into `fix/revive-2026-07`.
 4. Optional roadmap #11: MCP OCI/Docker install, browse-before-install preview, deep-link from `search_mcp_tools` to `/mcp`.

@@ -200,11 +200,11 @@ Composer did **not** implement these — still open in `revival-2026-07.md`:
 | # | Item | Notes |
 |---|------|-------|
 | 11 | MCP discover follow-ups | OCI/Docker packages, browse-before-install preview |
-| — | Merge composer branch | PR into `fix/revive-2026-07` or `main` when tests A–F look good |
-| — | Manual ops | Revoke leaked Supabase token; add `ANTHROPIC_API_KEY` if using ask-Claude |
+| — | Merge to `main` | `fix/revive-2026-07` merged into `main` when manual tests A–F look good (Richard's call — held back July 7 pending manual testing) |
+| — | Manual ops | Add `ANTHROPIC_API_KEY` if using ask-Claude. Supabase token revoke: N/A, no project exists anymore |
 | — | WCCA intent JSON repair | Same repair-reparse pattern as the orchestrator, applied to WCCA intent parsing |
 
-**Recently closed** (were on this list): embedding truncation on large memory stores (shipped `7660664`), `BRAVE_SEARCH_API_KEY` support (shipped), and the `set_dependencies(tool_registry=...)` startup crash (shipped `28f3c5c`).
+**Recently closed** (were on this list): embedding truncation on large memory stores (shipped `7660664`), `BRAVE_SEARCH_API_KEY` support (shipped), the `set_dependencies(tool_registry=...)` startup crash (shipped `28f3c5c`), and merging `composer/orchestrator-search-quality` + Tier 2/3 cleanup into `fix/revive-2026-07` (shipped `dc7f813`, fast-forward, July 7).
 
 ---
 
@@ -289,8 +289,11 @@ Full suite after Tier 2/3: **312 passed, 2 skipped**.
     `supabase-mcp`, `Ollama-mcp`) add 266+ files. Consider on-demand clone via
     the existing `scripts/clone_mcp_servers.py` instead of vendoring, to shrink
     the working tree.
-17. **Confirm the Supabase `sbp_...` token was revoked.** Still an open manual
-    item in the revival doc; it may remain valid in git history.
+17. ✅ **Supabase `sbp_...` token risk resolved** July 7 2026 — N/A, Richard
+    confirmed no Supabase project exists anymore, so the leaked token (still
+    in git history) has nothing to grant access to. Given that, worth
+    reconsidering whether the vendored `supabase-mcp` submodule (see #16) is
+    still needed at all.
 
 ---
 
