@@ -34,17 +34,6 @@
       ]
     },
     {
-      "name": "github.com/supabase-community/supabase-mcp",
-      "type": "github",
-      "clone_url": "https://github.com/supabase-community/supabase-mcp.git",
-      "source": "github",
-      "working_directory": "mcp_servers\\supabase-mcp",
-      "command": [
-        "node",
-        "index.js"
-      ]
-    },
-    {
       "name": "com.mcparmory/google-gmail",
       "command": [
         "uvx",

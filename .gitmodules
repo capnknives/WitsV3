@@ -4,6 +4,3 @@
 [submodule "mcp_servers/servers"]
 	path = mcp_servers/servers
 	url = https://github.com/modelcontextprotocol/servers.git
-[submodule "mcp_servers/supabase-mcp"]
-	path = mcp_servers/supabase-mcp
-	url = https://github.com/supabase-community/supabase-mcp.git

@@ -57,6 +57,8 @@ log/
 # WitsV3 Data Files (Personal/Runtime Data)
 documents/*
 !documents/.gitkeep
+exports/*
+!exports/.gitkeep
 data/wits_memory.json
 data/neural_web.json
 data/neural_web_backup.json
