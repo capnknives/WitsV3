@@ -9,10 +9,12 @@ from core.content_policy import (
     guest_system_prompt_slice,
     normalize_age_band,
 )
-from core.guest_policy_loader import load_guest_policy
 from core.guest_access import GuestRegistry
-from tests.web.test_guest_access import _register, guest_env
+from core.guest_policy_loader import load_guest_policy
+from tests.web.test_guest_access import _register
 from tools.guest_audit_tool import GuestSetAgeBandTool
+
+pytest_plugins = ("tests.web.test_guest_access",)
 
 
 def test_normalize_age_band_aliases():

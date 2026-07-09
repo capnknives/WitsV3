@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 from core.guest_access import GuestRegistry
 from core.guest_user_profile import GuestUserProfileStore
-from tests.web.test_web_server import FakeSystem, _parse_sse
+from tests.web.test_web_server import FakeSystem
 from web.server import create_app
 
 

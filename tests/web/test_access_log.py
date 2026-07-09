@@ -8,7 +8,6 @@ import pytest
 
 from core.config import WitsV3Config
 from web.access_log import owner_display_name, resolve_caller_label
-from web.guest_auth import resolve_auth
 
 
 @pytest.fixture
@@ -107,4 +106,3 @@ def test_log_http_access_format(config, caplog):
     req.state.caller_label = "TESTER"
     log_http_access(req, 200, config)
     assert any("[TESTER]" in r.message and "POST /api/chat" in r.message for r in caplog.records)
-

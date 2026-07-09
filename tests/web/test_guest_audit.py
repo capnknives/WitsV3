@@ -6,8 +6,10 @@ from datetime import datetime, timezone
 
 from core.content_policy import check_guest_content
 from core.guest_audit import GuestAuditLog
-from tests.web.test_guest_access import _register, guest_env
+from tests.web.test_guest_access import _register
 from tests.web.test_web_server import _parse_sse
+
+pytest_plugins = ("tests.web.test_guest_access",)
 
 
 def test_content_policy_blocks_inappropriate_input():
