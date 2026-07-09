@@ -62,6 +62,7 @@ GUEST_ALLOWED_API_PREFIXES = (
     "/api/tools",
     "/api/search/providers",
     "/api/sessions",
+    "/api/commands",
 )
 
 # Register / me are public (invite-gated); other /api/guest/* need a guest token.

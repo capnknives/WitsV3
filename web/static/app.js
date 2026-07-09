@@ -402,13 +402,211 @@ async function sendMessage(text) {
 
 $("#composer").addEventListener("submit", (e) => {
   e.preventDefault();
+  hideSlashMenu();
   const text = inputEl.value;
   inputEl.value = "";
   inputEl.style.height = "auto";
   sendMessage(text);
 });
 
+const slashMenuEl = $("#slash-menu");
+let slashCommands = [];
+let slashMenuRows = [];
+let slashMenuIndex = 0;
+let slashReplaceStart = 0;
+
+function slashRowsFromCommands() {
+  const rows = [];
+  for (const cmd of slashCommands) {
+    rows.push({ cmd, label: cmd.command });
+    for (const alias of cmd.aliases || []) {
+      rows.push({ cmd, label: alias });
+    }
+  }
+  return rows.sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function slashQueryAtCursor() {
+  const value = inputEl.value;
+  const pos = inputEl.selectionStart ?? value.length;
+  const before = value.slice(0, pos);
+  const match = before.match(/(?:^|\s)(\/[^\s]*)$/);
+  if (!match) return null;
+  const token = match[1];
+  const start = before.length - token.length;
+  return { query: token.slice(1).toLowerCase(), start, token };
+}
+
+function filterSlashRows(query) {
+  const rows = slashRowsFromCommands();
+  if (!query) return rows;
+  return rows.filter((row) => {
+    const label = row.label.toLowerCase();
+    const body = label.slice(1);
+    return body.startsWith(query) || label.includes(query);
+  });
+}
+
+function hideSlashMenu() {
+  if (!slashMenuEl) return;
+  slashMenuEl.hidden = true;
+  slashMenuEl.innerHTML = "";
+  slashMenuRows = [];
+  slashMenuIndex = 0;
+}
+
+function renderSlashMenu(rows) {
+  if (!slashMenuEl) return;
+  slashMenuRows = rows;
+  slashMenuIndex = 0;
+  slashMenuEl.innerHTML = "";
+  if (!rows.length) {
+    slashMenuEl.appendChild(el("div", "slash-empty", "No matching commands"));
+    slashMenuEl.hidden = false;
+    return;
+  }
+  rows.forEach((row, idx) => {
+    const btn = el("button", `slash-item${idx === 0 ? " active" : ""}`);
+    btn.type = "button";
+    const cmdLine = el(
+      "span",
+      `slash-item-cmd${row.cmd.dangerous ? " danger" : ""}`,
+      row.label
+    );
+    const descLine = el("span", "slash-item-desc", row.cmd.description || "");
+    btn.appendChild(cmdLine);
+    btn.appendChild(descLine);
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      selectSlashRow(idx);
+    });
+    slashMenuEl.appendChild(btn);
+  });
+  slashMenuEl.hidden = false;
+}
+
+function updateSlashMenuSelection() {
+  if (!slashMenuEl) return;
+  slashMenuEl.querySelectorAll(".slash-item").forEach((node, idx) => {
+    node.classList.toggle("active", idx === slashMenuIndex);
+  });
+  const active = slashMenuEl.querySelector(".slash-item.active");
+  if (active) active.scrollIntoView({ block: "nearest" });
+}
+
+function applySlashToken(label, start) {
+  const value = inputEl.value;
+  const pos = inputEl.selectionStart ?? value.length;
+  inputEl.value = `${value.slice(0, start)}${label}${value.slice(pos)}`;
+  const caret = start + label.length;
+  inputEl.setSelectionRange(caret, caret);
+  inputEl.dispatchEvent(new Event("input"));
+}
+
+async function runSlashClientAction(cmd) {
+  switch (cmd.client_action) {
+    case "help":
+      showSlashHelp();
+      break;
+    case "new_chat":
+      await startNewChat();
+      break;
+    case "export":
+      await exportCurrentSession();
+      break;
+    case "panel":
+      openPanelTab(cmd.panel_tab || "tools");
+      break;
+    case "navigate":
+      if (cmd.href) location.href = cmd.href;
+      break;
+    default:
+      addAssistantMsg(`Unknown client command: ${cmd.id}`, true);
+  }
+}
+
+function showSlashHelp() {
+  const lines = ["Available slash commands:"];
+  const seen = new Set();
+  for (const cmd of slashCommands) {
+    if (seen.has(cmd.id)) continue;
+    seen.add(cmd.id);
+    const aliases = (cmd.aliases || []).length ? ` (${cmd.aliases.join(", ")})` : "";
+    lines.push(`• ${cmd.command}${aliases} — ${cmd.description}`);
+  }
+  lines.push("Type / in the chat box to open the picker.");
+  addAssistantMsg(lines.join("\n"));
+}
+
+function selectSlashRow(index) {
+  const row = slashMenuRows[index];
+  if (!row) return;
+  hideSlashMenu();
+  if (row.cmd.dispatch === "client") {
+    inputEl.value = "";
+    inputEl.style.height = "auto";
+    runSlashClientAction(row.cmd);
+    inputEl.focus();
+    return;
+  }
+  applySlashToken(row.label, slashReplaceStart);
+  inputEl.focus();
+}
+
+function openPanelTab(tab) {
+  openPanel();
+  const btn = document.querySelector(`.panel-tabs [data-tab="${tab}"]`);
+  if (!btn) return;
+  document.querySelectorAll(".panel-tabs button").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+  btn.classList.add("active");
+  const panel = $(`#tab-${tab}`);
+  if (panel) panel.classList.add("active");
+  if (tab === "chats") loadSessions();
+  if (tab === "memory") {
+    memLoadedOnce = true;
+    memRecentOffset = 0;
+    loadRecentMemory();
+  }
+}
+
+async function loadSlashCommands() {
+  try {
+    const res = await api("/api/commands");
+    if (res.ok) {
+      const body = await res.json();
+      slashCommands = body.commands || [];
+    }
+  } catch (e) {
+    /* handled by api() */
+  }
+}
+
 inputEl.addEventListener("keydown", (e) => {
+  if (slashMenuEl && !slashMenuEl.hidden && slashMenuRows.length) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      slashMenuIndex = (slashMenuIndex + 1) % slashMenuRows.length;
+      updateSlashMenuSelection();
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      slashMenuIndex = (slashMenuIndex - 1 + slashMenuRows.length) % slashMenuRows.length;
+      updateSlashMenuSelection();
+      return;
+    }
+    if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      selectSlashRow(slashMenuIndex);
+      return;
+    }
+  }
+  if (e.key === "Escape" && slashMenuEl && !slashMenuEl.hidden) {
+    e.preventDefault();
+    hideSlashMenu();
+    return;
+  }
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     $("#composer").requestSubmit();
@@ -418,6 +616,17 @@ inputEl.addEventListener("keydown", (e) => {
 inputEl.addEventListener("input", () => {
   inputEl.style.height = "auto";
   inputEl.style.height = Math.min(inputEl.scrollHeight, 130) + "px";
+  const ctx = slashQueryAtCursor();
+  if (!ctx) {
+    hideSlashMenu();
+    return;
+  }
+  slashReplaceStart = ctx.start;
+  renderSlashMenu(filterSlashRows(ctx.query));
+});
+
+inputEl.addEventListener("blur", () => {
+  setTimeout(hideSlashMenu, 120);
 });
 
 async function startNewChat() {
@@ -438,7 +647,7 @@ async function startNewChat() {
 
 $("#new-chat-btn").addEventListener("click", () => startNewChat());
 
-$("#export-btn").addEventListener("click", async () => {
+async function exportCurrentSession() {
   if (!sessionId) {
     addAssistantMsg("Nothing to export yet — send a message first.", true);
     return;
@@ -458,7 +667,9 @@ $("#export-btn").addEventListener("click", async () => {
   } catch (e) {
     if (e.message !== "unauthorized") addAssistantMsg(`Export failed: ${e.message}`, true);
   }
-});
+}
+
+$("#export-btn").addEventListener("click", () => exportCurrentSession());
 
 /* ---------------------------------------------------------- panel */
 const panel = $("#panel");
@@ -961,16 +1172,17 @@ async function bootstrapAuth() {
     if (!restored) {
       addAssistantMsg(
         guestName
-          ? `Welcome back, ${guestName} — you're chatting as a guest tester.`
-          : "You're chatting as a guest tester. Ask me anything."
+          ? `Welcome back, ${guestName} — you're chatting as a guest tester. Type / for commands.`
+          : "You're chatting as a guest tester. Type / for commands."
       );
     }
   } else {
     const restored = await restoreSessionIfAny();
     if (!restored) {
-      addAssistantMsg("Hey Richard — WITS is online. Ask me anything, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
+      addAssistantMsg("Hey Richard — WITS is online. Ask me anything, type / for commands, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
     }
   }
+  loadSlashCommands();
   checkStatus();
   setInterval(checkStatus, 30000);
 }

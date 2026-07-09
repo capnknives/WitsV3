@@ -154,6 +154,14 @@ Safe MVP landed on `cursor/work`: `/join` invite flow, HMAC guest tokens, device
 registry (`data/guest_profiles.json`), owner-only API deny, orchestrator tool
 allowlist, no specialist-agent routing for guests. Phase 3–4 content policy +
 admin UI complete — see [`guest-tester-access-2026-07.md`](guest-tester-access-2026-07.md).
+Guest profile fact editor in Settings (owner can fix corrupted notes).
+
+### Chat slash commands (July 8 2026 evening)
+
+Type `/` in the web chat composer for a Cursor-style command menu with descriptions.
+Registry: `web/slash_commands.py`; API: `GET /api/commands` (role-filtered).
+Client actions: `/help`, `/new`, `/export`, panel shortcuts; owner chat commands:
+`/shutdown`, `/restart` (and aliases). Tests: `tests/web/test_slash_commands.py`.
 
 ### Whole-repo audit (Tiers 1–4) — complete
 

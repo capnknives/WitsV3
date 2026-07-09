@@ -28,7 +28,10 @@
   <main id="chat"></main>
 
   <form id="composer">
-    <textarea id="input" rows="1" placeholder="Ask WITS anything…" autocomplete="off"></textarea>
+    <div class="composer-input-wrap">
+      <div id="slash-menu" class="slash-menu" hidden></div>
+      <textarea id="input" rows="1" placeholder="Ask WITS anything… type / for commands" autocomplete="off"></textarea>
+    </div>
     <button id="send-btn" type="submit" title="Send">➤</button>
   </form>
 

@@ -138,8 +138,34 @@ main#chat {
   background: var(--bg-2);
   border-top: 1px solid #262b3a;
 }
+.composer-input-wrap {
+  position: relative; flex: 1; min-width: 0;
+}
+
+.slash-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 6px);
+  max-height: min(280px, 42vh); overflow-y: auto;
+  background: var(--bg-2); border: 1px solid #2c3245;
+  border-radius: 12px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  z-index: 6; padding: 6px;
+}
+.slash-menu[hidden] { display: none; }
+.slash-item {
+  display: flex; flex-direction: column; gap: 2px;
+  width: 100%; text-align: left; background: none; border: none;
+  border-radius: 8px; padding: 8px 10px; cursor: pointer;
+  color: var(--fg); font: inherit;
+}
+.slash-item:hover, .slash-item.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.slash-item-cmd { font-weight: 600; font-size: 14px; color: var(--accent); }
+.slash-item-cmd.danger { color: #ff8f8f; }
+.slash-item-desc { font-size: 12px; color: var(--fg-dim); line-height: 1.35; }
+.slash-empty { color: var(--fg-dim); font-size: 13px; padding: 8px 10px; }
 
 #input {
+  width: 100%;
   flex: 1; resize: none; max-height: 130px;
   background: var(--bg-3); color: var(--fg);
   border: 1px solid #2c3245; border-radius: 22px;
