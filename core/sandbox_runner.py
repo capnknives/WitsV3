@@ -88,13 +88,21 @@ async def _run_subprocess_sandbox(
 async def _run_docker_sandbox(
     code: str, *, config: Any | None, timeout: float
 ) -> SandboxResult:
+    # Reason: reuse docker_sandbox PATH resolution so PATH-less shells work on Windows.
+    from core.docker_sandbox import _docker_env, _docker_exe
+
     security = getattr(config, "security", None) if config else None
     image = getattr(security, "sandbox_image", "witsv3-sandbox") if security else "witsv3-sandbox"
+    exe = _docker_exe()
+    if not exe:
+        return SandboxResult(
+            success=False, output="", error="docker CLI not found on PATH", return_code=-1
+        )
     with tempfile.TemporaryDirectory(prefix="wits_docker_sandbox_") as tmp:
         script = Path(tmp) / "user_code.py"
         script.write_text(code, encoding="utf-8")
         cmd = [
-            "docker",
+            exe,
             "run",
             "--rm",
             "--network=none",
@@ -108,6 +116,7 @@ async def _run_docker_sandbox(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            env=_docker_env(),
         )
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -145,9 +154,14 @@ async def run_pytest_sandboxed(
     if mode != "docker":
         return await run_pytest(test_paths, timeout=timeout)
 
+    from core.docker_sandbox import _docker_env, _docker_exe
+
     security = getattr(config, "security", None) if config else None
     image = getattr(security, "sandbox_image", "witsv3-sandbox") if security else "witsv3-sandbox"
-  # Project mount is read-only; keep pytest cache/temp off /workspace.
+    exe = _docker_exe()
+    if not exe:
+        return False, "docker CLI not found on PATH"
+    # Project mount is read-only; keep pytest cache/temp off /workspace.
     args = [
         "pytest",
         "-q",
@@ -160,7 +174,7 @@ async def run_pytest_sandboxed(
         *(test_paths or []),
     ]
     cmd = [
-        "docker",
+        exe,
         "run",
         "--rm",
         "-v",
@@ -174,6 +188,7 @@ async def run_pytest_sandboxed(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
+        env=_docker_env(),
     )
     try:
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)

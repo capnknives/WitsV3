@@ -34,7 +34,7 @@ document_rag:
   documents_path: var/user_files
   chunk_size: 1200
   chunk_overlap: 150
-  auto_ingest_on_startup: true
+  auto_ingest_on_startup: false
   file_extensions:
     - .txt
     - .md
