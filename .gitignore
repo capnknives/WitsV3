@@ -102,11 +102,13 @@ config/user_*
 
 # Development & Debug Files
 debug_*.py
+!scripts/debug_init.py
 # Important test files are NOT ignored (test_witsv3.py, etc.)
 # Only ignore temporary/local test files
 temp_test_*.py
 _test_*.py
 fix_*.py
+!scripts/fix_neural_web.py
 verify_*.py
 
 # Local development

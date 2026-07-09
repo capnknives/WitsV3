@@ -210,6 +210,16 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 | Root `TASK.md` / `PLANNING.md` | Redirects only |
 | `DOCKER_INSTRUCTIONS.md` | Parked / background-agent only |
 
+### Repo footprint consolidation (July 2026)
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| **0 — Safe deletes** | ✅ Done | Removed `models/` (dummy adaptive-LLM safetensors), `WitsV3/` stray package, `enhanced_config_with_fallback.txt`; moved `debug_init.py` + `fix_neural_web.py` → `scripts/` |
+| **1 — Doc consolidation** | Pending | Merge `planning/` + `docs/` under single `docs/` tree |
+| **2 — Archive slim-down** | Pending | Tag + prune `planning/archive/gui/` etc. |
+| **3 — Runtime `var/` layout** | Pending | Centralize paths in config first |
+| **4 — Root surface cleanup** | Pending | Instruction-file redirects |
+
 ---
 
 ## 4. Parked (out of scope unless requirements change)

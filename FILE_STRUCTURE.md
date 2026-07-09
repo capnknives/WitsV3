@@ -19,7 +19,7 @@ Practical map of the repo as of July 2026. Prefer this + [`README.md`](README.md
 | `web/` | FastAPI app, SSE chat, static UI, settings / MCP pages |
 | `tests/` | Pytest suite mirroring packages |
 | `config/` | Extra YAML (personality, ethics, background agent) |
-| `scripts/` | Setup / maintenance utilities (`setup_local_data.py`, doc helpers, …) |
+| `scripts/` | Setup / maintenance utilities (`setup_local_data.py`, `debug_init.py`, `fix_neural_web.py`, …) |
 | `planning/` | Roadmaps, architecture, archives (including parked PyQt6 GUI) |
 | `docs/` | Mostly historical (synthetic-brain set); see `docs/SYNTHETIC_BRAIN.md` |
 | `documents/` | User drop folder for Document RAG (contents gitignored) |
