@@ -1,8 +1,8 @@
 # WitsV3 — Suggested Features & Roadmap
 
-**Last updated:** July 8, 2026 (post Top-50 gap analysis)  
-**Working branch tip:** `cursor/work` (merges into `fix/revive-2026-07`)  
-**Test suite:** 435 collected — re-run `pytest -q` before claiming green
+**Last updated:** July 8, 2026 (Phase 0 complete — `main` promoted)  
+**Working branch tip:** `cursor/work` / `claude/work` (merge into `fix/revive-2026-07` or `main`)  
+**Test suite:** **571 passed, 2 skipped** (July 8, 2026 — re-run `pytest -q` before claiming green)
 
 This is the **canonical forward roadmap**: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
@@ -11,7 +11,8 @@ For audits (clutter / tools / config), see the July 8 catalog docs in this folde
 
 ### Git workflow
 
-Feature work → **`fix/revive-2026-07`** → Richard merges to **`main`** after manual verification.
+Feature work → **`fix/revive-2026-07`** or feature branches → **`main`** after verification.  
+Richard promoted **`fix/revive-2026-07` → `main`** July 8, 2026 (Phase 0 complete).
 
 ---
 
@@ -81,17 +82,15 @@ Mapped against [`FEATURE_IDEAS/Top Local AI System Features.docx`](FEATURE_IDEAS
 
 **Product stance:** WitsV3 is a **personal LAN orchestration stack**, not a full sovereign AI OS. Do not chase voice, fine-tuning, microVM sandboxes, or Windows ODR unless requirements change.
 
-### Phase 0 — Ship gate (now)
+### Phase 0 — Ship gate ✅ complete (July 8, 2026)
 
-| # | Item | Maps to | Effort |
-|---|------|---------|--------|
-| 0.1 | Merge `fix/revive-2026-07` → `main` when satisfied | — | Human |
-| 0.2 | Keep pytest green | — | Ongoing |
-| 0.3 | Optional `ANTHROPIC_API_KEY` for ask-Claude | #18 | Owner |
+| # | Item | Maps to | Effort | Status |
+|---|------|---------|--------|--------|
+| 0.1 | Merge `fix/revive-2026-07` → `main` | — | Human | ✅ Done July 8 — fast-forward to `4c676c3` |
+| 0.2 | Keep pytest green | — | Ongoing | ✅ **571 passed, 2 skipped** (July 8) |
+| 0.3 | Optional `ANTHROPIC_API_KEY` for ask-Claude | #18 | Owner | Open — optional; escalation works when key is set |
 
-### Phase 1 — Trust & daily-use quality (next 4–6 weeks)
-
-Highest ROI vs the Top-50 doc and existing open items.
+### Phase 1 — Trust & daily-use quality ✅ complete (July 8, 2026)
 
 | # | Item | Maps to | Effort | Notes |
 |---|------|---------|--------|-------|
@@ -102,7 +101,7 @@ Highest ROI vs the Top-50 doc and existing open items.
 | 1.5 | ~~**Evidence sufficiency gate**~~ | #33 | Small–Medium | ✅ Done July 8 — synthesis guard blocks weak doc answers |
 | 1.6 | ~~**Multi-session chat UI**~~ | #21 | Medium | ✅ Done July 8 — `/api/sessions` + Chats panel |
 
-### Phase 2 — Operator UX & observability
+### Phase 2 — Operator UX & observability **(current)**
 
 | # | Item | Maps to | Effort |
 |---|------|---------|--------|
@@ -141,8 +140,8 @@ Highest ROI vs the Top-50 doc and existing open items.
 ### P0 — Verify & promote
 
 1. ~~Complete manual tests A–F~~ ✅  
-2. Keep the suite green (including traceback remapping across sibling worktree log paths)  
-3. Merge `fix/revive-2026-07` → `main` when satisfied  
+2. ~~Keep the suite green~~ ✅ 571 passed, 2 skipped (July 8, 2026)  
+3. ~~Merge `fix/revive-2026-07` → `main`~~ ✅ Done July 8, 2026  
 
 ### P1 — High leverage (historical)
 
@@ -240,15 +239,14 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 
 ---
 
-## 6. Suggested next chunk (post Top-50)
+## 6. Suggested next chunk
 
-1. **Phase 0:** Promote `fix/revive-2026-07` → `main` when ready  
-2. **Phase 1.1:** Conversation-history-aware intent (WCCA branch)  
-3. **Phase 1.2:** Guest content policy + owner admin UI  
-4. **Phase 1.3:** Hybrid document search spike (BM25 + existing vector path)  
-5. **Phase 1.6:** Multi-session chat UI (quick win once 1.1–1.2 stable)  
+1. ~~**Phase 0:** Promote `fix/revive-2026-07` → `main`~~ ✅ Done July 8, 2026  
+2. ~~**Phase 1:** Trust & daily-use quality (all six items)~~ ✅ Done July 8, 2026  
+3. **Phase 2.1:** Ollama model pull/status helper in `/settings` (start here)  
+4. **Phase 2.2–2.6:** MCP health, tool analytics, streaming progress, background-task visibility, offline mode  
 
-Defer Phase 3 (FAISS default / GraphRAG / neural web) until Phase 1 RAG + memory work proves the need.
+Defer Phase 3 (FAISS default / GraphRAG / neural web) until Phase 2 operator UX is in place.
 
 ---
 

@@ -1,8 +1,8 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
-**Branch tip (tracking):** `fix/revive-2026-07` / feature work on `cursor/iron-delta-w0r5`  
-**Test suite:** 406 collected (re-run `pytest` — treat README figures as authoritative when they disagree)  
-**Last updated:** July 8, 2026
+**Branch tip:** `main` @ `4c676c3` (promoted from `fix/revive-2026-07` July 8, 2026)  
+**Test suite:** **571 passed, 2 skipped** (July 8, 2026 — re-run `pytest -q`)  
+**Last updated:** July 8, 2026 (Phase 0 complete)
 
 This document is the **shipped-work log** for the July 2026 revival: what landed,
 what broke, and how it was fixed. It is **not** the forward backlog.
@@ -12,11 +12,9 @@ what broke, and how it was fixed. It is **not** the forward backlog.
 
 ### Git workflow (integration branch)
 
-**All revival work lands on `fix/revive-2026-07` first.** Feature branches
-(e.g. `cursor/*`, `composer/*`, `claude/*`) merge there when a chunk of work is
-done; agents and sessions should **push to `fix/revive-2026-07`**, not directly
-to `main`. Richard merges `fix/revive-2026-07` → `main` when manual testing
-looks good — that promotion step stays a deliberate human decision.
+Feature branches (`cursor/*`, `claude/*`) merge into **`fix/revive-2026-07`**
+or directly to **`main`** when verified. **`main` was promoted** July 8, 2026
+(fast-forward from `fix/revive-2026-07` @ `4c676c3`) — Phase 0 ship gate complete.
 
 ---
 
@@ -131,10 +129,11 @@ work, and remove/archive candidates live in the forward roadmap:
 
 Quick gates before promoting `fix/revive-2026-07` → `main`:
 
-1. ~~Run manual tests **A–F**~~ — ✅ DONE July 8 2026 (see suggested-features G1/G3).
+1. ~~Run manual tests **A–F**~~ — ✅ DONE July 8 2026.
 2. Optionally add `ANTHROPIC_API_KEY` for ask-Claude escalation — still owner's call.
-3. Re-run full pytest and clear any remaining failures before calling the branch green.
-4. Docs/install authenticity pass — ✅ README + planning indexes updated July 8 2026.
+3. ~~Re-run full pytest~~ — ✅ **571 passed, 2 skipped** (July 8, 2026).
+4. ~~Docs/install authenticity pass~~ — ✅ README + planning indexes updated July 8 2026.
+5. ~~Promote `fix/revive-2026-07` → `main`~~ — ✅ DONE July 8, 2026 (`4c676c3`).
 
 ### Phase 1 — Trust & daily-use quality (July 8 2026)
 

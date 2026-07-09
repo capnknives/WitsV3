@@ -5,7 +5,7 @@ personal use, Claude, and Cursor do not stomp each other.
 
 | Folder | Branch (typical) | Role |
 |--------|------------------|------|
-| **`WitsV3`** | `fix/revive-2026-07` (or `main`) | **Your runtime** — run the Web UI / CLI, daily self-repair, watchdog, live testing |
+| **`WitsV3`** | `main` (or `fix/revive-2026-07`) | **Your runtime** — run the Web UI / CLI, daily self-repair, watchdog, live testing |
 | **`WitsV3-cursor`** | `cursor/work` (or `cursor/*`) | **Cursor agent** — AI edits and PRs land here first |
 | **`WitsV3-claude`** | `claude/work` (or `claude/*`) | **Claude agent** — Claude Code / Claude sessions only |
 
@@ -22,8 +22,10 @@ C:\Users\capta\source\repos\capnknives\WitsV3-claude
 1. **Run WITS for yourself from `WitsV3` only** (`start_web_ui.bat` / `run_web.py`). Point Scheduled Tasks / watchdog at this folder, not an agent worktree.
 2. **Open Cursor’s project folder on `WitsV3-cursor`** when asking the Cursor agent to edit code.
 3. **Open Claude on `WitsV3-claude`** the same way.
-4. Agents push feature branches → merge into `fix/revive-2026-07` → you pull that into `WitsV3` for personal use → promote to `main` when ready.
+4. Agents push feature branches → merge into `fix/revive-2026-07` or `main` → pull `main` into `WitsV3` for personal use.
 5. Do not commit `.env`, `data/`, or memory files. Agent worktrees may share the personal `.venv` via a directory junction; that is intentional.
+
+**July 8, 2026:** `fix/revive-2026-07` was promoted to **`main`** (Phase 0 ship gate). Runtime can track `main`:
 
 > ⚠️ **Edits made in `WitsV3-cursor` are NOT live in your runtime.** The Web UI /
 > CLI you actually run come from **`WitsV3`**. After finishing changes here
@@ -31,7 +33,12 @@ C:\Users\capta\source\repos\capnknives\WitsV3-claude
 > as-is), sync them into `WitsV3` or they won't show up:
 >
 > ```powershell
-> # from WitsV3-cursor: commit, then fast-forward the runtime worktree
+> git -C C:\Users\capta\source\repos\capnknives\WitsV3 pull origin main
+> ```
+>
+> Or after agent work on `cursor/work`:
+>
+> ```powershell
 > git -C C:\Users\capta\source\repos\capnknives\WitsV3-cursor add -A
 > git -C C:\Users\capta\source\repos\capnknives\WitsV3-cursor commit -m "..."
 > git -C C:\Users\capta\source\repos\capnknives\WitsV3 merge --ff-only cursor/work

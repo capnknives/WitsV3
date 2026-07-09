@@ -76,6 +76,8 @@ These files are **hot** on both guest/orchestrator and web paths:
 - No commits on `claude/work` or `fix/revive-2026-07` from this session
 - Did not merge into `WitsV3` runtime worktree (owner step per `WORKTREES.md`)
 
+**Update (July 8, 2026 evening):** Phase 0 complete — `fix/revive-2026-07` promoted to **`main`** @ `4c676c3`; pytest **571 passed, 2 skipped**. Phase 2 is next.
+
 ---
 
 ## Commit series on `cursor/work` (this push)
