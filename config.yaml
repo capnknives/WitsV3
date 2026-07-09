@@ -1,82 +1,12 @@
-adaptive_llm:
-  complexity_analyzer:
-    length_weight: 0.2
-    reasoning_weight: 0.3
-    structure_weight: 0.2
-    use_embeddings: true
-    vocab_weight: 0.3
-  enable_performance_tracking: true
-  fallback_to_base_on_error: true
-  max_fallback_attempts: 3
-  module_loader:
-    enable_quantization: true
-    preload_modules:
-      - base
-    ram_budget_gb: 30.0
-    vram_budget_gb: 7.5
-  semantic_cache:
-    cache_dir: cache
-    cache_size: 1000000
-    enable_caching: true
-    similarity_threshold: 0.92
 agents:
-  # NOTE: only model/temperature/max_tokens/num_ctx are wired to
-  # BookWritingAgentSettings (core/config.py) and actually take effect.
-  # enable_narrative_intelligence and story_structure_patterns are not read
-  # by any loader and currently do nothing — see
-  # docs/roadmap/config-surface-truth-2026-07.md.
-  book_writing_agent:
-    enable_narrative_intelligence: true
-    # Per-chapter generation bound (the book is written one chapter per LLM
-    # call), not a whole-book budget. A real novella chapter runs roughly
-    # 2,000-3,500 words (~2,800-4,900 tokens) — 4500 leaves headroom for
-    # that plus a safety margin before truncating.
-    max_tokens: 4500
-    # Ollama's own runtime context window default is much smaller than most
-    # models' trained context length (often 2k-4k tokens) regardless of
-    # max_tokens, and silently truncates a large world-bible + continuity +
-    # outline prompt combined with a long completion unless set explicitly.
-    num_ctx: 8192
-    # hermes3:8b (Nous Research) over the system default qwen3:8b: tuned for
-    # long-context narrative coherence and multi-turn roleplay, and unlike
-    # qwen3 it doesn't spend part of max_tokens on hidden <think> reasoning
-    # before the actual prose — pull with `ollama pull hermes3:8b`.
-    model: hermes3:8b
-    story_structure_patterns:
-      - hero_journey
-      - three_act
-      - spiral
-    temperature: 0.8
-  coding_agent:
-    enable_code_intelligence: true
-    max_tokens: 8192
-    model: qwen2.5-coder:7b
-    supported_languages:
-      - python
-      - javascript
-      - typescript
-      - rust
-      - go
-    temperature: 0.2
-  control_center_agent:
-    enable_neural_routing: true
-    max_tokens: 2048
-    model: qwen3:8b
-    temperature: 0.3
   default_temperature: 0.7
   max_iterations: 15
-  orchestrator_agent:
-    enable_neural_reasoning: true
-    max_tokens: 4096
-    model: qwen3:8b
-    reasoning_depth: 3
-    temperature: 0.7
-  self_repair_agent:
-    enable_system_monitoring: true
-    health_check_interval: 300
-    max_tokens: 4096
-    model: qwen3:8b
-    temperature: 0.1
+  book_writing_agent:
+    # hermes3:8b — narrative coherence; pull via Settings or `ollama pull hermes3:8b`
+    model: hermes3:8b
+    max_tokens: 4500
+    num_ctx: 8192
+    temperature: 0.8
 auto_restart_on_file_change: false
 cli:
   show_thoughts: true
@@ -143,26 +73,10 @@ knowledge_log:
   file_path: data/knowledge_log.json
   max_error_signatures: 200
   max_facts: 200
-docker:
-  background_agents:
-    cpu_limit: "1.0"
-    health_check_interval: 30
-    max_instances: 3
-    memory_limit: 2G
-    network_mode: bridge
-    restart_policy: unless-stopped
+escalation:
   enabled: true
-  environment:
-    CURSOR_INTEGRATION: "true"
-    OLLAMA_HOST: host.docker.internal
-    OLLAMA_PORT: "11434"
-    WITSV3_BACKGROUND_MODE: "true"
-    WITSV3_DOCKER_ENV: "true"
-  volumes:
-    - source: ./data
-      target: /app/data
-    - source: ./config.yaml
-      target: /app/config.yaml
+  model: claude-opus-4-8
+  max_tokens: 2048
 llm_interface:
   default_provider: ollama
   streaming_enabled: true
@@ -189,15 +103,10 @@ memory_manager:
   pruning_interval_seconds: 3600
   vector_dim: 768  # nomic-embed-text embedding dimension
 ollama_settings:
-  book_writing_model: qwen3:8b
-  coding_agent_model: qwen2.5-coder:7b
   control_center_model: qwen3:8b
   default_model: qwen3:8b
   embedding_model: nomic-embed-text
-  neural_reasoning_model: qwen3:8b
   orchestrator_model: qwen3:8b
-  request_timeout: 120
-  self_repair_model: qwen3:8b
   url: http://localhost:11434
 
   # Model reliability and fallback settings

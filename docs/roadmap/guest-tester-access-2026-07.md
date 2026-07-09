@@ -2,9 +2,9 @@
 
 **Created:** July 8, 2026  
 **Last reviewed:** July 8, 2026 (plan review + safe-MVP merge)  
-**Status:** Safe MVP implemented (Phase 1+2); Phase 3 content policy partial; guest audit logging shipped; Phase 4 owner admin UI still open  
-**Priority:** P1 (user-requested)  
-**Branch target:** `cursor/work` → `fix/revive-2026-07`
+**Status:** Safe MVP + Phase 3–4 complete (July 8, 2026) — policy YAML, safesearch, guest admin UI, profile fact editor  
+**Priority:** P1 (shipped)  
+**Branch target:** `cursor/work` / `claude/work` → `main`
 
 Let a trusted family member (e.g. nephew on the same WiFi) use Wits from a phone
 **without the owner token**, with age-appropriate guardrails and a remembered

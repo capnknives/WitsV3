@@ -17,7 +17,7 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 | 3 | Hybrid CPU/GPU/NPU routing | 🟡 | Ollama owns GPU; `model_router.py` routes by task complexity, not chip type | No NPU path; no explicit GPU layer controls in app |
 | 4 | Hardware security enclaves | ➖ | — | OS/firmware (Pluton, Secure Enclave) |
 | 5 | ARM/Metal API optimizations | 🟡 | Ollama/MLX on Mac is environmental | App does not select MLX vs CUDA |
-| 6 | Air-gapped sovereignty | 🟡 | Local-first; Ollama + optional keyless DDG search | `web_search` and MCP can reach network; no “offline-only” mode flag |
+| 6 | Air-gapped sovereignty | 🟡 | Local-first; Ollama + optional keyless DDG search | `web_search` and MCP can reach network; no “offline-only” mode flag → **Phase 2.6** |
 
 ---
 
@@ -27,7 +27,7 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 |---|---------|--------|--------------|-------------|
 | 7 | GGUF format support | 🟡 | Via Ollama model pulls (GGUF under the hood) | No in-app GGUF management or quant picker |
 | 8 | Daemon CLI inference (Ollama) | ✅ | `ollama_settings.url`, all agents use `OllamaInterface` | Shipped |
-| 9 | GUI management layer | 🟡 | Web `/settings` for models; no model browser/pull UI | P3 “ollama pull helper” in old roadmap |
+| 9 | GUI management layer | 🟡 | Web `/settings` for models; Ollama pull/status panel (Phase 2.1, July 9) | Quick win shipped |
 | 10 | MoE base architectures | 🟡 | Can run MoE models if pulled in Ollama | No MoE-aware routing |
 | 11 | Native multimodal backbones | ❌ | Text-only orchestration path | No vision/audio in chat |
 | 12 | Multi-token prediction (MTP) | ➖ | Ollama/runtime concern | — |
@@ -54,7 +54,7 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 | # | Feature | Status | WitsV3 today | Gap / notes |
 |---|---------|--------|--------------|-------------|
 | 21 | Tri-layer memory (working / episodic / semantic) | 🟡 | Single `MemoryManager` segment store; `config/wits_core.yaml` aspirational; `working_memory.py` + KG exist but not on default path | Layers not enforced in live `run_web.py` |
-| 22 | Pre-compaction memory flushes | 🟡 | `ConversationSummarizer` exists; configurable history window in `/settings` | No automatic flush-before-truncate on long sessions |
+| 22 | Pre-compaction memory flushes | ✅ | `maybe_flush_conversation_memory` before agent runs | Shipped Phase 1.4 (July 8) |
 | 23 | Autonomous “dreaming” / consolidation | ❌ | Synthetic brain archived | Explicitly out of scope unless revived |
 | 24 | Frozen prompt memory snapshots | 🟡 | Personality + guest profiles load at session start | No session-frozen MEMORY.md injection pattern |
 | 25 | Active memory sub-agent retrieval | 🟡 | `memory_manager.search_memory` in orchestrator context; document inventory in WCCA | Not a blocking pre-turn retrieval agent |
@@ -70,7 +70,7 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 | 28 | GraphRAG / knowledge-graph retrieval | 🟡 | `core/knowledge_graph.py` + neural web; **not wired to document RAG** | GraphRAG pipeline missing |
 | 29 | Local dense embeddings | ✅ | `nomic-embed-text` via Ollama on ingest/search | Shipped |
 | 30 | Agentic retry + drift-guarded reformulation | 🟡 | Orchestrator can retry tools; synthesis guard on final answer | No dedicated RAG query reformulation loop |
-| 31 | Hybrid lexical + semantic fusion | ❌ | Vector search only in `document_search` | No BM25 / keyword index |
+| 31 | Hybrid lexical + semantic fusion | ✅ | BM25 + vector fuse in `document_search` | Shipped Phase 1.3 (July 8) |
 | 32 | Incremental RAG indexing (hashing) | ✅ | SHA-256 per file in `document_tools.py` | Shipped |
 | 33 | Evidence sufficiency scoring | 🟡 | Synthesis guard checks term overlap with doc/web observations | No explicit “insufficient evidence → refuse” rubric |
 
@@ -136,18 +136,18 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 
 | Existing item | Maps to feature # | Notes |
 |---------------|-------------------|-------|
-| Guest access MVP (Phase 3–4 open) | 27, 43–45 | Content policy partial; owner admin UI open |
-| Conversation-history-aware intent | 21–22 | Reduces misrouting after clarifications |
-| Multi-session chat history | 21, UI | Server supports multiple sessions; no UI switcher |
-| Memory browser | 21 | Shipped |
-| Hybrid RAG / reranking | 28, 31, 33 | **Not on old roadmap** — new P1 candidate |
+| Guest access MVP (Phase 3–4) | 27, 43–45 | ✅ Shipped July 8 |
+| Conversation-history-aware intent | 21–22 | ✅ Shipped Phase 1.1 |
+| Multi-session chat history | 21, UI | ✅ Shipped Phase 1.6 |
+| Memory browser | 21 | ✅ Shipped |
+| Hybrid RAG / reranking | 28, 31, 33 | ✅ Shipped Phase 1.3 |
 | Neural web | 21, 28 | Parked as research; KG exists |
-| MCP health dashboard | 14, 20 | Partial overlap |
-| Ollama pull helper | 8–9 | Quick win |
-| Streaming tool progress | 20 | UX telemetry |
+| MCP health dashboard | 14, 20 | **→ Phase 2.2** (next) |
+| Ollama pull/status helper | 8–9 | ✅ Shipped Phase 2.1 (July 9) |
+| Streaming tool progress | 20 | **→ Phase 2.4** |
 | Clutter / file splits | — | Hygiene, not feature gaps |
 
-**Revival backlog:** effectively closed. **Guest Phase 3–4** and **conversation-aware intent** remain the only explicit open P1 items from the pre-analysis roadmap.
+**Revival backlog:** closed. **Phase 2.2** (MCP health panel) is the next canonical item.
 
 ---
 

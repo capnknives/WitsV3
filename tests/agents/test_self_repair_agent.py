@@ -291,7 +291,7 @@ def test_extract_file_mention_ignores_nonexistent_files():
 
 def test_extract_code_from_response_strips_fence():
     response = "Here you go:\n```python\nx = 1\n```\n"
-    assert extract_code_from_response(response) == "x = 1\n"
+    assert extract_code_from_response(response) == "x = 1"
 
 
 def test_extract_code_from_response_falls_back_to_raw_text():

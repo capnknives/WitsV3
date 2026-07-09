@@ -63,7 +63,9 @@ from web.schemas import (
     SessionCreateResponse,
     SessionRenameRequest,
     SettingsUpdate,
+    OllamaPullRequest,
 )
+from web.ollama_admin import build_ollama_status, pull_ollama_model
 from web.slash_commands import list_slash_commands
 from web.user_errors import format_chat_error
 
@@ -777,19 +779,36 @@ def create_app(system) -> FastAPI:
     # --------------------------------------------------------- settings
     async def _list_ollama_models() -> list:
         """Best-effort list of locally available Ollama models."""
-        import asyncio
-        import urllib.request
+        status = await build_ollama_status(system.config)
+        return status["available_models"]
 
-        def fetch():
-            url = system.config.ollama_settings.url.rstrip("/") + "/api/tags"
-            with urllib.request.urlopen(url, timeout=3) as resp:
-                return json.loads(resp.read())
+    def _owner_only(request: Request) -> JSONResponse | None:
+        if getattr(request.state, "auth_role", None) != "owner":
+            return JSONResponse({"detail": "Only the owner can manage Ollama models."}, status_code=403)
+        return None
 
+    @app.get("/api/ollama/status")
+    async def ollama_status(request: Request):
+        denied = _owner_only(request)
+        if denied:
+            return denied
+        return await build_ollama_status(system.config)
+
+    @app.post("/api/ollama/pull")
+    async def ollama_pull(request: Request, body: OllamaPullRequest):
+        denied = _owner_only(request)
+        if denied:
+            return denied
         try:
-            data = await asyncio.to_thread(fetch)
-            return sorted(m["name"] for m in data.get("models", []))
-        except Exception:
-            return []
+            result = await pull_ollama_model(system.config.ollama_settings.url, body.model)
+        except ValueError as e:
+            return JSONResponse({"detail": str(e)}, status_code=400)
+        except TimeoutError as e:
+            return JSONResponse({"detail": str(e)}, status_code=504)
+        except RuntimeError as e:
+            return JSONResponse({"detail": str(e)}, status_code=502)
+        status = await build_ollama_status(system.config)
+        return {"pulled": True, **result, "ollama": status}
 
     @app.get("/api/settings")
     async def get_settings():
@@ -797,13 +816,15 @@ def create_app(system) -> FastAPI:
 
         cfg = system.config
         mr = cfg.model_routing
+        ollama_status_payload = await build_ollama_status(cfg)
         return {
             "history_window": cfg.agents.history_window,
             "default_temperature": cfg.agents.default_temperature,
             "max_iterations": cfg.agents.max_iterations,
             "default_model": cfg.ollama_settings.default_model,
             "orchestrator_model": cfg.ollama_settings.orchestrator_model,
-            "available_models": await _list_ollama_models(),
+            "available_models": ollama_status_payload["available_models"],
+            "ollama": ollama_status_payload,
             "model_routing": {
                 "enabled": mr.enabled,
                 "trivial_model": mr.trivial_model,

@@ -88,6 +88,12 @@ class OwnerControlRequest(BaseModel):
     delay_seconds: float | None = 1.0
 
 
+class OllamaPullRequest(BaseModel):
+    """Pull a model into the local Ollama store from the settings UI."""
+
+    model: str
+
+
 class DocumentDeleteRequest(BaseModel):
     """Remove a single ingested document file and its memory chunks."""
 

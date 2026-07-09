@@ -10,7 +10,8 @@ memory_file_path: "var/data/background_agent_memory.json"
 
 tasks:
   memory_maintenance:
-    enabled: true
+    # Off by default: _maintain_memory() is currently a no-op — enable after wiring prune.
+    enabled: false
     schedule: "0 0 * * *" # Daily at midnight
     description: "Prune memory, enhance metadata, optimize embeddings"
     settings:

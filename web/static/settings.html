@@ -62,6 +62,29 @@
     #status { margin-top: 14px; font-size: 14px; }
     #status.ok { color: #7dd68a; }
     #status.bad { color: #ff8f8f; }
+    .model-status-banner { border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+    .model-status-banner.down { background: #3a2020; border: 1px solid #7a4040; color: #ffafaf; }
+    .model-status-banner.ok { background: #1a2a22; border: 1px solid #3a6a4a; color: #9fdfaf; }
+    .model-status-banner.warn { background: #2a2418; border: 1px solid #6a5a30; color: #ffcf8f; }
+    .model-row { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+                 padding: 8px 0; border-bottom: 1px solid #2c3245; }
+    .model-row:last-child { border-bottom: none; }
+    .model-row-meta { min-width: 0; }
+    .model-row-name { font-weight: 600; font-size: 14px; word-break: break-all; }
+    .model-row-role { color: var(--fg-dim); font-size: 12px; }
+    .model-badge { font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+                   border-radius: 999px; padding: 3px 8px; white-space: nowrap; }
+    .model-badge.installed { background: #1f3d2a; color: #7dd68a; }
+    .model-badge.missing { background: #3d2a1f; color: #ffcf8f; }
+    .model-badge.down { background: #3a2020; color: #ffafaf; }
+    .model-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .model-actions button { background: var(--bg-3); border: 1px solid #2c3245; color: var(--fg);
+                            border-radius: 8px; padding: 8px 14px; cursor: pointer; font: inherit; }
+    .model-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .model-actions button:disabled { opacity: .55; cursor: wait; }
+    .pull-btn { background: var(--accent); border: none; color: #fff; border-radius: 6px;
+                padding: 5px 10px; font: inherit; cursor: pointer; font-size: 12px; }
+    .pull-btn:disabled { opacity: .55; cursor: wait; }
   </style>
 </head>
 <body>
@@ -101,6 +124,19 @@
       </div>
 
       <h2>Models (Ollama)</h2>
+      <div class="setting" id="ollama-status-panel">
+        <div class="hint" style="margin-bottom:10px">
+          Required models for WITS. Install missing ones with <b>Pull</b> or run
+          <code>ollama pull &lt;name&gt;</code> from a terminal.
+          <a href="https://github.com/capnknives/WitsV3#2-models" target="_blank" rel="noopener">README model list</a>
+        </div>
+        <div id="ollama-status-banner" class="model-status-banner warn">Checking Ollama…</div>
+        <div id="ollama-model-rows"></div>
+        <div class="model-actions">
+          <button type="button" id="ollama-refresh-btn">Refresh status</button>
+          <button type="button" id="ollama-pull-all-btn" class="primary" hidden>Pull all missing</button>
+        </div>
+      </div>
       <div class="setting">
         <label for="default_model">Default model</label>
         <select id="default_model"></select>
@@ -234,6 +270,128 @@
         `A typical approved question costs a few cents.`;
     }
     $("#escalation_model").addEventListener("change", updatePriceNote);
+
+    function renderOllamaStatus(ollama) {
+      const banner = $("#ollama-status-banner");
+      const rows = $("#ollama-model-rows");
+      const pullAll = $("#ollama-pull-all-btn");
+      if (!ollama) {
+        banner.className = "model-status-banner down";
+        banner.textContent = "Could not load Ollama status.";
+        rows.innerHTML = "";
+        pullAll.hidden = true;
+        return;
+      }
+      const configured = ollama.configured_models || [];
+      const missing = configured.filter((m) => !m.installed);
+      if (!ollama.reachable) {
+        banner.className = "model-status-banner down";
+        banner.textContent =
+          `Ollama is not reachable at ${ollama.url}. Start the Ollama app, then refresh.`;
+      } else if (missing.length === 0) {
+        banner.className = "model-status-banner ok";
+        banner.textContent = "All configured models are installed.";
+      } else {
+        banner.className = "model-status-banner warn";
+        banner.textContent = `${missing.length} configured model(s) not installed locally.`;
+      }
+      rows.innerHTML = "";
+      for (const m of configured) {
+        const row = document.createElement("div");
+        row.className = "model-row";
+        let badgeClass = "missing";
+        let badgeText = "Missing";
+        if (!ollama.reachable) {
+          badgeClass = "down";
+          badgeText = "Unknown";
+        } else if (m.installed) {
+          badgeClass = "installed";
+          badgeText = "Installed";
+        }
+        const pullBtn =
+          ollama.reachable && !m.installed
+            ? `<button type="button" class="pull-btn" data-model="${m.name}">Pull</button>`
+            : "";
+        row.innerHTML = `
+          <div class="model-row-meta">
+            <div class="model-row-name">${m.name}</div>
+            <div class="model-row-role">${m.label}</div>
+          </div>
+          <span class="model-badge ${badgeClass}">${badgeText}</span>
+          ${pullBtn}`;
+        rows.appendChild(row);
+      }
+      rows.querySelectorAll(".pull-btn").forEach((btn) => {
+        btn.addEventListener("click", () => pullModel(btn.dataset.model, btn));
+      });
+      pullAll.hidden = !ollama.reachable || missing.length === 0;
+    }
+
+    async function pullModel(name, btn) {
+      if (!name) return;
+      const buttons = document.querySelectorAll(".pull-btn, #ollama-pull-all-btn, #ollama-refresh-btn");
+      buttons.forEach((b) => { b.disabled = true; });
+      if (btn) btn.textContent = "Pulling…";
+      setStatus(`Pulling ${name}… (this can take several minutes)`, true);
+      try {
+        const res = await api("/api/ollama/pull", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model: name }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          setStatus(body.detail || `Pull failed (${res.status})`, false);
+          return;
+        }
+        setStatus(`✅ Pulled ${name}`, true);
+        await refreshOllamaAndSettings(body.ollama);
+      } catch (e) { /* handled */ }
+      finally {
+        buttons.forEach((b) => { b.disabled = false; });
+        document.querySelectorAll(".pull-btn").forEach((b) => { b.textContent = "Pull"; });
+      }
+    }
+
+    async function refreshOllamaAndSettings(cachedOllama) {
+      let ollama = cachedOllama;
+      if (!ollama) {
+        const res = await api("/api/ollama/status");
+        if (res.ok) ollama = await res.json();
+      }
+      renderOllamaStatus(ollama);
+      if (ollama && ollama.available_models) {
+        const sRes = await api("/api/settings");
+        if (sRes.ok) {
+          const s = await sRes.json();
+          fillSelect($("#default_model"), ollama.available_models, s.default_model);
+          fillSelect($("#orchestrator_model"), ollama.available_models, s.orchestrator_model);
+          const mr = s.model_routing || {};
+          fillSelect($("#routing_trivial_model"), ollama.available_models, mr.trivial_model);
+          fillSelect($("#routing_code_model"), ollama.available_models, mr.code_model);
+          fillSelect($("#routing_complex_model"), ollama.available_models, mr.complex_model);
+        }
+      }
+    }
+
+    $("#ollama-refresh-btn").addEventListener("click", async () => {
+      $("#ollama-refresh-btn").disabled = true;
+      try {
+        await refreshOllamaAndSettings();
+        setStatus("Ollama status refreshed.", true);
+      } catch (e) { /* handled */ }
+      finally { $("#ollama-refresh-btn").disabled = false; }
+    });
+
+    $("#ollama-pull-all-btn").addEventListener("click", async () => {
+      const res = await api("/api/ollama/status");
+      if (!res.ok) return;
+      const ollama = await res.json();
+      const missing = (ollama.configured_models || []).filter((m) => !m.installed);
+      for (const m of missing) {
+        await pullModel(m.name, null);
+      }
+    });
 
     function renderGuestList(data) {
       const list = $("#guest-list");
@@ -474,6 +632,7 @@
         $("#max_iterations").value = s.max_iterations;
         fillSelect($("#default_model"), s.available_models, s.default_model);
         fillSelect($("#orchestrator_model"), s.available_models, s.orchestrator_model);
+        renderOllamaStatus(s.ollama);
         const mr = s.model_routing || {};
         $("#routing_enabled").checked = !!mr.enabled;
         fillSelect($("#routing_trivial_model"), s.available_models, mr.trivial_model);

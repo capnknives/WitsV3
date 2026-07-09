@@ -1,8 +1,8 @@
 # WitsV3 — Suggested Features & Roadmap
 
-**Last updated:** July 8, 2026 (Phase 0 complete — `main` promoted)  
+**Last updated:** July 9, 2026 (Phase 2.1 shipped)  
 **Working branch tip:** `cursor/work` / `claude/work` (merge into `fix/revive-2026-07` or `main`)  
-**Test suite:** **571 passed, 2 skipped** (July 8, 2026 — re-run `pytest -q` before claiming green)
+**Test suite:** **668 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q` before claiming green)
 
 This is the **canonical forward roadmap**: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
@@ -40,6 +40,7 @@ Richard promoted **`fix/revive-2026-07` → `main`** July 8, 2026 (Phase 0 compl
 | Adaptive LLM stack archived; clutter Wave A/B cleanup | ✅ Shipped July 8 |
 | Guest / family tester access (full Phase 3–4 + fact editor) | ✅ Shipped July 8 |
 | Chat slash-command picker (`/` menu, `GET /api/commands`) | ✅ Shipped July 8 |
+| Ollama model pull/status in `/settings` | ✅ Shipped July 9 (Phase 2.1) |
 | July revival feature backlog | ✅ **Closed** — Phase 2 operator UX next |
 
 ---
@@ -109,7 +110,7 @@ Mapped against [`FEATURE_IDEAS/Top Local AI System Features.docx`](FEATURE_IDEAS
 
 | # | Item | Maps to | Effort |
 |---|------|---------|--------|
-| 2.1 | Ollama model pull/status helper in `/settings` | #8–9 | Small |
+| 2.1 | ~~Ollama model pull/status helper in `/settings`~~ | #8–9 | Small | ✅ Done July 9 — `GET /api/ollama/status`, `POST /api/ollama/pull`, settings panel |
 | 2.2 | MCP server health panel (state, last error) | #14, #20 | Small–Medium |
 | 2.3 | Tool usage analytics (latency, failures) | #20 | Medium |
 | 2.4 | Streaming tool progress in SSE | #20 | Medium |
@@ -222,6 +223,8 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 | **3 — Runtime `var/` layout** | ✅ Done | `core/runtime_paths.py`; legacy dirs auto-migrate on startup |
 | **4 — Root surface cleanup** | Pending | Instruction-file redirects |
 
+**July 9:** Config Wave 1 — removed YAML ghosts (`adaptive_llm`, `docker`, unwired nested `agents.*`, ghost ollama `*_model` keys); added explicit `escalation:` block.
+
 ---
 
 ## 4. Parked (out of scope unless requirements change)
@@ -259,7 +262,7 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 
 1. ~~**Phase 0:** Promote `fix/revive-2026-07` → `main`~~ ✅ Done July 8, 2026  
 2. ~~**Phase 1:** Trust & daily-use quality (all six items)~~ ✅ Done July 8, 2026  
-3. **Phase 2.1:** Ollama model pull/status helper in `/settings` (start here)  
+3. ~~**Phase 2.1:** Ollama model pull/status helper in `/settings`~~ ✅ Done July 9, 2026  
 4. **Phase 2.2–2.6:** MCP health, tool analytics, streaming progress, background-task visibility, offline mode  
 
 **Shipped (July 8 late):** Session persistence (`var/sessions/`) + reliable chat save/export (transcript `chat_export_a42ee2e0` fixes). Optional follow-up: verbose export mode with tool-trace lines (Phase 2.x).

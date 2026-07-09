@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.config import WitsV3Config
+from core.guest_access import issue_guest_token
 from core.schemas import StreamData
 from web.server import create_app
 
@@ -639,6 +640,106 @@ def test_settings_post_rejects_bad_values(client_settings):
     res = client.post("/api/settings", json={"history_window": 9999})
     assert res.status_code == 400
     assert system.config.agents.history_window == original
+
+
+# ------------------------------------------------------------------ ollama admin
+
+
+@pytest.fixture
+def mock_ollama_status(monkeypatch):
+    async def fake_status(config):
+        return {
+            "url": config.ollama_settings.url,
+            "reachable": True,
+            "available_models": ["qwen3:8b", "nomic-embed-text:latest"],
+            "configured_models": [
+                {"role": "default", "label": "Default", "name": "qwen3:8b", "installed": True},
+                {
+                    "role": "embedding",
+                    "label": "Embeddings",
+                    "name": "nomic-embed-text",
+                    "installed": True,
+                },
+            ],
+            "all_installed": True,
+        }
+
+    monkeypatch.setattr("web.server.build_ollama_status", fake_status)
+    return fake_status
+
+
+def test_settings_includes_ollama_status(client_settings, mock_ollama_status):
+    client, _, _ = client_settings
+    body = client.get("/api/settings").json()
+    assert body["ollama"]["reachable"] is True
+    assert body["ollama"]["all_installed"] is True
+    assert "qwen3:8b" in body["available_models"]
+
+
+def test_ollama_status_endpoint(client_settings, mock_ollama_status):
+    client, _, _ = client_settings
+    res = client.get("/api/ollama/status")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["reachable"] is True
+    assert len(body["configured_models"]) == 2
+
+
+def test_ollama_pull_success(client_settings, monkeypatch, mock_ollama_status):
+    client, _, _ = client_settings
+
+    async def fake_pull(url, model):
+        return {"model": model, "status": "success", "detail": {}}
+
+    monkeypatch.setattr("web.server.pull_ollama_model", fake_pull)
+    res = client.post("/api/ollama/pull", json={"model": "qwen3:8b"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["pulled"] is True
+    assert body["model"] == "qwen3:8b"
+    assert body["ollama"]["all_installed"] is True
+
+
+def test_ollama_pull_rejects_invalid_model(client_settings, mock_ollama_status):
+    client, _, _ = client_settings
+    res = client.post("/api/ollama/pull", json={"model": "../../evil"})
+    assert res.status_code == 400
+
+
+def test_ollama_endpoints_require_owner_when_auth_enabled(
+    client_auth, mock_ollama_status, monkeypatch
+):
+    client, system = client_auth
+    monkeypatch.setenv("WITSV3_GUEST_SECRET", "guest-signing-secret-xyz")
+    monkeypatch.setenv("WITSV3_GUEST_INVITE", "family-code")
+    system.config.web_ui.guest_access.enabled = True
+
+    async def fake_pull(url, model):
+        return {"model": model, "status": "success", "detail": {}}
+
+    monkeypatch.setattr("web.server.pull_ollama_model", fake_pull)
+
+    owner_headers = {"Authorization": "Bearer sekrit"}
+
+    assert client.get("/api/ollama/status", headers=owner_headers).status_code == 200
+    assert (
+        client.post("/api/ollama/pull", json={"model": "qwen3:8b"}, headers=owner_headers).status_code
+        == 200
+    )
+    assert client.get("/api/ollama/status").status_code == 401
+
+    guest_token = issue_guest_token(
+        guest_id="guest-1",
+        display_name="Tester",
+        device_id="dev-1",
+        ttl_hours=24,
+    )
+    guest_headers = {"Authorization": f"Bearer {guest_token}"}
+    assert client.get("/api/ollama/status", headers=guest_headers).status_code == 403
+    assert (
+        client.post("/api/ollama/pull", json={"model": "qwen3:8b"}, headers=guest_headers).status_code
+        == 403
+    )
 
 
 def test_local_overrides_are_loaded(client_settings, monkeypatch):
