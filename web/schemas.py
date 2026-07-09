@@ -45,6 +45,7 @@ class GuestProfileFactsUpdate(BaseModel):
 class ExportRequest(BaseModel):
     session_id: str | None = None
     file_path: str | None = None
+    verbose: bool = False
 
 
 class SessionRenameRequest(BaseModel):

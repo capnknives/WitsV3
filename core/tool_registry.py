@@ -48,6 +48,25 @@ class ToolRegistry:
         self.tools[tool.name] = tool
         self.logger.info(f"Registered tool: {tool.name}")
 
+    def _should_register_tool(self, tool: ToolType, module_stem: str) -> bool:
+        """Gate research-only neural tools unless memory backend is neural."""
+        if not module_stem.startswith("neural_web"):
+            return True
+        try:
+            from core.config import load_config
+
+            backend = load_config().memory_manager.backend
+        except Exception:
+            backend = "basic"
+        if backend != "neural":
+            self.logger.debug(
+                "Skipping neural tool %s — memory_manager.backend is %s (research-only)",
+                getattr(tool, "name", module_stem),
+                backend,
+            )
+            return False
+        return True
+
     def unregister_tool(self, tool_name: str) -> bool:
         """
         Unregister a tool.
@@ -470,14 +489,16 @@ class ToolRegistry:
 
                                     if not params:  # No required parameters
                                         tool_instance = obj()
-                                        self.register_tool(tool_instance)
+                                        if self._should_register_tool(tool_instance, py_file.stem):
+                                            self.register_tool(tool_instance)
                                     else:
                                         self.logger.debug(
                                             f"Skipping tool {name} - requires parameters: {[p.name for p in params]}"
                                         )
                                 else:
                                     tool_instance = obj()
-                                    self.register_tool(tool_instance)
+                                    if self._should_register_tool(tool_instance, py_file.stem):
+                                        self.register_tool(tool_instance)
                             except Exception as e:
                                 self.logger.error(f"Error registering tool {name}: {e}")
 

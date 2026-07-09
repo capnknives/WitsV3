@@ -28,6 +28,7 @@ from core.knowledge_log import KnowledgeLogStore
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
 from core.safe_code_editor import (
+    PATCH_LINE_THRESHOLD,
     PROJECT_ROOT,
     extract_code_from_response,
     extract_file_mention,
@@ -188,31 +189,64 @@ class SelfRepairAgent(BaseAgent):
 
         yield self.stream_action(f"Reading {file_path} to diagnose: {issue['message'][:200]}")
         original = full_path.read_text(encoding="utf-8", errors="replace")
+        line_count = len(original.splitlines())
 
-        prompt = (
-            "You are fixing a real bug in a Python project. Output ONLY the full, "
-            "corrected file content inside a single ```python code fence — no prose, "
-            "no explanation, no partial snippets. Preserve everything that isn't "
-            "related to the bug.\n\n"
-            f"File: {file_path}\n"
-            f"Reported problem: {issue['message']}\n\n"
-            f"Current file content:\n```python\n{original}\n```\n"
-        )
-        proposed = await self.generate_response(prompt, temperature=0.2, max_tokens=4000)
-        new_content = extract_code_from_response(proposed)
-
-        if new_content.strip() == original.strip():
-            yield self.stream_observation(
-                "Proposed fix is identical to the current file — nothing to apply."
+        if line_count > PATCH_LINE_THRESHOLD:
+            prompt = (
+                "You are fixing a real bug in a Python project. Output ONLY SEARCH/REPLACE "
+                "hunks in this exact format (one or more blocks):\n\n"
+                "<<<<<<< SEARCH\n"
+                "exact lines to find\n"
+                "=======\n"
+                "replacement lines\n"
+                ">>>>>>> REPLACE\n\n"
+                "Do not rewrite the whole file. Include enough context in SEARCH to match uniquely.\n\n"
+                f"File: {file_path}\n"
+                f"Reported problem: {issue['message']}\n\n"
+                f"Current file content:\n```python\n{original}\n```\n"
             )
-            return
+            proposed = await self.generate_response(prompt, temperature=0.2, max_tokens=4000)
+            from core.safe_code_editor import apply_verified_patch
 
-        yield self.stream_action(
-            f"Applying candidate fix to {file_path} and verifying with tests..."
-        )
-        result = await fix_tool.execute(
-            file_path=file_path, new_content=new_content, reason=issue["message"][:120]
-        )
+            yield self.stream_action(
+                f"Applying patch hunks to {file_path} and verifying with tests..."
+            )
+            result_obj = await apply_verified_patch(
+                file_path=file_path,
+                patch_response=proposed,
+                reason=issue["message"][:120],
+            )
+            result = {
+                "success": result_obj.success,
+                "committed": result_obj.committed,
+                "commit_sha": result_obj.commit_sha,
+                "test_output": result_obj.test_output,
+            }
+        else:
+            prompt = (
+                "You are fixing a real bug in a Python project. Output ONLY the full, "
+                "corrected file content inside a single ```python code fence — no prose, "
+                "no explanation, no partial snippets. Preserve everything that isn't "
+                "related to the bug.\n\n"
+                f"File: {file_path}\n"
+                f"Reported problem: {issue['message']}\n\n"
+                f"Current file content:\n```python\n{original}\n```\n"
+            )
+            proposed = await self.generate_response(prompt, temperature=0.2, max_tokens=4000)
+            new_content = extract_code_from_response(proposed)
+
+            if new_content.strip() == original.strip():
+                yield self.stream_observation(
+                    "Proposed fix is identical to the current file — nothing to apply."
+                )
+                return
+
+            yield self.stream_action(
+                f"Applying candidate fix to {file_path} and verifying with tests..."
+            )
+            result = await fix_tool.execute(
+                file_path=file_path, new_content=new_content, reason=issue["message"][:120]
+            )
 
         if result["success"]:
             note = (

@@ -10,24 +10,24 @@ A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it
 
 ---
 
-## Current status (2026-07-08)
+## Current status (2026-07-09)
 
 | Area | State |
 |------|--------|
-| Test suite | **665 passed, 2 skipped** — `pytest tests/ -q --no-cov` |
-| Release branch | **`main`** promoted from `fix/revive-2026-07` @ `4c676c3` (Phase 0 complete) |
+| Test suite | **677 passed, 2 skipped** — `pytest tests/ -q --no-cov` |
+| Release branch | **`main`** @ audit remediation + Next 10 batch (see roadmap) |
 | Models (default) | `qwen3:8b` (general + routing), `qwen2.5-coder:7b` (coding), `nomic-embed-text` (embeddings) |
 | GPU target | Configured models fit in ~8 GB VRAM when fully on-GPU |
-| Built-in tools | **26** auto-discovered (files, search, docs, MCP discovery, self-repair, neural-web helpers, …) |
+| Built-in tools | **28** auto-discovered by default (`neural_web*` gated unless `memory_manager.backend: neural`) |
 | Agents | Control center → orchestrator + book / coding / self-repair specialists |
 | Safe code edits | Verified-edit pipeline: write → pytest → commit, or revert to original bytes |
 | Guest / family testers | Opt-in LAN access via `/join` (invite code; no owner token) — see below |
 | CI | GitHub Actions on Python 3.10 / 3.11 (`.github/workflows/ci.yml`) |
 | Secrets | Gitignored `.env` only — never in `config.yaml` |
 
-**Recently shipped (July 2026):** Web UI + PWA, Document RAG, multi-provider web search, smart model routing, MCP registry discover/install, orchestrator JSON robustness, synthesis guard, one-click chat export, coding + self-repair, daily self-repair schedule, guest / family-tester access (full Phase 3–4), **Phase 1** (follow-up intent, hybrid doc search, memory flush, evidence gate, multi-session Chats panel), guest profile fact editor, **chat slash commands** (type `/` in the composer), **Ollama model pull/status panel** in Settings.
+**Recently shipped (July 2026):** … **Phase 2** operator UX (MCP health, tool metrics, offline mode), **Phase 3a** FAISS memory, **Next 10 batch** (verbose export, patch self-repair, auto facts, injection guard, orchestrator helper splits).
 
-**What's next:** **Phase 2.2** — MCP server health panel. See [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md).
+**What's next:** Phase **3b–3d** research (GraphRAG, neural product surface, SKILL playbooks) or **PII redaction**. See [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md).
 
 ---
 
@@ -185,7 +185,7 @@ Main file: `config.yaml` (schema/defaults in `core/config.py`).
 | `ollama_settings.default_model` | `qwen3:8b` | General / orchestration |
 | `ollama_settings.coding_agent_model` | `qwen2.5-coder:7b` | Coding agent |
 | `ollama_settings.embedding_model` | `nomic-embed-text` | Embeddings (768-dim) |
-| `memory_manager.backend` | `basic` | `basic`, `faiss_cpu`, `faiss_gpu`, or `neural` |
+| `memory_manager.backend` | `faiss_cpu` | `basic`, `faiss_cpu`, `faiss_gpu`, or `neural` (research-only tools) |
 | `memory_manager.vector_dim` | `768` | Must match embedding model |
 | `model_routing.enabled` | `false` (toggle in `/settings`) | Size models by query complexity when enabled |
 | `tool_system.mcp_connect_on_startup` | `false` | Skip slow MCP boot unless you want it |

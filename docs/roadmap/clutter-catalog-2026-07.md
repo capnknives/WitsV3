@@ -205,7 +205,7 @@ Canonical: `suggested-features-2026-07.md` (forward) + `revival-2026-07.md` (shi
 3. ✅ **DONE July 8 2026 (Phase 2b)** — Unused Sphinx stubs → pruned; stub README under `docs/archive/sphinx/`.
 
 ### Wave D — Product decisions (don’t delete until decided)
-1. Neural stack (`working_memory`, `knowledge_graph`, `cross_domain_learning`, neural orchestrator): **ship as default** or **mark research-only** in README.
+1. ✅ **DONE July 9 2026** — Neural stack marked **research-only** in README + architecture docs; `neural_web*` tools gated unless `memory_manager.backend: neural`.
 2. `tool_composition.py`: finish workflow execution or archive.
 3. BackgroundAgent empty jobs: wire prune/graph or remove from YAML schedules.
 

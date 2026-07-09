@@ -1,8 +1,8 @@
 # WitsV3 — Suggested Features & Roadmap
 
-**Last updated:** July 9, 2026 (Phase 2 complete, 3a shipped)  
+**Last updated:** July 9, 2026 (Next 10 actions batch)  
 **Working branch tip:** `cursor/work` / `claude/work` (merge into `fix/revive-2026-07` or `main`)  
-**Test suite:** **665 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q` before claiming green)
+**Test suite:** **677 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q` before claiming green)
 
 This is the **canonical forward roadmap**: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
@@ -43,7 +43,8 @@ Richard promoted **`fix/revive-2026-07` → `main`** July 8, 2026 (Phase 0 compl
 | Ollama model pull/status in `/settings` | ✅ Shipped July 9 (Phase 2.1) |
 | Phase 2 operator UX (2.2–2.6) | ✅ Shipped July 9 |
 | Memory Phase 3a (FAISS default + session memory search) | ✅ Shipped July 9 |
-| July revival feature backlog | ✅ **Closed** — Phase 3b+ research / Post–Phase 2 backlog next |
+| July revival feature backlog | ✅ **Closed** — Phase 3b+ research next |
+| Next 10 actions batch (July 9) | ✅ Shipped — verbose export, patch repair, auto facts, log diagnosis, injection guard, neural research gating, orchestrator split |
 
 ---
 
@@ -73,8 +74,8 @@ Summary of what landed (detail also in README § Self-repair):
 
 **Honest follow-ups (not blocking):**
 
-- Full-file LLM rewrite (diff/patch path would scale better for large files)
-- Log diagnosis needs real Python tracebacks (bare ERROR lines stay non-actionable)
+- ~~Full-file LLM rewrite~~ → SEARCH/REPLACE patch path for files >150 lines (July 9)
+- ~~Log diagnosis bare ERROR lines~~ → signature dedupe + traceback-first grouping (July 9)
 - Restart is still blunt `Popen` + exit (fine for CLI/dev; not a graceful uvicorn drain)
 - `restart_after_fix` defaults **off** so scheduled runs never interrupt a live session
 
@@ -169,7 +170,7 @@ Files still over ~500 lines (excluding archived GUI). Re-measure before splittin
 
 | Approx. lines | File | Suggestion |
 |-------------:|------|------------|
-| 735 | `tools/neural_web_nlp.py` | Split NLP ops from helpers |
+| ~900 | `agents/orchestrator_tool_helpers.py` | ✅ Split July 9 — `orchestrator_preflight.py`, `orchestrator_codebase.py` |
 | 772 | `tools/neural_web_visualization.py` | Split render/export from graph queries |
 | 704 | `core/tool_composition.py` | Composition engine vs registry glue |
 | 632 | `agents/self_repair_handlers.py` | **Prefer delete** — orphan after rewrite (see clutter catalog) |
@@ -223,7 +224,7 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 | **2a — GUI archive prune** | ✅ Done | Tag `archive-pre-prune-2026-07`; removed 61 files under `docs/archive/gui/` (stub README remains) |
 | **2b — Further archive prune** | ✅ Done | Tag `archive-pre-prune-2b-2026-07`; removed 27 files (`adaptive_llm/core/`, `sphinx/`, synthetic_brain code); stub READMEs remain |
 | **3 — Runtime `var/` layout** | ✅ Done | `core/runtime_paths.py`; legacy dirs auto-migrate on startup |
-| **4 — Root surface cleanup** | Pending | Instruction-file redirects |
+| **4 — Root surface cleanup** | ✅ Done | Instruction-file redirects (`.cursorrules`, `TASK.md`, `PLANNING.md`, `planning/`) — July 9 |
 
 **July 9:** Config Wave 1 — removed YAML ghosts (`adaptive_llm`, `docker`, unwired nested `agents.*`, ghost ollama `*_model` keys); added explicit `escalation:` block.
 
@@ -260,15 +261,15 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 
 ---
 
-## 5. Post–Phase 2 backlog (track, don't implement yet)
+## 5. Post–Phase 2 backlog
 
-| Item | Notes |
-|------|-------|
-| **Prompt-injection classifier** | Owner-path guard before tool execution |
-| **Automatic fact extraction** | Promote durable facts from chat → knowledge log without explicit "remember" |
-| **Verbose export with tool traces** | Optional `/export` mode including tool_call/observation lines |
-| **Diff/patch self-repair** | Replace full-file LLM rewrite for large files |
-| **PII redaction** | Guest/owner export and memory hygiene |
+| Item | Notes | Status |
+|------|-------|--------|
+| ~~**Prompt-injection classifier**~~ | Owner-path pattern guard on file-write tools | ✅ July 9 |
+| ~~**Automatic fact extraction**~~ | Heuristic owner-path promotion + WCCA remember | ✅ July 9 |
+| ~~**Verbose export with tool traces**~~ | `/export verbose` + `POST /api/export?verbose` | ✅ July 9 |
+| ~~**Diff/patch self-repair**~~ | SEARCH/REPLACE via `apply_verified_patch` for large files | ✅ July 9 |
+| **PII redaction** | Guest/owner export and memory hygiene | Open |
 
 ---
 
@@ -278,11 +279,12 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 2. ~~**Phase 1:** Trust & daily-use quality (all six items)~~ ✅ Done July 8, 2026  
 3. ~~**Phase 2:** Operator UX (2.1–2.6)~~ ✅ Done July 9, 2026  
 4. ~~**Phase 3a:** FAISS default + session memory search~~ ✅ Done July 9, 2026  
-5. **Phase 3b–3d or Post–Phase 2 backlog:** GraphRAG, neural web product surface, SKILL playbooks, security-lite items (§5 above)
+5. ~~**Next 10 actions (July 9):** verbose export, patch repair, auto facts, log diagnosis, injection guard, neural research gating, orchestrator split, doc sync~~ ✅ Done July 9, 2026  
+6. **Phase 3b–3d:** GraphRAG, neural web product surface (if desired), SKILL.md playbooks  
+7. **PII redaction** on export/memory (§5)  
+8. **Optional `ANTHROPIC_API_KEY`** — owner gate G2
 
-**Shipped (July 9):** System audit remediation — doc truth pass, operator observability bundle, config Waves 3–4 hygiene, memory architecture doc.
-
-**Optional follow-up:** Verbose export mode with tool-trace lines (§5).
+**Shipped (July 9):** System audit remediation + Next 10 batch — see [`revival-2026-07.md`](revival-2026-07.md).
 
 **Also shipped (pre-2.1):** Chat slash-command picker — type `/` for help, new chat, export, panels, owner process controls.
 

@@ -251,3 +251,21 @@ tracked in [`suggested-features-2026-07.md`](suggested-features-2026-07.md) § P
 | **Config hygiene** | Wave 3: `logging_level`, `cli.show_tool_calls`, `test_timeout_seconds` wired; unknown YAML key warnings; `knowledge_log` → `var/data/` |
 | **Memory 3a** | Default `faiss_cpu`; session-filtered orchestrator search; optional fact promotion to knowledge log |
 | **Clutter** | Removed blocked `json_manipulate` tool + dummy `models/*.safetensors` |
+
+---
+
+## 4. July 9, 2026 — Next 10 actions batch
+
+| Theme | What shipped |
+|-------|----------------|
+| **Verbose export** | `POST /api/export` `verbose: true`, `/export verbose`, stream trace capture in web chat |
+| **Patch self-repair** | SEARCH/REPLACE hunks via `apply_verified_patch` for files >150 lines |
+| **Auto fact extraction** | `core/fact_extraction.py` + owner-path promotion after web turns; WCCA `remember` metadata |
+| **Log diagnosis** | Traceback signature dedupe in `parse_traceback_issues` |
+| **Injection guard** | `core/injection_guard.py` on owner `write_file` / `apply_code_fix` preflight |
+| **Neural research-only** | Docs + tool registry gating for `neural_web*` unless `backend: neural` |
+| **Orchestrator split** | `agents/orchestrator_preflight.py`, `agents/orchestrator_codebase.py` |
+| **Live smoke** | `faiss_cpu` validated via `scripts/a42ee2e0_live_smoke.py --quick` (226 segments) |
+| **Doc sync** | Gap analysis, config-surface-truth, Phase 4 root cleanup marked complete |
+
+Tests: **677 passed, 2 skipped** (`pytest tests/ -q --no-cov`).

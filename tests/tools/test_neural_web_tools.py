@@ -54,6 +54,23 @@ def test_tools_construct_with_zero_args_and_are_auto_discovered():
     """Registry auto-discovery only instantiates tools with no required args."""
     registry = ToolRegistry()
     assert registry.get_tool("enhanced_reasoning") is not None
+    # Research-only: neural_web* tools are gated unless memory_manager.backend is neural.
+    assert registry.get_tool("neural_web_nlp_extract") is None
+    assert registry.get_tool("neural_web_visualize") is None
+
+
+def test_neural_web_tools_registered_when_backend_is_neural(monkeypatch):
+    """Neural web tools register only when the memory backend is neural."""
+    from core.config import WitsV3Config
+
+    cfg = WitsV3Config()
+    cfg.memory_manager.backend = "neural"
+
+    def _fake_load_config():
+        return cfg
+
+    monkeypatch.setattr("core.config.load_config", _fake_load_config)
+    registry = ToolRegistry()
     assert registry.get_tool("neural_web_nlp_extract") is not None
     assert registry.get_tool("neural_web_visualize") is not None
 

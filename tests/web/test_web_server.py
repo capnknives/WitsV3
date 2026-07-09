@@ -172,6 +172,28 @@ def test_export_writes_session_transcript(client_noauth, tmp_path, monkeypatch):
     assert "ASSISTANT:" in text
 
 
+def test_export_verbose_includes_stream_traces(client_noauth, tmp_path, monkeypatch):
+    client, system = client_noauth
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "var" / "exports").mkdir(parents=True)
+
+    chat_res = client.post("/api/chat", json={"message": "hello"})
+    session_id = _parse_sse(chat_res.text)[0][1]["session_id"]
+    conv = system.session_histories[session_id]
+    conv.stream_traces.append(
+        {"turn": 1, "events": [{"type": "tool_call", "content": "web_search"}]}
+    )
+
+    export_res = client.post(
+        "/api/export", json={"session_id": session_id, "verbose": True}
+    )
+    assert export_res.status_code == 200
+    data = export_res.json()
+    text = (tmp_path / data["file_path"]).read_text(encoding="utf-8")
+    assert "SESSION STREAM TRACES" in text
+    assert "web_search" in text
+
+
 def test_export_requires_session(client_noauth):
     client, _ = client_noauth
     res = client.post("/api/export", json={"session_id": "missing"})

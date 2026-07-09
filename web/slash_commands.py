@@ -29,6 +29,15 @@ SLASH_COMMANDS: list[dict[str, Any]] = [
         "client_action": "new_chat",
     },
     {
+        "id": "export_verbose",
+        "command": "/export verbose",
+        "aliases": [],
+        "description": "Export chat with tool/action/observation traces",
+        "roles": ["owner", "guest"],
+        "dispatch": "client",
+        "client_action": "export_verbose",
+    },
+    {
         "id": "export",
         "command": "/export",
         "aliases": [],

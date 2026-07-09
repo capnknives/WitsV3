@@ -26,6 +26,10 @@ Install/run context: [`README.md`](../../README.md).
 `tests/core/test_faiss_memory_backend.py`. Roll back to `basic` if FAISS or
 `faiss-cpu` causes issues on your machine.
 
+**Live validation (July 9, 2026):** `scripts/a42ee2e0_live_smoke.py --quick`
+passed on RTX 3070 stack — FAISS initialized 226 segments with `nomic-embed-text`
+(no rollback required).
+
 Embeddings use Ollama `nomic-embed-text` (768-dim). Auto-pruning runs on add
 for both `basic` and FAISS backends when segment count exceeds
 `max_memory_segments`.
@@ -38,8 +42,9 @@ for both `basic` and FAISS backends when segment count exceeds
    history window drops old turns (`core/conversation_compaction.py`).
 3. **Guests** skip global memory writes; they use guest tools and profiles only.
 4. **Self-repair** records recurring errors into the knowledge log.
-5. **Fact promotion** (optional): segments with `importance >= 0.9` and
-   `segment_type: USER_FACT` or `metadata.remember: true` copy into the knowledge log.
+5. **Fact promotion:** segments with `importance >= 0.9` and `USER_FACT` /
+   `metadata.remember: true`, plus heuristic owner-path extraction
+   (`core/fact_extraction.py`) after chat turns.
 
 ## Dormant / research paths
 
@@ -47,7 +52,7 @@ for both `basic` and FAISS backends when segment count exceeds
 |-----------|--------|
 | `core/knowledge_graph.py` | Not wired on hot path |
 | `core/working_memory.py` | In-process only; tests/archive |
-| Neural web (`backend: neural`) | Research — see [`neural-web-roadmap.md`](../roadmap/neural-web-roadmap.md) |
+| Neural web (`backend: neural`) | **Research-only** — tools gated unless backend is `neural`; see [`neural-web-roadmap.md`](../roadmap/neural-web-roadmap.md) |
 | Supabase sync | Optional / parked |
 
 ## Owner tools
@@ -57,8 +62,7 @@ for both `basic` and FAISS backends when segment count exceeds
 
 ## What this is not (yet)
 
-WitsV3 has **durable episodic + semantic memory** suitable for a personal assistant,
-but not automatic continuous learning from every chat turn. Post–Phase 2 backlog
-items (prompt-injection classifier, automatic fact extraction, verbose export with
-tool traces) are tracked in
-[`suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md).
+WitsV3 has **durable episodic + semantic memory** suitable for a personal assistant.
+Automatic continuous learning from every turn is limited to heuristic owner-path
+fact promotion; deeper learning remains in the Phase 3b+ backlog
+([`suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md)).

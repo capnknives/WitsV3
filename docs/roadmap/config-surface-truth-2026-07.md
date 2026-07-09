@@ -56,8 +56,10 @@ Unknown YAML keys are **silently dropped** (Pydantic default — `extra` not for
 | `ollama_settings` (core fields) | LIVE | url, models, fallbacks, health — yes |
 | `agents.default_temperature` / `max_iterations` | LIVE | |
 | `agents.history_window` | LIVE | Model default; settings UI / local yaml |
-| `memory_manager` (basic + prune fields) | LIVE | Default backend `basic` |
-| `self_repair.*` | LIVE | Except `test_timeout_seconds` → MODEL_ONLY |
+| `memory_manager` (basic + faiss + prune fields) | LIVE | Default backend `faiss_cpu` (July 9); roll back to `basic` if needed |
+| `self_repair.*` | LIVE | Includes wired `test_timeout_seconds` |
+| `security.offline_mode` | LIVE | Blocks web search + MCP when enabled (Phase 2.6) |
+| `logging_level` | LIVE | Wired to root logger in `run.py` / `run_web.py` (Wave 3) |
 | `web_search.*` | LIVE | Keys from env |
 | `web_ui.*` | LIVE | |
 | `document_rag.*` | LIVE | |
@@ -89,18 +91,18 @@ These currently do **nothing** at load:
 
 ## 4. MODEL_ONLY (wire or drop)
 
-| Field | Prefer |
-|-------|--------|
-| `logging_level` | Wire to `basicConfig` (run.py hardcodes INFO) |
-| `debug_mode` | Drop unless needed |
-| `llm_interface.timeout_seconds` | Drop — Ollama uses `request_timeout` |
-| `llm_interface.streaming_enabled` | Drop |
-| `cli.show_tool_calls` | Wire to CLI stream filter or drop |
-| `ollama_settings.model_timeout` | Drop |
-| `personality.profile_id` / `allow_runtime_switching` | Drop or implement switching |
-| `supabase.enable_realtime` | Drop |
-| `self_repair.test_timeout_seconds` | Wire into apply_code_fix timeout |
-| Neural `reasoning_patterns` + 3 cross-domain numeric fields | Drop or wire to `cross_domain_learning` |
+| Field | Prefer | Status (July 9) |
+|-------|--------|-----------------|
+| `logging_level` | Wire to `basicConfig` | ✅ LIVE |
+| `debug_mode` | Drop unless needed | MODEL_ONLY |
+| `llm_interface.timeout_seconds` | Drop — Ollama uses `request_timeout` | MODEL_ONLY |
+| `llm_interface.streaming_enabled` | Drop | MODEL_ONLY |
+| `cli.show_tool_calls` | Wire to CLI stream filter or drop | MODEL_ONLY |
+| `ollama_settings.model_timeout` | Drop | MODEL_ONLY |
+| `personality.profile_id` / `allow_runtime_switching` | Drop or implement switching | MODEL_ONLY |
+| `supabase.enable_realtime` | Drop | MODEL_ONLY |
+| `self_repair.test_timeout_seconds` | Wire into apply_code_fix timeout | ✅ LIVE |
+| Neural `reasoning_patterns` + 3 cross-domain numeric fields | Drop or wire to `cross_domain_learning` | MODEL_ONLY |
 
 ---
 

@@ -515,7 +515,10 @@ async function runSlashClientAction(cmd) {
       await startNewChat();
       break;
     case "export":
-      await exportCurrentSession();
+      await exportCurrentSession(false);
+      break;
+    case "export_verbose":
+      await exportCurrentSession(true);
       break;
     case "panel":
       openPanelTab(cmd.panel_tab || "tools");
@@ -650,7 +653,7 @@ async function startNewChat() {
 
 $("#new-chat-btn").addEventListener("click", () => startNewChat());
 
-async function exportCurrentSession() {
+async function exportCurrentSession(verbose = false) {
   if (!sessionId) {
     addAssistantMsg("Nothing to export yet — send a message first.", true);
     return;
@@ -659,7 +662,7 @@ async function exportCurrentSession() {
     const res = await api("/api/export", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ session_id: sessionId, verbose }),
     });
     const data = await res.json();
     if (res.ok) {

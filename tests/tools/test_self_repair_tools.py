@@ -49,6 +49,13 @@ def test_parse_traceback_issues_includes_bare_error_lines_as_non_actionable():
     assert any("Unrelated bare error" in i["message"] for i in non_actionable)
 
 
+def test_parse_traceback_issues_dedupes_identical_signatures():
+    dup_log = SAMPLE_LOG + "\n" + SAMPLE_LOG
+    issues = parse_traceback_issues(dup_log, max_issues=10)
+    tracebacks = [i for i in issues if i.get("kind") == "traceback"]
+    assert len(tracebacks) == 1
+
+
 def test_parse_traceback_issues_respects_max_issues():
     big_log = "\n".join(
         f"2026-07-08 03:00:0{i},000 - WitsV3.X - ERROR - distinct error {i}" for i in range(9)

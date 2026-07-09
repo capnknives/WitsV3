@@ -143,7 +143,7 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
                 content=user_input,
                 segment_type="USER_FACT",
                 importance=1.0,
-                metadata={"source": "user", "session_id": session_id},
+                metadata={"source": "user", "session_id": session_id, "remember": True},
             )
             yield self.stream_result("I've stored that in my memory for future conversations.")
             self.logger.info(

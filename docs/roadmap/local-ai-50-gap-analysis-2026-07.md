@@ -17,7 +17,7 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 | 3 | Hybrid CPU/GPU/NPU routing | 🟡 | Ollama owns GPU; `model_router.py` routes by task complexity, not chip type | No NPU path; no explicit GPU layer controls in app |
 | 4 | Hardware security enclaves | ➖ | — | OS/firmware (Pluton, Secure Enclave) |
 | 5 | ARM/Metal API optimizations | 🟡 | Ollama/MLX on Mac is environmental | App does not select MLX vs CUDA |
-| 6 | Air-gapped sovereignty | 🟡 | Local-first; Ollama + optional keyless DDG search | `web_search` and MCP can reach network; no “offline-only” mode flag → **Phase 2.6** |
+| 6 | Air-gapped sovereignty | ✅ | Local-first; `security.offline_mode` blocks web search + MCP (Phase 2.6) | Shipped July 9 |
 
 ---
 
@@ -45,7 +45,7 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 | 17 | Multi-agent collaboration | 🟡 | WCCA → orchestrator **or** specialist (coding, self-repair, book) | No parallel agent swarm or inter-agent debate |
 | 18 | Dynamic cross-provider routing | 🟡 | `model_router.py` (local models); `ask_claude` escalation with UI approval | No automatic cloud fallback; Claude is opt-in |
 | 19 | Strict tool call validation | ✅ | `tool_registry.validate_tool_call`, schema unwrap fix | Shipped |
-| 20 | Execution telemetry / observability | 🟡 | SSE `StreamData`; `core/metrics.py` in background agent only | No OpenTelemetry, trace IDs, or tool analytics dashboard |
+| 20 | Execution telemetry / observability | ✅ | SSE `StreamData`; in-process tool metrics + MCP health (`core/tool_metrics.py`, Settings UI) | Shipped July 9 |
 
 ---
 
@@ -97,7 +97,7 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 | 41 | Sovereign execution brokers | ❌ | — | Research-grade; overkill for personal LAN |
 | 42 | Zero-trust ephemeral filesystems | 🟡 | Verified edit reverts on test fail | Not full ephemeral sandbox |
 | 43 | Gateway callback approvals | ✅ | Ask-Claude approval card; owner-only shutdown; guest tool allowlist | Shipped for high-impact paths |
-| 44 | Input prompt-injection defenses | 🟡 | Guest content policy; orchestrator context hygiene | No dedicated injection classifier |
+| 44 | Input prompt-injection defenses | 🟡 | Guest content policy; owner-path `core/injection_guard.py` on `write_file` / `apply_code_fix` | Lightweight pattern guard shipped; no full classifier model |
 | 45 | Output schema + toxicity filtering | 🟡 | Pydantic tool schemas; guest content bands | No PII redaction layer on owner path |
 
 ---
@@ -118,17 +118,17 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 
 | Category | ✅ | 🟡 | ❌ | ➖ |
 |----------|---:|---:|---:|---:|
-| Hardware (1–6) | 0 | 3 | 0 | 3 |
+| Hardware (1–6) | 1 | 2 | 0 | 3 |
 | Models & inference (7–13) | 1 | 5 | 1 | 1 |
-| Orchestration & MCP (14–20) | 2 | 4 | 1 | 0 |
+| Orchestration & MCP (14–20) | 3 | 3 | 1 | 0 |
 | Memory (21–27) | 0 | 6 | 2 | 0 |
 | RAG (28–33) | 2 | 3 | 1 | 0 |
 | Voice & ambient (34–39) | 0 | 1 | 5 | 0 |
 | Security (40–45) | 1 | 4 | 2 | 0 |
 | Fine-tuning (46–50) | 0 | 0 | 5 | 0 |
-| **Total** | **6** | **26** | **17** | **4** |
+| **Total** | **8** | **24** | **17** | **4** |
 
-**Interpretation:** WitsV3 is strong on **local orchestration, MCP, document RAG core, tool validation, guest safety, and verified code edits**. It is weak on **voice/ambient, fine-tuning, GraphRAG/hybrid search, formal memory layers, and enterprise-grade sandboxing** — which matches its identity as a personal LAN assistant, not a full “AI PC OS.”
+**Interpretation:** WitsV3 is strong on **local orchestration, MCP, document RAG core, tool validation, guest safety, verified code edits, and operator observability**. It is weak on **voice/ambient, fine-tuning, GraphRAG/hybrid search, formal memory layers, and enterprise-grade sandboxing** — which matches its identity as a personal LAN assistant, not a full “AI PC OS.”
 
 ---
 
@@ -142,12 +142,12 @@ Legend: ✅ Has · 🟡 Partial · ❌ Gap · ➖ N/A (hardware/OS — out of Wi
 | Memory browser | 21 | ✅ Shipped |
 | Hybrid RAG / reranking | 28, 31, 33 | ✅ Shipped Phase 1.3 |
 | Neural web | 21, 28 | Parked as research; KG exists |
-| MCP health dashboard | 14, 20 | **→ Phase 2.2** (next) |
+| MCP health dashboard | 14, 20 | ✅ Shipped Phase 2.2 (July 9) |
 | Ollama pull/status helper | 8–9 | ✅ Shipped Phase 2.1 (July 9) |
-| Streaming tool progress | 20 | **→ Phase 2.4** |
-| Clutter / file splits | — | Hygiene, not feature gaps |
+| Streaming tool progress | 20 | ✅ Shipped Phase 2.4 (July 9) |
+| Clutter / file splits | — | Hygiene — orchestrator helpers split July 9 |
 
-**Revival backlog:** closed. **Phase 2.2** (MCP health panel) is the next canonical item.
+**Revival backlog:** closed. **Post–Next-10 queue:** Phase 3b–3d research + PII redaction (see [`suggested-features-2026-07.md`](suggested-features-2026-07.md) §6).
 
 ---
 

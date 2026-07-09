@@ -419,6 +419,10 @@ class ConversationHistory(BaseModel):
     session_id: str = Field(description="Unique session identifier")
     title: str = Field(default="New chat", description="Display name in session list")
     messages: list[ConversationMessage] = Field(default_factory=list)
+    stream_traces: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Per-turn tool/action/observation traces for verbose export",
+    )
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 

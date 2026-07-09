@@ -21,7 +21,7 @@ flowchart TB
   WCCA --> Coding[AdvancedCodingAgent]
   WCCA --> Repair[SelfRepairAgent]
   WCCA --> Book[BookWritingAgent]
-  Orch --> Tools[ToolRegistry ~26 tools]
+  Orch --> Tools[ToolRegistry ~28 tools]
   Orch --> Mem[MemoryManager]
   Orch --> LLM[Ollama via LLM interfaces]
   Tools --> MCP[Optional MCP servers]
@@ -44,7 +44,7 @@ flowchart TB
 | Subsystem | Primary modules |
 |-----------|-----------------|
 | **Routing** | `agents/wits_control_center_agent.py`, `agents/wcca_*_mixin.py`, `core/model_router.py` |
-| **ReAct loop** | `agents/llm_driven_orchestrator.py`, `agents/orchestrator_tool_helpers.py` |
+| **ReAct loop** | `agents/llm_driven_orchestrator.py`, `agents/orchestrator_tool_helpers.py`, `orchestrator_preflight.py`, `orchestrator_codebase.py` |
 | **Verified edits** | `core/safe_code_editor.py` — shared by coding + self-repair agents |
 | **Document RAG** | `core/document_hybrid_search.py`, `tools/document_tools.py` |
 | **Auth** | Owner bearer token + guest `/join` (`core/guest_access.py`, `web/server.py`) |
@@ -61,6 +61,16 @@ All agents extend `BaseAgent` and stream `StreamData` (`core/schemas.py`).
 - **SelfRepairAgent** — log/test diagnosis → verified fixes
 - **BookWritingAgent** — long-form content (not the verified-edit path)
 - **BackgroundAgent** — optional Docker scheduled maintenance (local use prefers in-process cron in `run.py` / `run_web.py`)
+
+## Research-only (not default)
+
+These modules exist for experimentation; they are **not** on the default hot path:
+
+- **Neural web** — `memory_manager.backend: neural`; `neural_web*` tools register only when that backend is active
+- **Knowledge graph** — `core/knowledge_graph.py` (not wired to document RAG)
+- **Working memory** — `core/working_memory.py` (in-process tests/archive)
+
+See [`memory.md`](memory.md) and [`clutter-catalog-2026-07.md`](../roadmap/clutter-catalog-2026-07.md) Wave D.
 
 ## External dependencies
 

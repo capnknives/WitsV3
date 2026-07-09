@@ -1,7 +1,7 @@
 ---
 title: "WitsV3 Documentation"
 created: "2025-06-09"
-last_updated: "2026-07-08"
+last_updated: "2026-07-09"
 status: "active"
 ---
 
@@ -21,6 +21,7 @@ Design notes, roadmaps, and historical material for WitsV3.
 | **What shipped (July 2026)** | [`roadmap/revival-2026-07.md`](roadmap/revival-2026-07.md) |
 | **Architecture** | [`architecture/system-architecture.md`](architecture/system-architecture.md) *(component map)* |
 | **Memory model** | [`architecture/memory.md`](architecture/memory.md) |
+| **Agent integration** | [`../agents/integration_guide.md`](../agents/integration_guide.md) |
 | **Dead/dormant code** | [`roadmap/clutter-catalog-2026-07.md`](roadmap/clutter-catalog-2026-07.md) |
 | **Tool registry truth** | [`roadmap/tool-registry-reality-2026-07.md`](roadmap/tool-registry-reality-2026-07.md) |
 | **Config surface truth** | [`roadmap/config-surface-truth-2026-07.md`](roadmap/config-surface-truth-2026-07.md) |

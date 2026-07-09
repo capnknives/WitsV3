@@ -69,6 +69,33 @@ def extract_code_from_response(response: str) -> str:
     return cleaned.strip()
 
 
+def extract_search_replace_blocks(response: str) -> list[tuple[str, str]]:
+    """Parse SEARCH/REPLACE hunks from an LLM repair response."""
+    blocks: list[tuple[str, str]] = []
+    pattern = re.compile(
+        r"<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE",
+        re.DOTALL,
+    )
+    for match in pattern.finditer(response or ""):
+        old, new = match.group(1), match.group(2)
+        if old:
+            blocks.append((old, new))
+    return blocks
+
+
+def apply_search_replace(original: str, blocks: list[tuple[str, str]]) -> str | None:
+    """Apply SEARCH/REPLACE blocks; return None if any block misses."""
+    content = original
+    for old, new in blocks:
+        if old not in content:
+            return None
+        content = content.replace(old, new, 1)
+    return content
+
+
+PATCH_LINE_THRESHOLD = 150
+
+
 @dataclass
 class EditResult:
     success: bool
@@ -235,6 +262,49 @@ async def apply_verified_edit(
         test_output=test_output,
         committed=committed,
         commit_sha=commit_sha,
+    )
+
+
+async def apply_verified_patch(
+    file_path: str,
+    patch_response: str,
+    *,
+    reason: str,
+    test_paths: list[str] | None = None,
+    timeout: float = 120.0,
+    commit: bool = True,
+) -> EditResult:
+    """Apply SEARCH/REPLACE hunks from patch_response, then verify with pytest."""
+    try:
+        resolved = resolve_within_project(file_path)
+    except PermissionError as e:
+        return EditResult(success=False, file_path=file_path, message=str(e))
+
+    if not resolved.exists():
+        return EditResult(success=False, file_path=file_path, message="File does not exist.")
+
+    original = resolved.read_text(encoding="utf-8", errors="replace")
+    blocks = extract_search_replace_blocks(patch_response)
+    if not blocks:
+        return EditResult(
+            success=False,
+            file_path=file_path,
+            message="No valid SEARCH/REPLACE blocks found in patch response.",
+        )
+    patched = apply_search_replace(original, blocks)
+    if patched is None:
+        return EditResult(
+            success=False,
+            file_path=file_path,
+            message="Patch hunks did not match the current file content.",
+        )
+    return await apply_verified_edit(
+        file_path,
+        patched,
+        reason=reason,
+        test_paths=test_paths,
+        timeout=timeout,
+        commit=commit,
     )
 
 

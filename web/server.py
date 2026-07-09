@@ -374,6 +374,7 @@ def create_app(system) -> FastAPI:
                 return
 
             result_parts = []
+            turn_traces: list[dict[str, Any]] = []
             profile_store = GuestUserProfileStore()
             guest_personalization = ""
             if guest:
@@ -401,6 +402,15 @@ def create_app(system) -> FastAPI:
                 ):
                     payload = _stream_payload(stream_data)
                     yield sse("stream", payload)
+                    if stream_data.type in ("tool_call", "action", "observation"):
+                        turn_traces.append(
+                            {
+                                "type": stream_data.type,
+                                "content": stream_data.content,
+                                "source": stream_data.source,
+                                "metadata": stream_data.metadata,
+                            }
+                        )
                     if guest and stream_data.type in ("tool_call", "action"):
                         _audit(
                             "tool_call",
@@ -441,7 +451,26 @@ def create_app(system) -> FastAPI:
                             logger.warning("Guest profile update failed: %s", prof_err)
 
                     asyncio.create_task(_refresh_guest_profile())
-                conversation.add_message("assistant", final_text)
+                conversation.add_message(
+                    "assistant",
+                    final_text,
+                    metadata={"tool_traces": turn_traces} if turn_traces else None,
+                )
+                if turn_traces:
+                    conversation.stream_traces.append(
+                        {"turn": len(conversation.messages) // 2, "events": turn_traces}
+                    )
+                if not guest and auth_role == "owner":
+                    from core.fact_extraction import extract_promotable_facts
+                    from core.knowledge_log import KnowledgeLogStore
+
+                    for fact in extract_promotable_facts(body.message, final_text):
+                        try:
+                            KnowledgeLogStore(
+                                path=system.config.knowledge_log.file_path
+                            ).add_fact(fact, source="auto_extraction", category="owner")
+                        except Exception as fact_err:
+                            logger.debug("Auto fact promotion skipped: %s", fact_err)
                 try:
                     from core.session_store import persist_session
 
@@ -476,12 +505,23 @@ def create_app(system) -> FastAPI:
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    def _format_session_export(conversation: ConversationHistory) -> str:
+    def _format_session_export(conversation: ConversationHistory, *, verbose: bool = False) -> str:
         if not conversation.messages:
             return "Conversation history is empty."
         lines = []
         for msg in conversation.messages:
             lines.append(f"{msg.role.upper()}: {msg.content}")
+            if verbose and msg.metadata and msg.metadata.get("tool_traces"):
+                lines.append("--- tool trace ---")
+                for ev in msg.metadata["tool_traces"]:
+                    lines.append(f"  [{ev.get('type', '?')}] {ev.get('content', '')}")
+                lines.append("--- end trace ---")
+        if verbose and conversation.stream_traces:
+            lines.append("\n=== SESSION STREAM TRACES ===")
+            for block in conversation.stream_traces:
+                lines.append(f"Turn {block.get('turn', '?')}:")
+                for ev in block.get("events", []):
+                    lines.append(f"  [{ev.get('type', '?')}] {ev.get('content', '')}")
         return "\n\n".join(lines)
 
     @app.post("/api/export")
@@ -496,7 +536,7 @@ def create_app(system) -> FastAPI:
             return JSONResponse({"detail": "no active session"}, status_code=400)
 
         conversation = system.session_histories[session_id]
-        content = _format_session_export(conversation)
+        content = _format_session_export(conversation, verbose=body.verbose)
         if not content.strip():
             return JSONResponse({"detail": "conversation is empty"}, status_code=400)
 

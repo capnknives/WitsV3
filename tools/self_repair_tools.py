@@ -117,17 +117,19 @@ def parse_traceback_issues(log_text: str, max_issues: int) -> list[dict[str, Any
     """
     issues: list[dict[str, Any]] = []
     seen_messages = set()
+    seen_signatures = set()
 
     for match in _TRACEBACK_RE.finditer(log_text):
         exc_line = match.group("exc_line").strip()
-        if exc_line in seen_messages:
-            continue
         body = match.group("body")
         file_line = None
         for fm in _FILE_LINE_RE.finditer(body):
             rel = _relative_to_project(fm.group("file"))
             if rel:
-                file_line = (rel, int(fm.group("line")))  # keep the last (innermost) project frame
+                file_line = (rel, int(fm.group("line")))
+        sig = f"{file_line}:{exc_line}" if file_line else exc_line
+        if exc_line in seen_messages or sig in seen_signatures:
+            continue
         if file_line:
             issues.append(
                 {
@@ -136,9 +138,11 @@ def parse_traceback_issues(log_text: str, max_issues: int) -> list[dict[str, Any
                     "line": file_line[1],
                     "message": exc_line,
                     "kind": "traceback",
+                    "signature": sig,
                 }
             )
             seen_messages.add(exc_line)
+            seen_signatures.add(sig)
 
     if len(issues) < max_issues:
         for line in log_text.splitlines():

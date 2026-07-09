@@ -17,11 +17,8 @@ from core.schemas import ConversationHistory, StreamData
 
 from agents.routing_classifier import FILE_SAVE_SIGNALS, needs_codebase_intro
 
-CODEBASE_BOOTSTRAP_FILES = (
-    "README.md",
-    "AGENTS.md",
-    "docs/architecture/system-architecture.md",
-)
+from agents.orchestrator_codebase import OrchestratorCodebaseMixin
+from agents.orchestrator_preflight import OrchestratorPreflightMixin
 
 _DESKTOP_ACTION_RE = re.compile(
     r"\b(open|launch|start|run)\b.{0,40}\b("
@@ -31,169 +28,8 @@ _DESKTOP_ACTION_RE = re.compile(
 )
 
 
-class OrchestratorToolHelpersMixin:
-    """Mixin: preflight guardrails, observation layout, and export helpers."""
-
-    REPEAT_TOOL_FAILURE_LIMIT = 2
-    TOOL_TOTAL_FAILURE_LIMIT = 3
-    ORCHESTRATOR_BLOCKED_TOOLS = frozenset({"intent_analysis", "json_manipulate"})
-
-    def _guest_allowed_tools(self) -> frozenset[str]:
-        from core.guest_access import guest_tools_for_age_band
-
-        state = getattr(self, "_react_state_for_tools", None) or {}
-        age_band = state.get("guest_age_band", "teen")
-        return guest_tools_for_age_band(age_band, getattr(self, "config", None))
-
-    @staticmethod
-    def _has_ingested_documents(state: dict[str, Any]) -> bool:
-        """True when USER DOCUMENTS lists at least one ingested file."""
-        ctx = state.get("documents_context", "")
-        return bool(ctx) and "No user documents are currently ingested" not in ctx
-
-    @staticmethod
-    def _tool_call_signature(tool_name: str, tool_args: dict[str, Any]) -> str:
-        return f"{tool_name}:{json.dumps(tool_args, sort_keys=True, default=str)}"
-
-    def _preflight_tool_call(
-        self, tool_name: str, tool_args: dict[str, Any], state: dict[str, Any]
-    ) -> str | None:
-        """Return a block message to skip doomed/repeat tool calls, or None to proceed."""
-        if getattr(self, "config", None) and self.config.security.offline_mode:
-            if tool_name == "web_search" or tool_name.startswith("mcp_"):
-                return (
-                    f"Blocked {tool_name}: offline mode is enabled — "
-                    "web search and MCP tools are disabled."
-                )
-        if state.get("user_role") == "guest" and tool_name not in self._guest_allowed_tools():
-            return (
-                f"Blocked {tool_name}: not available for guest users. "
-                f"Use web_search, math_operations, or datetime, or final_answer to respond."
-            )
-        goal = state.get("goal", "")
-        from agents.wcca_routing_mixin import OrchestratorRoutingMixin
-
-        if state.get(
-            "user_role"
-        ) == "owner" and OrchestratorRoutingMixin._needs_guest_profile_review(
-            OrchestratorRoutingMixin(), goal
-        ):
-            if tool_name == "web_search":
-                return (
-                    "Blocked web_search: guest profile questions must use "
-                    "guest_user_profile_summary (saved facts only, no online lookup)."
-                )
-            if tool_name not in (
-                "guest_user_profile_summary",
-                "guest_accounts_list",
-                "guest_audit_summary",
-                "guest_set_age_band",
-            ):
-                return (
-                    f"Blocked {tool_name}: for guest profile/interest questions use "
-                    "guest_user_profile_summary only."
-                )
-
-        if tool_name in self.ORCHESTRATOR_BLOCKED_TOOLS:
-            return (
-                f"Blocked {tool_name}: not available in the orchestrator. "
-                f"Use web_search for online lookups, document_search for uploaded files, "
-                f"or final_answer to respond."
-            )
-
-        goal = state.get("goal", "")
-
-        if state.get("lookup_search_done"):
-            return (
-                f"Blocked {tool_name}: web_search already returned results for this lookup. "
-                f"Use action_type final_answer now — write a short report that answers GOAL "
-                f"using only the web_search SOURCES in observations. Do not discuss unrelated "
-                f"games, card lists, or uploaded documents."
-            )
-
-        if self._goal_is_web_lookup(goal) and tool_name == "document_search":
-            return (
-                "Blocked document_search: GOAL is a public web lookup — use web_search only, "
-                "not the user's private uploaded files."
-            )
-
-        if (
-            self._goal_is_web_lookup(goal)
-            and tool_name == "web_search"
-            and self._has_web_search_observation(state.get("observations", []))
-        ):
-            return (
-                "Skipped repeat web_search: results are already in observations. "
-                "Use final_answer to summarize for GOAL."
-            )
-
-        if (
-            tool_name == "read_conversation_history"
-            and self._goal_saves_conversation(goal)
-            and self._has_read_history_observation(state.get("observations", []))
-        ):
-            root = self.config.runtime_paths.root if getattr(self, "config", None) else "var"
-            path = self._save_file_path_from_goal(goal) or exports_subpath(
-                "conversation_log.txt", root
-            )
-            return (
-                f"Skipped repeat read_conversation_history: transcript already in observations. "
-                f'Call write_file with {{"file_path": "{path}"}} (omit content) or final_answer.'
-            )
-
-        if (
-            tool_name == "write_file"
-            and self._goal_saves_conversation(goal)
-            and self._save_already_verified(state)
-        ):
-            return (
-                "Skipped repeat write_file: conversation already saved to disk. "
-                "Use final_answer to confirm the path."
-            )
-
-        observations = state.get("observations", [])
-        if tool_name == "list_mcp_tools":
-            prior = sum(1 for o in observations if "list_mcp_tools" in o)
-            if prior >= 2:
-                return (
-                    "Skipped repeat list_mcp_tools: tools already listed in observations. "
-                    "Use a matching mcp_* tool or final_answer explaining the limitation."
-                )
-
-        if tool_name == "web_search" and self._goal_is_pure_math(goal):
-            return (
-                "Blocked web_search: GOAL is a pure math calculation — use calculator or "
-                "math_operations only."
-            )
-
-        if self._has_ingested_documents(state) and tool_name in (
-            "read_file",
-            "list_directory",
-        ):
-            if not needs_codebase_intro(goal):
-                return (
-                    f"Blocked {tool_name}: ingested USER DOCUMENTS must be read with "
-                    f"document_search (query + optional file_name), not filesystem tools. "
-                    f"If you already have excerpts in observations, use final_answer."
-                )
-
-        sig = self._tool_call_signature(tool_name, tool_args)
-        repeat = state.get("tool_repeat_failures", {}).get(sig, 0)
-        if repeat >= self.REPEAT_TOOL_FAILURE_LIMIT:
-            return (
-                f"Skipped repeat {tool_name} call with identical tool_args "
-                f"(already failed {repeat} times). Change args, pick another tool, "
-                f"or use final_answer from existing observations."
-            )
-
-        total = state.get("tool_total_failures", {}).get(tool_name, 0)
-        if total >= self.TOOL_TOTAL_FAILURE_LIMIT:
-            return (
-                f"Skipped {tool_name}: it failed {total} times this session. "
-                f"Do not call it again — answer from observations or explain the blocker."
-            )
-
-        return None
+class OrchestratorToolHelpersMixin(OrchestratorPreflightMixin, OrchestratorCodebaseMixin):
+    """Mixin: observation layout and export helpers (preflight/codebase in sibling mixins)."""
 
     @staticmethod
     def _has_read_history_observation(observations: list[str]) -> bool:
@@ -1012,36 +848,6 @@ class OrchestratorToolHelpersMixin:
             )
         return None
 
-    async def _bootstrap_codebase_intro(
-        self, state: dict[str, Any], session_id: str | None
-    ) -> AsyncGenerator[StreamData, None]:
-        """Pre-load key project files for codebase introspection goals."""
-        if not needs_codebase_intro(state.get("goal", "")):
-            return
-        if self._has_codebase_file_observation(state.get("observations", [])):
-            return
-
-        yield self.stream_action("Reading project structure for codebase overview...")
-        try:
-            listing = await self._call_tool("list_directory", {"directory_path": "."}, state)
-            list_obs = self._format_tool_observation("list_directory", listing)
-        except Exception as e:
-            list_obs = f"Tool list_directory failed: {e}"
-
-        state["observations"].append(list_obs)
-        yield self.stream_observation(list_obs)
-
-        for rel_path in CODEBASE_BOOTSTRAP_FILES:
-            yield self.stream_action(f"Reading {rel_path}...")
-            try:
-                content = await self._call_tool("read_file", {"file_path": rel_path}, state)
-                read_obs = self._format_tool_observation("read_file", content)
-            except Exception as e:
-                read_obs = f"Tool read_file failed: {e}"
-            if not read_obs.startswith("Tool read_file result: Error"):
-                state["observations"].append(read_obs)
-                yield self.stream_observation(read_obs)
-
     @staticmethod
     def _format_conversation_for_file(
         conversation_history: ConversationHistory,
@@ -1073,34 +879,3 @@ class OrchestratorToolHelpersMixin:
                 ):
                     return text
         return None
-
-    async def _get_document_inventory(self) -> dict[str, int]:
-        """File path -> chunk count for every ingested document (empty if none)."""
-        if not self.memory_manager:
-            return {}
-        try:
-            segments = await self.memory_manager.get_recent_memory(
-                limit=1_000_000, filter_dict={"type": "DOCUMENT_CHUNK"}
-            )
-        except Exception as e:
-            self.logger.warning(f"Could not list ingested documents: {e}")
-            return {}
-        counts: dict[str, int] = {}
-        for seg in segments:
-            fp = seg.metadata.get("file_path")
-            if fp:
-                counts[fp] = counts.get(fp, 0) + 1
-        return counts
-
-    @staticmethod
-    def _format_documents_context(inventory: dict[str, int]) -> str:
-        """Prompt block listing ingested documents the orchestrator can search."""
-        if not inventory:
-            return "No user documents are currently ingested."
-        listing = "\n".join(
-            f"- {name} ({count} chunks)" for name, count in sorted(inventory.items())
-        )
-        return (
-            "These user documents are ALREADY ingested and searchable via "
-            "document_search. Never claim you cannot access them:\n" + listing
-        )

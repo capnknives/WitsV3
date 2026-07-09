@@ -68,6 +68,50 @@ async def collect_streams(agent, user_input: str, conversation: ConversationHist
     return final, "\n".join(parts), tool_hits
 
 
+async def operator_checks(system) -> None:
+    """July 9 operator UX + memory 3a checks (no LLM)."""
+    print("\n=== Operator UX + memory (no LLM) ===")
+    backend = system.config.memory_manager.backend
+    if backend == "faiss_cpu":
+        ok("memory backend", backend)
+    else:
+        fail("memory backend", f"expected faiss_cpu, got {backend}")
+
+    if system.memory_manager:
+        try:
+            await system.memory_manager.initialize()
+            ok("memory manager init")
+        except Exception as e:
+            fail("memory manager init", str(e))
+    else:
+        fail("memory manager", "not configured")
+
+    from core.mcp_health import clear_server_health, get_server_health, record_connect_failure
+
+    clear_server_health()
+    record_connect_failure("smoke-test", "simulated connect failure")
+    health = get_server_health("smoke-test")
+    if health.get("last_error"):
+        ok("mcp health tracking")
+    else:
+        fail("mcp health tracking", "missing last_error")
+    clear_server_health()
+
+    from core.tool_metrics import ToolMetricsRecorder
+
+    rec = ToolMetricsRecorder()
+    rec.record("smoke_tool", 10.0, success=True)
+    if rec.snapshot():
+        ok("tool metrics recorder")
+    else:
+        fail("tool metrics recorder", "empty snapshot")
+
+    if hasattr(system.config.security, "offline_mode"):
+        ok("offline_mode config", str(system.config.security.offline_mode))
+    else:
+        fail("offline_mode config", "missing on SecuritySettings")
+
+
 async def routing_checks(wcca) -> None:
     print("\n=== Routing (deterministic, no LLM) ===")
     cases = [
@@ -309,16 +353,19 @@ async def main() -> int:
         print("FATAL: control center not initialized")
         return 1
 
+    await operator_checks(system)
     await routing_checks(system.control_center)
 
     if args.quick:
         print(f"\nDone: {PASS} passed, {FAIL} failed, {SKIP} skipped (quick mode)")
+        await system.shutdown()
         return 1 if FAIL else 0
 
     only = {s.strip() for s in args.only.split(",")} if args.only else None
     await live_checks(system, only=only)
 
     print(f"\n=== Summary: {PASS} passed, {FAIL} failed, {SKIP} skipped ===")
+    await system.shutdown()
     return 1 if FAIL else 0
 
 
