@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from core.config import load_config, WitsV3Config
+from core.runtime_paths import ensure_runtime_layout, main_log_path
 from core.conversation_compaction import maybe_flush_conversation_memory
 from core.llm_interface import OllamaInterface, BaseLLMInterface
 from core.memory_manager import MemoryManager, BasicMemoryBackend
@@ -51,13 +52,16 @@ IS_RESTART = "--restart" in sys.argv
 IS_TEST_MODE = any(arg in sys.argv for arg in ["--test", "--validate", "--check"])
 IS_CURSOR_TEST = os.getenv('CURSOR_TEST_MODE') == '1' or os.getenv('CI') == 'true'
 
+# Ensure runtime dirs exist before attaching the log file handler.
+ensure_runtime_layout()
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler('logs/witsv3.log', encoding='utf-8') if Path('logs').exists() else logging.NullHandler()
+        logging.FileHandler(str(main_log_path()), encoding='utf-8'),
     ]
 )
 
@@ -137,7 +141,7 @@ class WitsV3System:
             # skipped unless mcp_connect_on_startup is enabled — connecting to
             # unavailable node servers adds ~20s of failed attempts at boot)
             if self.config.tool_system.enable_mcp_tools and self.config.tool_system.mcp_connect_on_startup:
-                self.mcp_registry = MCPToolRegistry()
+                self.mcp_registry = MCPToolRegistry(self.config.tool_system.mcp_tool_definitions_path)
                 await self.mcp_registry.initialize(self.tool_registry)
             else:
                 self.mcp_registry = None

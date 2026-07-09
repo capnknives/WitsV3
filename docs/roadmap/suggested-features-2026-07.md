@@ -219,7 +219,7 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 | **1 — Doc consolidation** | ✅ Done | Merged `planning/` into `docs/`; `planning/` is redirect stub |
 | **2a — GUI archive prune** | ✅ Done | Tag `archive-pre-prune-2026-07`; removed 61 files under `docs/archive/gui/` (stub README remains) |
 | **2b — Further archive prune** | ✅ Done | Tag `archive-pre-prune-2b-2026-07`; removed 27 files (`adaptive_llm/core/`, `sphinx/`, synthetic_brain code); stub READMEs remain |
-| **3 — Runtime `var/` layout** | Pending | Centralize paths in config first |
+| **3 — Runtime `var/` layout** | ✅ Done | `core/runtime_paths.py`; legacy dirs auto-migrate on startup |
 | **4 — Root surface cleanup** | Pending | Instruction-file redirects |
 
 ---

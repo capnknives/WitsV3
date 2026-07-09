@@ -14,7 +14,13 @@ lib/
 lib64/
 parts/
 sdist/
-var/
+var/**
+!var/data/
+var/data/**
+!var/data/README.md
+!var/data/mcp_tools.json
+!var/data/mcp_config.json
+!var/data/*.template
 wheels/
 *.egg-info/
 .installed.cfg
@@ -49,12 +55,10 @@ htmlcov/
 .tox/
 .nox/
 
-# Logs
+# Legacy runtime roots (pre-Phase 3 var/ layout) — still ignored during migration
 *.log
 logs/
 log/
-
-# WitsV3 Data Files (Personal/Runtime Data)
 documents/*
 !documents/.gitkeep
 exports/*
@@ -64,6 +68,7 @@ workspace/*
 mcp_servers/*
 !mcp_servers/.gitkeep
 !mcp_servers/README.md
+cache/
 data/wits_memory.json
 data/neural_web.json
 data/neural_web_backup.json
@@ -75,6 +80,19 @@ data/*_smoke_report.json
 data/*_backup.json
 data/faiss_index.*
 data/wits_faiss_index.*
+
+# WitsV3 runtime data under var/ (mutable; templates tracked in var/data/)
+var/data/wits_memory.json
+var/data/neural_web.json
+var/data/neural_web_backup.json
+var/data/knowledge_graph.json
+var/data/guest_profiles.json
+var/data/guest_user_profiles/
+var/data/guest_audit/
+var/data/*_smoke_report.json
+var/data/*_backup.json
+var/data/faiss_index.*
+var/data/wits_faiss_index.*
 
 # Authentication & Security (Never commit)
 .env

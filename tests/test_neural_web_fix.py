@@ -23,7 +23,7 @@ async def test_neural_web():
     neural_web = NeuralWeb()
 
     # Check if the data file exists
-    neural_web_path = Path("data/neural_web.json")
+    neural_web_path = Path("var/data/neural_web.json")
     if not neural_web_path.exists():
         print("Neural web data file not found")
         return

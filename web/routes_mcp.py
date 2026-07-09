@@ -110,7 +110,7 @@ def register_mcp_routes(app: FastAPI, system) -> None:
                 "npx/uvx servers can take 1–2 minutes on first run — try Reconnect."
             )
         if not ok:
-            return False, "connection failed — check logs/witsv3.log for details"
+            return False, "connection failed — check var/logs/witsv3.log for details"
 
         tools = _register_mcp_tools_for_server(adapter, name)
         logger.info(f"MCP server connected: {name} ({len(tools)} tools)")

@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from core.base_tool import BaseTool
+from core.runtime_paths import main_log_path
 from core.safe_code_editor import (
     PROJECT_ROOT,
     apply_verified_edit,
@@ -177,7 +178,7 @@ class DiagnoseLogErrorsTool(BaseTool):
                 "at the right place. Read-only — makes no changes."
             ),
         )
-        self.log_path = PROJECT_ROOT / "logs" / "witsv3.log"
+        self.log_path = main_log_path()
 
     async def execute(self, lines: int = 2000, max_issues: int = 5) -> dict[str, Any]:
         if not self.log_path.exists():

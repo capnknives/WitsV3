@@ -138,11 +138,20 @@ class NeuralWebSettings(BaseModel):
     )
 
 
+class RuntimePathsSettings(BaseModel):
+    """Mutable runtime data root (memory, logs, RAG drop folder, exports, …)."""
+
+    root: str = Field(
+        default="var",
+        description="Top-level directory for all runtime/personal data (subdirs: data, documents, exports, logs, workspace, cache)",
+    )
+
+
 class MemoryManagerSettings(BaseModel):
     backend: str = Field(default="basic")  # basic, faiss_cpu, faiss_gpu, neural
-    memory_file_path: str = Field(default="data/wits_memory.json")
-    faiss_index_path: str = Field(default="data/wits_faiss_index.bin")
-    neural_web_path: str = Field(default="data/neural_web.json")
+    memory_file_path: str = Field(default="var/data/wits_memory.json")
+    faiss_index_path: str = Field(default="var/data/wits_faiss_index.bin")
+    neural_web_path: str = Field(default="var/data/neural_web.json")
     vector_dim: int = Field(default=768)  # nomic-embed-text embedding dimension
     max_results_per_search: int = Field(default=5)
     pruning_interval_seconds: int = Field(default=3600)
@@ -199,7 +208,7 @@ class ToolSystemSettings(BaseModel):
         default=False,
         description="Connect to external MCP servers during startup (slows boot when servers are unavailable)",
     )
-    mcp_tool_definitions_path: str = Field(default="data/mcp_tools.json")
+    mcp_tool_definitions_path: str = Field(default="var/data/mcp_tools.json")
     mcp_registry_url: str = Field(
         default="https://registry.modelcontextprotocol.io",
         description="Official MCP registry used by the discover/search feature",
@@ -233,7 +242,7 @@ class GuestAccessSettings(BaseModel):
     )
     audit_chat: bool = Field(
         default=True,
-        description="Append guest turns to data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl",
+        description="Append guest turns to var/data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl",
     )
     content_policy_enabled: bool = Field(
         default=True, description="Block inappropriate guest input/output (family-friendly)"
@@ -272,7 +281,7 @@ class WebUISettings(BaseModel):
 class DocumentRAGSettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the document RAG system")
     documents_path: str = Field(
-        default="documents", description="Folder watched for documents to ingest"
+        default="var/documents", description="Folder watched for documents to ingest"
     )
     chunk_size: int = Field(default=1200, gt=0, description="Target chunk size in characters")
     chunk_overlap: int = Field(
@@ -399,7 +408,7 @@ class SelfRepairSettings(BaseModel):
         default=3, gt=0, description="Cap on distinct issues attempted per run"
     )
     log_scan_lines: int = Field(
-        default=2000, gt=0, description="Trailing lines of logs/witsv3.log to scan for errors"
+        default=2000, gt=0, description="Trailing lines of var/logs/witsv3.log to scan for errors"
     )
     restart_after_fix: bool = Field(
         default=False,
@@ -414,6 +423,7 @@ class WitsV3Config(BaseModel):
     project_name: str = Field(default="WitsV3")
     version: str = Field(default="3.0.0")
     logging_level: str = Field(default="INFO")
+    runtime_paths: RuntimePathsSettings = Field(default_factory=RuntimePathsSettings)
     debug_mode: bool = Field(default=False)
     auto_restart_on_file_change: bool = Field(
         default=True, description="Automatically restart the system when Python files are changed"
@@ -554,10 +564,34 @@ def save_local_overrides(new_overrides: dict[str, Any], config_path: str = "conf
 
 
 # Convenience function for loading config
+def _apply_runtime_path_defaults(config: WitsV3Config) -> WitsV3Config:
+    """Upgrade legacy top-level runtime paths from config.yaml to var/ layout."""
+    from core.runtime_paths import upgrade_runtime_path
+
+    root = config.runtime_paths.root
+    config.memory_manager.memory_file_path = upgrade_runtime_path(
+        config.memory_manager.memory_file_path, root
+    )
+    config.memory_manager.faiss_index_path = upgrade_runtime_path(
+        config.memory_manager.faiss_index_path, root
+    )
+    config.memory_manager.neural_web_path = upgrade_runtime_path(
+        config.memory_manager.neural_web_path, root
+    )
+    config.tool_system.mcp_tool_definitions_path = upgrade_runtime_path(
+        config.tool_system.mcp_tool_definitions_path, root
+    )
+    config.document_rag.documents_path = upgrade_runtime_path(
+        config.document_rag.documents_path, root
+    )
+    return config
+
+
 def load_config(config_path: str = "config.yaml") -> WitsV3Config:
     """Load configuration from YAML file, with local + env-var overrides."""
     config = WitsV3Config.from_yaml(config_path)
     config = _apply_local_overrides(config, config_path)
+    config = _apply_runtime_path_defaults(config)
     return _apply_env_overrides(config)
 
 

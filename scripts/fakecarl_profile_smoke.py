@@ -30,6 +30,7 @@ from httpx import ASGITransport, AsyncClient
 
 from core.guest_access import GuestRegistry
 from core.guest_user_profile import GuestUserProfileStore
+from core.runtime_paths import data_dir, ensure_runtime_layout
 from tests.web.test_web_server import FakeSystem, _parse_sse
 from tools.guest_profile_tool import GuestUserProfileSummaryTool
 from web.server import create_app
@@ -132,7 +133,8 @@ async def _guest_chat(client: AsyncClient, token: str, message: str, session_id:
 
 async def _run_inprocess(*, profile_llm: bool, settle_s: float) -> int:
     invite, _, web_token = _load_env()
-    (ROOT / "data").mkdir(exist_ok=True)
+    ensure_runtime_layout()
+    data_dir().mkdir(parents=True, exist_ok=True)
 
     system = FakeSystem(ROOT)
     system.config.web_ui.guest_access.enabled = True
@@ -232,7 +234,7 @@ async def _run_inprocess(*, profile_llm: bool, settle_s: float) -> int:
             "owner_summary": owner_summary,
             "validated_at": datetime.now(timezone.utc).isoformat(),
         }
-        report_path = ROOT / "data" / "fakecarl_profile_smoke_report.json"
+        report_path = data_dir() / "fakecarl_profile_smoke_report.json"
         report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"\nReport saved: {report_path}")
         print("\n=== FAKECARL PROFILE SMOKE PASSED ===")

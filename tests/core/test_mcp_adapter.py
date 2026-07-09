@@ -147,7 +147,7 @@ async def test_mcp_adapter_shutdown(mcp_adapter, mcp_server_config, mock_mcp_cli
 async def test_filesystem_mcp_server_integration():
     """Test integration with the filesystem MCP server"""
     # Find the filesystem MCP server
-    config_path = "data/mcp_tools.json"
+    config_path = "var/data/mcp_tools.json"
 
     if not os.path.exists(config_path):
         pytest.skip(f"MCP configuration file not found: {config_path}")

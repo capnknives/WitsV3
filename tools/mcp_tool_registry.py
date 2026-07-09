@@ -22,7 +22,7 @@ class MCPToolRegistry:
     Handles loading MCP server configurations and registering MCP tools with the main ToolRegistry.
     """
 
-    def __init__(self, config_path: str = "data/mcp_tools.json"):
+    def __init__(self, config_path: str = "var/data/mcp_tools.json"):
         """
         Initialize the MCP tool registry.
 

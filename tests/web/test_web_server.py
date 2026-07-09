@@ -153,7 +153,7 @@ def test_chat_streams_events_and_records_history(client_noauth):
 def test_export_writes_session_transcript(client_noauth, tmp_path, monkeypatch):
     client, system = client_noauth
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "exports").mkdir()
+    (tmp_path / "var" / "exports").mkdir(parents=True)
 
     chat_res = client.post("/api/chat", json={"message": "hello"})
     events = _parse_sse(chat_res.text)

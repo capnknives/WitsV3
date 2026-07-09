@@ -21,8 +21,8 @@ def guest_env(tmp_path, monkeypatch):
     monkeypatch.setenv("WITSV3_GUEST_INVITE", "family-code")
     monkeypatch.setenv("WITSV3_GUEST_SECRET", "guest-signing-secret-xyz")
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
-    (tmp_path / "exports").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
+    (tmp_path / "var" / "exports").mkdir(parents=True)
 
     system = FakeSystem(tmp_path)
     system.config.web_ui.guest_access.enabled = True

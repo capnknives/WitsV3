@@ -23,7 +23,7 @@ def print_step(step_num, total_steps, description):
 
 async def main():
     parser = argparse.ArgumentParser(description="Set up MCP servers for WitsV3")
-    parser.add_argument("--config", default="data/mcp_tools.json", help="Path to MCP configuration file")
+    parser.add_argument("--config", default="var/data/mcp_tools.json", help="Path to MCP configuration file")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show verbose output")
     args = parser.parse_args()
 

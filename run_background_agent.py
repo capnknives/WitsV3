@@ -8,6 +8,8 @@ import asyncio
 import logging
 from pathlib import Path
 
+from core.runtime_paths import ensure_runtime_layout, logs_dir
+
 # Add project root to Python path
 project_root = Path(__file__).parent.absolute()
 os.environ["PYTHONPATH"] = str(project_root)
@@ -16,12 +18,15 @@ os.environ["PYTHONPATH"] = str(project_root)
 os.environ["WITSV3_BACKGROUND_MODE"] = "true"
 os.environ["CURSOR_INTEGRATION"] = "true"
 
+ensure_runtime_layout()
+logs_dir().mkdir(parents=True, exist_ok=True)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("logs/background_agent.log"),
+        logging.FileHandler(str(logs_dir() / "background_agent.log")),
         logging.StreamHandler()
     ]
 )
@@ -40,8 +45,5 @@ async def main():
         raise
 
 if __name__ == "__main__":
-    # Create logs directory if it doesn't exist
-    os.makedirs("logs", exist_ok=True)
-
-    # Run the agent
+    ensure_runtime_layout()
     asyncio.run(main())

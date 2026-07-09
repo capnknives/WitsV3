@@ -6,7 +6,7 @@ max_concurrent_tasks: 3
 
 # Memory backend configuration
 memory_backend: "basic"
-memory_file_path: "data/background_agent_memory.json"
+memory_file_path: "var/data/background_agent_memory.json"
 
 tasks:
   memory_maintenance:
@@ -68,7 +68,7 @@ tasks:
     settings: {}
 
 logging:
-  file: "logs/background_agent.log"
+  file: "var/logs/background_agent.log"
   max_size_mb: 10
   backup_count: 5
   format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -79,5 +79,5 @@ notifications:
     - type: "log"
       level: "ERROR"
     - type: "file"
-      path: "logs/background_agent_alerts.log"
+      path: "var/logs/background_agent_alerts.log"
       level: "WARNING"

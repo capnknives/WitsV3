@@ -16,6 +16,7 @@ from agents.advanced_coding_agent import AdvancedCodingAgent
 from agents.coding_models import CodeProject
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
+from core.runtime_paths import workspace_dir
 from core.safe_code_editor import PROJECT_ROOT
 
 
@@ -65,18 +66,18 @@ async def test_write_project_files_writes_to_workspace_and_compiles(agent):
         tests={},
         documentation="",
     )
-    workspace_dir = PROJECT_ROOT / "workspace" / project.name
+    workspace_dir_path = workspace_dir() / project.name
     try:
         results = await agent._write_project_files(
             project, {"main.py": "print('hello')\n", "README.md": "# scratch\n"}
         )
         assert any("✓ main.py" in r for r in results)
         assert any("✓ README.md" in r for r in results)
-        assert (workspace_dir / "main.py").read_text(encoding="utf-8") == "print('hello')\n"
+        assert (workspace_dir_path / "main.py").read_text(encoding="utf-8") == "print('hello')\n"
     finally:
         import shutil
 
-        shutil.rmtree(workspace_dir, ignore_errors=True)
+        shutil.rmtree(workspace_dir_path, ignore_errors=True)
 
 
 @pytest.mark.asyncio
@@ -93,14 +94,14 @@ async def test_write_project_files_reports_syntax_errors(agent):
         tests={},
         documentation="",
     )
-    workspace_dir = PROJECT_ROOT / "workspace" / project.name
+    workspace_dir_path = workspace_dir() / project.name
     try:
         results = await agent._write_project_files(project, {"broken.py": "def broken(:\n"})
         assert any("syntax error" in r for r in results)
     finally:
         import shutil
 
-        shutil.rmtree(workspace_dir, ignore_errors=True)
+        shutil.rmtree(workspace_dir_path, ignore_errors=True)
 
 
 @pytest.mark.asyncio

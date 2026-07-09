@@ -49,7 +49,9 @@ class BookWritingWriterMixin:
         return slug or "untitled_story"
 
     def _book_output_path(self, slug: str) -> Path:
-        resolved = resolve_within_project(f"workspace/{slug}/{slug}.md")
+        from core.runtime_paths import workspace_subpath
+
+        resolved = resolve_within_project(f"{workspace_subpath(slug)}/{slug}.md")
         resolved.parent.mkdir(parents=True, exist_ok=True)
         return resolved
 

@@ -22,7 +22,7 @@ def guest_env(tmp_path, monkeypatch):
     monkeypatch.setenv("WITSV3_GUEST_INVITE", "family-code")
     monkeypatch.setenv("WITSV3_GUEST_SECRET", "guest-signing-secret-xyz")
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
     system = FakeSystem(tmp_path)
     system.config.web_ui.guest_access.enabled = True
     client = TestClient(create_app(system))
@@ -31,7 +31,7 @@ def guest_env(tmp_path, monkeypatch):
 
 def test_register_same_name_reuses_account(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
     reg = GuestRegistry()
     first = reg.register_or_update(display_name="TESTER", device_id="device-aaa-11111")
     second = reg.register_or_update(display_name="TESTER", device_id="device-bbb-22222")
@@ -42,7 +42,7 @@ def test_register_same_name_reuses_account(tmp_path, monkeypatch):
 
 def test_merge_guests_combines_devices_and_profiles(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
     reg = GuestRegistry()
     a = reg.register_or_update(display_name="TESTER", device_id="device-aaa-11111")
     # Force a duplicate (legacy data shape)
@@ -91,7 +91,7 @@ def test_owner_merge_api(guest_env, tmp_path):
         },
     )
     gid = r1.json()["guest_id"]
-    path = tmp_path / "data" / "guest_profiles.json"
+    path = tmp_path / "var" / "data" / "guest_profiles.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     data["guests"]["dup-id"] = {
         "guest_id": "dup-id",
@@ -196,7 +196,7 @@ def test_guest_cannot_edit_profile_facts_api(guest_env):
 
 def test_profile_query_signals(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
     reg = GuestRegistry()
     reg.register_or_update(display_name="TESTER", device_id="device-aaa-11111")
 

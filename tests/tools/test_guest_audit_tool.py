@@ -17,7 +17,7 @@ class _RoutingProbe(OrchestratorRoutingMixin):
 @pytest.mark.asyncio
 async def test_guest_audit_summary_tool_owner_reads_logs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
 
     reg = GuestRegistry()
     profile = reg.register_or_update(display_name="TESTER", device_id="dev-tester-001")
@@ -72,7 +72,7 @@ async def test_wcca_routes_guest_accounts_list_to_orchestrator():
 @pytest.mark.asyncio
 async def test_guest_accounts_list_tool(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
     reg = GuestRegistry()
     reg.register_or_update(display_name="Sean", device_id="dev-sean-001")
     reg.register_or_update(display_name="TESTER", device_id="dev-tester-002")
@@ -95,14 +95,14 @@ async def test_guest_accounts_list_denied_for_guest():
 
 def test_format_active_guest_accounts_empty(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
     text = format_active_guest_accounts(GuestRegistry())
     assert "No active guest accounts" in text
 
 
 def test_build_owner_audit_digest_all_guests(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
     reg = GuestRegistry()
     p = reg.register_or_update(display_name="Alex", device_id="dev-alex-001")
     audit = GuestAuditLog()

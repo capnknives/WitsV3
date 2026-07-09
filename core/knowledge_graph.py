@@ -11,7 +11,7 @@ import logging
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
+from core.runtime_paths import data_dir, main_log_path
 from typing import Any
 
 import networkx as nx
@@ -79,7 +79,7 @@ class KnowledgeGraph:
         self.relations: dict[str, Relation] = {}
 
         # Persistence settings - use a default path
-        self.knowledge_file_path = Path("data/knowledge_graph.json")
+        self.knowledge_file_path = data_dir() / "knowledge_graph.json"
         self.knowledge_file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Load existing knowledge graph if available

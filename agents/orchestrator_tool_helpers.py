@@ -12,6 +12,7 @@ import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from core.runtime_paths import exports_subpath, upgrade_runtime_path
 from core.schemas import ConversationHistory, StreamData
 
 
@@ -110,7 +111,10 @@ class OrchestratorToolHelpersMixin:
             and self._goal_saves_conversation(goal)
             and self._has_read_history_observation(state.get("observations", []))
         ):
-            path = self._save_file_path_from_goal(goal) or "exports/conversation_log.txt"
+            root = self.config.runtime_paths.root if getattr(self, "config", None) else "var"
+            path = self._save_file_path_from_goal(goal) or exports_subpath(
+                "conversation_log.txt", root
+            )
             return (
                 f"Skipped repeat read_conversation_history: transcript already in observations. "
                 f'Call write_file with {{"file_path": "{path}"}} (omit content) or final_answer.'
@@ -161,7 +165,7 @@ class OrchestratorToolHelpersMixin:
         for pattern in patterns:
             match = re.search(pattern, goal, re.IGNORECASE)
             if match:
-                return match.group(1).replace("\\", "/")
+                return upgrade_runtime_path(match.group(1).replace("\\", "/"))
         return None
 
     async def _auto_write_saved_conversation(
@@ -614,6 +618,9 @@ class OrchestratorToolHelpersMixin:
                 path = self._save_file_path_from_goal(state.get("goal", ""))
                 if path:
                     args["file_path"] = path
+            if args.get("file_path"):
+                root = self.config.runtime_paths.root if getattr(self, "config", None) else "var"
+                args["file_path"] = upgrade_runtime_path(str(args["file_path"]), root)
 
         if tool_name in (
             "guest_audit_summary",

@@ -8,19 +8,25 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from core.runtime_paths import guest_audit_dir
+
 if TYPE_CHECKING:
     from core.guest_access import GuestRegistry
 
 logger = logging.getLogger("WitsV3.GuestAudit")
 
-DEFAULT_AUDIT_DIR = Path("data/guest_audit")
+def default_audit_dir() -> Path:
+    return guest_audit_dir()
+
+
+DEFAULT_AUDIT_DIR = default_audit_dir
 
 
 class GuestAuditLog:
     """Per-guest daily JSONL files for safety review and debugging."""
 
     def __init__(self, base_dir: Path | str | None = None, *, enabled: bool = True):
-        self.base_dir = Path(base_dir) if base_dir else DEFAULT_AUDIT_DIR
+        self.base_dir = Path(base_dir) if base_dir else default_audit_dir()
         self.enabled = enabled
 
     def log(
