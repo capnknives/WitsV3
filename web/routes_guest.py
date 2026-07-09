@@ -69,9 +69,7 @@ def register_guest_routes(
         if len(name) < 1:
             return JSONResponse({"detail": "display_name is required."}, status_code=400)
 
-        default_band = normalize_age_band(
-            guest_cfg.default_guest_age_band, default="teen"
-        )
+        default_band = normalize_age_band(guest_cfg.default_guest_age_band, default="teen")
 
         profile = guest_registry.register_or_update(
             display_name=name,
@@ -142,9 +140,7 @@ def register_guest_routes(
         if body.guest_id:
             profile = guest_registry.set_age_band(body.guest_id.strip(), band)
         else:
-            profile = guest_registry.set_age_band_by_name(
-                (body.display_name or "").strip(), band
-            )
+            profile = guest_registry.set_age_band_by_name((body.display_name or "").strip(), band)
         if not profile:
             return JSONResponse({"detail": "Guest not found."}, status_code=404)
 

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+", re.I)
 

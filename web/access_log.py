@@ -46,6 +46,12 @@ def resolve_caller_label(
         enriched = enrich_guest_payload(state_guest, reg)
         return (enriched or {}).get("display_name") or "Guest"
 
+    # Static assets are not API callers — label before auth (open deployments
+    # treat unauthenticated requests as owner role via resolve_auth).
+    path = request.url.path
+    if not path.startswith("/api/"):
+        return "-"
+
     auth = resolve_auth(request, config)
     if auth.get("role") == "owner":
         return owner_display_name(config)
@@ -53,9 +59,6 @@ def resolve_caller_label(
         enriched = enrich_guest_payload(auth["guest"], reg)
         return (enriched or {}).get("display_name") or "Guest"
 
-    path = request.url.path
-    if not path.startswith("/api/"):
-        return "-"
     return "anon"
 
 

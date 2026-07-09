@@ -244,12 +244,16 @@ def build_owner_audit_digest(
         if not profiles:
             ids = audit.list_guest_ids()
             if not ids:
-                return "No guest audit logs found yet. Guests appear after someone registers at /join."
+                return (
+                    "No guest audit logs found yet. Guests appear after someone registers at /join."
+                )
             sections = []
             for gid in ids:
                 events = audit.read_recent(gid, days=days)
                 sections.append(
-                    format_guest_audit_report(events, profile={"guest_id": gid, "display_name": gid[:8]}, days=days)
+                    format_guest_audit_report(
+                        events, profile={"guest_id": gid, "display_name": gid[:8]}, days=days
+                    )
                 )
             return "\n\n---\n\n".join(sections)
 

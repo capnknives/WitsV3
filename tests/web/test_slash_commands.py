@@ -1,11 +1,8 @@
 """Tests for web chat slash commands."""
 
-import pytest
-
-from tests.web.test_web_server import client_auth, client_noauth
 from web.slash_commands import list_slash_commands
 
-pytest_plugins = ("tests.web.test_guest_access",)
+pytest_plugins = ("tests.web.test_web_server", "tests.web.test_guest_access")
 
 
 def test_list_slash_commands_owner_includes_shutdown():

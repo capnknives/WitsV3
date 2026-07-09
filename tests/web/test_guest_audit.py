@@ -6,8 +6,10 @@ from datetime import datetime, timezone
 
 from core.content_policy import check_guest_content
 from core.guest_audit import GuestAuditLog
-from tests.web.test_guest_access import _register, guest_env
+from tests.web.test_guest_access import _register
 from tests.web.test_web_server import _parse_sse
+
+pytest_plugins = ("tests.web.test_guest_access",)
 
 
 def test_content_policy_blocks_inappropriate_input():
@@ -80,8 +82,6 @@ def test_guest_inappropriate_lookup_blocked_without_llm(guest_env):
 
 def test_tester_cannot_access_owner_settings(guest_env):
     client, _ = guest_env
-    token = _register(client, name="TESTER", device="tester-device-003").json()[
-        "guest_token"
-    ]
+    token = _register(client, name="TESTER", device="tester-device-003").json()["guest_token"]
     res = client.get("/api/settings", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 403

@@ -48,7 +48,9 @@ def policy_terms(section: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(str(item).lower() for item in items)
 
 
-def policy_patterns(section: str, fallback: tuple[re.Pattern[str], ...]) -> tuple[re.Pattern[str], ...]:
+def policy_patterns(
+    section: str, fallback: tuple[re.Pattern[str], ...]
+) -> tuple[re.Pattern[str], ...]:
     data = load_guest_policy()
     items = data.get(section)
     if not items:

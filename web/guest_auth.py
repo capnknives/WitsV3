@@ -69,7 +69,9 @@ def resolve_auth(request: Request, config: Any) -> dict[str, Any]:
                 "allow": guest_may_call(path),
             }
 
-    require_auth = bool(getattr(getattr(config, "web_ui", None), "require_auth", True) and web_token)
+    require_auth = bool(
+        getattr(getattr(config, "web_ui", None), "require_auth", True) and web_token
+    )
     if not require_auth:
         return {"role": "owner", "guest": None, "token": token, "allow": True}
 

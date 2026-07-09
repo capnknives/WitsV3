@@ -14,7 +14,9 @@ class GuestRegisterRequest(BaseModel):
     invite_code: str
     display_name: str
     device_id: str
-    age_band: str | None = None  # ignored — owner assigns tier; new guests get default_guest_age_band
+    age_band: str | None = (
+        None  # ignored — owner assigns tier; new guests get default_guest_age_band
+    )
 
 
 class GuestSetAgeBandRequest(BaseModel):

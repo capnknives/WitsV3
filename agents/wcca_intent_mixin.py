@@ -50,9 +50,7 @@ class WCCAIntentMixin:
         if conversation_history and self._is_conversation_follow_up(
             user_input, conversation_history
         ):
-            routing_message = self._follow_up_routing_message(
-                user_input, conversation_history
-            )
+            routing_message = self._follow_up_routing_message(user_input, conversation_history)
             if await self._requires_orchestrator_for_input(routing_message):
                 return self._orchestrator_follow_up_intent(
                     "Follow-up to a prior task — routing to orchestrator with conversation context."

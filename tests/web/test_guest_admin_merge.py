@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 from core.guest_access import GuestRegistry
 from core.guest_user_profile import GuestUserProfileStore
-from tests.web.test_web_server import FakeSystem, _parse_sse
+from tests.web.test_web_server import FakeSystem
 from web.server import create_app
 
 
@@ -226,6 +226,4 @@ def test_profile_query_signals_for_arbitrary_registered_name(tmp_path, monkeypat
 @pytest.mark.asyncio
 async def test_wcca_profile_query_skips_web_search_path():
     probe = _RoutingProbe()
-    assert await probe._requires_orchestrator_for_input(
-        "what does the system know about TESTER"
-    )
+    assert await probe._requires_orchestrator_for_input("what does the system know about TESTER")
