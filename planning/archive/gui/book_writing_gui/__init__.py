@@ -1,1 +1,0 @@
-# Book Writing GUI package

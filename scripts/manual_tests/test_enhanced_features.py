@@ -4,7 +4,7 @@ Test script for enhanced WitsV3 features
 Tests the meta-reasoning and tool composition components.
 
 Note: the adaptive-LLM stack was archived July 2026 (see
-planning/archive/adaptive_llm/); its smoke checks were removed here.
+docs/archive/adaptive_llm/); its smoke checks were removed here.
 """
 
 import asyncio

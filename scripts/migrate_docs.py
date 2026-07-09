@@ -9,17 +9,17 @@ import datetime
 
 # Map of source files to destination files
 FILE_MAPPING = {
-    "planning-md.md": "planning/architecture/system-architecture.md",
-    "task-md.md": "planning/tasks/task-management.md",
-    "IMPLEMENTATION_SUMMARY.md": "planning/implementation/personality-ethics-network-implementation.md",
-    "WITSV3_FIXES.md": "planning/technical-notes/system-fixes.md",
-    "witsv3_improvement_roadmap.md": "planning/roadmap/neural-web-roadmap.md",
-    "DEBUG_INTERPRETER_FIX.md": "planning/technical-notes/interpreter-fixes.md",
-    "DEBUG_SYSTEM_IMPROVEMENTS.md": "planning/technical-notes/system-improvements.md",
-    "DEBUG_SETUP_COMPLETE.md": "planning/technical-notes/setup-completion.md",
-    "CLAUDE_EVOLUTION_PROMPT.md": "planning/implementation/claude-evolution-prompt.md",
-    "AUTHENTICATION_STATUS.md": "planning/technical-notes/authentication-status.md",
-    "copper-scroll-adaptive-llm.md": "planning/implementation/adaptive-llm-design.md"
+    "planning-md.md": "docs/architecture/system-architecture.md",
+    "task-md.md": "docs/tasks/task-management.md",
+    "IMPLEMENTATION_SUMMARY.md": "docs/implementation/personality-ethics-network-implementation.md",
+    "WITSV3_FIXES.md": "docs/technical-notes/system-fixes.md",
+    "witsv3_improvement_roadmap.md": "docs/roadmap/neural-web-roadmap.md",
+    "DEBUG_INTERPRETER_FIX.md": "docs/technical-notes/interpreter-fixes.md",
+    "DEBUG_SYSTEM_IMPROVEMENTS.md": "docs/technical-notes/system-improvements.md",
+    "DEBUG_SETUP_COMPLETE.md": "docs/technical-notes/setup-completion.md",
+    "CLAUDE_EVOLUTION_PROMPT.md": "docs/implementation/claude-evolution-prompt.md",
+    "AUTHENTICATION_STATUS.md": "docs/technical-notes/authentication-status.md",
+    "copper-scroll-adaptive-llm.md": "docs/implementation/adaptive-llm-design.md"
 }
 
 # Metadata template to add to the top of each file

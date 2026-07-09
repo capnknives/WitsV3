@@ -1,57 +1,21 @@
 ---
-title: "WitsV3 Planning Documentation"
-created: "2025-06-09"
+title: "WitsV3 Planning (redirect)"
+status: "superseded"
+superseded_by: "docs/README.md"
 last_updated: "2026-07-08"
-status: "active"
 ---
 
-# WitsV3 Planning Documentation
+# WitsV3 Planning
 
-Design notes, roadmaps, and historical material for WitsV3.  
-**Product install and day-to-day usage live in the root [`README.md`](../README.md).**
+This folder is a **redirect only**. Documentation consolidated under [`docs/`](../docs/) in July 2026.
 
-## Start here
+| Old path | New path |
+|----------|----------|
+| `planning/roadmap/` | [`docs/roadmap/`](../docs/roadmap/) |
+| `planning/architecture/` | [`docs/architecture/`](../docs/architecture/) |
+| `planning/implementation/` | [`docs/implementation/`](../docs/implementation/) |
+| `planning/technical-notes/` | [`docs/technical-notes/`](../docs/technical-notes/) |
+| `planning/tasks/` | [`docs/tasks/`](../docs/tasks/) |
+| `planning/archive/` | [`docs/archive/`](../docs/archive/) |
 
-| Need | Document |
-|------|----------|
-| **What's next** | [`roadmap/suggested-features-2026-07.md`](roadmap/suggested-features-2026-07.md) |
-| **What shipped (July 2026)** | [`roadmap/revival-2026-07.md`](roadmap/revival-2026-07.md) |
-| **Architecture** | [`architecture/system-architecture.md`](architecture/system-architecture.md) *(mark as historical where dates say 2025)* |
-| **Dead/dormant code** | [`roadmap/clutter-catalog-2026-07.md`](roadmap/clutter-catalog-2026-07.md) |
-| **Tool registry truth** | [`roadmap/tool-registry-reality-2026-07.md`](roadmap/tool-registry-reality-2026-07.md) |
-| **Config surface truth** | [`roadmap/config-surface-truth-2026-07.md`](roadmap/config-surface-truth-2026-07.md) |
-
-Root redirects: [`TASK.md`](../TASK.md), [`PLANNING.md`](../PLANNING.md).
-
-## Directory structure
-
-| Folder | Contents |
-|--------|----------|
-| [`architecture/`](architecture/) | System design |
-| [`roadmap/`](roadmap/) | Forward roadmap + July revival logs + audits |
-| [`implementation/`](implementation/) | Implementation write-ups (many historical) |
-| [`tasks/`](tasks/) | Superseded task lists → use roadmap |
-| [`technical-notes/`](technical-notes/) | Debug / fix notes (prefer consolidated) |
-| [`archive/`](archive/) | Originals, parked GUI, future-task dumps |
-
-## Documentation standards
-
-New planning docs should:
-
-1. Live under the right subdirectory  
-2. Use `lowercase-with-hyphens.md` (include `YYYY-MM` when time-sensitive)  
-3. Carry YAML front matter (`title`, `created`/`last_updated`, `status`)  
-4. Get linked from this README and/or [`roadmap/README.md`](roadmap/README.md)  
-5. Prefer updating the canonical roadmap over duplicating “what’s next” elsewhere  
-
-Supersede by marking status + pointing to the replacement; don’t delete history casually.
-
-### Optional tooling
-
-```bash
-python scripts/doc_maintenance.py list
-python scripts/doc_maintenance.py create planning/tasks/new-note.md "Title"
-python scripts/doc_maintenance.py archive planning/path/obsolete.md
-```
-
-Older one-shot migration scripts under `scripts/` (`migrate_docs.py`, etc.) are historical.
+**Start here:** [`docs/README.md`](../docs/README.md) · **Roadmap:** [`docs/roadmap/suggested-features-2026-07.md`](../docs/roadmap/suggested-features-2026-07.md)

@@ -186,7 +186,7 @@ class BackgroundAgent(BaseAgent):
 
     async def _optimize_semantic_cache(self, settings: dict[str, Any]):
         """Not implemented — the semantic cache belongs to the deprecated
-        adaptive-LLM stack (see planning/archive/adaptive_llm/README.md).
+        adaptive-LLM stack (see docs/archive/adaptive_llm/README.md).
         Disabled by default in config/background_agent.yaml; logs rather
         than silently reporting success on a no-op."""
         logger.warning(

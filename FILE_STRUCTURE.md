@@ -19,9 +19,9 @@ Practical map of the repo as of July 2026. Prefer this + [`README.md`](README.md
 | `web/` | FastAPI app, SSE chat, static UI, settings / MCP pages |
 | `tests/` | Pytest suite mirroring packages |
 | `config/` | Extra YAML (personality, ethics, background agent) |
-| `scripts/` | Setup / maintenance utilities (`setup_local_data.py`, doc helpers, …) |
-| `planning/` | Roadmaps, architecture, archives (including parked PyQt6 GUI) |
-| `docs/` | Mostly historical (synthetic-brain set); see `docs/SYNTHETIC_BRAIN.md` |
+| `scripts/` | Setup / maintenance utilities (`setup_local_data.py`, `debug_init.py`, `fix_neural_web.py`, …) |
+| `docs/` | Roadmaps, architecture, technical notes, archives (GUI pruned — tag `archive-pre-prune-2026-07`) |
+| `planning/` | **Redirect stub only** → see [`docs/README.md`](docs/README.md) |
 | `documents/` | User drop folder for Document RAG (contents gitignored) |
 | `workspace/` | Coding-agent generated projects (gitignored) |
 | `data/` | Local memory / MCP defs (personal data gitignored) |
@@ -55,7 +55,7 @@ Practical map of the repo as of July 2026. Prefer this + [`README.md`](README.md
 | `TASK.md` / `PLANNING.md` | Redirects → roadmap |
 | `PATH_MIGRATION_GUIDE.md` | Historical path moves (2025 reorganization) |
 | `DOCKER_INSTRUCTIONS.md` | Parked Docker notes |
-| `planning/roadmap/suggested-features-2026-07.md` | What's next |
+| `docs/roadmap/suggested-features-2026-07.md` | What's next |
 
 ## Conventions
 

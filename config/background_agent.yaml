@@ -21,7 +21,7 @@ tasks:
 
   semantic_cache_optimization:
     # Off by default: the semantic cache belongs to the deprecated adaptive-LLM
-    # stack (planning/archive/adaptive_llm/) — _optimize_semantic_cache() is a
+    # stack (docs/archive/adaptive_llm/) — _optimize_semantic_cache() is a
     # documented no-op, not a real job. Enable only after actually reviving
     # that stack.
     enabled: false

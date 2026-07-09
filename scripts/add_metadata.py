@@ -8,9 +8,9 @@ import datetime
 
 # Files to add metadata to
 FILES = [
-    "planning/architecture/system-architecture.md",
-    "planning/tasks/task-management.md",
-    "planning/implementation/adaptive-llm-design.md",
+    "docs/architecture/system-architecture.md",
+    "docs/tasks/task-management.md",
+    "docs/implementation/adaptive-llm-design.md",
 ]
 
 # Metadata template
