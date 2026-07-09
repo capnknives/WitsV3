@@ -99,42 +99,9 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         """Get the model name for the control center."""
         return self.config.ollama_settings.control_center_model
 
-    @staticmethod
-    def _is_casual_reply(message: str) -> bool:
-        """Narrower casual-chat check for the clarification merge guard below.
-
-        _is_casual_conversation (wcca_routing_mixin) treats any message under
-        6 words as casual — a heuristic tuned for classifying a message in
-        isolation. But a short, substantive answer to our own clarifying
-        question (e.g. "specifically the wits v3 codebase", 5 words) would
-        get misjudged as casual by that rule and never get merged back in,
-        which is the exact bug this feature exists to fix. This checks only
-        for actual greeting/small-talk words or phrases, with no length
-        shortcut, so brevity alone never counts as "casual" here.
-        """
-        lowered = message.lower()
-        words = set(re.findall(r"[a-z']+", lowered))
-        casual_words = {
-            "hello",
-            "hi",
-            "hey",
-            "thanks",
-            "appreciate",
-            "nice",
-            "cool",
-            "great",
-            "bye",
-            "goodbye",
-        }
-        casual_phrases = (
-            "how are you",
-            "what's up",
-            "how's it going",
-            "thank you",
-            "see you",
-            "talk to you",
-        )
-        return bool(words & casual_words) or any(phrase in lowered for phrase in casual_phrases)
+    def _is_casual_reply(self, message: str) -> bool:
+        """Pure greeting check for clarification merge guard."""
+        return self._is_pure_greeting(message)
 
     async def run(
         self,
@@ -245,7 +212,9 @@ User input: {user_input}
                     return
 
             # Analyze user intent
-            intent_analysis = await self._analyze_user_intent(user_input, conversation_history)
+            intent_analysis = await self._analyze_user_intent(
+                user_input, conversation_history, session_id=session_id
+            )
 
             yield self.stream_thinking(f"Intent analysis: {intent_analysis.get('type', 'unknown')}")
 
@@ -293,51 +262,10 @@ User input: {user_input}
         complexity = intent_analysis.get("complexity", "simple")
         suggested_response = intent_analysis.get("suggested_response", "direct")
         requires_tools = intent_analysis.get("requires_tools", False)
+        routing_destination = intent_analysis.get("routing_destination")
 
-        # An unambiguous "find/fix real bugs" request must reach the
-        # self-repair agent regardless of what the LLM intent classifier
-        # decided — 2026-07-08 finding: "find and fix any bugs in your code"
-        # was classified as clarification_question and "conversation" for a
-        # follow-up, both of which return before specialized-agent routing
-        # is ever considered below. Guests never get self-repair.
-        if getattr(self, "_request_user_role", "owner") != "guest" and self._needs_self_repair(
-            user_input
-        ):
-            intent_type = "goal_defined"
-            complexity = "moderate"
-            requires_tools = True
-            suggested_response = "specialized"
-
-        # Same idea for unambiguous story/book requests — 2026-07-08 finding:
-        # a live "write ... a 100 page story ... save as X" request was
-        # classified as ordinary conversation, never reached specialized-agent
-        # routing, and the generic orchestrator fabricated a "created" message
-        # without writing anything to disk.
-        elif self._needs_story_writing(user_input):
-            intent_type = "goal_defined"
-            complexity = "moderate"
-            requires_tools = True
-            suggested_response = "specialized"
-
-        # A short "make it" / "write it all" / "continue" reply is
-        # meaningless judged in isolation — resume whichever specialized
-        # agent handled the previous turn in this session instead of letting
-        # it fall to casual chat or a fresh, unrelated orchestrator run.
-        elif session_id in self._active_specialized_agent and self._is_agent_continuation_phrase(
-            user_input
-        ):
-            intent_type = "goal_defined"
-            complexity = "moderate"
-            requires_tools = True
-            suggested_response = "specialized"
-
-        # "What did guest <name> chat with you about?" — deterministically read
-        # that guest's audit digest instead of letting the generic orchestrator
-        # loop trying to find it (2026-07-08 max_iterations timeout). Owner-only;
-        # guests can never inspect another user's activity.
-        if getattr(
-            self, "_request_user_role", "owner"
-        ) == "owner" and self._needs_guest_chat_history(user_input):
+        # Deterministic classifier short-circuits (owner-only direct tools).
+        if getattr(self, "_request_user_role", "owner") == "owner" and routing_destination == "guest_chat_history":
             yield self.stream_thinking("Reading guest chat audit log...")
             from tools.guest_audit_tool import GuestAuditSummaryTool
 
@@ -347,10 +275,7 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
-        # Guest interest/profile queries use saved JSON facts only — never web search.
-        if getattr(
-            self, "_request_user_role", "owner"
-        ) == "owner" and self._needs_guest_profile_review(user_input):
+        if getattr(self, "_request_user_role", "owner") == "owner" and routing_destination == "guest_profile":
             yield self.stream_thinking("Loading saved guest profile (no web search)...")
             from tools.guest_profile_tool import GuestUserProfileSummaryTool
 
@@ -360,12 +285,7 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
-        # Accumulated project knowledge (recurring bugs, durable facts) —
-        # owner-only, saved facts only, same direct-handling short-circuit as
-        # the guest-profile block above.
-        if getattr(
-            self, "_request_user_role", "owner"
-        ) == "owner" and self._needs_knowledge_log_review(user_input):
+        if getattr(self, "_request_user_role", "owner") == "owner" and routing_destination == "knowledge_log":
             yield self.stream_thinking("Loading accumulated project knowledge...")
             from tools.knowledge_log_tool import KnowledgeLogSummaryTool
 
@@ -392,9 +312,7 @@ User input: {user_input}
                 if direct_text:
                     yield self.stream_result(direct_text)
                     return
-                async for stream_data in self._stream_casual_chat_response(
-                    user_input, conversation_history
-                ):
+                async for stream_data in self._stream_greeting_reply(user_input):
                     yield stream_data
                 return
 
@@ -417,9 +335,7 @@ User input: {user_input}
                 requires_tools = True
                 suggested_response = "orchestrator"
             else:
-                async for stream_data in self._stream_casual_chat_response(
-                    user_input, conversation_history
-                ):
+                async for stream_data in self._stream_greeting_reply(user_input):
                     yield stream_data
                 return
 
@@ -436,15 +352,21 @@ User input: {user_input}
             # previous turn in this session instead of running it through
             # keyword matching, which would find nothing and miss.
             resumed_agent_type = self._active_specialized_agent.get(session_id)
-            if resumed_agent_type and self._is_agent_continuation_phrase(user_input):
+            preset_agent = intent_analysis.get("specialized_agent")
+            if preset_agent and preset_agent in self.specialized_agents:
+                specialized_agent = self.specialized_agents[preset_agent]
+            elif resumed_agent_type and self._is_agent_continuation_phrase(user_input):
                 specialized_agent = self.specialized_agents.get(resumed_agent_type)
             else:
                 specialized_agent = await self._select_specialized_agent(user_input)
 
             if specialized_agent:
-                agent_type = next(
-                    (k for k, v in self.specialized_agents.items() if v == specialized_agent),
-                    "specialized",
+                agent_type = (
+                    intent_analysis.get("specialized_agent")
+                    or next(
+                        (k for k, v in self.specialized_agents.items() if v == specialized_agent),
+                        "specialized",
+                    )
                 )
                 self._active_specialized_agent[session_id] = agent_type
                 yield self.stream_thinking(f"Using {agent_type} agent for: {user_input}")
@@ -539,7 +461,7 @@ User input: {user_input}
         )
         response = await self.generate_response(
             f"You are a helpful assistant. Respond to this user query: {user_input}",
-            model_name=self.model_router.route(user_input, default=self.get_model_name()),
+            model_name=self.get_model_name(),
             temperature=0.7,
         )
         yield self.stream_result(response)
@@ -589,34 +511,13 @@ User input: {user_input}
             "I'll route it to the right agent so it actually runs."
         )
 
-    async def _stream_casual_chat_response(
+    async def _stream_greeting_reply(
         self,
         user_input: str,
-        conversation_history: ConversationHistory | None,
     ) -> AsyncGenerator[StreamData, None]:
-        """Generate a friendly chat reply (heuristic conversation path only)."""
-        yield self.stream_thinking("Generating direct response...")
+        """Minimal direct reply for explicit greetings only (qwen3:8b)."""
+        yield self.stream_thinking("Generating greeting reply...")
 
-        from core.personality_manager import get_personality_manager
-
-        personality_manager = get_personality_manager()
-
-        if conversation_history and conversation_history.messages:
-            history_text = "\n".join(
-                [
-                    f"{msg.role.upper()}: {msg.content}"
-                    for msg in conversation_history.get_recent_messages(
-                        self.config.agents.history_window
-                    )
-                ]
-            )
-        else:
-            history_text = ""
-
-        personality_prompt = personality_manager.get_system_prompt()
-        documents_context = self._documents_context(await self._get_document_inventory())
-        personalization = getattr(self, "_guest_personalization_context", "")
-        personalization_block = f"\n{personalization}\n" if personalization else ""
         guest_rules_block = ""
         if getattr(self, "_request_user_role", "owner") == "guest":
             from core.content_policy import guest_system_prompt_slice
@@ -626,38 +527,34 @@ User input: {user_input}
             if guest_profile.get("age_band"):
                 age_band = guest_profile["age_band"]
             guest_rules_block = f"\n{guest_system_prompt_slice(age_band)}\n"
-        conversation_prompt = f"""{personality_prompt}
-{guest_rules_block}{personalization_block}
-You are having a casual conversation with the user. Respond in a friendly, helpful manner.
-USER DOCUMENTS:
-{documents_context}
 
-CONVERSATION HISTORY:
-{history_text}
+        prompt = f"""You are Wits (WITS), a friendly local AI assistant.
+{guest_rules_block}
+Respond briefly and warmly to this greeting or thanks. Do not claim to have run tools or agents.
 
 USER: {user_input}
 ASSISTANT:"""
 
         try:
-            routed_model = self.model_router.route(user_input, default=self.get_model_name())
             response = await self.generate_response(
-                conversation_prompt, model_name=routed_model, temperature=0.7
+                prompt, model_name=self.get_model_name(), temperature=0.7
             )
-            if self._looks_like_action_confabulation(response):
-                self.logger.warning(
-                    "Casual-chat reply claimed a system action was performed; "
-                    "suppressing confabulated response for: %r",
-                    user_input,
-                )
-                yield self.stream_result(self._action_confabulation_correction())
-                return
             yield self.stream_result(response)
         except Exception as e:
-            self.logger.error(f"Error generating direct response: {e}")
+            self.logger.error(f"Error generating greeting response: {e}")
             yield self.stream_error(
                 "I'm having trouble generating a response right now. Could you try again?",
                 details=str(e),
             )
+
+    async def _stream_casual_chat_response(
+        self,
+        user_input: str,
+        conversation_history: ConversationHistory | None,
+    ) -> AsyncGenerator[StreamData, None]:
+        """Backward-compatible alias — greeting-only path."""
+        async for stream_data in self._stream_greeting_reply(user_input):
+            yield stream_data
 
     async def _select_specialized_agent(self, goal_statement: str) -> Any | None:
         """

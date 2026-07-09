@@ -33,7 +33,7 @@ class OllamaSettings(BaseModel):
 
     # Model fallback configuration
     fallback_models: list[str] = Field(
-        default=["qwen3:8b", "llama3.2:3b", "qwen2.5-coder:7b"],
+        default=["qwen3:8b", "qwen2.5-coder:7b"],
         description="Fallback models in order of preference",
     )
     enable_model_fallback: bool = Field(
@@ -329,15 +329,40 @@ class EscalationSettings(BaseModel):
     )
 
 
+class RoutingSettings(BaseModel):
+    """Control-center routing behavior (deterministic-first + slim intent LLM)."""
+
+    slim_intent_prompt: bool = Field(
+        default=True, description="Use compact routing prompt without full personality"
+    )
+    intent_history_turns: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Recent conversation turns included in intent classification",
+    )
+    greeting_only_direct: bool = Field(
+        default=True,
+        description="Only explicit greetings get direct replies; everything else routes to tools/agents",
+    )
+    enable_meta_reasoning_intent: bool = Field(
+        default=False,
+        description="Use meta-reasoning engine before intent LLM (off by default)",
+    )
+
+
 class ModelRoutingSettings(BaseModel):
     """Smart model routing: pick the Ollama model per request based on what the
     user actually asked, instead of sending everything to the default model.
-    Trivial chat goes to a small fast model, code work goes to the coder model,
-    everything else stays on the default. The router only ever sees the raw
-    user message or goal, never full prompt templates."""
+    Code work goes to the coder model; complex stays on the default. Trivial
+    tier is disabled by default — qwen3:8b handles routing and greetings."""
 
-    enabled: bool = Field(default=True, description="Enable per-request model routing")
-    trivial_model: str = Field(default="llama3.2:3b", description="Model for short casual chat")
+    enabled: bool = Field(
+        default=False, description="Enable per-request model routing (code tier only when on)"
+    )
+    trivial_model: str = Field(
+        default="qwen3:8b", description="Model for short casual chat (unused when routing disabled)"
+    )
     code_model: str = Field(
         default="qwen2.5-coder:7b", description="Model for code-related requests"
     )
@@ -464,6 +489,7 @@ class WitsV3Config(BaseModel):
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
     escalation: EscalationSettings = Field(default_factory=EscalationSettings)
     model_routing: ModelRoutingSettings = Field(default_factory=ModelRoutingSettings)
+    routing: RoutingSettings = Field(default_factory=RoutingSettings)
     web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
     self_repair: SelfRepairSettings = Field(default_factory=SelfRepairSettings)
     knowledge_log: KnowledgeLogSettings = Field(default_factory=KnowledgeLogSettings)

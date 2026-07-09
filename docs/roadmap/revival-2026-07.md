@@ -180,6 +180,22 @@ and "Run self repair" was answered by the casual-chat path with a fabricated
 
 Tests: `tests/agents/test_wcca_routing.py`, `tests/agents/test_orchestrator_synthesis_guard.py`.
 
+### Routing simplification overhaul (July 8 2026 evening)
+
+Replaced the brittle three-layer WCCA routing stack with deterministic-first classification:
+
+| Change | Detail |
+|--------|--------|
+| Trivial tier retired | `model_routing.enabled: false` by default; `llama3.2:3b` removed from defaults/fallbacks — qwen3:8b handles routing + greetings |
+| `agents/routing_classifier.py` | Single ordered classifier: guest tools → self-repair → book-writing → orchestrator guards → follow-ups → greeting whitelist → slim intent LLM |
+| Greeting-only direct path | `_is_pure_greeting()` replaces length-based casual bypass; `_stream_greeting_reply()` uses minimal prompt (no full personality / doc inventory) |
+| Slim intent prompt | No personality block by default; 5-turn history cap; doc inventory only when message references documents |
+| Meta-reasoning intent | Off by default (`routing.enable_meta_reasoning_intent: false`) |
+
+Manual verification checklist: hi/thanks → greeting; run self repair → self-repair agent; bug hunt / story / web search / doc Q&A / clarification follow-ups → correct destination.
+
+Tests: `tests/agents/test_routing_classifier.py`, updated `tests/agents/test_wcca_routing.py`.
+
 ### Whole-repo audit (Tiers 1–4) — complete
 
 **Tiers 1–4 shipped July 7 2026.** Detail preserved in

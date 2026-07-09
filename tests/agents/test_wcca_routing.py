@@ -380,23 +380,18 @@ class _FakeSpecializedAgent:
 async def test_bug_hunt_request_reaches_self_repair_despite_clarification_classification(
     wcca_with_specialists,
 ):
-    """2026-07-08 finding: the LLM intent classifier called this a
-    clarification_question, which returns before specialized-agent routing
-    is ever considered — _needs_self_repair must force delegation anyway."""
+    """Deterministic classifier routes bug-hunt requests before the intent LLM."""
     self_repair_agent = _FakeSpecializedAgent("self_repair")
     wcca_with_specialists.specialized_agents["self_repair"] = self_repair_agent
 
-    intent_analysis = {
-        "type": "clarification_question",
-        "complexity": "simple",
-        "suggested_response": "clarification",
-        "requires_tools": False,
-        "clarification_question": "Could you clarify what you'd like me to check?",
-    }
+    intent = await wcca_with_specialists._analyze_user_intent(
+        "find and fix any bugs in your code.", None
+    )
+    assert intent["specialized_agent"] == "self_repair"
     streams = [
         item
         async for item in wcca_with_specialists._handle_intent_response(
-            intent_analysis, "find and fix any bugs in your code.", None, "sess-1"
+            intent, "find and fix any bugs in your code.", None, "sess-1"
         )
     ]
     assert self_repair_agent.received_input == "find and fix any bugs in your code."
@@ -407,31 +402,21 @@ async def test_bug_hunt_request_reaches_self_repair_despite_clarification_classi
 async def test_story_request_reaches_book_writing_despite_conversation_classification(
     wcca_with_specialists,
 ):
-    """2026-07-08 live-chat finding: the LLM intent step classified this
-    story request as ordinary conversation, which returns before
-    specialized-agent routing is ever considered — _needs_story_writing must
-    force delegation to book_writing anyway, the same way _needs_self_repair
-    already does for bug-hunt requests. Before this fix, the generic
-    orchestrator handled the turn and fabricated a "has been created" reply
-    without writing anything to disk."""
+    """Deterministic classifier routes story requests before the intent LLM."""
     book_agent = _FakeSpecializedAgent("book_writing")
     wcca_with_specialists.specialized_agents["book_writing"] = book_agent
 
-    intent_analysis = {
-        "type": "conversation",
-        "complexity": "simple",
-        "suggested_response": "direct",
-        "requires_tools": False,
-    }
     live_request = (
         "Please write the equivalent to a 100 page story, about a knight in a "
         "medieval town that develops powers like dbz characters and takes over "
         "the surrounding area. Save the story as TheBigStory01"
     )
+    intent = await wcca_with_specialists._analyze_user_intent(live_request, None)
+    assert intent["specialized_agent"] == "book_writing"
     streams = [
         item
         async for item in wcca_with_specialists._handle_intent_response(
-            intent_analysis, live_request, None, "sess-story"
+            intent, live_request, None, "sess-story"
         )
     ]
     assert book_agent.received_input == live_request
@@ -454,15 +439,13 @@ async def test_continuation_followup_resumes_previous_specialized_agent(wcca_wit
     assert wcca_with_specialists._active_specialized_agent[session_id] == "book_writing"
 
     book_agent.received_input = None
+    intent = await wcca_with_specialists._analyze_user_intent(
+        "Okay, so make it.", None, session_id=session_id
+    )
     streams = [
         item
         async for item in wcca_with_specialists._handle_intent_response(
-            {
-                "type": "conversation",
-                "complexity": "simple",
-                "suggested_response": "direct",
-                "requires_tools": False,
-            },
+            intent,
             "Okay, so make it.",
             None,
             session_id,
@@ -752,7 +735,7 @@ async def test_conversation_still_calls_llm_once(wcca):
     }
     await _collect_handler_results(wcca, intent, "hi there!")
     assert len(tracking.calls) == 1
-    assert "casual conversation" in tracking.calls[0].lower()
+    assert "greeting" in tracking.calls[0].lower() or "briefly and warmly" in tracking.calls[0].lower()
 
 
 # ------------------------------------------------------- documents context

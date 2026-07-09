@@ -78,7 +78,7 @@ def main():
     # Install Ollama models if Ollama is available
     if ollama_available:
         print("\n🤖 Installing recommended Ollama models...")
-        models = ["qwen3:8b", "qwen2.5-coder:7b", "llama3.2:3b", "nomic-embed-text"]
+        models = ["qwen3:8b", "qwen2.5-coder:7b", "nomic-embed-text"]
         for model in models:
             run_command(f"ollama pull {model}", f"Installing {model} model")
 
@@ -100,7 +100,7 @@ def main():
     if not ollama_available:
         print("\n⚠️  Remember to install Ollama:")
         print("   Visit: https://ollama.com")
-        print("   Then pull: qwen3:8b, qwen2.5-coder:7b, llama3.2:3b, nomic-embed-text")
+        print("   Then pull: qwen3:8b, qwen2.5-coder:7b, nomic-embed-text")
 
     print("\n📚 Documentation: README.md")
     print("🔧 Configuration: config.yaml  |  Secrets: .env")

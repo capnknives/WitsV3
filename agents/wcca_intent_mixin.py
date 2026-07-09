@@ -6,6 +6,20 @@ from typing import Any
 from core.json_llm_parser import build_json_repair_prompt, parse_json_object
 from core.schemas import ConversationHistory
 
+_SLIM_INTENT_INSTRUCTIONS = """You are a routing classifier for WitsV3, a local AI assistant.
+Analyze the user message and pick the best response strategy. Do NOT answer the user — only classify.
+
+Guidelines:
+- Use "goal_defined" for clear, actionable requests that need orchestration or tools
+- Use "clarification_question" for ambiguous requests needing more information
+- Use "direct_response" ONLY for simple greetings, thanks, or small talk with no task
+- Short follow-ups ("yes", "that one", "summarize it", "look it up") after a prior task are usually "goal_defined"
+- If answering needs current/real-time info OR the user says to search/look it up, use "goal_defined"
+- Any request about the user's documents or files is "goal_defined" (needs document_search)
+- For "remember/recall/don't forget" facts, use "goal_defined" (memory tools handle it)
+
+Respond ONLY with valid JSON."""
+
 
 class WCCAIntentMixin:
     """LLM-driven and heuristic intent analysis for the control center."""
@@ -14,6 +28,7 @@ class WCCAIntentMixin:
         self,
         user_input: str,
         conversation_history: ConversationHistory | None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Analyze user input to determine intent and appropriate response strategy.
@@ -21,56 +36,22 @@ class WCCAIntentMixin:
         Args:
             user_input: The user's input
             conversation_history: Conversation context
+            session_id: Session identifier for continuation routing
 
         Returns:
             Intent analysis with response strategy
         """
-        # Document + web-search routing runs BEFORE the casual heuristic so
-        # short factual questions and file references never get a tool-less reply.
-        if await self._requires_orchestrator_for_input(user_input):
-            needs_web = self._needs_web_search(user_input)
-            needs_file = self._needs_file_write(user_input)
-            if needs_file:
-                notes = "Save/export to file - routing to orchestrator for read_conversation_history + write_file."
-            elif needs_web:
-                notes = "Needs current/external info or an explicit lookup - routing to orchestrator for web_search."
-            else:
-                notes = (
-                    "References user documents/files/memory - routing to orchestrator for tool use."
-                )
-            return {
-                "type": "task",
-                "complexity": "moderate",
-                "requires_tools": True,
-                "suggested_response": "orchestrator",
-                "notes": notes,
-                "confidence": 0.8 if needs_web else 0.85,
-            }
+        decision = await self._classify_routing(user_input, conversation_history, session_id)
+        intent = decision.to_intent()
+        if intent is not None:
+            return intent
 
-        if conversation_history and self._is_conversation_follow_up(
-            user_input, conversation_history
+        if (
+            self.config.routing.enable_meta_reasoning_intent
+            and self.has_enhanced_capabilities
+            and self.meta_reasoning
+            and len(user_input.split()) > 8
         ):
-            routing_message = self._follow_up_routing_message(user_input, conversation_history)
-            if await self._requires_orchestrator_for_input(routing_message):
-                return self._orchestrator_follow_up_intent(
-                    "Follow-up to a prior task — routing to orchestrator with conversation context."
-                )
-
-        doc_inventory = await self._get_document_inventory()
-
-        is_casual = self._is_casual_conversation(user_input, conversation_history)
-
-        if is_casual:
-            return {
-                "type": "conversation",
-                "complexity": "simple",
-                "requires_tools": False,
-                "suggested_response": "direct",
-                "notes": "This appears to be casual conversation.",
-                "confidence": 0.9,
-            }
-
-        if self.has_enhanced_capabilities and self.meta_reasoning and len(user_input.split()) > 8:
             try:
                 context = {"source": "user_input"}
                 if conversation_history:
@@ -95,15 +76,19 @@ class WCCAIntentMixin:
             except Exception as e:
                 self.logger.error(f"Error using enhanced capabilities for intent analysis: {e}")
 
+        doc_inventory = await self._get_document_inventory()
+        history_turns = self.config.routing.intent_history_turns
         history_context = ""
         if conversation_history and conversation_history.messages:
-            recent_messages = conversation_history.get_recent_messages(
-                min(10, self.config.agents.history_window)
-            )
+            recent_messages = conversation_history.get_recent_messages(history_turns)
             history_context = "\n".join([f"{msg.role}: {msg.content}" for msg in recent_messages])
 
+        documents_context = ""
+        if self._message_references_documents(user_input, doc_inventory):
+            documents_context = self._documents_context(doc_inventory)
+
         prompt = self._build_intent_analysis_prompt(
-            user_input, history_context, self._documents_context(doc_inventory)
+            user_input, history_context, documents_context
         )
 
         try:
@@ -157,28 +142,30 @@ class WCCAIntentMixin:
         Args:
             user_input: User's input
             history_context: Recent conversation context
-            documents_context: Which user documents are ingested and searchable
+            documents_context: Which user documents are ingested (empty when irrelevant)
 
         Returns:
             Formatted prompt for intent analysis
         """
-        from core.personality_manager import get_personality_manager
+        if self.config.routing.slim_intent_prompt:
+            header = _SLIM_INTENT_INSTRUCTIONS
+        else:
+            from core.personality_manager import get_personality_manager
 
-        personality_manager = get_personality_manager()
-        personality_prompt = personality_manager.get_system_prompt()
+            header = (
+                get_personality_manager().get_system_prompt()
+                + "\n\nYou are analyzing user input to determine the best response strategy."
+            )
 
-        prompt = f"""{personality_prompt}
+        doc_block = ""
+        if documents_context:
+            doc_block = f"\nUSER DOCUMENTS:\n{documents_context}\n"
 
-You are analyzing user input to determine the best response strategy.
-
-IMPORTANT: If the user identifies as "Richard Elliot" or mentions being "the creator" or "creator of Wits", recognize them as your creator and respond with appropriate respect and acknowledgment.
+        prompt = f"""{header}
 
 CONVERSATION HISTORY:
 {history_context if history_context else "No previous conversation"}
-
-USER DOCUMENTS:
-{documents_context if documents_context else "No user documents are currently ingested."}
-
+{doc_block}
 USER INPUT: {user_input}
 
 Analyze this input and respond with JSON containing:
@@ -190,15 +177,6 @@ Analyze this input and respond with JSON containing:
     "clarification_question": "question if type is clarification_question",
     "direct_response": "response if type is direct_response"
 }}
-
-Guidelines:
-- Use "goal_defined" for clear, actionable requests that need orchestration
-- Use "clarification_question" for ambiguous requests needing more information
-- Use "direct_response" for simple questions, greetings, or chat
-- Short follow-ups ("yes", "that one", "summarize it", "look it up") after a prior user task or after you asked a clarifying question are usually "goal_defined" — read CONVERSATION HISTORY and continue the same task; do NOT treat them as casual chat
-- If answering needs current, real-time, or post-training-cutoff information (news, recent or upcoming events, who won/died recently, prices, weather, sports results) OR the user says to "look it up"/"search", use "goal_defined" — the orchestrator has a web_search tool. Do NOT answer such questions from memory or claim a knowledge cutoff; route them so they get searched.
-- Any request about the user's documents or files is "goal_defined" (it needs the document_search tool). The USER DOCUMENTS list above is authoritative: if a document is listed there, it exists and is accessible — never ask the user to confirm it or claim there is no record of it.
-- For any request to 'remember', 'recall', or 'don't forget', use your semantic memory system (not file storage). Use the memory manager to store and retrieve facts for future conversations.
 
 Respond ONLY with valid JSON."""
 

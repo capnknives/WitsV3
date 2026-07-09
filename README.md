@@ -16,7 +16,7 @@ A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it
 |------|--------|
 | Test suite | **571 passed, 2 skipped** — `pytest tests/ -q --no-cov` |
 | Release branch | **`main`** promoted from `fix/revive-2026-07` @ `4c676c3` (Phase 0 complete) |
-| Models (default) | `qwen3:8b` (general), `qwen2.5-coder:7b` (coding), `llama3.2:3b` (fast), `nomic-embed-text` (embeddings) |
+| Models (default) | `qwen3:8b` (general + routing), `qwen2.5-coder:7b` (coding), `nomic-embed-text` (embeddings) |
 | GPU target | Configured models fit in ~8 GB VRAM when fully on-GPU |
 | Built-in tools | **26** auto-discovered (files, search, docs, MCP discovery, self-repair, neural-web helpers, …) |
 | Agents | Control center → orchestrator + book / coding / self-repair specialists |
@@ -68,7 +68,6 @@ python install.py
 ```bash
 ollama pull qwen3:8b
 ollama pull qwen2.5-coder:7b
-ollama pull llama3.2:3b
 ollama pull nomic-embed-text
 ```
 

@@ -14,7 +14,9 @@ from core.model_router import ModelRouter
 
 @pytest.fixture
 def router():
-    return ModelRouter(WitsV3Config())
+    config = WitsV3Config()
+    config.model_routing.enabled = True
+    return ModelRouter(config)
 
 
 class TestClassify:
@@ -98,6 +100,7 @@ class TestRoute:
 
     def test_custom_models_from_config(self):
         config = WitsV3Config()
+        config.model_routing.enabled = True
         config.model_routing.trivial_model = "tiny:1b"
         config.model_routing.code_model = "coder:13b"
         router = ModelRouter(config)

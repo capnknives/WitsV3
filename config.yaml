@@ -203,7 +203,6 @@ ollama_settings:
   # Model reliability and fallback settings
   fallback_models:
     - qwen3:8b
-    - llama3.2:3b
     - qwen2.5-coder:7b
   enable_model_fallback: true
   model_failure_threshold: 3
@@ -211,6 +210,17 @@ ollama_settings:
   health_check_interval: 60
   enable_health_monitoring: true
   quarantine_duration: 300
+model_routing:
+  enabled: false
+  trivial_model: qwen3:8b
+  code_model: qwen2.5-coder:7b
+  complex_model: qwen3:8b
+  trivial_max_chars: 140
+routing:
+  slim_intent_prompt: true
+  intent_history_turns: 5
+  greeting_only_direct: true
+  enable_meta_reasoning_intent: false
 personality:
   allow_runtime_switching: false
   enabled: true

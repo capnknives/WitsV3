@@ -42,13 +42,12 @@ class ContentFallbackManager:
         # which were ever pulled, so every fallback attempt errored out and
         # the whole feature was silently dead. dolphin3:8b is a modern,
         # actively-maintained, genuinely uncensored model; hermes3:8b is a
-        # permissive second choice with strong prose quality; llama3.2:3b is
-        # the one model in this list guaranteed to already be installed
-        # (WitsV3's own default fast model), so the chain can't fully fail.
+        # permissive second choice with strong prose quality; qwen3:8b is
+        # the default general model and guaranteed to be installed.
         self.uncensored_models = [
             "dolphin3:8b",
             "hermes3:8b",
-            "llama3.2:3b",
+            "qwen3:8b",
         ]
 
         # Content refusal detection patterns

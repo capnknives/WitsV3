@@ -1,10 +1,9 @@
 # agents/wcca_routing_mixin.py
 """Orchestrator routing helpers for WitsControlCenterAgent."""
 
-import re
-from pathlib import Path
 from typing import Any
 
+from agents import routing_classifier as rc
 from core.schemas import ConversationHistory
 
 
@@ -43,354 +42,51 @@ class OrchestratorRoutingMixin:
             "have no record of them:\n" + listing
         )
 
-    # Phrases in user messages that imply document_search / file access.
-    _DOCUMENT_TOOL_HINTS = (
-        "document",
-        "my notes",
-        "my files",
-        "search my",
-        "in my memory",
-        "remember",
-        "ingest",
-        "uploaded",
-        "read the file",
-        "look up",
-        "the file",
-        "attachment",
-        "attached",
-    )
-
-    # Phrases that signal the user wants live/external info fetched. Kept
-    # deliberately precise so ordinary chat ("how are you today") is NOT routed
-    # to the slow orchestrator — "today"/"current" alone are too weak to trust.
-    _WEB_SEARCH_SIGNALS = (
-        # explicit "go find this online" commands
-        "look up",
-        "look it up",
-        "look that up",
-        "look this up",
-        "look them up",
-        "search for",
-        "search the web",
-        "web search",
-        "search online",
-        "search it up",
-        "google it",
-        "google for",
-        "find out",
-        "check online",
-        "look online",
-        "on the internet",
-        "on the web",
-        "browse the web",
-        # real-time / recency signals a local model can't answer from memory
-        "latest",
-        "most recent",
-        "breaking news",
-        "in the news",
-        "news about",
-        "up to date",
-        "up-to-date",
-        "weather",
-        "forecast",
-        # common current-fact question patterns
-        "who won",
-        "who died",
-        "who passed away",
-        "who is the current",
-        "who's the current",
-        "what happened to",
-        "price of",
-        "stock price",
-        "exchange rate",
-        "score of",
-        "release date",
-        "when is the next",
-        "when does the next",
-    )
+    # Re-export signal lists for tests and backward compatibility.
+    _DOCUMENT_TOOL_HINTS = rc.DOCUMENT_TOOL_HINTS
+    _WEB_SEARCH_SIGNALS = rc.WEB_SEARCH_SIGNALS
+    _FILE_SAVE_SIGNALS = rc.FILE_SAVE_SIGNALS
+    _SELF_REPAIR_SIGNALS = rc.SELF_REPAIR_SIGNALS
+    _STORY_NOUN_RE = rc.STORY_NOUN_RE
+    _AUTHORING_VERB_RE = rc.AUTHORING_VERB_RE
+    _AGENT_CONTINUATION_RE = rc.AGENT_CONTINUATION_RE
+    _GUEST_AUDIT_SIGNALS = rc.GUEST_AUDIT_SIGNALS
+    _GUEST_PROFILE_SIGNALS = rc.GUEST_PROFILE_SIGNALS
+    _GUEST_PROFILE_PERSON_QUERY_SIGNALS = rc.GUEST_PROFILE_PERSON_QUERY_SIGNALS
+    _GUEST_ACCOUNTS_SIGNALS = rc.GUEST_ACCOUNTS_SIGNALS
+    _GUEST_CHAT_ACTIVITY_SIGNALS = rc.GUEST_CHAT_ACTIVITY_SIGNALS
+    _KNOWLEDGE_LOG_SIGNALS = rc.KNOWLEDGE_LOG_SIGNALS
+    _GENERIC_ASSISTANT_QUESTIONS = rc.GENERIC_ASSISTANT_QUESTIONS
 
     def _needs_web_search(self, message: str) -> bool:
-        """True if answering needs current/external info or an explicit lookup.
-
-        Such queries must reach the orchestrator (which owns the web_search
-        tool) rather than being answered directly from the model's training.
-        """
-        lowered = message.lower()
-        if any(sig in lowered for sig in self._WEB_SEARCH_SIGNALS):
-            return True
-        # A recent/near-future year (>= 2024) in a question usually implies
-        # information past the local model's training cutoff.
-        has_question = "?" in message or bool(
-            re.search(r"\b(who|what|when|where|which|whose|did|does|is|are|died|won)\b", lowered)
-        )
-        if has_question and re.search(r"\b(202[4-9]|20[3-9]\d)\b", lowered):
-            return True
-        return False
+        return rc.needs_web_search(message)
 
     def _doc_routing_hints(self, doc_inventory: dict[str, int]) -> set:
-        """Filename and stem tokens that imply a document/tool request."""
-        hints: set = set()
-        for path in doc_inventory:
-            name = Path(path).name.lower()
-            hints.add(name)
-            hints.update(w for w in re.split(r"[\W_]+", Path(path).stem.lower()) if len(w) >= 4)
-        return hints
-
-    # Phrases that signal saving/exporting content to disk.
-    _FILE_SAVE_SIGNALS = (
-        "save this conversation",
-        "save our conversation",
-        "save the conversation",
-        "save to file",
-        "save to a file",
-        "save to disk",
-        "write to file",
-        "write it to",
-        "export conversation",
-        "log of our conversation",
-        "save a log",
-        "save this chat",
-        "write the story",
-        "save the story",
-        "save as a file",
-    )
+        return rc.doc_routing_hints(doc_inventory)
 
     def _needs_file_write(self, message: str) -> bool:
-        """True when the user wants content written to a file on disk."""
-        lowered = message.lower()
-        return any(sig in lowered for sig in self._FILE_SAVE_SIGNALS)
-
-    # Phrases signaling an unambiguous, self-contained request to find/fix
-    # real bugs — deliberately specific multi-word phrases (not bare "bug"/
-    # "fix", which are too broad and would swallow unrelated chit-chat).
-    # 2026-07-08: "find and fix any bugs in your code" was classified as a
-    # clarification_question and never reached specialized-agent routing at
-    # all (that gate only runs for intent_type == "direct_response"). This
-    # signal short-circuits that misclassification the same way
-    # _needs_web_search/_needs_file_write already do for their cases.
-    _SELF_REPAIR_SIGNALS = (
-        "bugs in your code",
-        "bugs in the code",
-        "bugs in your codebase",
-        "bugs in the codebase",
-        "bug in your code",
-        "bug in the code",
-        "fix any bugs",
-        "find any bugs",
-        "find bugs in",
-        "find and fix",
-        "search for bugs",
-        "look for bugs",
-        "scan for bugs",
-        "fix bugs in",
-        "repair your code",
-        "repair your own code",
-        "analyze your own code",
-        "your own codebase",
-        # Direct imperative commands to run the self-repair agent. 2026-07-08
-        # finding: "Run self repair" matched none of the bug-hunt phrases
-        # above, was flagged casual (3 words), and the model fabricated a
-        # "self-repair complete" report without the agent ever running.
-        "run self repair",
-        "run self-repair",
-        "run a self repair",
-        "run a self-repair",
-        "run the self repair",
-        "run the self-repair",
-        "self repair",
-        "self-repair",
-        "start self repair",
-        "start self-repair",
-        "do a self repair",
-        "do a self-repair",
-        "perform self repair",
-        "perform self-repair",
-        "initiate self repair",
-        "initiate self-repair",
-        "repair yourself",
-    )
+        return rc.needs_file_write(message)
 
     def _needs_self_repair(self, message: str) -> bool:
-        """True for an unambiguous "find/fix real bugs" request."""
-        lowered = message.lower()
-        return any(sig in lowered for sig in self._SELF_REPAIR_SIGNALS)
-
-    # Same short-circuit idea as _needs_self_repair, for story/book requests.
-    # 2026-07-08 finding: "write the equivalent to a 100 page story, about a
-    # knight..." was classified by the LLM intent step as ordinary
-    # conversation/direct_response, which returns before specialized-agent
-    # routing is ever considered — this forces delegation to book_writing
-    # regardless of that classification, the same way _needs_self_repair
-    # already does for bug-hunt requests.
-    # A bare fiction noun isn't enough on its own — "what's the story with
-    # this bug?" is ordinary chat, not a writing request — so this requires
-    # an authoring verb to co-occur with a fiction noun anywhere in the
-    # message.
-    _STORY_NOUN_RE = re.compile(
-        r"\b(story|novel|screenplay|fanfiction|fan fiction|short story|poem|tale)\b",
-        re.IGNORECASE,
-    )
-    _AUTHORING_VERB_RE = re.compile(
-        r"\b(write|writing|wrote|create|creating|compose|composing|tell|telling|"
-        r"craft|crafting|pen|penning)\b",
-        re.IGNORECASE,
-    )
+        return rc.needs_self_repair(message)
 
     def _needs_story_writing(self, message: str) -> bool:
-        """True for an unambiguous creative-writing request."""
-        return bool(self._STORY_NOUN_RE.search(message) and self._AUTHORING_VERB_RE.search(message))
-
-    # Short follow-ups that mean "keep going with what we were just doing" —
-    # meaningless on their own, but should resume whichever specialized agent
-    # handled the previous turn in this session rather than being judged in
-    # isolation (which was landing on casual chat or a fresh, unrelated
-    # orchestrator run). Mirrors the _pending_clarifications merge pattern.
-    _AGENT_CONTINUATION_RE = re.compile(
-        r"^\s*(okay,?\s*|ok,?\s*|alright,?\s*|so\s+)*"
-        r"(please\s+)?"
-        r"(make it|do it|write it( all)?|go ahead|finish it|finish (it|the (story|book|chapter))|"
-        r"continue( writing)?|keep (going|writing)|"
-        r"write the (whole|entire|full) (story|book|thing)|"
-        r"save (it|this)( now)?( to disk)?)\s*\.?\s*$",
-        re.IGNORECASE,
-    )
+        return rc.needs_story_writing(message)
 
     def _is_agent_continuation_phrase(self, message: str) -> bool:
-        """True for a short "keep going" reply with no new content of its own."""
-        return bool(self._AGENT_CONTINUATION_RE.match(message.strip()))
-
-    # Owner guest admin: audit summaries + account roster (guest_audit_summary / guest_accounts_list).
-    _GUEST_AUDIT_SIGNALS = (
-        "guest log",
-        "guest logs",
-        "guest audit",
-        "guest activity",
-        "family tester",
-        "tester log",
-        "tester logs",
-        "what did tester",
-        "what has tester",
-        "summarize tester",
-        "other user",
-        "other users",
-        "guest user",
-        "who joined",
-        "nephew",
-        "nephews",
-    )
-
-    _GUEST_PROFILE_SIGNALS = (
-        "interested in",
-        "what does",
-        "what do we know about",
-        "what do you know about",
-        "what does the system know",
-        "what does wits know",
-        "what have we learned about",
-        "what have you learned about",
-        "guest profile",
-        "user profile",
-        "their hobbies",
-        "their interests",
-    )
-
-    # Generic "ask about a person" phrasing. On its own this is too broad to
-    # force guest-profile routing (e.g. "tell me about the weather"), so it
-    # only counts when paired with an actual registered guest's name via
-    # _message_mentions_guest_name — see _needs_guest_profile_review.
-    _GUEST_PROFILE_PERSON_QUERY_SIGNALS = (
-        "tell me about",
-        "who is",
-        "what is",
-        "what's",
-        "know about",
-        "into",
-    )
-
-    _GUEST_ACCOUNTS_SIGNALS = (
-        "list guest",
-        "list guests",
-        "list all guest",
-        "list active guest",
-        "guest accounts",
-        "guest account",
-        "active guest",
-        "active guests",
-        "registered guest",
-        "registered guests",
-        "who are the guests",
-        "show me guests",
-        "family testers",
-        "tester accounts",
-        "set age band",
-        "age band",
-        "as a teen",
-        "as an adult",
-        "as a child",
-        "make guest",
-        "set guest",
-        "set sean",
-        "protection tier",
-    )
-
-    # Verbs describing what a guest *did* in conversation. Paired with an
-    # actual registered guest name (via _message_mentions_guest_name), a
-    # message like "what did the test user Sean chat with you about?" is an
-    # unambiguous request for that guest's audit history — 2026-07-08 finding:
-    # this phrasing matched none of _GUEST_AUDIT_SIGNALS ("what did tester"
-    # expects the literal word "tester") nor the profile person-query signals,
-    # so it fell through to the generic orchestrator and looped to
-    # max_iterations with no way to reach guest_audit_summary.
-    _GUEST_CHAT_ACTIVITY_SIGNALS = (
-        "chat with",
-        "chatted",
-        "chat about",
-        "chatting about",
-        "talk with",
-        "talked",
-        "talk about",
-        "talking about",
-        "talk to you",
-        "talked to you",
-        "discuss",
-        "discussed",
-        "say to you",
-        "said to you",
-        "ask you",
-        "asked you",
-        "asking about",
-        "conversation with",
-        "conversations with",
-        "message you",
-        "messaged you",
-    )
+        return rc.is_agent_continuation_phrase(message)
 
     def _needs_guest_chat_history(self, message: str) -> bool:
-        """True when the owner asks what a named registered guest talked about."""
-        lowered = message.lower()
-        if not self._message_mentions_guest_name(message):
-            return False
-        return any(sig in lowered for sig in self._GUEST_CHAT_ACTIVITY_SIGNALS)
+        return rc.needs_guest_chat_history(message)
 
     def _needs_guest_audit_review(self, message: str) -> bool:
-        lowered = message.lower()
-        if any(sig in lowered for sig in self._GUEST_AUDIT_SIGNALS):
-            return True
-        return self._needs_guest_chat_history(message)
+        return rc.needs_guest_audit_review(message)
 
     def _needs_guest_accounts_list(self, message: str) -> bool:
-        lowered = message.lower()
-        return any(sig in lowered for sig in self._GUEST_ACCOUNTS_SIGNALS)
+        return rc.needs_guest_accounts_list(message)
 
     def _message_mentions_guest_name(self, message: str) -> bool:
-        from core.guest_access import GuestRegistry
-
-        lowered = message.lower()
-        for guest in GuestRegistry().list_active_guests():
-            name = (guest.get("display_name") or "").strip().lower()
-            if name and name in lowered:
-                return True
-        return False
+        return rc.message_mentions_guest_name(message)
 
     def _extract_guest_name_for_profile_query(self, message: str) -> str | None:
         from core.guest_access import GuestRegistry
@@ -406,300 +102,55 @@ class OrchestratorRoutingMixin:
         return None
 
     def _needs_guest_profile_review(self, message: str) -> bool:
-        lowered = message.lower()
-        mentions_known_guest = self._message_mentions_guest_name(message)
-
-        # A message naming an actual registered guest plus any "ask about a
-        # person" phrasing is unambiguous, regardless of which name it is —
-        # don't require the name to be hardcoded into a phrase list.
-        if mentions_known_guest and any(
-            sig in lowered for sig in self._GUEST_PROFILE_PERSON_QUERY_SIGNALS
-        ):
-            return True
-
-        if not any(sig in lowered for sig in self._GUEST_PROFILE_SIGNALS):
-            return False
-        if mentions_known_guest:
-            return True
-        return any(
-            w in lowered
-            for w in (
-                "guest",
-                "tester",
-                "nephew",
-                "family",
-                "user",
-                "profile",
-                "interest",
-                "hobbies",
-            )
-        )
+        return rc.needs_guest_profile_review(message)
 
     def _needs_guest_admin_review(self, message: str) -> bool:
-        if self._needs_guest_profile_review(message):
-            return True
-        return self._needs_guest_audit_review(message) or self._needs_guest_accounts_list(message)
-
-    # Owner asks about accumulated cross-session knowledge (recurring bugs,
-    # durable project facts) — distinct from guest-profile signals above,
-    # which require either a registered guest name or explicit guest/tester
-    # wording, so there's no overlap with these project-level phrases.
-    _KNOWLEDGE_LOG_SIGNALS = (
-        "recurring bug",
-        "recurring bugs",
-        "recurring error",
-        "recurring errors",
-        "recurring issue",
-        "recurring issues",
-        "keeps happening",
-        "keeps breaking",
-        "keep happening",
-        "keep breaking",
-        "what bugs keep",
-        "what do you know about this project",
-        "what do you know about the project",
-        "project facts",
-        "accumulated knowledge",
-    )
+        return rc.needs_guest_admin_review(message)
 
     def _needs_knowledge_log_review(self, message: str) -> bool:
-        lowered = message.lower()
-        return any(sig in lowered for sig in self._KNOWLEDGE_LOG_SIGNALS)
+        return rc.needs_knowledge_log_review(message)
 
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
-        """True when answering requires tools (ingested docs or live web search)."""
         if self._needs_guest_admin_review(user_input):
             return True
         if self._needs_file_write(user_input):
             return True
         doc_inventory = await self._get_document_inventory()
-        lowered = user_input.lower()
-        doc_hints = self._doc_routing_hints(doc_inventory)
-        if any(h in lowered for h in self._DOCUMENT_TOOL_HINTS) or any(
-            h in lowered for h in doc_hints
-        ):
-            return True
-        return self._needs_web_search(user_input)
+        return rc.requires_orchestrator(user_input, doc_inventory)
 
     def _messages_before_current_turn(
         self, conversation_history: ConversationHistory | None
     ) -> list:
-        """History excluding the in-flight user message (already appended in web/CLI)."""
-        if not conversation_history or not conversation_history.messages:
-            return []
-        messages = conversation_history.messages
-        if messages[-1].role == "user":
-            return messages[:-1]
-        return messages
+        return rc._messages_before_current_turn(conversation_history)
 
     def _last_assistant_message(self, conversation_history: ConversationHistory | None) -> str:
-        for msg in reversed(self._messages_before_current_turn(conversation_history)):
-            if msg.role == "assistant":
-                return msg.content or ""
-        return ""
+        return rc._last_assistant_message(conversation_history)
 
     def _last_user_message_before_current(
         self, conversation_history: ConversationHistory | None
     ) -> str:
-        prior = self._messages_before_current_turn(conversation_history)
-        for msg in reversed(prior):
-            if msg.role == "user":
-                return msg.content or ""
-        return ""
-
-    _GENERIC_ASSISTANT_QUESTIONS = (
-        "how can i help",
-        "how may i assist",
-        "what can i do for you",
-        "anything else i can",
-        "how are you",
-        "what would you like to work on",
-    )
-
-    # Leading verbs that mark a message as a command/directive rather than
-    # small talk. Used to bypass the "short messages are casual" length rule
-    # so terse imperatives ("run self repair", "fix the login bug") reach real
-    # routing instead of the chat path.
-    _IMPERATIVE_COMMAND_VERBS = frozenset(
-        {
-            "run",
-            "fix",
-            "repair",
-            "diagnose",
-            "troubleshoot",
-            "debug",
-            "search",
-            "find",
-            "look",
-            "summarize",
-            "summarise",
-            "analyze",
-            "analyse",
-            "build",
-            "create",
-            "make",
-            "write",
-            "read",
-            "list",
-            "show",
-            "check",
-            "open",
-            "delete",
-            "remove",
-            "install",
-            "deploy",
-            "generate",
-            "scan",
-            "refactor",
-            "test",
-            "execute",
-            "launch",
-            "start",
-            "stop",
-            "restart",
-            "update",
-            "add",
-            "edit",
-            "review",
-            "explain",
-            "compare",
-            "audit",
-            "save",
-            "export",
-            "ingest",
-            "compile",
-        }
-    )
+        return rc._last_user_message_before_current(conversation_history)
 
     def _assistant_message_awaited_reply(self, text: str) -> bool:
-        """True when the assistant's last turn invited a task-shaping user answer."""
-        t = (text or "").strip()
-        if not t:
-            return False
-        lowered = t.lower()
-        if any(marker in lowered for marker in self._GENERIC_ASSISTANT_QUESTIONS):
-            return False
-        if t.endswith("?"):
-            return True
-        markers = (
-            "which one",
-            "could you clarify",
-            "please clarify",
-            "let me know",
-            "tell me which",
-            "what would you like",
-            "can you specify",
-            "more details",
-            "which file",
-            "which report",
-            "which document",
-            "what do you mean",
-            "look it up",
-            "would you like me to",
-        )
-        return any(marker in lowered for marker in markers)
+        return rc._assistant_message_awaited_reply(text)
 
-    @staticmethod
-    def _is_short_follow_up_reply(message: str) -> bool:
-        """Short reply that likely continues prior context instead of starting small talk."""
-        stripped = (message or "").strip()
-        if not stripped:
-            return False
-        words = stripped.split()
-        if len(words) > 12:
-            return False
-        lowered = stripped.lower().rstrip("!.,")
-        affirmatives = {
-            "yes",
-            "yeah",
-            "yep",
-            "yup",
-            "sure",
-            "ok",
-            "okay",
-            "no",
-            "nope",
-            "go ahead",
-            "do it",
-            "do that",
-        }
-        if lowered in affirmatives:
-            return True
-        referential_phrases = (
-            "summarize it",
-            "look it up",
-            "that one",
-            "this one",
-            "the same",
-            "the audit",
-            "the report",
-            "the file",
-            "the first",
-            "the second",
-            "same one",
-            "that report",
-            "that file",
-        )
-        if any(phrase in lowered for phrase in referential_phrases):
-            return True
-        if len(words) <= 6 and any(token in lowered for token in ("it", "that", "this", "one")):
-            return True
-        return False
+    def _is_short_follow_up_reply(self, message: str) -> bool:
+        return rc.is_short_follow_up_reply(message)
 
     def _prior_turn_was_task_context(
         self, conversation_history: ConversationHistory | None
     ) -> bool:
-        """Prior user turn looked like a task rather than pure small talk."""
-        prior_user = self._last_user_message_before_current(conversation_history)
-        if not prior_user:
-            return False
-        if self._needs_web_search(prior_user) or self._needs_file_write(prior_user):
-            return True
-        lowered = prior_user.lower()
-        task_verbs = (
-            "summarize",
-            "search",
-            "find",
-            "fix",
-            "write",
-            "read",
-            "analyze",
-            "explain",
-            "compare",
-            "list",
-            "show",
-            "check",
-            "audit",
-            "report",
-            "document",
-        )
-        return any(verb in lowered for verb in task_verbs)
+        return rc._prior_turn_was_task_context(conversation_history)
 
     def _is_conversation_follow_up(
         self, user_input: str, conversation_history: ConversationHistory | None
     ) -> bool:
-        """True when the current message continues an in-progress exchange."""
-        if not conversation_history or len(conversation_history.messages) < 2:
-            return False
-        last_assistant = self._last_assistant_message(conversation_history)
-        if not last_assistant:
-            return False
-        if self._assistant_message_awaited_reply(last_assistant):
-            return True
-        if self._is_short_follow_up_reply(user_input) and self._prior_turn_was_task_context(
-            conversation_history
-        ):
-            return True
-        return False
+        return rc.is_conversation_follow_up(user_input, conversation_history)
 
     def _follow_up_routing_message(
         self, user_input: str, conversation_history: ConversationHistory | None
     ) -> str:
-        """Combine prior user turn with a short follow-up for routing heuristics."""
-        prior_user = self._last_user_message_before_current(conversation_history)
-        if prior_user and self._is_short_follow_up_reply(user_input):
-            return f"{prior_user} {user_input}"
-        return user_input
+        return rc.follow_up_routing_message(user_input, conversation_history)
 
     def _orchestrator_follow_up_intent(self, notes: str) -> dict[str, Any]:
         return {
@@ -736,73 +187,45 @@ class OrchestratorRoutingMixin:
             parsed.setdefault("suggested_response", "direct")
         return parsed
 
+    def _is_pure_greeting(self, message: str) -> bool:
+        """True only for explicit greetings/thanks/bye — never by message length."""
+        return rc.is_pure_greeting(message)
+
     def _is_casual_conversation(
         self,
         message: str,
         conversation_history: ConversationHistory | None = None,
     ) -> bool:
-        """
-        Determine if a message is casual conversation.
-
-        Args:
-            message: The user's message
-            conversation_history: Optional prior turns (current user message may
-                already be appended)
-
-        Returns:
-            True if it's casual conversation
-        """
+        """Deprecated alias — greeting whitelist only (no length shortcut)."""
         if conversation_history and self._is_conversation_follow_up(message, conversation_history):
             return False
+        return self._is_pure_greeting(message)
 
-        lowered = message.lower()
-        # Single words match on word boundaries only — a plain substring test
-        # made "hi" match inside "things"/"this" and flagged real requests
-        # as small talk.
-        words = set(re.findall(r"[a-z']+", lowered))
-        casual_words = {
-            "hello",
-            "hi",
-            "hey",
-            "thanks",
-            "appreciate",
-            "nice",
-            "cool",
-            "great",
-            "bye",
-            "goodbye",
-        }
-        casual_phrases = (
-            "how are you",
-            "what's up",
-            "how's it going",
-            "thank you",
-            "see you",
-            "talk to you",
+    async def _classify_routing(
+        self,
+        user_input: str,
+        conversation_history: ConversationHistory | None,
+        session_id: str | None = None,
+    ) -> rc.RouteDecision:
+        doc_inventory = await self._get_document_inventory()
+        ctx = rc.RoutingContext(
+            message=user_input,
+            user_role=getattr(self, "_request_user_role", "owner"),
+            doc_inventory=doc_inventory,
+            session_id=session_id,
+            active_specialized_agent=(
+                self._active_specialized_agent.get(session_id)
+                if session_id and hasattr(self, "_active_specialized_agent")
+                else None
+            ),
+            conversation_history=conversation_history,
+            greeting_only_direct=self.config.routing.greeting_only_direct,
         )
+        return rc.classify_message(ctx)
 
-        # A short message that *starts* with an imperative command verb is a
-        # directive, not small talk — 2026-07-08 finding: "Run self repair" (3
-        # words) was flagged casual purely on length, sent to the chat path,
-        # and the model fabricated a success report instead of running
-        # anything. Command verbs must bypass the length short-circuit below so
-        # they reach real intent analysis / specialized-agent routing.
-        first_token = next(iter(re.findall(r"[a-z]+", lowered)), "")
-        if first_token in self._IMPERATIVE_COMMAND_VERBS:
-            return False
-
-        # Short messages are usually casual
-        if len(message.split()) < 6:
+    @staticmethod
+    def _message_references_documents(message: str, doc_inventory: dict[str, int]) -> bool:
+        lowered = message.lower()
+        if any(h in lowered for h in rc.DOCUMENT_TOOL_HINTS):
             return True
-
-        # Check for casual indicators
-        if words & casual_words or any(phrase in lowered for phrase in casual_phrases):
-            return True
-
-        # Short questions are usually casual
-        question_words = {"what", "how", "why", "when", "where", "who"}
-        if ("?" in message or words & question_words) and len(message.split()) < 10:
-            return True
-
-        # Longer messages are less likely to be casual
-        return False
+        return any(h in lowered for h in rc.doc_routing_hints(doc_inventory))
