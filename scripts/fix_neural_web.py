@@ -5,12 +5,13 @@ import json
 import uuid
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from core.runtime_paths import data_dir, ensure_runtime_layout
 
 
 def fix_neural_web_json() -> None:
     """Fix the neural web JSON file by removing/fixing null ID concepts."""
-    neural_web_path = PROJECT_ROOT / "data" / "neural_web.json"
+    ensure_runtime_layout()
+    neural_web_path = data_dir() / "neural_web.json"
 
     if not neural_web_path.exists():
         print("Neural web file not found")

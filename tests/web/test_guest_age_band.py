@@ -96,7 +96,7 @@ def test_guest_cannot_set_age_band(guest_env):
 @pytest.mark.asyncio
 async def test_guest_set_age_band_tool(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
     reg = GuestRegistry()
     reg.register_or_update(display_name="Sean", device_id="dev-sean-001")
     tool = GuestSetAgeBandTool()

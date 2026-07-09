@@ -16,6 +16,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import guest_profiles_path
+
 logger = logging.getLogger("WitsV3.GuestAccess")
 
 # Safe tools for guest chat. Everything else is blocked in the orchestrator.
@@ -73,7 +75,11 @@ GUEST_PUBLIC_PATHS = frozenset(
     }
 )
 
-DEFAULT_PROFILES_PATH = Path("data/guest_profiles.json")
+def default_profiles_path() -> Path:
+    return guest_profiles_path()
+
+
+DEFAULT_PROFILES_PATH = default_profiles_path  # lazy; call as default_profiles_path()
 
 
 def guest_invite_configured() -> str:
@@ -131,7 +137,7 @@ class GuestRegistry:
     """File-backed guest profiles keyed by device_id."""
 
     def __init__(self, path: Path | str | None = None):
-        self.path = Path(path) if path else DEFAULT_PROFILES_PATH
+        self.path = Path(path) if path else default_profiles_path()
         self._data: dict[str, Any] = {"guests": {}}
         self._load()
 

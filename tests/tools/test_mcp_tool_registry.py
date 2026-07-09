@@ -149,7 +149,7 @@ async def test_mcp_tool_registry_integration():
     tool_registry = ToolRegistry()
 
     # Create MCP tool registry with real config file
-    mcp_registry = MCPToolRegistry(config_path="data/mcp_tools.json")
+    mcp_registry = MCPToolRegistry(config_path="var/data/mcp_tools.json")
 
     try:
         # Initialize registry
@@ -168,7 +168,7 @@ async def test_mcp_tool_registry_integration():
 
             # If it's a read file tool, try to execute it
             if "read" in tool.name.lower() and "file" in tool.name.lower():
-                result = await tool.execute(path="data/mcp_tools.json")
+                result = await tool.execute(path="var/data/mcp_tools.json")
                 assert result is not None, "Failed to execute read file tool"
 
     finally:

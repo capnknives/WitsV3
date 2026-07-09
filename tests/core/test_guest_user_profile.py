@@ -31,7 +31,7 @@ def test_profile_update_extracts_interests_and_facts(tmp_path, monkeypatch):
     assert profile["interests"]["Coding"] >= 1
     assert any("love Minecraft" in f["text"] for f in profile["facts"])
 
-    path = tmp_path / "data" / "guest_user_profiles" / "gid-sean.json"
+    path = tmp_path / "var" / "data" / "guest_user_profiles" / "gid-sean.json"
     assert path.is_file()
     reloaded = json.loads(path.read_text(encoding="utf-8"))
     assert reloaded["display_name"] == "Sean"
@@ -54,7 +54,7 @@ def test_personalization_block_after_turns(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_guest_user_profile_summary_tool(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "data").mkdir()
+    (tmp_path / "var" / "data").mkdir(parents=True)
 
     reg = GuestRegistry()
     acct = reg.register_or_update(display_name="Sean", device_id="dev-sean-001")

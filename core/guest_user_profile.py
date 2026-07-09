@@ -9,11 +9,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import guest_user_profiles_dir
+
 from core.json_llm_parser import parse_json_object
 
 logger = logging.getLogger("WitsV3.GuestUserProfile")
 
-DEFAULT_PROFILE_DIR = Path("data/guest_user_profiles")
+def default_profile_dir() -> Path:
+    return guest_user_profiles_dir()
+
+
+DEFAULT_PROFILE_DIR = default_profile_dir
 MAX_FACTS = 40
 MAX_FACT_LEN = 200
 
@@ -128,7 +134,7 @@ class GuestUserProfileStore:
     """JSON document per guest under data/guest_user_profiles/<guest_id>.json."""
 
     def __init__(self, base_dir: Path | str | None = None):
-        self.base_dir = Path(base_dir) if base_dir else DEFAULT_PROFILE_DIR
+        self.base_dir = Path(base_dir) if base_dir else default_profile_dir()
 
     def _path(self, guest_id: str) -> Path:
         return self.base_dir / f"{guest_id}.json"

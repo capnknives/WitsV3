@@ -1,13 +1,16 @@
 ---
 title: "WitsV3 Documentation Archive"
 created: "2025-06-09"
-last_updated: "2025-06-09"
+last_updated: "2026-07-08"
 status: "active"
 ---
 
 # WitsV3 Documentation Archive
 
-This directory contains archived documentation files that are no longer actively maintained but are kept for historical reference.
+This directory contains archived documentation and pointers to pruned dormant code.
+Several code trees were removed in July 2026 footprint work; recover via git tags
+`archive-pre-prune-2026-07` (GUI) and `archive-pre-prune-2b-2026-07` (adaptive LLM,
+sphinx, synthetic brain). Stub READMEs under each pruned folder document restore commands.
 
 ## Directory Structure
 

@@ -5,7 +5,7 @@ import os
 from collections import Counter
 
 def analyze_memory():
-    memory_file = 'data/wits_memory.json'
+    memory_file = 'var/data/wits_memory.json'
     if not os.path.exists(memory_file):
         print('Memory file not found')
         return

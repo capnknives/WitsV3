@@ -21,6 +21,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import exports_dir, guest_audit_dir, guest_profiles_path
+
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
@@ -130,9 +132,9 @@ def create_app(system) -> FastAPI:
     app = FastAPI(title="WitsV3 Web UI", docs_url=None, redoc_url=None)
     web_token = os.getenv("WITSV3_WEB_TOKEN", "")
     require_auth = bool(system.config.web_ui.require_auth and web_token)
-    guest_registry = GuestRegistry()
+    guest_registry = GuestRegistry(guest_profiles_path())
     guest_cfg = system.config.web_ui.guest_access
-    guest_audit = GuestAuditLog(enabled=guest_cfg.audit_chat)
+    guest_audit = GuestAuditLog(base_dir=guest_audit_dir(), enabled=guest_cfg.audit_chat)
 
     if system.config.web_ui.require_auth and not web_token:
         logger.warning(
@@ -489,7 +491,7 @@ def create_app(system) -> FastAPI:
         if not content.strip():
             return JSONResponse({"detail": "conversation is empty"}, status_code=400)
 
-        export_dir = Path("exports")
+        export_dir = exports_dir()
         export_dir.mkdir(parents=True, exist_ok=True)
         if body.file_path:
             rel = Path(body.file_path.replace("\\", "/"))

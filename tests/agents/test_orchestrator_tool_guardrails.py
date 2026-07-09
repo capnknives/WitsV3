@@ -104,7 +104,7 @@ def test_save_file_path_from_goal():
     path = h._save_file_path_from_goal(
         "Save a log of our conversations as exports/chat_log_report_failure.txt"
     )
-    assert path == "exports/chat_log_report_failure.txt"
+    assert path == "var/exports/chat_log_report_failure.txt"
 
 
 def test_blocks_document_search_on_web_lookup_goal():

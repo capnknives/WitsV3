@@ -25,7 +25,8 @@ from agents.book_writing_helpers import (
 from agents.book_writing_models import BookStructure
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
-from core.safe_code_editor import PROJECT_ROOT, resolve_within_project
+from core.runtime_paths import workspace_dir, workspace_subpath
+from core.safe_code_editor import resolve_within_project
 
 
 class PromptRoutedLLM(BaseLLMInterface):
@@ -70,7 +71,7 @@ class PromptRoutedLLM(BaseLLMInterface):
 
 
 def _cleanup(slug: str):
-    shutil.rmtree(PROJECT_ROOT / "workspace" / slug, ignore_errors=True)
+    shutil.rmtree(workspace_dir() / slug, ignore_errors=True)
 
 
 @pytest.fixture
@@ -197,7 +198,7 @@ async def test_write_full_book_saves_all_chapters_to_disk(agent):
 
         streams = [s async for s in agent._handle_write_full_book(book_id, "sess-1", filename=slug)]
 
-        output_path = resolve_within_project(f"workspace/{slug}/{slug}.md")
+        output_path = resolve_within_project(f"{workspace_subpath(slug)}/{slug}.md")
         assert output_path.exists()
         text = output_path.read_text(encoding="utf-8")
         assert "Chapter 1: The Beginning" in text
@@ -227,7 +228,7 @@ async def test_write_full_book_resumes_without_rewriting_finished_chapters(agent
                 {"id": "c2", "title": "Chapter Two", "outline": "y", "status": "planned"},
             ],
         )
-        output_path = resolve_within_project(f"workspace/{slug}/{slug}.md")
+        output_path = resolve_within_project(f"{workspace_subpath(slug)}/{slug}.md")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
             "# Resume Test Book\n\n## Chapter 1: Chapter One\n\nAlready written.\n",
@@ -269,7 +270,7 @@ async def test_run_writes_and_saves_story_in_one_turn_when_save_requested(agent)
         )
         streams = [s async for s in agent.run(request, session_id="sess-live")]
 
-        output_path = resolve_within_project(f"workspace/{slug}/{slug}.md")
+        output_path = resolve_within_project(f"{workspace_subpath(slug)}/{slug}.md")
         assert output_path.exists(), "story was never written to disk"
         text = output_path.read_text(encoding="utf-8")
         assert "Chapter prose number" in text
@@ -297,7 +298,7 @@ async def test_run_continuation_followup_resumes_same_book(agent):
         assert agent.writing_sessions["sess-cont"]["active_book_id"] == book_id
         assert any(c["status"] == "written" for c in agent.current_books[book_id].chapters)
         assert any("saved to" in s.content for s in streams if s.type == "result")
-        assert resolve_within_project(f"workspace/{slug}/{slug}.md").exists()
+        assert resolve_within_project(f"{workspace_subpath(slug)}/{slug}.md").exists()
     finally:
         _cleanup(slug)
 
@@ -720,7 +721,7 @@ async def test_seed_existing_chapter_writes_immediately_and_is_skipped_later(age
             {"id": "c2", "title": "Chapter One", "outline": "x", "status": "planned"}
         )
 
-        output_path = resolve_within_project(f"workspace/{slug}/{slug}.md")
+        output_path = resolve_within_project(f"{workspace_subpath(slug)}/{slug}.md")
         assert "The night was still." in output_path.read_text(encoding="utf-8")
         assert agent.current_books[book_id].chapters[0]["status"] == "written"
 
@@ -757,12 +758,12 @@ async def test_handle_create_world_bible_saves_file_and_attaches_to_session(agen
                 "sess-bible-gen",
             )
         ]
-        bible_path = resolve_within_project(f"workspace/{slug}/world_bible.md")
+        bible_path = resolve_within_project(f"{workspace_subpath(slug)}/world_bible.md")
         assert bible_path.exists()
         assert agent.writing_sessions["sess-bible-gen"]["world_bible"]
         assert any(s.type == "result" and "saved to" in s.content for s in streams)
     finally:
-        shutil.rmtree(PROJECT_ROOT / "workspace" / slug, ignore_errors=True)
+        shutil.rmtree(workspace_dir() / slug, ignore_errors=True)
 
 
 @pytest.mark.asyncio

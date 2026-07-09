@@ -148,7 +148,7 @@ pytest tests/ -q --no-cov  # Full test suite
 | Capability | How |
 |------------|-----|
 | Chat with streaming thinking / tools | Web UI or CLI |
-| Ask about your files | Drop into `documents/` (auto-ingest) or upload in the UI; ask in plain English |
+| Ask about your files | Drop into `var/documents/` (auto-ingest) or upload in the UI; ask in plain English |
 | Search the web | `web_search` — Tavily → Brave → DuckDuckGo |
 | Edit project code safely | “Fix the bug in `tools/foo.py`” → verified-edit pipeline |
 | Autonomous maintenance | Daily self-repair scan (config: `self_repair.*`) |
@@ -157,7 +157,7 @@ pytest tests/ -q --no-cov  # Full test suite
 
 ### Document RAG
 
-Files in `documents/` are chunked, embedded (`nomic-embed-text`), and searchable. Built-in: `.txt` `.md` `.py` `.json` `.csv` `.html` `.log` (`.pdf` needs `pypdf`, already in requirements). Changed files re-ingest; deletes clean up. Tune under `document_rag:` in `config.yaml`.
+Files in `var/documents/` are chunked, embedded (`nomic-embed-text`), and searchable. Built-in: `.txt` `.md` `.py` `.json` `.csv` `.html` `.log` (`.pdf` needs `pypdf`, already in requirements). Changed files re-ingest; deletes clean up. Tune under `document_rag:` in `config.yaml`.
 
 ### Self-repair & coding agent
 
@@ -170,7 +170,7 @@ Shared pipeline in `core/safe_code_editor.py`:
 
 - Named file in the request → that file is targeted  
 - No file named → self-repair scans `logs/witsv3.log` (then failing tests if needed)  
-- New projects from the coding agent land in `workspace/<name>/` with `py_compile` checks  
+- New projects from the coding agent land in `var/workspace/<name>/` with `py_compile` checks  
 - Edits stay inside the project tree (`resolve_within_project()`)
 
 Defaults: `self_repair.enabled: true`, daily cron `0 3 * * *`, `restart_after_fix: false` (scheduled restarts never surprise an active session).
@@ -228,9 +228,8 @@ WitsV3/
 ├── tools/            # Auto-discovered tools (26 built-in)
 ├── web/              # FastAPI + SSE UI
 ├── tests/            # Pytest suite (~406 collected)
-├── documents/        # Drop folder for RAG (gitignored contents)
-├── workspace/        # Coding-agent scaffolds (gitignored)
-├── docs/         # Architecture, roadmap, historical notes
+├── var/              # Runtime data (memory, documents, exports, logs, workspace, cache)
+├── docs/             # Architecture, roadmap, historical notes
 ├── config.yaml       # Main config
 ├── run_web.py        # Web entry
 ├── run.py            # CLI + --test + daily self-repair schedule

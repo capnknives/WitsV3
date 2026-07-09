@@ -51,6 +51,7 @@ async def test_prepare_write_file_fills_content_from_session():
         "observations": [],
     }
     args = await h._prepare_tool_args("write_file", {"file_path": "exports/chat.txt"}, state)
+    assert args["file_path"] == "var/exports/chat.txt"
     assert "USER: Tell me a story" in args["content"]
     assert "ASSISTANT: Once upon a time" in args["content"]
 

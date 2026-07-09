@@ -101,7 +101,7 @@ web_ui:
     adult_allow_document_search: true
 document_rag:
   enabled: true
-  documents_path: documents
+  documents_path: var/documents
   chunk_size: 1200
   chunk_overlap: 150
   auto_ingest_on_startup: true
@@ -170,11 +170,11 @@ llm_interface:
 logging_level: INFO
 memory_manager:
   backend: basic
-  faiss_index_path: data/wits_faiss_index.bin
+  faiss_index_path: var/data/wits_faiss_index.bin
   max_memory_segments: 10000
   max_results_per_search: 5
-  memory_file_path: data/wits_memory.json
-  neural_web_path: data/neural_web.json
+  memory_file_path: var/data/wits_memory.json
+  neural_web_path: var/data/neural_web.json
   neural_web_settings:
     activation_threshold: 0.3
     auto_connect: true
@@ -235,5 +235,5 @@ supabase:
 tool_system:
   enable_mcp_tools: true
   mcp_connect_on_startup: false  # external MCP node servers aren't built locally; skip slow boot attempts
-  mcp_tool_definitions_path: data/mcp_tools.json
+  mcp_tool_definitions_path: var/data/mcp_tools.json
 version: 3.0.0

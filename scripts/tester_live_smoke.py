@@ -30,6 +30,7 @@ from fastapi.testclient import TestClient
 
 from core.guest_audit import GuestAuditLog, build_owner_audit_digest
 from core.guest_access import GuestRegistry
+from core.runtime_paths import data_dir, ensure_runtime_layout, exports_dir
 from tests.web.test_web_server import FakeSystem, _parse_sse
 from tools.guest_audit_tool import GuestAuditSummaryTool
 from web.server import create_app
@@ -82,8 +83,9 @@ def main() -> int:
         print("FAIL: WITSV3_GUEST_INVITE and WITSV3_GUEST_SECRET required in .env")
         return 1
 
-    (ROOT / "data").mkdir(exist_ok=True)
-    (ROOT / "exports").mkdir(exist_ok=True)
+    ensure_runtime_layout()
+    data_dir().mkdir(parents=True, exist_ok=True)
+    exports_dir().mkdir(parents=True, exist_ok=True)
 
     system = FakeSystem(ROOT)
     system.config.web_ui.guest_access.enabled = True
@@ -177,7 +179,7 @@ def main() -> int:
         "content_blocked_events": len(blocked_rows),
         "owner_summary": summary,
     }
-    report_path = ROOT / "data" / "tester_live_smoke_report.json"
+    report_path = data_dir() / "tester_live_smoke_report.json"
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nReport saved: {report_path}")
     print("\n=== SMOKE PASSED ===")

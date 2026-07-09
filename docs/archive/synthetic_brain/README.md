@@ -15,8 +15,11 @@ experimental Phase 1 "synthetic brain" layer that was never wired into
 
 ## Source archived here (July 8, 2026)
 
-| Archived path (under this folder) | Role |
-|-----------------------------------|------|
+**July 8 2026 (Phase 2b):** Python under `core/` and `tests/` was pruned from the
+working copy (~6 files). This README remains as the index.
+
+| Former path (under this folder) | Role |
+|---------------------------------|------|
 | `core/memory_handler.py` | Unified memory facade (working/episodic/semantic/procedural) |
 | `core/cognitive_architecture.py` | Perception → reasoning → action loop |
 | `core/synthetic_brain_stubs.py` | Stub LLM/KG/WM for integration tests |
@@ -25,6 +28,17 @@ experimental Phase 1 "synthetic brain" layer that was never wired into
 | `tests/test_cognitive_architecture.py` | Unit tests (removed from pytest collection) |
 
 Historical docs: [`SYNTHETIC_BRAIN.md`](../historical-docs/SYNTHETIC_BRAIN.md) and siblings under `docs/archive/historical-docs/`.
+
+## Recover the snapshot
+
+Full code tree is preserved in git at tag **`archive-pre-prune-2b-2026-07`**:
+
+```powershell
+git ls-tree -r --name-only archive-pre-prune-2b-2026-07 docs/archive/synthetic_brain/
+
+# Restore locally (optional)
+git checkout archive-pre-prune-2b-2026-07 -- docs/archive/synthetic_brain/core/ docs/archive/synthetic_brain/tests/
+```
 
 Re-enable only for research — do not wire back into production without reconciling
 APIs with the current `MemoryManager` and orchestrator stack.

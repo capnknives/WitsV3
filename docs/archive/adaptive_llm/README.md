@@ -15,10 +15,13 @@ were never shipped in the revival stack. Smart model routing lives in
 ## Source archived here (July 8, 2026)
 
 The modules were moved out of the live `core/` package into this folder so they
-no longer sit on the import path. They are preserved for research revival only.
+no longer sat on the import path. They were preserved for research revival only.
 
-| Archived path (under this folder) | Role |
-|-----------------------------------|------|
+**July 8 2026 (Phase 2b):** The Python tree under `core/` was pruned from the
+working copy (~10 files). This README remains as the index.
+
+| Former path (under this folder) | Role |
+|---------------------------------|------|
 | `core/adaptive_llm_interface.py` | Main adaptive interface (experimental) |
 | `core/adaptive_llm_config.py` | Settings dataclasses |
 | `core/complexity_analyzer.py` | Query complexity scoring |
@@ -28,6 +31,17 @@ no longer sit on the import path. They are preserved for research revival only.
 
 The former `tests/test_adaptive_llm.py` integration smoke and its `tests/config.yaml`
 were deleted (recoverable via git history) since their subjects are archived.
+
+## Recover the snapshot
+
+Full code tree is preserved in git at tag **`archive-pre-prune-2b-2026-07`**:
+
+```powershell
+git ls-tree -r --name-only archive-pre-prune-2b-2026-07 docs/archive/adaptive_llm/
+
+# Restore locally (optional)
+git checkout archive-pre-prune-2b-2026-07 -- docs/archive/adaptive_llm/core/
+```
 
 Re-enable only for research — do not wire back into production without replacing
 the module-loader design with real Ollama model routing. If you revive these,

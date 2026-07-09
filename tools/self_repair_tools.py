@@ -28,6 +28,7 @@ from typing import Any
 
 from core.base_tool import BaseTool
 from core.knowledge_log import KnowledgeLogStore
+from core.runtime_paths import main_log_path
 from core.safe_code_editor import (
     PROJECT_ROOT,
     apply_verified_edit,
@@ -179,7 +180,7 @@ class DiagnoseLogErrorsTool(BaseTool):
                 "issues are recorded in the knowledge log for trend tracking."
             ),
         )
-        self.log_path = PROJECT_ROOT / "logs" / "witsv3.log"
+        self.log_path = main_log_path()
         self.knowledge_log = KnowledgeLogStore()
 
     async def execute(self, lines: int = 2000, max_issues: int = 5) -> dict[str, Any]:

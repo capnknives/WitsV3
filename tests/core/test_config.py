@@ -53,9 +53,9 @@ def test_load_default_config():
 
     assert isinstance(config.memory_manager, MemoryManagerSettings)
     assert config.memory_manager.backend == "basic"
-    assert config.memory_manager.memory_file_path == "data/wits_memory.json"
-    assert config.memory_manager.faiss_index_path == "data/wits_faiss_index.bin"
-    assert config.memory_manager.neural_web_path == "data/neural_web.json"
+    assert config.memory_manager.memory_file_path == "var/data/wits_memory.json"
+    assert config.memory_manager.faiss_index_path == "var/data/wits_faiss_index.bin"
+    assert config.memory_manager.neural_web_path == "var/data/neural_web.json"
     assert config.memory_manager.vector_dim == 768
     assert config.memory_manager.max_results_per_search == 5
     assert config.memory_manager.pruning_interval_seconds == 3600
@@ -66,7 +66,7 @@ def test_load_default_config():
 
     assert isinstance(config.tool_system, ToolSystemSettings)
     assert config.tool_system.enable_mcp_tools is True
-    assert config.tool_system.mcp_tool_definitions_path == "data/mcp_tools.json"
+    assert config.tool_system.mcp_tool_definitions_path == "var/data/mcp_tools.json"
 
     assert isinstance(config.cli, CLISettings)
     assert config.cli.show_thoughts is True

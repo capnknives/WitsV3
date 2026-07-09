@@ -11,6 +11,7 @@ from typing import Any
 from agents.base_agent import BaseAgent
 from agents.orchestrator_tool_helpers import OrchestratorToolHelpersMixin
 from core.config import WitsV3Config
+from core.runtime_paths import exports_subpath
 from core.json_llm_parser import build_json_repair_prompt
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
@@ -403,7 +404,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         ):
             file_path = (
                 self._save_file_path_from_goal(state.get("goal", ""))
-                or "exports/conversation_log.txt"
+                or exports_subpath("conversation_log.txt", self.config.runtime_paths.root)
             )
             if file_path:
                 async for stream_data in self._auto_write_saved_conversation(

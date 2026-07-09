@@ -21,6 +21,7 @@ os.chdir(ROOT)
 from fastapi.testclient import TestClient
 
 from core.guest_audit import GuestAuditLog
+from core.runtime_paths import data_dir, ensure_runtime_layout, exports_dir
 from tests.web.test_web_server import FakeSystem, _parse_sse
 from web.server import create_app
 
@@ -35,9 +36,9 @@ def main() -> int:
     os.environ["WITSV3_GUEST_INVITE"] = INVITE
     os.environ["WITSV3_GUEST_SECRET"] = SECRET
 
-    data_dir = ROOT / "data"
-    data_dir.mkdir(exist_ok=True)
-    (ROOT / "exports").mkdir(exist_ok=True)
+    ensure_runtime_layout()
+    data_dir().mkdir(parents=True, exist_ok=True)
+    exports_dir().mkdir(parents=True, exist_ok=True)
 
     system = FakeSystem(ROOT)
     system.config.web_ui.guest_access.enabled = True

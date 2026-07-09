@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.coding_models import CodeProject
+from core.runtime_paths import workspace_subpath
 from core.safe_code_editor import PROJECT_ROOT, extract_code_from_response
 from core.schemas import StreamData
 
@@ -98,7 +99,7 @@ class CodingHandlersMixin:
         from core.safe_code_editor import resolve_within_project, run_py_compile
 
         results = []
-        workspace_rel = f"workspace/{project.name}"
+        workspace_rel = workspace_subpath(project.name)
         for rel_name, content in files.items():
             file_rel = f"{workspace_rel}/{rel_name}"
             try:
@@ -189,7 +190,7 @@ class CodingHandlersMixin:
                 "language": language,
                 "project_type": project_type,
                 "session_id": session_id,
-                "workspace_path": f"workspace/{project.name}",
+                "workspace_path": workspace_subpath(project.name),
             },
         )
 
@@ -207,7 +208,7 @@ class CodingHandlersMixin:
 
         yield self.stream_result(
             f"Created project '{project.name}' with {len(initial_files)} files "
-            f"written to workspace/{project.name}/"
+            f"written to {workspace_subpath(project.name)}/"
         )
         yield self.stream_result("Project Architecture:")
         yield self.stream_result(architecture_response)

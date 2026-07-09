@@ -177,7 +177,7 @@ async def update_mcp_config(config_path: Path, cloned_repos: Dict[str, Path]) ->
 
 async def main():
     parser = argparse.ArgumentParser(description="Clone and set up MCP servers")
-    parser.add_argument("--config", default="data/mcp_tools.json", help="Path to MCP configuration file")
+    parser.add_argument("--config", default="var/data/mcp_tools.json", help="Path to MCP configuration file")
     args = parser.parse_args()
 
     config_path = Path(args.config)

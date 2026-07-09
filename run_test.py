@@ -24,7 +24,7 @@ import sys
 import subprocess
 import time
 import argparse
-from pathlib import Path
+from core.runtime_paths import ensure_runtime_layout
 
 def run_command(command, description):
     """Run a command and return if it was successful."""
@@ -130,6 +130,6 @@ def main():
 
 if __name__ == "__main__":
     # Create logs directory if it doesn't exist
-    Path("logs").mkdir(exist_ok=True)
+    ensure_runtime_layout()
 
     sys.exit(main())

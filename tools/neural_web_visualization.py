@@ -8,7 +8,7 @@ including static graphs and interactive HTML visualizations.
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
+from core.runtime_paths import data_dir
 from typing import Any
 
 import matplotlib.patches as mpatches
@@ -170,7 +170,7 @@ class NeuralWebVisualizer:
             plt.axis("off")
 
             # Save visualization
-            output_dir = Path("data/visualizations")
+            output_dir = data_dir() / "visualizations"
             output_dir.mkdir(exist_ok=True, parents=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -252,7 +252,7 @@ class NeuralWebVisualizer:
             html_content = self._create_interactive_html(nodes, links, include_domains)
 
             # Save HTML file
-            output_dir = Path("data/visualizations")
+            output_dir = data_dir() / "visualizations"
             output_dir.mkdir(exist_ok=True, parents=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
