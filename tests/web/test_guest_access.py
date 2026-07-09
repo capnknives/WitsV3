@@ -112,7 +112,6 @@ def test_owner_admin_accounts(guest_env):
     assert "Sean" in names
 
 
-
 def test_guest_blocked_from_settings(guest_env):
     client, _ = guest_env
     token = _register(client).json()["guest_token"]
@@ -201,10 +200,13 @@ def test_guest_sessions_isolated_from_owner(guest_env):
     assert len(guest_list) == 1
     assert guest_list[0]["session_id"] == guest_session
 
-    assert client.get(
-        f"/api/sessions/{guest_session}/messages",
-        headers=owner_headers,
-    ).status_code == 404
+    assert (
+        client.get(
+            f"/api/sessions/{guest_session}/messages",
+            headers=owner_headers,
+        ).status_code
+        == 404
+    )
 
     guest_messages = client.get(
         f"/api/sessions/{guest_session}/messages",
@@ -217,9 +219,7 @@ def test_guest_sessions_isolated_from_owner(guest_env):
 def test_token_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("WITSV3_GUEST_SECRET", "roundtrip-secret")
     monkeypatch.setenv("WITSV3_GUEST_INVITE", "x")
-    tok = issue_guest_token(
-        guest_id="g1", device_id="d1", display_name="Alex", ttl_hours=1
-    )
+    tok = issue_guest_token(guest_id="g1", device_id="d1", display_name="Alex", ttl_hours=1)
     payload = validate_guest_token(tok)
     assert payload is not None
     assert payload["guest_id"] == "g1"

@@ -88,9 +88,7 @@ async def test_get_session_flush_context_formats_segments():
             self.metadata = {"flushed_through": flushed_through}
 
     memory = AsyncMock()
-    memory.get_recent_memory = AsyncMock(
-        return_value=[Seg("Earlier user chose audit.md", 12)]
-    )
+    memory.get_recent_memory = AsyncMock(return_value=[Seg("Earlier user chose audit.md", 12)])
     ctx = await get_session_flush_context(memory, "sess-3")
     assert "PERSISTED SESSION MEMORY" in ctx
     assert "audit.md" in ctx

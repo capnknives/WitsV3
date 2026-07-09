@@ -12,11 +12,11 @@ control_center, tool_registry, memory_manager, session_histories) — tests
 pass a lightweight fake.
 """
 
+import asyncio
 import json
 import logging
 import os
 import uuid
-import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -68,6 +68,7 @@ from web.user_errors import format_chat_error
 logger = logging.getLogger("WitsV3.WebUI")
 
 STATIC_DIR = Path(__file__).parent / "static"
+
 
 # Paths that never require auth (the shell page + PWA assets load before the
 # user can enter a token; every /api/* call is protected).
@@ -185,7 +186,9 @@ def create_app(system) -> FastAPI:
     @app.get("/join.js")
     async def join_js():
         return FileResponse(
-            STATIC_DIR / "join.js", media_type="application/javascript", headers={"Cache-Control": "no-store"}
+            STATIC_DIR / "join.js",
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.get("/personality")
@@ -477,9 +480,7 @@ def create_app(system) -> FastAPI:
         raw_session = body.session_id
         if not raw_session:
             return JSONResponse({"detail": "no active session"}, status_code=400)
-        session_id = (
-            guest_session_key(guest["guest_id"], raw_session) if guest else raw_session
-        )
+        session_id = guest_session_key(guest["guest_id"], raw_session) if guest else raw_session
         if session_id not in system.session_histories:
             return JSONResponse({"detail": "no active session"}, status_code=400)
 
@@ -924,8 +925,10 @@ def create_app(system) -> FastAPI:
         docs_dir = Path(system.config.document_rag.documents_path)
         docs_dir.mkdir(parents=True, exist_ok=True)
 
-        # Keep only the file name — no path traversal from client input
-        safe_name = Path(file.filename or "upload.txt").name
+        # Keep only the file name — normalize slashes so Windows-style traversal
+        # attempts (..\\..\\evil.txt) cannot survive on POSIX runners.
+        raw_name = (file.filename or "upload.txt").replace("\\", "/")
+        safe_name = Path(raw_name).name
         target = docs_dir / safe_name
         target.write_bytes(await file.read())
 

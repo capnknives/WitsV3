@@ -593,9 +593,7 @@ class OrchestratorRoutingMixin:
         Returns:
             True if it's casual conversation
         """
-        if conversation_history and self._is_conversation_follow_up(
-            message, conversation_history
-        ):
+        if conversation_history and self._is_conversation_follow_up(message, conversation_history):
             return False
 
         lowered = message.lower()

@@ -232,7 +232,8 @@ class GuestAccessSettings(BaseModel):
         default=False, description="Let guests use document_search on owner-ingested docs"
     )
     audit_chat: bool = Field(
-        default=True, description="Append guest turns to data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl"
+        default=True,
+        description="Append guest turns to data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl",
     )
     content_policy_enabled: bool = Field(
         default=True, description="Block inappropriate guest input/output (family-friendly)"

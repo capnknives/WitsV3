@@ -81,9 +81,7 @@ def normalize_age_band(value: str | None, *, default: str = "teen") -> str:
 
 def _terms_for_band(age_band: str) -> tuple[str, ...]:
     band = normalize_age_band(age_band)
-    terms = list(
-        policy_terms("absolute_blocked_terms", _BUILTIN_ABSOLUTE_BLOCKED_TERMS)
-    )
+    terms = list(policy_terms("absolute_blocked_terms", _BUILTIN_ABSOLUTE_BLOCKED_TERMS))
     if band in ("child", "teen"):
         terms.extend(policy_terms("family_blocked_terms", _BUILTIN_FAMILY_BLOCKED_TERMS))
     if band == "child":
@@ -141,10 +139,7 @@ def _refusal_message(direction: Direction, age_band: str) -> str:
             "I can't help with that request. This guest session has content limits "
             f"for {band} users. {hint}"
         )
-    return (
-        "I need to keep my answer appropriate for this guest session. "
-        "Ask me something else!"
-    )
+    return "I need to keep my answer appropriate for this guest session. " "Ask me something else!"
 
 
 def age_band_description(age_band: str) -> str:

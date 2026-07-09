@@ -31,9 +31,7 @@ class GuestAccountsListTool(BaseTool):
                 "Guests cannot list other accounts."
             )
         try:
-            report = format_active_guest_accounts(
-                self.registry, include_revoked=include_revoked
-            )
+            report = format_active_guest_accounts(self.registry, include_revoked=include_revoked)
             self.logger.info("Guest accounts list for owner (revoked=%s)", include_revoked)
             return report
         except Exception as e:

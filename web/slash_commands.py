@@ -143,11 +143,7 @@ def list_slash_commands(role: str | None) -> list[dict[str, Any]]:
                 "description": cmd["description"],
                 "dispatch": cmd["dispatch"],
                 "dangerous": bool(cmd.get("dangerous")),
-                **{
-                    k: cmd[k]
-                    for k in ("client_action", "panel_tab", "href")
-                    if k in cmd
-                },
+                **{k: cmd[k] for k in ("client_action", "panel_tab", "href") if k in cmd},
             }
         )
     return visible

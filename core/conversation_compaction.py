@@ -15,9 +15,7 @@ FLUSH_SEGMENT_TYPE = "CONVERSATION_FLUSH"
 _FLUSH_BUFFER = 2  # wait until window + buffer messages before flushing
 
 
-async def _last_flushed_through(
-    memory_manager: MemoryManager, session_id: str
-) -> int:
+async def _last_flushed_through(memory_manager: MemoryManager, session_id: str) -> int:
     segments = await memory_manager.get_recent_memory(
         limit=20,
         filter_dict={"type": FLUSH_SEGMENT_TYPE, "session_id": session_id},

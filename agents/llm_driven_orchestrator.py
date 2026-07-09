@@ -165,7 +165,9 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
             )
 
         personalization = state.get("guest_personalization_context", "")
-        personalization_block = f"\nGUEST PERSONALIZATION:\n{personalization}\n" if personalization else ""
+        personalization_block = (
+            f"\nGUEST PERSONALIZATION:\n{personalization}\n" if personalization else ""
+        )
 
         guest_rules_block = ""
         if state.get("user_role") == "guest":

@@ -132,6 +132,4 @@ async def test_wcca_routes_guest_profile_questions_to_orchestrator():
     assert await probe._requires_orchestrator_for_input(
         "What is Sean interested in from our guest conversations?"
     )
-    assert await probe._requires_orchestrator_for_input(
-        "What do we know about TESTER's hobbies?"
-    )
+    assert await probe._requires_orchestrator_for_input("What do we know about TESTER's hobbies?")

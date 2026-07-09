@@ -51,7 +51,9 @@ class OrchestratorToolHelpersMixin:
         goal = state.get("goal", "")
         from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 
-        if state.get("user_role") == "owner" and OrchestratorRoutingMixin._needs_guest_profile_review(
+        if state.get(
+            "user_role"
+        ) == "owner" and OrchestratorRoutingMixin._needs_guest_profile_review(
             OrchestratorRoutingMixin(), goal
         ):
             if tool_name == "web_search":
@@ -492,8 +494,10 @@ class OrchestratorToolHelpersMixin:
                     "Say clearly that the uploaded documents do not contain enough evidence."
                 )
 
-        if doc_obs and "(no matching passages" not in doc_obs and not self._document_search_weak(
+        if (
             doc_obs
+            and "(no matching passages" not in doc_obs
+            and not self._document_search_weak(doc_obs)
         ):
             if self._answer_denies_access(final_answer):
                 return (

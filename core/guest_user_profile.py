@@ -160,7 +160,9 @@ class GuestUserProfileStore:
             return True
         return False
 
-    def merge_profiles(self, *, target_guest_id: str, source_guest_id: str, display_name: str) -> dict[str, Any]:
+    def merge_profiles(
+        self, *, target_guest_id: str, source_guest_id: str, display_name: str
+    ) -> dict[str, Any]:
         """Merge source profile JSON into target and remove source file."""
         target = self.load(target_guest_id, display_name)
         source = self.load(source_guest_id, display_name)
@@ -171,7 +173,9 @@ class GuestUserProfileStore:
         self.delete_profile(source_guest_id)
         return target
 
-    def consolidate_for_display_name(self, registry: Any, display_name: str) -> dict[str, Any] | None:
+    def consolidate_for_display_name(
+        self, registry: Any, display_name: str
+    ) -> dict[str, Any] | None:
         """Merge duplicate account profiles into the canonical guest_id for this name."""
         accounts = registry.find_all_by_display_name(display_name)
         if not accounts:
