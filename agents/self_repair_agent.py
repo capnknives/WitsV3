@@ -24,6 +24,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from core.config import WitsV3Config
+from core.knowledge_log import KnowledgeLogStore
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
 from core.safe_code_editor import (
@@ -57,6 +58,7 @@ class SelfRepairAgent(BaseAgent):
     ) -> None:
         super().__init__(agent_name, config, llm_interface, memory_manager)
         self.tool_registry = tool_registry
+        self.knowledge_log = KnowledgeLogStore()
 
     def _tool(self, name: str):
         if not self.tool_registry:
@@ -226,6 +228,7 @@ class SelfRepairAgent(BaseAgent):
                 importance=0.7,
                 metadata={"file": file_path, "commit_sha": result.get("commit_sha")},
             )
+            self.knowledge_log.mark_error_resolved(issue)
         else:
             tail = result.get("test_output", "")[-500:]
             yield self.stream_observation(

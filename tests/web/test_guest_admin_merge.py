@@ -205,6 +205,24 @@ def test_profile_query_signals(tmp_path, monkeypatch):
     assert probe._extract_guest_name_for_profile_query("what do you know about TESTER") == "TESTER"
 
 
+def test_profile_query_signals_for_arbitrary_registered_name(tmp_path, monkeypatch):
+    """Regression: routing must not depend on hardcoded example names like
+    "sean"/"tester" — any registered guest's real name must work, e.g. Christina."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    reg = GuestRegistry()
+    reg.register_or_update(display_name="Christina", device_id="device-ccc-33333")
+
+    probe = _RoutingProbe()
+    assert probe._needs_guest_profile_review("tell me about the user christina")
+    assert (
+        probe._extract_guest_name_for_profile_query("tell me about the user christina")
+        == "Christina"
+    )
+    # A person-phrase with no registered-guest name must NOT be misrouted.
+    assert not probe._needs_guest_profile_review("tell me about the weather today")
+
+
 @pytest.mark.asyncio
 async def test_wcca_profile_query_skips_web_search_path():
     probe = _RoutingProbe()

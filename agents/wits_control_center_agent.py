@@ -332,16 +332,29 @@ User input: {user_input}
             suggested_response = "specialized"
 
         # Guest interest/profile queries use saved JSON facts only — never web search.
-        if (
-            getattr(self, "_request_user_role", "owner") == "owner"
-            and self._needs_guest_profile_review(user_input)
-        ):
+        if getattr(
+            self, "_request_user_role", "owner"
+        ) == "owner" and self._needs_guest_profile_review(user_input):
             yield self.stream_thinking("Loading saved guest profile (no web search)...")
             from tools.guest_profile_tool import GuestUserProfileSummaryTool
 
             tool = GuestUserProfileSummaryTool()
             display_name = self._extract_guest_name_for_profile_query(user_input)
             report = await tool.execute(display_name=display_name, user_role="owner")
+            yield self.stream_result(report)
+            return
+
+        # Accumulated project knowledge (recurring bugs, durable facts) —
+        # owner-only, saved facts only, same direct-handling short-circuit as
+        # the guest-profile block above.
+        if getattr(
+            self, "_request_user_role", "owner"
+        ) == "owner" and self._needs_knowledge_log_review(user_input):
+            yield self.stream_thinking("Loading accumulated project knowledge...")
+            from tools.knowledge_log_tool import KnowledgeLogSummaryTool
+
+            tool = KnowledgeLogSummaryTool()
+            report = await tool.execute(user_role="owner")
             yield self.stream_result(report)
             return
 
@@ -352,9 +365,7 @@ User input: {user_input}
         # LLM-classified direct_response: use the intent JSON text, not a second
         # casual-chat call — unless tools are required (misclassification guard).
         if intent_type == "direct_response":
-            routing_message = self._follow_up_routing_message(
-                user_input, conversation_history
-            )
+            routing_message = self._follow_up_routing_message(user_input, conversation_history)
             if await self._requires_orchestrator_for_input(routing_message):
                 intent_type = "goal_defined"
                 complexity = "moderate"
@@ -383,9 +394,7 @@ User input: {user_input}
             return
 
         if intent_type == "conversation":
-            routing_message = self._follow_up_routing_message(
-                user_input, conversation_history
-            )
+            routing_message = self._follow_up_routing_message(user_input, conversation_history)
             if await self._requires_orchestrator_for_input(routing_message):
                 intent_type = "goal_defined"
                 complexity = "moderate"
@@ -503,9 +512,7 @@ User input: {user_input}
                 session_id=session_id,
                 user_role=getattr(self, "_request_user_role", "owner"),
                 guest_profile=getattr(self, "_request_guest_profile", None),
-                guest_personalization_context=getattr(
-                    self, "_guest_personalization_context", ""
-                ),
+                guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
             ):
                 yield stream_data
             return

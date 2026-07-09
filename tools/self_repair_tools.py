@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from core.base_tool import BaseTool
+from core.knowledge_log import KnowledgeLogStore
 from core.safe_code_editor import (
     PROJECT_ROOT,
     apply_verified_edit,
@@ -174,10 +175,12 @@ class DiagnoseLogErrorsTool(BaseTool):
                 "Scan the trailing lines of logs/witsv3.log for real tracebacks and "
                 "ERROR/CRITICAL entries. Returns distinct issues with the source file "
                 "and line when resolvable from the traceback, so a fix can be targeted "
-                "at the right place. Read-only — makes no changes."
+                "at the right place. Makes no changes to the log or codebase — recurring "
+                "issues are recorded in the knowledge log for trend tracking."
             ),
         )
         self.log_path = PROJECT_ROOT / "logs" / "witsv3.log"
+        self.knowledge_log = KnowledgeLogStore()
 
     async def execute(self, lines: int = 2000, max_issues: int = 5) -> dict[str, Any]:
         if not self.log_path.exists():
@@ -192,6 +195,8 @@ class DiagnoseLogErrorsTool(BaseTool):
         text = "".join(tail)
 
         issues = parse_traceback_issues(text, max(1, int(max_issues)))
+        self.knowledge_log.record_error_issues(issues)
+
         actionable = sum(1 for i in issues if i["actionable"])
         return {
             "success": True,

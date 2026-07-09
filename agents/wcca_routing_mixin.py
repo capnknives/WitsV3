@@ -271,12 +271,19 @@ class OrchestratorRoutingMixin:
         "user profile",
         "their hobbies",
         "their interests",
-        "what is sean into",
-        "what is tester into",
-        "tell me about sean",
-        "tell me about tester",
-        "know about tester",
-        "know about sean",
+    )
+
+    # Generic "ask about a person" phrasing. On its own this is too broad to
+    # force guest-profile routing (e.g. "tell me about the weather"), so it
+    # only counts when paired with an actual registered guest's name via
+    # _message_mentions_guest_name — see _needs_guest_profile_review.
+    _GUEST_PROFILE_PERSON_QUERY_SIGNALS = (
+        "tell me about",
+        "who is",
+        "what is",
+        "what's",
+        "know about",
+        "into",
     )
 
     _GUEST_ACCOUNTS_SIGNALS = (
@@ -338,9 +345,19 @@ class OrchestratorRoutingMixin:
 
     def _needs_guest_profile_review(self, message: str) -> bool:
         lowered = message.lower()
+        mentions_known_guest = self._message_mentions_guest_name(message)
+
+        # A message naming an actual registered guest plus any "ask about a
+        # person" phrasing is unambiguous, regardless of which name it is —
+        # don't require the name to be hardcoded into a phrase list.
+        if mentions_known_guest and any(
+            sig in lowered for sig in self._GUEST_PROFILE_PERSON_QUERY_SIGNALS
+        ):
+            return True
+
         if not any(sig in lowered for sig in self._GUEST_PROFILE_SIGNALS):
             return False
-        if self._message_mentions_guest_name(message):
+        if mentions_known_guest:
             return True
         return any(
             w in lowered
@@ -348,7 +365,6 @@ class OrchestratorRoutingMixin:
                 "guest",
                 "tester",
                 "nephew",
-                "sean",
                 "family",
                 "user",
                 "profile",
@@ -361,6 +377,32 @@ class OrchestratorRoutingMixin:
         if self._needs_guest_profile_review(message):
             return True
         return self._needs_guest_audit_review(message) or self._needs_guest_accounts_list(message)
+
+    # Owner asks about accumulated cross-session knowledge (recurring bugs,
+    # durable project facts) — distinct from guest-profile signals above,
+    # which require either a registered guest name or explicit guest/tester
+    # wording, so there's no overlap with these project-level phrases.
+    _KNOWLEDGE_LOG_SIGNALS = (
+        "recurring bug",
+        "recurring bugs",
+        "recurring error",
+        "recurring errors",
+        "recurring issue",
+        "recurring issues",
+        "keeps happening",
+        "keeps breaking",
+        "keep happening",
+        "keep breaking",
+        "what bugs keep",
+        "what do you know about this project",
+        "what do you know about the project",
+        "project facts",
+        "accumulated knowledge",
+    )
+
+    def _needs_knowledge_log_review(self, message: str) -> bool:
+        lowered = message.lower()
+        return any(sig in lowered for sig in self._KNOWLEDGE_LOG_SIGNALS)
 
     async def _requires_orchestrator_for_input(self, user_input: str) -> bool:
         """True when answering requires tools (ingested docs or live web search)."""
@@ -593,9 +635,7 @@ class OrchestratorRoutingMixin:
         Returns:
             True if it's casual conversation
         """
-        if conversation_history and self._is_conversation_follow_up(
-            message, conversation_history
-        ):
+        if conversation_history and self._is_conversation_follow_up(message, conversation_history):
             return False
 
         lowered = message.lower()

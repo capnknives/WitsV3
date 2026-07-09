@@ -136,6 +136,12 @@ self_repair:
   log_scan_lines: 2000
   restart_after_fix: false  # keep off by default so a scheduled repair never surprises an active session
   test_timeout_seconds: 120
+knowledge_log:
+  # Cross-session aggregation of recurring errors (fed by self_repair's log
+  # scan) and durable project facts. See core/knowledge_log.py.
+  file_path: data/knowledge_log.json
+  max_error_signatures: 200
+  max_facts: 200
 docker:
   background_agents:
     cpu_limit: "1.0"

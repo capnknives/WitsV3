@@ -232,7 +232,8 @@ class GuestAccessSettings(BaseModel):
         default=False, description="Let guests use document_search on owner-ingested docs"
     )
     audit_chat: bool = Field(
-        default=True, description="Append guest turns to data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl"
+        default=True,
+        description="Append guest turns to data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl",
     )
     content_policy_enabled: bool = Field(
         default=True, description="Block inappropriate guest input/output (family-friendly)"
@@ -409,6 +410,20 @@ class SelfRepairSettings(BaseModel):
     )
 
 
+class KnowledgeLogSettings(BaseModel):
+    """Cross-session aggregation of recurring errors and durable project facts
+    (data/knowledge_log.json) — separate from per-guest profiles and from
+    general conversational memory."""
+
+    file_path: str = Field(
+        default="data/knowledge_log.json", description="Path to the knowledge log JSON file"
+    )
+    max_error_signatures: int = Field(
+        default=200, gt=0, description="Cap on distinct tracked error signatures"
+    )
+    max_facts: int = Field(default=200, gt=0, description="Cap on stored durable facts")
+
+
 class WitsV3Config(BaseModel):
     project_name: str = Field(default="WitsV3")
     version: str = Field(default="3.0.0")
@@ -433,6 +448,7 @@ class WitsV3Config(BaseModel):
     model_routing: ModelRoutingSettings = Field(default_factory=ModelRoutingSettings)
     web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
     self_repair: SelfRepairSettings = Field(default_factory=SelfRepairSettings)
+    knowledge_log: KnowledgeLogSettings = Field(default_factory=KnowledgeLogSettings)
 
     class Config:
         validate_assignment = True

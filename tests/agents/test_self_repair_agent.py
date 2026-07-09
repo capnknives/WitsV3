@@ -11,6 +11,7 @@ from agents.self_repair_agent import (
     extract_file_mention,
 )
 from core.config import WitsV3Config
+from core.knowledge_log import KnowledgeLogStore
 from core.llm_interface import BaseLLMInterface
 from core.schemas import StreamData
 
@@ -86,7 +87,7 @@ async def test_no_issues_found_reports_nothing_to_repair():
 
 
 @pytest.mark.asyncio
-async def test_falls_back_to_test_suite_when_no_file_named_and_no_log_issues():
+async def test_falls_back_to_test_suite_when_no_file_named_and_no_log_issues(tmp_path):
     """2026-07-08 finding: a vague 'find bugs in the codebase' request with no
     resolvable log traceback previously had no path to inspect the codebase
     at all. Falls back to running the real test suite and parsing failures
@@ -122,6 +123,7 @@ async def test_falls_back_to_test_suite_when_no_file_named_and_no_log_issues():
     )
     llm = ScriptedLLM("```python\ndef broken():\n    return 0\n```")
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=registry)
+    agent.knowledge_log = KnowledgeLogStore(tmp_path / "knowledge_log.json")
 
     try:
         streams = [item async for item in agent.run("find and fix any bugs in the codebase")]
@@ -171,6 +173,7 @@ async def test_targets_a_file_named_in_the_request(tmp_path, monkeypatch):
     registry = _fake_registry({"apply_code_fix": MagicMock(execute=fix_execute)})
     llm = ScriptedLLM("```python\ndef broken():\n    return 0\n```")
     agent = SelfRepairAgent("TestSelfRepair", WitsV3Config(), llm, tool_registry=registry)
+    agent.knowledge_log = KnowledgeLogStore(tmp_path / "knowledge_log.json")
 
     try:
         streams = [

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from core.knowledge_log import KnowledgeLogStore
 from tools.self_repair_tools import (
     ApplyCodeFixTool,
     DiagnoseLogErrorsTool,
@@ -62,10 +63,14 @@ async def test_diagnose_log_errors_tool_reads_real_log_file(tmp_path, monkeypatc
     log_file = tmp_path / "witsv3.log"
     log_file.write_text(SAMPLE_LOG, encoding="utf-8")
     tool.log_path = log_file
+    tool.knowledge_log = KnowledgeLogStore(tmp_path / "knowledge_log.json")
 
     result = await tool.execute(lines=100, max_issues=5)
     assert result["success"] is True
     assert result["count"] >= 1
+
+    logged = tool.knowledge_log._load()
+    assert logged["errors"], "expected the scanned issues to be recorded"
 
 
 @pytest.mark.asyncio
