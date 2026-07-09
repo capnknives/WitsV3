@@ -202,9 +202,10 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 
 | Item | Verdict |
 |------|---------|
-| Adaptive LLM stack | ✅ Archived July 8 → `docs/archive/adaptive_llm/core/` (superseded by `model_router.py`; `test_adaptive_llm.py` + `tests/config.yaml` removed). Root `torch.py` shim deleted |
-| Synthetic brain / cognitive cluster | ✅ Archived July 8 → `docs/archive/synthetic_brain/` (`memory_handler`, `cognitive_architecture`, stubs, integration + tests) |
-| `docs/archive/gui/` | ✅ Pruned Phase 2a (July 8) — stub + tag `archive-pre-prune-2026-07`; web UI is the client |
+| Adaptive LLM stack | ✅ Archived July 8; **pruned Phase 2b** — stub `docs/archive/adaptive_llm/README.md` + tag `archive-pre-prune-2b-2026-07` (superseded by `model_router.py`) |
+| Synthetic brain / cognitive cluster | ✅ Archived July 8; **pruned Phase 2b** — stub README + tag (historical docs under `historical-docs/`) |
+| `docs/archive/gui/` | ✅ Pruned Phase 2a — stub + tag `archive-pre-prune-2026-07`; web UI is the client |
+| `docs/archive/sphinx/` | ✅ Pruned Phase 2b — stub README; Markdown docs are canonical |
 | Supabase | Optional; skip in default install docs |
 | Synthetic brain doc set | Historical — entry [`SYNTHETIC_BRAIN.md`](../archive/historical-docs/SYNTHETIC_BRAIN.md) |
 | Root `TASK.md` / `PLANNING.md` | Redirects only |
@@ -217,7 +218,7 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 | **0 — Safe deletes** | ✅ Done | Removed `models/` (dummy adaptive-LLM safetensors), `WitsV3/` stray package, `enhanced_config_with_fallback.txt`; moved `debug_init.py` + `fix_neural_web.py` → `scripts/` |
 | **1 — Doc consolidation** | ✅ Done | Merged `planning/` into `docs/`; `planning/` is redirect stub |
 | **2a — GUI archive prune** | ✅ Done | Tag `archive-pre-prune-2026-07`; removed 61 files under `docs/archive/gui/` (stub README remains) |
-| **2b — Further archive prune** | Pending | Optional: `adaptive_llm/core/`, `sphinx/`, synthetic_brain code copies |
+| **2b — Further archive prune** | ✅ Done | Tag `archive-pre-prune-2b-2026-07`; removed 27 files (`adaptive_llm/core/`, `sphinx/`, synthetic_brain code); stub READMEs remain |
 | **3 — Runtime `var/` layout** | Pending | Centralize paths in config first |
 | **4 — Root surface cleanup** | Pending | Instruction-file redirects |
 

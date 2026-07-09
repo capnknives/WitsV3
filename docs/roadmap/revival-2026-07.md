@@ -175,3 +175,4 @@ tracked in [`suggested-features-2026-07.md`](suggested-features-2026-07.md) § P
 - **Phase 0** — removed dead root artifacts (`models/`, `WitsV3/`, orphan config); utility scripts → `scripts/`
 - **Phase 1** — merged `planning/` into `docs/`; `planning/` redirect stub only
 - **Phase 2a** — tagged `archive-pre-prune-2026-07`; pruned 61 files from `docs/archive/gui/` (PyQt6 + book GUI); stub README + git tag for recovery
+- **Phase 2b** — tagged `archive-pre-prune-2b-2026-07`; pruned 27 files (`adaptive_llm/core/`, `sphinx/`, synthetic_brain code); stub READMEs + tag for recovery

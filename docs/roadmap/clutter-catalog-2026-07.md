@@ -200,8 +200,9 @@ Canonical: `suggested-features-2026-07.md` (forward) + `revival-2026-07.md` (shi
 2. ✅ Delete root `torch.py` (unused after adaptive archive).
 
 ### Wave C — Archive dormant clusters
-1. ✅ **DONE July 8 2026** — Adaptive LLM + `core/adaptive/` → `docs/archive/adaptive_llm/core/`; `tests/test_adaptive_llm.py` + `tests/config.yaml` removed.
-2. ✅ **DONE July 8 2026** — Synthetic brain + cognitive + `memory_handler` → `docs/archive/synthetic_brain/`.
+1. ✅ **DONE July 8 2026** — Adaptive LLM + `core/adaptive/` → `docs/archive/adaptive_llm/`; `tests/test_adaptive_llm.py` + `tests/config.yaml` removed; **code pruned Phase 2b** (tag `archive-pre-prune-2b-2026-07`).
+2. ✅ **DONE July 8 2026** — Synthetic brain + cognitive + `memory_handler` → `docs/archive/synthetic_brain/`; **code pruned Phase 2b**.
+3. ✅ **DONE July 8 2026 (Phase 2b)** — Unused Sphinx stubs → pruned; stub README under `docs/archive/sphinx/`.
 
 ### Wave D — Product decisions (don’t delete until decided)
 1. Neural stack (`working_memory`, `knowledge_graph`, `cross_domain_learning`, neural orchestrator): **ship as default** or **mark research-only** in README.
