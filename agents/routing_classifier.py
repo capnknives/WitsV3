@@ -23,6 +23,7 @@ RouteDestination = Literal[
     "guest_chat_history",
     "guest_profile",
     "knowledge_log",
+    "codebase_intro",
 ]
 
 # --- shared signal lists (single source of truth for routing heuristics) ---
@@ -90,18 +91,49 @@ FILE_SAVE_SIGNALS = (
     "save this conversation",
     "save our conversation",
     "save the conversation",
+    "save a copy",
+    "save a copy of",
     "save to file",
     "save to a file",
     "save to disk",
+    "save as",
     "write to file",
     "write it to",
     "export conversation",
+    "export this chat",
     "log of our conversation",
     "save a log",
     "save this chat",
     "write the story",
     "save the story",
     "save as a file",
+)
+
+CODEBASE_INTRO_SIGNALS = (
+    "your codebase",
+    "your own files",
+    "your own code",
+    "tell me about yourself",
+    "look at your code",
+    "look at your files",
+    "look at your own files",
+    "read your own files",
+    "actually look at your",
+    "wits v3",
+    "this codebase",
+    "about your code",
+    "about the codebase",
+    "about yourself",
+    "this project",
+)
+
+CODEBASE_AUTHORING_VERBS = (
+    "create",
+    "write",
+    "generate",
+    "build",
+    "implement",
+    "scaffold",
 )
 
 SELF_REPAIR_SIGNALS = (
@@ -351,6 +383,16 @@ class RouteDecision:
                 "notes": self.orchestrator_notes or self.reason,
                 "confidence": 0.85,
             }
+        if self.destination == "codebase_intro":
+            return {
+                "type": "task",
+                "complexity": "moderate",
+                "requires_tools": True,
+                "suggested_response": "orchestrator",
+                "routing_destination": "codebase_intro",
+                "notes": self.orchestrator_notes or self.reason,
+                "confidence": 0.9,
+            }
         if self.destination in ("guest_chat_history", "guest_profile", "knowledge_log"):
             return {
                 "type": "task",
@@ -398,7 +440,38 @@ def needs_web_search(message: str) -> bool:
 
 def needs_file_write(message: str) -> bool:
     lowered = message.lower()
+    if needs_story_writing(message) and not any(
+        s in lowered
+        for s in ("conversation", "chat", "copy of", "export conversation", "log of our")
+    ):
+        return False
     return any(sig in lowered for sig in FILE_SAVE_SIGNALS)
+
+
+def needs_codebase_intro(message: str) -> bool:
+    lowered = message.lower()
+    return any(sig in lowered for sig in CODEBASE_INTRO_SIGNALS)
+
+
+def is_code_introspection_not_authoring(message: str) -> bool:
+    """True when the user wants to read/describe the project, not author new code."""
+    lowered = message.lower()
+    intro_hints = (
+        "codebase",
+        "your code",
+        "your files",
+        "your own files",
+        "your own code",
+        "yourself",
+        "this project",
+        "wits",
+        "about you",
+        "look at your",
+        "read your",
+    )
+    if not any(h in lowered for h in intro_hints):
+        return False
+    return not any(v in lowered for v in CODEBASE_AUTHORING_VERBS)
 
 
 def needs_self_repair(message: str) -> bool:
@@ -674,6 +747,21 @@ def classify_message(ctx: RoutingContext) -> RouteDecision:
             "Owner project knowledge query — direct knowledge log tool.",
         )
 
+    if needs_file_write(message):
+        return RouteDecision(
+            "orchestrator",
+            "Save/export to file — routing to orchestrator.",
+            "Save/export to file — routing to orchestrator for "
+            "read_conversation_history + write_file.",
+        )
+
+    if needs_codebase_intro(message):
+        return RouteDecision(
+            "codebase_intro",
+            "Codebase introspection — read project files before answering.",
+            "Read README.md, AGENTS.md, and key architecture docs via filesystem tools.",
+        )
+
     if role != "guest" and needs_self_repair(message):
         return RouteDecision(
             "self_repair",
@@ -688,12 +776,7 @@ def classify_message(ctx: RoutingContext) -> RouteDecision:
 
     if requires_orchestrator(message, ctx.doc_inventory):
         notes = "Routing to orchestrator for tool use."
-        if needs_file_write(message):
-            notes = (
-                "Save/export to file — routing to orchestrator for "
-                "read_conversation_history + write_file."
-            )
-        elif needs_web_search(message):
+        if needs_web_search(message):
             notes = (
                 "Needs current/external info or an explicit lookup — "
                 "routing to orchestrator for web_search."

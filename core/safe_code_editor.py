@@ -33,7 +33,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Matches a project-relative-looking path ending in a common source
 # extension, e.g. "agents/base_agent.py" or "core/config.py:42".
 _FILE_MENTION_RE = re.compile(r"\b([\w./\\-]+\.(?:py|ts|js|json|yaml|yml))\b(?::(\d+))?")
-_FENCE_RE = re.compile(r"```(?:\w+)?\n(.*?)```", re.DOTALL)
+_FENCE_RE = re.compile(r"```(?:\w+)?\s*\n?(.*?)```", re.DOTALL)
 
 
 def extract_file_mention(text: str) -> tuple[str, int | None] | None:
@@ -58,8 +58,15 @@ def extract_file_mention(text: str) -> tuple[str, int | None] | None:
 
 def extract_code_from_response(response: str) -> str:
     """Pull code out of a fenced code block if present, else return as-is."""
-    match = _FENCE_RE.search(response)
-    return match.group(1) if match else response
+    from core.json_llm_parser import strip_think_blocks
+
+    cleaned = strip_think_blocks(response or "")
+    match = _FENCE_RE.search(cleaned)
+    if match:
+        return match.group(1).strip()
+    if re.search(r"^\s*(import |from |def |class )", cleaned, re.MULTILINE):
+        return cleaned.strip()
+    return cleaned.strip()
 
 
 @dataclass

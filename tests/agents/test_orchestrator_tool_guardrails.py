@@ -107,6 +107,49 @@ def test_save_file_path_from_goal():
     assert path == "var/exports/chat_log_report_failure.txt"
 
 
+def test_save_file_path_extensionless_importantissues01():
+    h = _harness()
+    path = h._save_file_path_from_goal("Save a copy of our conversation as importantissues01")
+    assert path == "var/exports/importantissues01.txt"
+
+
+def test_blocks_repeat_list_mcp_tools():
+    h = _harness()
+    state = {
+        "goal": "Please open microsoft edge",
+        "observations": [
+            "Tool list_mcp_tools result: []",
+            "Tool list_mcp_tools result: []",
+        ],
+        "tool_repeat_failures": {},
+        "tool_total_failures": {},
+    }
+    msg = h._preflight_tool_call("list_mcp_tools", {}, state)
+    assert msg is not None
+    assert "Skipped repeat list_mcp_tools" in msg
+
+
+def test_allows_read_file_for_codebase_intro_with_ingested_docs():
+    h = _harness()
+    state = _state_with_docs()
+    state["goal"] = "What can you tell me about your codebase wits?"
+    msg = h._preflight_tool_call("read_file", {"file_path": "README.md"}, state)
+    assert msg is None
+
+
+def test_blocks_web_search_on_pure_math_goal():
+    h = _harness()
+    state = {
+        "goal": "what is the square-root of 75231",
+        "observations": [],
+        "tool_repeat_failures": {},
+        "tool_total_failures": {},
+    }
+    msg = h._preflight_tool_call("web_search", {"query": "sqrt 75231"}, state)
+    assert msg is not None
+    assert "Blocked web_search" in msg
+
+
 def test_blocks_document_search_on_web_lookup_goal():
     h = _harness()
     state = {

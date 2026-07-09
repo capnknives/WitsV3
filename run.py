@@ -115,7 +115,14 @@ class WitsV3System:
 
     async def initialize(self):
         """Initialize all system components."""
-        try:            # Initialize LLM interface with model reliability
+        try:
+            from core.session_store import load_persisted_sessions_into
+
+            root = self.config.runtime_paths.root
+            restored = load_persisted_sessions_into(self.session_histories, root)
+            if restored:
+                logger.info("Restored %s persisted chat session(s) from disk", restored)
+            # Initialize LLM interface with model reliability
             from core.enhanced_llm_interface import get_enhanced_llm_interface
             self.llm_interface = get_enhanced_llm_interface(self.config)
             logger.info("Enhanced LLM interface with model reliability initialized")
@@ -470,6 +477,12 @@ class WitsV3System:
 
             final_response = "\n".join(response_parts)
             conversation.add_message("assistant", final_response)
+            try:
+                from core.session_store import persist_session
+
+                persist_session(conversation, self.config.runtime_paths.root)
+            except Exception as persist_err:
+                logger.warning("Session persist failed: %s", persist_err)
 
             return final_response
 
@@ -477,6 +490,12 @@ class WitsV3System:
             error_msg = format_cli_error(e, self.config.ollama_settings.url)
             logger.error(f"Error processing request: {e}")
             conversation.add_message("assistant", error_msg)
+            try:
+                from core.session_store import persist_session
+
+                persist_session(conversation, self.config.runtime_paths.root)
+            except Exception as persist_err:
+                logger.warning("Session persist failed: %s", persist_err)
             return error_msg
 
     def _format_stream_data(self, stream_data: StreamData) -> str:

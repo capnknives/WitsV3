@@ -155,6 +155,11 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         }
         self._react_state_for_tools = react_state
 
+        bootstrap = getattr(self, "_bootstrap_codebase_intro", None)
+        if bootstrap:
+            async for stream_data in bootstrap(react_state, session_id):
+                yield stream_data
+
         try:
             # Execute ReAct loop
             async for stream_data in self._execute_react_loop(react_state, session_id):
@@ -394,6 +399,27 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             importance=0.8,
             metadata={"tool_name": tool_name, "session_id": session_id},
         )
+
+        if (
+            tool_name == "write_file"
+            and self._goal_saves_conversation(state.get("goal", ""))
+            and not self._observation_indicates_failure(observation)
+        ):
+            file_path = tool_args.get("file_path") or self._save_file_path_from_goal(
+                state.get("goal", "")
+            )
+            min_bytes = self._save_export_min_bytes(state)
+            if file_path and not self._write_result_verified(
+                file_path, observation, min_bytes=min_bytes
+            ):
+                size_err = (
+                    f"Tool write_file failed: export at {file_path} is too small "
+                    f"(need at least {min_bytes} bytes for this session)."
+                )
+                state["observations"][-1] = size_err
+                self._record_tool_failure(tool_name, tool_args, state)
+                yield self.stream_error(size_err)
+                return
 
         # Save-to-file: after transcript is read, write immediately — the model
         # often loops on read_conversation_history and never reaches write_file.

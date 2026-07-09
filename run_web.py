@@ -69,6 +69,7 @@ _RELOAD_IGNORED_DIR_PARTS = (
     "/data/",
     "/memory/",
     "/exports/",
+    "/sessions/",
     "/documents/",
     "/workspace/",
     "/node_modules/",

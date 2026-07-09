@@ -294,6 +294,34 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
+        # Save/export must reach the orchestrator before specialized agents
+        # (2026-07-08: "save our conversation as debugthisoneplz" hit SystemDoctor).
+        if self._needs_file_write(user_input) and self.orchestrator_agent:
+            yield self.stream_thinking("Saving conversation to file via orchestrator...")
+            async for stream_data in self.orchestrator_agent.run(
+                user_input=user_input,
+                conversation_history=conversation_history,
+                session_id=session_id,
+                user_role=getattr(self, "_request_user_role", "owner"),
+                guest_profile=getattr(self, "_request_guest_profile", None),
+                guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
+            ):
+                yield stream_data
+            return
+
+        if routing_destination == "codebase_intro" and self.orchestrator_agent:
+            yield self.stream_thinking("Reading project files for codebase overview...")
+            async for stream_data in self.orchestrator_agent.run(
+                user_input=user_input,
+                conversation_history=conversation_history,
+                session_id=session_id,
+                user_role=getattr(self, "_request_user_role", "owner"),
+                guest_profile=getattr(self, "_request_guest_profile", None),
+                guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
+            ):
+                yield stream_data
+            return
+
         yield self.stream_thinking(
             f"Determined intent: {intent_type}, complexity: {complexity}, response: {suggested_response}"
         )
@@ -655,6 +683,12 @@ ASSISTANT:"""
                 self.logger.warning("Book writing agent requested but not available")
 
         # Check for coding related tasks
+        from agents.routing_classifier import is_code_introspection_not_authoring
+
+        if is_code_introspection_not_authoring(goal_statement):
+            self.logger.info("Code introspection request — skip coding agent")
+            return None
+
         coding_keywords = [
             "code",
             "program",

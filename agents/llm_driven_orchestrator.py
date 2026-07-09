@@ -217,7 +217,8 @@ Important:
 - If the goal needs current, recent, or post-training information (news, events, dates, who did/won/died something, prices, weather) and web_search is available, you MUST call web_search. NEVER answer such questions from memory or refuse by citing a knowledge/training cutoff.
 - web_search is for the public web. document_search ONLY searches the user's own uploaded private files — do NOT use it for general knowledge, current events, or public figures; it returns unrelated personal documents and will mislead you.
 - When the goal asks about the user's documents, notes, files, or a named report, you MUST call document_search before answering. The USER DOCUMENTS list above is authoritative — if a file is listed there, it exists and is searchable; never claim it is missing or that you lack access. Use tool_args like {{"query": "summary main findings", "file_name": "Report.md"}} — query is required; file_name is optional to narrow to one file. NEVER use read_file, list_directory, or ingest_documents for ingested uploads — document_search already has the content.
-+- MCP tools (names starting with mcp_) are live when connected via the /mcp page. If the user asks whether an MCP server/tool is available, call list_mcp_tools first, then use the matching mcp_* tool. Never claim an MCP tool is unavailable without checking list_mcp_tools.
++- MCP tools (names starting with mcp_) are live when connected via the /mcp page. If the user asks whether an MCP server/tool is available, call list_mcp_tools ONCE, then use the matching mcp_* tool or explain the limitation. Never call list_mcp_tools more than twice.
++- For pure math (sqrt, arithmetic, percentages): use calculator once — do NOT call web_search unless calculator failed.
 - ingest_documents takes NO arguments (empty tool_args {{}}). Do not pass arg1 or other placeholder keys.
 - read_file requires {{"file_path": "/path/to/file"}}. list_directory requires {{"directory_path": "/path/to/dir"}}. Do not call them without those keys.
 - To save/export conversation or chat to disk: call read_conversation_history once with empty tool_args {{}} — the system will auto-write to the path in the goal (if present) and finish. Do NOT call read_conversation_history repeatedly. Only call write_file yourself if auto-save did not run.
@@ -283,9 +284,7 @@ Respond ONLY with valid JSON."""
             # Large write_file bodies in ReAct JSON cause parse failures — strip
             # them; _prepare_tool_args fills content from session/observations.
             if parsed.get("tool_name") == "write_file":
-                content = parsed["tool_args"].get("content")
-                if isinstance(content, str) and len(content) > 300:
-                    parsed["tool_args"].pop("content", None)
+                parsed["tool_args"].pop("content", None)
 
         elif parsed["action_type"] == "final_answer":
             if "final_answer" not in parsed:

@@ -29,7 +29,7 @@ def project_root() -> Path:
 
 RUNTIME_ROOT_NAME = "var"
 
-SUBDIRS = ("data", "documents", "exports", "logs", "workspace", "cache")
+SUBDIRS = ("data", "documents", "exports", "logs", "workspace", "cache", "sessions")
 
 
 def runtime_root(root: str = RUNTIME_ROOT_NAME) -> Path:
@@ -62,6 +62,10 @@ def workspace_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
 
 def cache_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
     return runtime_subdir("cache", root)
+
+
+def sessions_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
+    return runtime_subdir("sessions", root)
 
 
 def main_log_path(root: str = RUNTIME_ROOT_NAME) -> Path:

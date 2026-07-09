@@ -112,6 +112,14 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
 
         self.logger.info("Advanced Coding Agent initialized")
 
+    def get_model_name(self) -> str:
+        """Code generation uses the dedicated coder model when routing is enabled."""
+        return self.model_router.route(
+            "python code generation",
+            default=self.config.model_routing.code_model,
+            allow_trivial=False,
+        )
+
     async def run(
         self,
         user_input: str,
@@ -139,9 +147,20 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
                 yield stream
             return
 
-        yield self.stream_thinking("Analyzing coding request...")
-
-        task_analysis = await self._analyze_coding_task(user_input)
+        if self._user_wants_workspace_write(user_input):
+            task_analysis = {
+                "task_type": "write_code",
+                "language": "python",
+                "project_type": "script",
+                "complexity": "medium",
+                "requirements": [user_input[:200]],
+                "frameworks": [],
+                "parameters": {},
+            }
+            yield self.stream_thinking("Workspace write request — generating script...")
+        else:
+            yield self.stream_thinking("Analyzing coding request...")
+            task_analysis = await self._analyze_coding_task(user_input)
 
         yield self.stream_thinking(f"Identified task: {task_analysis['task_type']}")
 
@@ -150,7 +169,9 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
                 yield stream
 
         elif task_analysis["task_type"] == "write_code":
-            async for stream in self._handle_code_generation(task_analysis, session_id):
+            async for stream in self._handle_code_generation(
+                task_analysis, session_id, user_input=user_input
+            ):
                 yield stream
 
         elif task_analysis["task_type"] == "analyze_code":

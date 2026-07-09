@@ -82,7 +82,7 @@ async def test_prepare_read_conversation_history_injects_session():
     assert args["max_messages"] == 0
 
 
-def test_validate_reasoning_strips_huge_write_file_content():
+def test_validate_reasoning_strips_write_file_content():
     orch = LLMDrivenOrchestrator(
         agent_name="Test",
         config=WitsV3Config(),
@@ -99,3 +99,31 @@ def test_validate_reasoning_strips_huge_write_file_content():
     result = orch._validate_reasoning(parsed)
     assert "content" not in result["tool_args"]
     assert result["tool_args"]["file_path"] == "big.txt"
+
+
+@pytest.mark.asyncio
+async def test_prepare_write_file_save_a_copy_injects_content():
+    """Transcript a42ee2e0: 'Save a copy of our conversation as importantissues01'."""
+    h = _harness()
+    state = {
+        "goal": "Save a copy of our conversation as importantissues01",
+        "conversation_history": _conversation(),
+        "observations": [],
+    }
+    args = await h._prepare_tool_args(
+        "write_file", {"file_path": "importantissues01.txt", "content": ""}, state
+    )
+    assert args["file_path"] == "var/exports/importantissues01.txt"
+    assert "USER: Tell me a story" in args["content"]
+
+
+def test_save_file_path_extensionless_name():
+    h = _harness()
+    path = h._save_file_path_from_goal("save our conversation as debugthisoneplz")
+    assert path == "var/exports/debugthisoneplz.txt"
+
+
+def test_normalize_calculator_square_root_args():
+    h = _harness()
+    args = h._normalize_calculator_args({"operation": "square_root", "value": 75231})
+    assert args["expression"] == "sqrt(75231)"

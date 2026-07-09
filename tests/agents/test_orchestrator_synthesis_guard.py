@@ -158,3 +158,41 @@ def test_auto_synthesize_returns_insufficient_evidence_message():
     text = h._auto_synthesize_from_observations(state)
     assert text is not None
     assert "didn't find passages" in text
+
+
+def _codebase_state():
+    return {
+        "goal": "What can you tell me about your codebase wits?",
+        "observations": [
+            "Tool read_file result: # WitsV3\n\nA local-first LLM orchestration system. "
+            "Talk to it in a browser; it plans with a ReAct loop and calls real tools."
+        ],
+        "synthesis_guard_retries": 0,
+    }
+
+
+def test_blocks_witwatersrand_hallucination_on_codebase_intro():
+    h = _harness()
+    msg = h._validate_final_answer_synthesis(
+        "Wits University, also known as the University of the Witwatersrand, uses GitHub.",
+        _codebase_state(),
+    )
+    assert msg is not None
+    assert "external organization" in msg or "WitsV3" in msg
+
+
+def test_allows_grounded_codebase_answer():
+    h = _harness()
+    msg = h._validate_final_answer_synthesis(
+        "WitsV3 is a local-first LLM orchestration system using Ollama and a ReAct orchestrator.",
+        _codebase_state(),
+    )
+    assert msg is None
+
+
+def test_auto_synthesize_from_codebase_read_file():
+    h = _harness()
+    state = _codebase_state()
+    text = h._auto_synthesize_from_observations(state)
+    assert text is not None
+    assert "WitsV3" in text or "local-first" in text

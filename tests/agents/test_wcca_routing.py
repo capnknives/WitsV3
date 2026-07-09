@@ -613,11 +613,15 @@ async def test_current_info_routes_to_orchestrator(wcca, message):
     [
         "Please save this conversation to a file",
         "Save a log of our conversations as a file",
-        "write the story to disk as goku.txt",
     ],
 )
 def test_save_to_file_needs_orchestrator(wcca, message):
     assert wcca._needs_file_write(message) is True
+
+
+def test_story_save_does_not_trigger_chat_export_routing(wcca):
+    """Story saves go to book-writing, not chat export orchestrator."""
+    assert wcca._needs_file_write("write the story to disk as goku.txt") is False
 
 
 @pytest.mark.asyncio
@@ -633,6 +637,41 @@ async def test_save_to_file_routes_to_orchestrator(wcca, message):
     assert intent["suggested_response"] == "orchestrator"
     assert intent["requires_tools"] is True
     assert "write_file" in intent["notes"] or "save" in intent["notes"].lower()
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "save our conversation as debugthisoneplz",
+        "Save a copy of our conversation as importantissues01",
+    ],
+)
+def test_transcript_a42ee2e0_save_phrases_need_file_write(wcca, message):
+    assert wcca._needs_file_write(message) is True
+
+
+@pytest.mark.asyncio
+async def test_transcript_a42ee2e0_debug_save_routes_orchestrator_not_self_repair(wcca):
+    intent = await wcca._analyze_user_intent("save our conversation as debugthisoneplz", None)
+    assert intent["suggested_response"] == "orchestrator"
+    assert intent.get("specialized_agent") != "self_repair"
+
+
+@pytest.mark.asyncio
+async def test_codebase_question_routes_codebase_intro(wcca):
+    intent = await wcca._analyze_user_intent(
+        "What can you tell me about your codebase wits?", None
+    )
+    assert intent["suggested_response"] == "orchestrator"
+    assert intent.get("routing_destination") == "codebase_intro"
+
+
+@pytest.mark.asyncio
+async def test_code_introspection_skips_coding_agent(wcca_with_specialists):
+    agent = await wcca_with_specialists._select_specialized_agent(
+        "No, I want you to actually look at your own files, the code."
+    )
+    assert agent is None
 
 
 # ------------------------------------------------------- intent parsing

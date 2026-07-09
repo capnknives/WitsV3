@@ -1,18 +1,74 @@
 # agents/coding_handlers.py
 """Task handler mixins for the advanced coding agent."""
 
+import re
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.coding_models import CodeProject
 from core.runtime_paths import workspace_subpath
-from core.safe_code_editor import PROJECT_ROOT, extract_code_from_response
+from core.safe_code_editor import PROJECT_ROOT, extract_code_from_response, resolve_within_project, run_py_compile
 from core.schemas import StreamData
 
 
 class CodingHandlersMixin:
     """Mixin providing coding task handlers and project structure generation."""
+
+    @staticmethod
+    def _user_wants_workspace_write(user_input: str) -> bool:
+        lowered = user_input.lower()
+        if any(
+            p in lowered
+            for p in (
+                "allowed file area",
+                "workspace",
+                "write to disk",
+                "save to",
+                "write to file",
+                "on disk",
+            )
+        ):
+            return True
+        return "script" in lowered and any(
+            v in lowered for v in ("create", "write", "generate", "make", "recreate")
+        )
+
+    @staticmethod
+    def _workspace_slug_and_filename(user_input: str) -> tuple[str, str]:
+        lowered = user_input.lower()
+        if "pong" in lowered:
+            return "pong", "pong.py"
+        match = re.search(r"\b(\w+)\s+script\b", lowered)
+        if match:
+            slug = match.group(1)
+            return slug, f"{slug}.py"
+        return "generated_script", "main.py"
+
+    async def _write_generated_script(
+        self,
+        user_input: str,
+        generated_code: str,
+        session_id: str,
+    ) -> str | None:
+        """Extract code from LLM output and write under workspace/<slug>/."""
+        code = extract_code_from_response(generated_code)
+        if not code.strip():
+            return None
+
+        slug, filename = self._workspace_slug_and_filename(user_input)
+        rel_path = f"{workspace_subpath(slug)}/{filename}"
+        resolved = resolve_within_project(rel_path)
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        resolved.write_text(code, encoding="utf-8")
+
+        if filename.endswith(".py"):
+            ok, err = await run_py_compile(resolved)
+            if not ok:
+                resolved.unlink(missing_ok=True)
+                raise RuntimeError(f"py_compile failed: {err}")
+
+        return str(resolved.relative_to(PROJECT_ROOT)).replace("\\", "/")
 
     async def _handle_fix_existing_file(
         self,
@@ -218,7 +274,10 @@ class CodingHandlersMixin:
             yield self.stream_action(f"  - {filename}")
 
     async def _handle_code_generation(
-        self, task_analysis: dict[str, Any], session_id: str
+        self,
+        task_analysis: dict[str, Any],
+        session_id: str,
+        user_input: str = "",
     ) -> AsyncGenerator[StreamData, None]:
         """Handle code generation requests"""
 
@@ -227,8 +286,20 @@ class CodingHandlersMixin:
         language = task_analysis.get("language", "python")
         requirements = task_analysis.get("requirements", [])
         complexity = task_analysis.get("complexity", "medium")
+        write_to_workspace = bool(user_input and self._user_wants_workspace_write(user_input))
 
-        code_prompt = f"""
+        if write_to_workspace:
+            code_prompt = f"""
+Write complete runnable {language} code for this request (code only inside one ```python fence):
+{user_input}
+
+Requirements:
+- Under 180 lines; use the stdlib `turtle` module if this is a game
+- No prose outside the fence
+- Runnable as a single script
+"""
+        else:
+            code_prompt = f"""
         Write {complexity} {language} code to implement:
         {' '.join(requirements)}
 
@@ -245,13 +316,54 @@ class CodingHandlersMixin:
 
         yield self.stream_thinking("Writing code implementation...")
         yield self.stream_thinking("Generating code...")
-        generated_code = await self.generate_response(code_prompt, temperature=0.7)
+        code_model = self.model_router.route(
+            user_input or " ".join(requirements),
+            default=self.get_model_name(),
+            allow_trivial=False,
+        )
+        try:
+            generated_code = await self.generate_response(
+                code_prompt,
+                model_name=code_model,
+                temperature=0.3 if write_to_workspace else 0.7,
+                max_tokens=4096 if write_to_workspace else None,
+            )
+        except Exception as e:
+            yield self.stream_error(f"Code generation failed: {e}")
+            return
+
+        if write_to_workspace and not extract_code_from_response(generated_code).strip():
+            retry_prompt = (
+                f"{code_prompt}\n\n"
+                "Your previous reply had no Python code. Reply with ONLY one ```python fence "
+                "containing the full script."
+            )
+            try:
+                generated_code = await self.generate_response(
+                    retry_prompt,
+                    model_name=code_model,
+                    temperature=0.2,
+                    max_tokens=4096,
+                )
+            except Exception as e:
+                yield self.stream_error(f"Code generation retry failed: {e}")
+                return
 
         content_length = len(generated_code)
         for i in range(0, content_length, 500):
             if i > 0:
                 lines = generated_code[:i].count("\n")
                 yield self.stream_action(f"Generated {lines} lines of code...")
+
+        written_path: str | None = None
+        if write_to_workspace:
+            yield self.stream_action("Writing generated code to workspace...")
+            try:
+                written_path = await self._write_generated_script(
+                    user_input, generated_code, session_id
+                )
+            except Exception as e:
+                yield self.stream_error(f"Failed to write script to workspace: {e}")
 
         analysis = await self._analyze_code_quality(generated_code, language)
 
@@ -264,9 +376,12 @@ class CodingHandlersMixin:
                 "lines_of_code": generated_code.count("\n"),
                 "complexity": complexity,
                 "session_id": session_id,
+                "workspace_path": written_path,
             },
         )
 
+        if written_path:
+            yield self.stream_result(f"Wrote script to {written_path}")
         yield self.stream_result("Generated Code:")
         yield self.stream_result(generated_code)
 

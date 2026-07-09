@@ -660,7 +660,9 @@ async function exportCurrentSession() {
     });
     const data = await res.json();
     if (res.ok) {
-      addAssistantMsg(`✅ ${data.message}`);
+      let msg = `✅ ${data.message}`;
+      if (data.warning) msg += `\n⚠ ${data.warning}`;
+      addAssistantMsg(msg);
     } else {
       addAssistantMsg(`Export failed: ${data.detail || res.status}`, true);
     }

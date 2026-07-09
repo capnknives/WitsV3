@@ -439,6 +439,12 @@ def create_app(system) -> FastAPI:
 
                     asyncio.create_task(_refresh_guest_profile())
                 conversation.add_message("assistant", final_text)
+                try:
+                    from core.session_store import persist_session
+
+                    persist_session(conversation, system.config.runtime_paths.root)
+                except Exception as persist_err:
+                    logger.warning("Session persist failed: %s", persist_err)
                 yield sse("done", {"final": final_text})
 
             except Exception as e:
@@ -505,11 +511,20 @@ def create_app(system) -> FastAPI:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(content, encoding="utf-8")
 
+        message_count = len(conversation.messages)
+        warning = None
+        if message_count < 4 and conversation.title and conversation.title != "New chat":
+            warning = (
+                "Export may be incomplete — the server may have restarted and only "
+                f"{message_count} message(s) are stored for this session."
+            )
+
         return {
             "success": True,
             "file_path": str(out_path).replace("\\", "/"),
-            "message_count": len(conversation.messages),
-            "message": f"Exported {len(conversation.messages)} messages to {out_path}",
+            "message_count": message_count,
+            "message": f"Exported {message_count} messages to {out_path}",
+            "warning": warning,
         }
 
     # -------------------------------------------------------- sessions

@@ -262,6 +262,8 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 3. **Phase 2.1:** Ollama model pull/status helper in `/settings` (start here)  
 4. **Phase 2.2–2.6:** MCP health, tool analytics, streaming progress, background-task visibility, offline mode  
 
+**Shipped (July 8 late):** Session persistence (`var/sessions/`) + reliable chat save/export (transcript `chat_export_a42ee2e0` fixes). Optional follow-up: verbose export mode with tool-trace lines (Phase 2.x).
+
 **Also shipped (pre-2.1):** Chat slash-command picker — type `/` for help, new chat, export, panels, owner process controls.
 
 Defer Phase 3 (FAISS default / GraphRAG / neural web) until Phase 2 operator UX is in place.

@@ -35,7 +35,7 @@ def test_migrate_legacy_data_dir(tmp_path, monkeypatch):
 def test_ensure_runtime_layout_creates_subdirs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     ensure_runtime_layout("var")
-    for sub in ("data", "documents", "exports", "logs", "workspace", "cache"):
+    for sub in ("data", "documents", "exports", "logs", "workspace", "cache", "sessions"):
         assert (tmp_path / "var" / sub).is_dir()
 
 

@@ -512,20 +512,37 @@ class CalculatorTool(BaseTool):
     def __init__(self):
         super().__init__(name="calculator", description="Perform basic mathematical calculations")
 
-    async def execute(self, expression: str) -> str:
+    async def execute(self, expression: str = "", **kwargs) -> str:
         """Execute calculation."""
+        import math
+        import re
+
         try:
-            # Basic safety check
-            if any(char in expression for char in ["import", "exec", "eval", "__"]):
+            expr = str(expression or kwargs.get("query") or "").strip()
+            if not expr:
+                op = str(kwargs.get("operation") or "").lower()
+                value = kwargs.get("value")
+                if op in ("square_root", "sqrt") and value is not None:
+                    expr = f"sqrt({value})"
+
+            if not expr:
+                return "Error: No expression provided"
+
+            if any(token in expr.lower() for token in ("import", "exec", "eval", "__")):
                 raise ValueError("Invalid expression")
 
-            # Only allow basic math operations
+            sqrt_match = re.fullmatch(r"sqrt\(([\d.]+)\)", expr.replace(" ", ""), re.IGNORECASE)
+            if sqrt_match:
+                result = math.sqrt(float(sqrt_match.group(1)))
+                self.logger.debug(f"Calculated: {expr} = {result}")
+                return str(result)
+
             allowed_chars = set("0123456789+-*/().,_ ")
-            if not all(c in allowed_chars for c in expression):
+            if not all(c in allowed_chars for c in expr):
                 raise ValueError("Expression contains invalid characters")
 
-            result = eval(expression)
-            self.logger.debug(f"Calculated: {expression} = {result}")
+            result = eval(expr)
+            self.logger.debug(f"Calculated: {expr} = {result}")
             return str(result)
 
         except Exception as e:

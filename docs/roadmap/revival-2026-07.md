@@ -196,6 +196,30 @@ Manual verification checklist: hi/thanks → greeting; run self repair → self-
 
 Tests: `tests/agents/test_routing_classifier.py`, updated `tests/agents/test_wcca_routing.py`.
 
+### Transcript `chat_export_a42ee2e0` save/export + trust fixes (July 8 2026 late)
+
+Eight owner-visible failures from `var/exports/chat_export_a42ee2e0.txt` (codebase
+hallucination, wrong coding-agent route, pong not written, MCP loop, save/export
+misroutes, empty `importantissues01.txt`, export after restart showing 2 messages).
+
+| Fix | What shipped |
+|-----|----------------|
+| Save/export priority | `needs_file_write` short-circuits before self-repair/specialists; WCCA early-return to orchestrator for save phrases |
+| Broader save phrasing | `save a copy`, `save a copy of`, `export this chat`; extensionless `as <name>` → `var/exports/<name>.txt` |
+| Content injection | `write_file` always fills transcript when save goal detected; zero-byte post-write verification |
+| Save confabulation guard | Orchestrator rejects “saved/wrote” claims without successful `write_file` observation |
+| Session persistence | `core/session_store.py` — `var/sessions/*.json` restored on startup; persisted after each web turn |
+| Export UX warning | `/api/export` warns when `message_count` is suspiciously low after a titled session |
+| Codebase intro route | `codebase_intro` destination + bootstrap `list_directory` / `read_file` on README/AGENTS/architecture |
+| Coding agent block | Introspection requests skip coding-agent keyword match |
+| Workspace script writes | Pong/script requests with “allowed file area” write to `var/workspace/<slug>/` with `py_compile` |
+| MCP / desktop guard | Repeat `list_mcp_tools` blocked after 2 calls; honest message when no MCP tool can open apps |
+| Calculator | `sqrt` / `square_root` arg normalization; web_search blocked on pure-math goals |
+
+Tests: `tests/agents/test_orchestrator_save_file.py`,
+`tests/agents/test_orchestrator_tool_guardrails.py`, `tests/agents/test_wcca_routing.py`,
+`tests/web/test_web_server.py`, `tests/core/test_session_store.py`.
+
 ### Whole-repo audit (Tiers 1–4) — complete
 
 **Tiers 1–4 shipped July 7 2026.** Detail preserved in

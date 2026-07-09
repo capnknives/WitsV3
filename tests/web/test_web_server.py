@@ -177,6 +177,40 @@ def test_export_requires_session(client_noauth):
     assert res.status_code == 400
 
 
+def test_session_persisted_to_disk(client_noauth, tmp_path, monkeypatch):
+    client, system = client_noauth
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "var" / "exports").mkdir(parents=True)
+    (tmp_path / "var" / "sessions").mkdir(parents=True)
+
+    chat_res = client.post("/api/chat", json={"message": "persist this turn"})
+    events = _parse_sse(chat_res.text)
+    session_id = events[0][1]["session_id"]
+
+    from core.session_store import load_persisted_sessions_into
+
+    reloaded: dict = {}
+    count = load_persisted_sessions_into(reloaded, "var")
+    assert count >= 1
+    assert session_id in reloaded
+    assert any("persist this turn" in m.content for m in reloaded[session_id].messages)
+
+
+def test_export_warns_on_short_session_after_title_set(client_noauth, tmp_path, monkeypatch):
+    client, system = client_noauth
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "var" / "exports").mkdir(parents=True)
+
+    chat_res = client.post("/api/chat", json={"message": "long session topic alpha"})
+    session_id = _parse_sse(chat_res.text)[0][1]["session_id"]
+    system.session_histories[session_id].title = "long session topic alpha"
+    # Only one exchange — simulate post-restart short history
+    export_res = client.post("/api/export", json={"session_id": session_id})
+    data = export_res.json()
+    assert export_res.status_code == 200
+    assert data.get("warning")
+
+
 def test_chat_reuses_session(client_noauth):
     client, system = client_noauth
     first = _parse_sse(client.post("/api/chat", json={"message": "hi"}).text)
