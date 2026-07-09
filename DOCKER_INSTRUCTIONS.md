@@ -41,6 +41,7 @@ docker images witsv3-sandbox
 
 # Smoke (no Ollama)
 python scripts/conversation_task_smoke.py --quick --only sandbox-docker-ready,sandbox-docker-exec
+python scripts/docker_sandbox_verify.py
 ```
 
 **Rebuild sandbox image**
