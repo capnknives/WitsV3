@@ -187,6 +187,27 @@ class OrchestratorRoutingMixin:
         "repair your own code",
         "analyze your own code",
         "your own codebase",
+        # Direct imperative commands to run the self-repair agent. 2026-07-08
+        # finding: "Run self repair" matched none of the bug-hunt phrases
+        # above, was flagged casual (3 words), and the model fabricated a
+        # "self-repair complete" report without the agent ever running.
+        "run self repair",
+        "run self-repair",
+        "run a self repair",
+        "run a self-repair",
+        "run the self repair",
+        "run the self-repair",
+        "self repair",
+        "self-repair",
+        "start self repair",
+        "start self-repair",
+        "do a self repair",
+        "do a self-repair",
+        "perform self repair",
+        "perform self-repair",
+        "initiate self repair",
+        "initiate self-repair",
+        "repair yourself",
     )
 
     def _needs_self_repair(self, message: str) -> bool:
@@ -312,9 +333,50 @@ class OrchestratorRoutingMixin:
         "protection tier",
     )
 
+    # Verbs describing what a guest *did* in conversation. Paired with an
+    # actual registered guest name (via _message_mentions_guest_name), a
+    # message like "what did the test user Sean chat with you about?" is an
+    # unambiguous request for that guest's audit history — 2026-07-08 finding:
+    # this phrasing matched none of _GUEST_AUDIT_SIGNALS ("what did tester"
+    # expects the literal word "tester") nor the profile person-query signals,
+    # so it fell through to the generic orchestrator and looped to
+    # max_iterations with no way to reach guest_audit_summary.
+    _GUEST_CHAT_ACTIVITY_SIGNALS = (
+        "chat with",
+        "chatted",
+        "chat about",
+        "chatting about",
+        "talk with",
+        "talked",
+        "talk about",
+        "talking about",
+        "talk to you",
+        "talked to you",
+        "discuss",
+        "discussed",
+        "say to you",
+        "said to you",
+        "ask you",
+        "asked you",
+        "asking about",
+        "conversation with",
+        "conversations with",
+        "message you",
+        "messaged you",
+    )
+
+    def _needs_guest_chat_history(self, message: str) -> bool:
+        """True when the owner asks what a named registered guest talked about."""
+        lowered = message.lower()
+        if not self._message_mentions_guest_name(message):
+            return False
+        return any(sig in lowered for sig in self._GUEST_CHAT_ACTIVITY_SIGNALS)
+
     def _needs_guest_audit_review(self, message: str) -> bool:
         lowered = message.lower()
-        return any(sig in lowered for sig in self._GUEST_AUDIT_SIGNALS)
+        if any(sig in lowered for sig in self._GUEST_AUDIT_SIGNALS):
+            return True
+        return self._needs_guest_chat_history(message)
 
     def _needs_guest_accounts_list(self, message: str) -> bool:
         lowered = message.lower()
@@ -452,6 +514,61 @@ class OrchestratorRoutingMixin:
         "anything else i can",
         "how are you",
         "what would you like to work on",
+    )
+
+    # Leading verbs that mark a message as a command/directive rather than
+    # small talk. Used to bypass the "short messages are casual" length rule
+    # so terse imperatives ("run self repair", "fix the login bug") reach real
+    # routing instead of the chat path.
+    _IMPERATIVE_COMMAND_VERBS = frozenset(
+        {
+            "run",
+            "fix",
+            "repair",
+            "diagnose",
+            "troubleshoot",
+            "debug",
+            "search",
+            "find",
+            "look",
+            "summarize",
+            "summarise",
+            "analyze",
+            "analyse",
+            "build",
+            "create",
+            "make",
+            "write",
+            "read",
+            "list",
+            "show",
+            "check",
+            "open",
+            "delete",
+            "remove",
+            "install",
+            "deploy",
+            "generate",
+            "scan",
+            "refactor",
+            "test",
+            "execute",
+            "launch",
+            "start",
+            "stop",
+            "restart",
+            "update",
+            "add",
+            "edit",
+            "review",
+            "explain",
+            "compare",
+            "audit",
+            "save",
+            "export",
+            "ingest",
+            "compile",
+        }
     )
 
     def _assistant_message_awaited_reply(self, text: str) -> bool:
@@ -663,6 +780,16 @@ class OrchestratorRoutingMixin:
             "see you",
             "talk to you",
         )
+
+        # A short message that *starts* with an imperative command verb is a
+        # directive, not small talk — 2026-07-08 finding: "Run self repair" (3
+        # words) was flagged casual purely on length, sent to the chat path,
+        # and the model fabricated a success report instead of running
+        # anything. Command verbs must bypass the length short-circuit below so
+        # they reach real intent analysis / specialized-agent routing.
+        first_token = next(iter(re.findall(r"[a-z]+", lowered)), "")
+        if first_token in self._IMPERATIVE_COMMAND_VERBS:
+            return False
 
         # Short messages are usually casual
         if len(message.split()) < 6:

@@ -1,5 +1,9 @@
 """Tests for orchestrator final-answer synthesis guard."""
 
+import logging
+
+import pytest
+
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
 
 
@@ -13,6 +17,55 @@ class _SynthHarness(BaseOrchestratorAgent):
 
 def _harness() -> _SynthHarness:
     return _SynthHarness.__new__(_SynthHarness)
+
+
+def _loop_harness() -> _SynthHarness:
+    """Harness wired just enough to drive _execute_react_loop past the cap."""
+    h = _SynthHarness.__new__(_SynthHarness)
+    h.agent_name = "test-orchestrator"
+    h.logger = logging.getLogger("test-orchestrator")
+    h.max_iterations = 15
+    h.current_iteration = 15  # already at the cap → loop body is skipped
+
+    async def _noop_store(**kwargs):
+        return None
+
+    h.store_memory = _noop_store
+    return h
+
+
+@pytest.mark.asyncio
+async def test_max_iterations_synthesizes_from_observations():
+    """2026-07-08 finding: hitting max_iterations returned only a bare error,
+    discarding usable observations. It must now salvage a grounded answer."""
+    h = _loop_harness()
+    state = {
+        "completed": False,
+        "goal": "Who died on June 14 2026?",
+        "lookup_search_done": True,
+        "observations": [
+            "web_search results (base your answer on the SOURCES below):\n"
+            "tavily summary (usually accurate — use it, but trust the sources "
+            "below if any clearly contradicts it): Oliver Tree died June 14, 2026.\n"
+            "[1] Example\n    snippet\n    source: https://example.com"
+        ],
+    }
+    results = [sd async for sd in h._execute_react_loop(state, "sess")]
+    assert state["completed"] is True
+    assert any(sd.type == "result" and "Oliver Tree" in sd.content for sd in results)
+    assert not any(sd.type == "error" for sd in results)
+
+
+@pytest.mark.asyncio
+async def test_max_iterations_without_observations_returns_clear_message():
+    """With nothing usable to synthesize, the fallback must be an honest,
+    actionable message rather than the old bare "maximum iterations" error."""
+    h = _loop_harness()
+    state = {"completed": False, "goal": "do something", "observations": []}
+    results = [sd async for sd in h._execute_react_loop(state, "sess")]
+    errors = [sd for sd in results if sd.type == "error"]
+    assert errors
+    assert "couldn't complete" in errors[0].content.lower()
 
 
 def _doc_state():

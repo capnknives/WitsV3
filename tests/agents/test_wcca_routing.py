@@ -282,6 +282,88 @@ def test_needs_self_repair_ignores_unrelated_chat(wcca_with_specialists):
     assert wcca_with_specialists._needs_self_repair("hey, how's it going?") is False
 
 
+# -------- transcript chat_export_901b8182: "Run self repair" hallucination
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Run self repair",
+        "run self-repair",
+        "please run a self repair",
+        "start self-repair now",
+        "self repair",
+        "repair yourself",
+    ],
+)
+def test_run_self_repair_command_matches_self_repair(wcca_with_specialists, message):
+    """The literal "Run self repair" command matched none of the bug-hunt
+    phrases and was flagged casual (3 words), so the model fabricated a
+    "self-repair complete" report without the agent ever running."""
+    assert wcca_with_specialists._needs_self_repair(message) is True
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Run self repair",
+        "fix the login bug",
+        "search my notes for the invoice",
+        "summarize it",
+    ],
+)
+def test_short_imperative_command_is_not_casual(wcca, message):
+    """Terse imperative commands must bypass the "short messages are casual"
+    length rule so they reach real routing instead of the chat path."""
+    assert wcca._is_casual_conversation(message) is False
+
+
+@pytest.mark.asyncio
+async def test_run_self_repair_reaches_self_repair_agent(wcca_with_specialists):
+    """End-to-end: "Run self repair" must invoke the self-repair agent rather
+    than the casual-chat path that previously confabulated a success report."""
+    self_repair_agent = _FakeSpecializedAgent("self_repair")
+    wcca_with_specialists.specialized_agents["self_repair"] = self_repair_agent
+
+    streams = [
+        item
+        async for item in wcca_with_specialists.run("Run self repair", session_id="sess-selfrepair")
+    ]
+    assert self_repair_agent.received_input == "Run self repair"
+    assert any("self_repair ran" in s.content for s in streams)
+
+
+# --- transcript chat_export_901b8182: action-confabulation guard on chat path
+
+
+def test_action_confabulation_detects_fabricated_self_repair_report(wcca):
+    """The exact fabricated reply from the transcript must be recognized as a
+    false claim of having performed a system action."""
+    fabricated = (
+        "**System Update: Self-Repair Initiated**\n"
+        "After running a self-repair cycle, I have re-evaluated my internal "
+        "state and updated my knowledge graph.\n"
+        "All system checks indicate that my core directives remain intact. "
+        "My memory is clean."
+    )
+    assert wcca._looks_like_action_confabulation(fabricated) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "I can run a self-repair cycle if you'd like — just say the word.",
+        "Self-repair scans logs and failing tests, then applies verified fixes.",
+        "Sure! How can I help you today?",
+        "I'd be happy to fix that bug once you point me at the file.",
+    ],
+)
+def test_action_confabulation_ignores_capability_descriptions(wcca, text):
+    """Naming a capability (without claiming it already ran) must not trip
+    the guard."""
+    assert wcca._looks_like_action_confabulation(text) is False
+
+
 class _FakeSpecializedAgent:
     """Records that .run() was actually invoked, for the intent-override test below."""
 
@@ -687,6 +769,49 @@ def test_documents_context_empty():
 
 
 # ---------------------------------------- agent delegation contract
+
+
+# --- transcript chat_export_901b8182: "what did guest X chat about" routing
+
+
+def test_named_guest_chat_history_routes_to_guest_audit(tmp_path, monkeypatch):
+    """2026-07-08 finding: "What did the test user Sean chat with you about?"
+    matched none of the guest-audit signals ("what did tester" expects the
+    literal "tester") nor the profile person-query signals, so it fell to the
+    generic orchestrator and looped to max_iterations. Naming a registered
+    guest plus a conversation verb must route to guest_audit_summary."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    from core.guest_access import GuestRegistry
+
+    from agents.wcca_routing_mixin import OrchestratorRoutingMixin
+
+    class _Probe(OrchestratorRoutingMixin):
+        pass
+
+    reg = GuestRegistry()
+    reg.register_or_update(display_name="Sean", device_id="device-sean-0001")
+
+    probe = _Probe()
+    msg = "What did the test user Sean chat with you about?"
+    assert probe._needs_guest_chat_history(msg) is True
+    assert probe._needs_guest_audit_review(msg) is True
+    assert probe._extract_guest_name_for_profile_query(msg) == "Sean"
+
+
+def test_guest_chat_history_requires_a_known_guest_name(tmp_path, monkeypatch):
+    """The conversation verb alone (no registered guest named) must not route
+    an ordinary question to the guest audit log."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+
+    from agents.wcca_routing_mixin import OrchestratorRoutingMixin
+
+    class _Probe(OrchestratorRoutingMixin):
+        pass
+
+    probe = _Probe()
+    assert probe._needs_guest_chat_history("what did you chat about with the model?") is False
 
 
 def test_orchestrator_and_coding_agents_use_user_input_param():

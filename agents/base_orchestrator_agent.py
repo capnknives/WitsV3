@@ -299,9 +299,35 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                 state["observations"].append(observation)
 
         if self.current_iteration >= self.max_iterations and not state["completed"]:
-            yield self.stream_error(
-                f"Reached maximum iterations ({self.max_iterations}) without completing the goal."
-            )
+            # Rather than a bare error, salvage a grounded answer from whatever
+            # search/tool observations we did gather (2026-07-08 finding: a
+            # guest-history question looped to the cap and returned only the
+            # raw error, discarding usable observations).
+            synth_fn = getattr(self, "_auto_synthesize_from_observations", None)
+            fallback: str | None = None
+            if synth_fn:
+                try:
+                    fallback = synth_fn(state)
+                except Exception as e:
+                    self.logger.warning(f"Max-iteration synthesis failed: {e}")
+
+            if fallback:
+                self.logger.info("Max iterations reached; returning synthesized fallback answer.")
+                state["completed"] = True
+                state["final_answer"] = fallback
+                yield self.stream_result(fallback)
+                await self.store_memory(
+                    content=f"Final Answer (synthesized at max iterations): {fallback}",
+                    segment_type="FINAL_ANSWER",
+                    importance=0.9,
+                    metadata={"session_id": session_id, "max_iterations_fallback": True},
+                )
+            else:
+                yield self.stream_error(
+                    f"I couldn't complete this within {self.max_iterations} steps and didn't "
+                    "gather enough information to answer. Try rephrasing, narrowing the request, "
+                    "or naming a specific file/tool to use."
+                )
 
     async def _execute_tool_action(
         self, reasoning: dict[str, Any], state: dict[str, Any], session_id: str | None

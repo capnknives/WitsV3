@@ -163,6 +163,23 @@ Registry: `web/slash_commands.py`; API: `GET /api/commands` (role-filtered).
 Client actions: `/help`, `/new`, `/export`, panel shortcuts; owner chat commands:
 `/shutdown`, `/restart` (and aliases). Tests: `tests/web/test_slash_commands.py`.
 
+### Transcript `chat_export_901b8182` routing/confabulation fixes (July 8 2026 evening)
+
+Two owner-visible failures diagnosed from `exports/chat_export_901b8182.txt`:
+"What did the test user Sean chat with you about?" looped to max_iterations,
+and "Run self repair" was answered by the casual-chat path with a fabricated
+"self-repair complete / all checks pass / memory is clean" report (nothing ran).
+
+| Fix | What shipped |
+|-----|----------------|
+| Self-repair command routing | `_SELF_REPAIR_SIGNALS` now includes literal commands ("run self repair", "self repair", "repair yourself", …) — the bug-hunt phrases missed them |
+| Imperative ≠ casual | `_is_casual_conversation` no longer flags a short message as small talk when it starts with a command verb (`_IMPERATIVE_COMMAND_VERBS`); "Run self repair" (3 words) used to auto-classify casual |
+| Named-guest chat history | `_needs_guest_chat_history` (registered guest name + conversation verb) routes directly to `guest_audit_summary` instead of the generic orchestrator loop |
+| Anti-confabulation guard | Casual-chat replies claiming a system action already ran (`_looks_like_action_confabulation`) are suppressed and replaced with an honest "nothing executed" message |
+| Max-iteration salvage | Orchestrator synthesizes a grounded fallback answer from observations at the cap instead of returning a bare "maximum iterations" error |
+
+Tests: `tests/agents/test_wcca_routing.py`, `tests/agents/test_orchestrator_synthesis_guard.py`.
+
 ### Whole-repo audit (Tiers 1–4) — complete
 
 **Tiers 1–4 shipped July 7 2026.** Detail preserved in

@@ -331,6 +331,22 @@ User input: {user_input}
             requires_tools = True
             suggested_response = "specialized"
 
+        # "What did guest <name> chat with you about?" — deterministically read
+        # that guest's audit digest instead of letting the generic orchestrator
+        # loop trying to find it (2026-07-08 max_iterations timeout). Owner-only;
+        # guests can never inspect another user's activity.
+        if getattr(
+            self, "_request_user_role", "owner"
+        ) == "owner" and self._needs_guest_chat_history(user_input):
+            yield self.stream_thinking("Reading guest chat audit log...")
+            from tools.guest_audit_tool import GuestAuditSummaryTool
+
+            tool = GuestAuditSummaryTool()
+            display_name = self._extract_guest_name_for_profile_query(user_input)
+            report = await tool.execute(display_name=display_name, days=30, user_role="owner")
+            yield self.stream_result(report)
+            return
+
         # Guest interest/profile queries use saved JSON facts only — never web search.
         if getattr(
             self, "_request_user_role", "owner"
@@ -528,6 +544,51 @@ User input: {user_input}
         )
         yield self.stream_result(response)
 
+    # The casual-chat path never runs a tool or agent, so any reply claiming a
+    # real system action already *happened* is confabulation. 2026-07-08
+    # finding: "Run self repair" landed here and the model produced a detailed
+    # "Self-Repair Initiated / all system checks pass / my memory is clean"
+    # report having executed nothing. These patterns catch that class of
+    # fabricated completion claim without tripping on "I can run self-repair"
+    # style explanations (which name the capability but claim no completion).
+    _ACTION_CONFABULATION_RE = re.compile(
+        r"self[- ]repair\s+(cycle\s+|process\s+)?(is\s+|has\s+been\s+|was\s+)?"
+        r"(initiated|complete|completed|finished|done|performed|successful|underway)"
+        r"|after\s+(running|performing|completing|finishing)\s+(a\s+|the\s+|my\s+)?"
+        r"(self[- ]repair|repair\s+cycle)"
+        r"|(i\s+have|i've|i\s+just|i)\s+"
+        r"(initiated|ran|run|performed|completed|executed|finished|applied|"
+        r"committed)\s+(a\s+|the\s+|my\s+)?"
+        r"(self[- ]repair|repair\s+cycle|system\s+check|scan|the\s+tests?|"
+        r"pytest|the\s+fix|the\s+repair)"
+        r"|(all\s+system\s+checks?|all\s+checks?)\s+"
+        r"(indicate|pass|passed|are\s+(green|good|ok|clean|intact))"
+        r"|my\s+memory\s+is\s+clean"
+        r"|(i\s+have|i've|i\s+just)\s+"
+        r"(saved|written|wrote|committed|applied|fixed|repaired|updated|"
+        r"restarted|reindexed|re-indexed)\s+"
+        r"(the\s+|a\s+|my\s+|your\s+)?"
+        r"(file|files|code|bug|bugs|memory|fix|repair|test|tests|changes?)",
+        re.IGNORECASE,
+    )
+
+    def _looks_like_action_confabulation(self, text: str) -> bool:
+        """True when a chat reply claims to have already performed a system action."""
+        if not text:
+            return False
+        return bool(self._ACTION_CONFABULATION_RE.search(text))
+
+    @staticmethod
+    def _action_confabulation_correction() -> str:
+        """Honest reply used when the chat path would otherwise fake an action."""
+        return (
+            "Just to be accurate: I didn't actually run anything — that was a "
+            "casual reply, and no tool or agent executed. If you want me to "
+            'really do it, say so directly (for example: "run self repair", '
+            '"find and fix bugs in your code", or "save this to a file") and '
+            "I'll route it to the right agent so it actually runs."
+        )
+
     async def _stream_casual_chat_response(
         self,
         user_input: str,
@@ -582,6 +643,14 @@ ASSISTANT:"""
             response = await self.generate_response(
                 conversation_prompt, model_name=routed_model, temperature=0.7
             )
+            if self._looks_like_action_confabulation(response):
+                self.logger.warning(
+                    "Casual-chat reply claimed a system action was performed; "
+                    "suppressing confabulated response for: %r",
+                    user_input,
+                )
+                yield self.stream_result(self._action_confabulation_correction())
+                return
             yield self.stream_result(response)
         except Exception as e:
             self.logger.error(f"Error generating direct response: {e}")
