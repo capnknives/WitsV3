@@ -24,7 +24,7 @@ experimental Phase 1 "synthetic brain" layer that was never wired into
 | `tests/test_memory_handler.py` | Unit tests (removed from pytest collection) |
 | `tests/test_cognitive_architecture.py` | Unit tests (removed from pytest collection) |
 
-Historical docs: [`docs/SYNTHETIC_BRAIN.md`](../../../docs/SYNTHETIC_BRAIN.md) and siblings under `docs/`.
+Historical docs: [`SYNTHETIC_BRAIN.md`](../historical-docs/SYNTHETIC_BRAIN.md) and siblings under `docs/archive/historical-docs/`.
 
 Re-enable only for research — do not wire back into production without reconciling
 APIs with the current `MemoryManager` and orchestrator stack.

@@ -251,7 +251,7 @@ WitsV3/
 | [`docs/roadmap/revival-2026-07.md`](docs/roadmap/revival-2026-07.md) | July 2026 shipped work log |
 | [`docs/README.md`](docs/README.md) | Index of all planning docs |
 | [`TASK.md`](TASK.md) / [`PLANNING.md`](PLANNING.md) | Redirects to the docs above |
-| [`docs/SYNTHETIC_BRAIN.md`](docs/SYNTHETIC_BRAIN.md) | Historical “synthetic brain” initiative (not current product) |
+| [`docs/archive/historical-docs/SYNTHETIC_BRAIN.md`](docs/archive/historical-docs/SYNTHETIC_BRAIN.md) | Historical “synthetic brain” initiative (not current product) |
 | [`DOCKER_INSTRUCTIONS.md`](DOCKER_INSTRUCTIONS.md) | Parked background-agent container notes |
 
 Changelog detail lives in the revival log and git history — this README stays focused on how to run and use the system today.

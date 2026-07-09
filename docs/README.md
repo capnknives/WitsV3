@@ -10,8 +10,8 @@ status: "active"
 Design notes, roadmaps, and historical material for WitsV3.  
 **Product install and day-to-day usage live in the root [`README.md`](../README.md).**
 
-> **July 2026:** Canonical planning docs moved from `docs/` to `docs/`.  
-> The `docs/` folder is a redirect stub only.
+> **July 2026:** Canonical planning docs moved from `planning/` to `docs/`.  
+> The `planning/` folder is a redirect stub only.
 
 ## Start here
 
@@ -24,7 +24,7 @@ Design notes, roadmaps, and historical material for WitsV3.
 | **Tool registry truth** | [`roadmap/tool-registry-reality-2026-07.md`](roadmap/tool-registry-reality-2026-07.md) |
 | **Config surface truth** | [`roadmap/config-surface-truth-2026-07.md`](roadmap/config-surface-truth-2026-07.md) |
 
-Root redirects: [`TASK.md`](../TASK.md), [`PLANNING.md`](../PLANNING.md), [`docs/README.md`](../docs/README.md).
+Root redirects: [`TASK.md`](../TASK.md), [`PLANNING.md`](../PLANNING.md), [`planning/README.md`](../planning/README.md).
 
 ## Directory structure
 
