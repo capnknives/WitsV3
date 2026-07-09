@@ -7,7 +7,7 @@ integrating the complexity analyzer, dynamic module loader, and semantic cache.
 DORMANT / EXPERIMENTAL: only relevant when
 `llm_interface.default_provider: adaptive` is set in config (default is
 "ollama"). As of July 2026, `get_llm_interface()` ignores adaptive and returns
-Ollama instead — see `planning/archive/adaptive_llm/README.md`.
+Ollama instead — see `docs/archive/adaptive_llm/README.md`.
 Superseded by `core/model_router.py` for smart routing.
 """
 

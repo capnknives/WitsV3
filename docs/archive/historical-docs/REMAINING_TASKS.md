@@ -43,7 +43,7 @@ We've successfully committed the Phase 1 implementation of the WITS Synthetic Br
    - `core/config.py`
    - `core/memory_manager.py`
    - `core/memory_summarization.py`
-   - `planning/tasks/task-management.md`
+   - `docs/tasks/task-management.md`
    - `test_enhanced_streaming.py`
 3. Decide on the approach for the untracked files (whether to include or ignore them)
 

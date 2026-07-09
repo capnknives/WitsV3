@@ -1,6 +1,6 @@
 """Guest / family-tester access: registry, tokens, and tool allowlist.
 
-See planning/roadmap/guest-tester-access-2026-07.md.
+See docs/roadmap/guest-tester-access-2026-07.md.
 """
 
 from __future__ import annotations

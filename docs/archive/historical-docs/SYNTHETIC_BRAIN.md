@@ -9,14 +9,14 @@ status: "historical"
 around 2025-06-12 for the "WITS Synthetic Brain Expansion Plan" (Phase 1:
 core cognitive layer integration). The initiative stalled after Phase 1 and
 was superseded by the July 2026 revival work
-(`planning/roadmap/revival-2026-07.md`). It is **not** the current
+(`docs/roadmap/revival-2026-07.md`). It is **not** the current
 architecture.
 
 ## What actually shipped (then archived)
 
 - `core/memory_handler.py`, `core/cognitive_architecture.py` — the "base
   versions" mentioned in these docs were never wired into `run.py` / `run_web.py`.
-  Archived July 2026 → `planning/archive/synthetic_brain/`.
+  Archived July 2026 → `docs/archive/synthetic_brain/`.
 - `config/wits_core.yaml` — identity/memory/cognitive config structure (still present;
   `debug_modules` for this cluster cleared).
 

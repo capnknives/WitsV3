@@ -26,7 +26,7 @@ This directory contains archived documentation files that are no longer actively
 
    - Use the archive command in the documentation maintenance tool:
      ```bash
-     python scripts/doc_maintenance.py archive planning/path/to/document.md
+     python scripts/doc_maintenance.py archive docs/path/to/document.md
      ```
    - This will:
      - Update the document's status to "archived"

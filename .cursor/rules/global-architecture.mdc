@@ -9,9 +9,9 @@ alwaysApply: true
 
 - Work from **`WitsV3-cursor`** (branch `cursor/work` or `cursor/*`). Personal runtime = sibling `WitsV3`; Claude = `WitsV3-claude` — see `WORKTREES.md`
 - **Edits here are NOT live in the runtime.** After changes (especially `web/` static assets — no build step), commit and fast-forward `WitsV3` (`git -C ...\WitsV3 merge --ff-only cursor/work`), then hard-refresh. See `WORKTREES.md`.
-- **Always read** `planning/roadmap/suggested-features-2026-07.md` for priorities and `README.md` for how it runs today
-- Architecture ref: `planning/architecture/system-architecture.md` (many sections mid-2025 — trust README/roadmap for status)
-- Shipped log: `planning/roadmap/revival-2026-07.md`
+- **Always read** `docs/roadmap/suggested-features-2026-07.md` for priorities and `README.md` for how it runs today
+- Architecture ref: `docs/architecture/system-architecture.md` (many sections mid-2025 — trust README/roadmap for status)
+- Shipped log: `docs/roadmap/revival-2026-07.md`
 - Root `TASK.md` / `PLANNING.md` are **redirects only** — do not append phase checklists; update the suggested-features roadmap
 - Legacy root `.cursorrules` is a one-line redirect here; canonical rules live under `.cursor/rules/*.mdc`
 
@@ -29,8 +29,8 @@ alwaysApply: true
 
 ## Task & docs standards
 
-- Track new work in `planning/roadmap/suggested-features-2026-07.md`
-- Log large shipped chunks in `planning/roadmap/revival-2026-07.md` when relevant
+- Track new work in `docs/roadmap/suggested-features-2026-07.md`
+- Log large shipped chunks in `docs/roadmap/revival-2026-07.md` when relevant
 - Update `README.md` when install or user-facing behavior changes
 - Prefer the canonical roadmap over proliferating “status” docs
 

@@ -21,24 +21,24 @@ The files in this directory are the original versions as they existed before thi
 
 ## Original Files
 
-- **AUTHENTICATION_STATUS.md** - Now at `planning/technical-notes/authentication-status.md`
-- **CLAUDE_EVOLUTION_PROMPT.md** - Now at `planning/implementation/claude-evolution-prompt.md`
-- **DEBUG_INTERPRETER_FIX.md** - Now at `planning/technical-notes/interpreter-fixes.md`
-- **DEBUG_SETUP_COMPLETE.md** - Now at `planning/technical-notes/setup-completion.md`
-- **DEBUG_SYSTEM_IMPROVEMENTS.md** - Now at `planning/technical-notes/system-improvements.md`
-- **IMPLEMENTATION_SUMMARY.md** - Now at `planning/implementation/personality-ethics-network-implementation.md`
-- **planning-md.md** - Now at `planning/architecture/system-architecture.md`
-- **task-md.md** - Now at `planning/tasks/task-management.md`
-- **WITSV3_FIXES.md** - Now at `planning/technical-notes/system-fixes.md`
-- **witsv3_improvement_roadmap.md** - Now at `planning/roadmap/neural-web-roadmap.md`
-- **copper-scroll-adaptive-llm.md** - Now at `planning/implementation/adaptive-llm-design.md`
+- **AUTHENTICATION_STATUS.md** - Now at `docs/technical-notes/authentication-status.md`
+- **CLAUDE_EVOLUTION_PROMPT.md** - Now at `docs/implementation/claude-evolution-prompt.md`
+- **DEBUG_INTERPRETER_FIX.md** - Now at `docs/technical-notes/interpreter-fixes.md`
+- **DEBUG_SETUP_COMPLETE.md** - Now at `docs/technical-notes/setup-completion.md`
+- **DEBUG_SYSTEM_IMPROVEMENTS.md** - Now at `docs/technical-notes/system-improvements.md`
+- **IMPLEMENTATION_SUMMARY.md** - Now at `docs/implementation/personality-ethics-network-implementation.md`
+- **planning-md.md** - Now at `docs/architecture/system-architecture.md`
+- **task-md.md** - Now at `docs/tasks/task-management.md`
+- **WITSV3_FIXES.md** - Now at `docs/technical-notes/system-fixes.md`
+- **witsv3_improvement_roadmap.md** - Now at `docs/roadmap/neural-web-roadmap.md`
+- **copper-scroll-adaptive-llm.md** - Now at `docs/implementation/adaptive-llm-design.md`
 
 ## Accessing Current Documentation
 
 Please refer to the main planning directory for the current documentation:
 
 ```
-planning/
+docs/
 ├── architecture/      # System architecture and design
 ├── implementation/    # Implementation details
 ├── roadmap/           # Future plans

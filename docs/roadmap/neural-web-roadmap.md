@@ -7,9 +7,9 @@ status: "historical"
 
 > **Historical document.** Written 2025-06-09, predates the July 2026 revival
 > work. Kept for background/context only — for current status see
-> [`planning/roadmap/revival-2026-07.md`](revival-2026-07.md). Some items here
+> [`docs/roadmap/revival-2026-07.md`](revival-2026-07.md). Some items here
 > (e.g. Neural Web tools) were later found unwired at the code level; see
-> `planning/roadmap/composer-orchestrator-search-quality-2026-07.md` Tier 3 §9.
+> `docs/roadmap/composer-orchestrator-search-quality-2026-07.md` Tier 3 §9.
 
 # WitsV3 Enhancement Roadmap: Neural Web Architecture
 
@@ -198,7 +198,7 @@ The cross-domain learning capability has been implemented in the `core/cross_dom
 - Activation propagation across domain boundaries
 - Integration with the NeuralOrchestratorAgent
 
-See the detailed implementation document at `planning/implementation/cross-domain-learning-implementation.md`.
+See the detailed implementation document at `docs/implementation/cross-domain-learning-implementation.md`.
 
 ## 7. Implementation Priority
 

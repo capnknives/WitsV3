@@ -158,7 +158,7 @@ If both processes run → **double repair**. Prefer one owner.
 
 | Setting | Behavior |
 |---------|----------|
-| `llm_interface.default_provider: adaptive` | Warning → still Ollama / ReliableOllama. Documented in `planning/archive/adaptive_llm/README.md` |
+| `llm_interface.default_provider: adaptive` | Warning → still Ollama / ReliableOllama. Documented in `docs/archive/adaptive_llm/README.md` |
 
 Live smart routing = `model_routing` (+ `/settings`), not adaptive YAML.
 

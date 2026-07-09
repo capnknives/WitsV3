@@ -202,11 +202,11 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 
 | Item | Verdict |
 |------|---------|
-| Adaptive LLM stack | ✅ Archived July 8 → `planning/archive/adaptive_llm/core/` (superseded by `model_router.py`; `test_adaptive_llm.py` + `tests/config.yaml` removed). Root `torch.py` shim deleted |
-| Synthetic brain / cognitive cluster | ✅ Archived July 8 → `planning/archive/synthetic_brain/` (`memory_handler`, `cognitive_architecture`, stubs, integration + tests) |
-| `planning/archive/gui/` | Keep archived; web UI is the client |
+| Adaptive LLM stack | ✅ Archived July 8 → `docs/archive/adaptive_llm/core/` (superseded by `model_router.py`; `test_adaptive_llm.py` + `tests/config.yaml` removed). Root `torch.py` shim deleted |
+| Synthetic brain / cognitive cluster | ✅ Archived July 8 → `docs/archive/synthetic_brain/` (`memory_handler`, `cognitive_architecture`, stubs, integration + tests) |
+| `docs/archive/gui/` | Keep archived; web UI is the client |
 | Supabase | Optional; skip in default install docs |
-| Synthetic brain doc set | Historical — entry [`docs/SYNTHETIC_BRAIN.md`](../../docs/SYNTHETIC_BRAIN.md) |
+| Synthetic brain doc set | Historical — entry [`SYNTHETIC_BRAIN.md`](../archive/historical-docs/SYNTHETIC_BRAIN.md) |
 | Root `TASK.md` / `PLANNING.md` | Redirects only |
 | `DOCKER_INSTRUCTIONS.md` | Parked / background-agent only |
 
@@ -215,8 +215,8 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 | Phase | Status | Notes |
 |-------|--------|-------|
 | **0 — Safe deletes** | ✅ Done | Removed `models/` (dummy adaptive-LLM safetensors), `WitsV3/` stray package, `enhanced_config_with_fallback.txt`; moved `debug_init.py` + `fix_neural_web.py` → `scripts/` |
-| **1 — Doc consolidation** | Pending | Merge `planning/` + `docs/` under single `docs/` tree |
-| **2 — Archive slim-down** | Pending | Tag + prune `planning/archive/gui/` etc. |
+| **1 — Doc consolidation** | ✅ Done | Merged `planning/` into `docs/`; `planning/` is redirect stub |
+| **2 — Archive slim-down** | Pending | Tag + prune `docs/archive/gui/` etc. |
 | **3 — Runtime `var/` layout** | Pending | Centralize paths in config first |
 | **4 — Root surface cleanup** | Pending | Instruction-file redirects |
 
@@ -235,7 +235,7 @@ See also [`clutter-catalog-2026-07.md`](clutter-catalog-2026-07.md), [`tool-regi
 ## 5. Document map
 
 ```
-planning/roadmap/
+docs/roadmap/
 ├── suggested-features-2026-07.md   ← YOU ARE HERE (what's next)
 ├── local-ai-50-gap-analysis-2026-07.md  ← Top 50 feature map (has / partial / gap)
 ├── FEATURE_IDEAS/Top Local AI System Features.docx  ← source reference doc

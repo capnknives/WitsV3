@@ -20,8 +20,8 @@ Practical map of the repo as of July 2026. Prefer this + [`README.md`](README.md
 | `tests/` | Pytest suite mirroring packages |
 | `config/` | Extra YAML (personality, ethics, background agent) |
 | `scripts/` | Setup / maintenance utilities (`setup_local_data.py`, `debug_init.py`, `fix_neural_web.py`, …) |
-| `planning/` | Roadmaps, architecture, archives (including parked PyQt6 GUI) |
-| `docs/` | Mostly historical (synthetic-brain set); see `docs/SYNTHETIC_BRAIN.md` |
+| `docs/` | Roadmaps, architecture, technical notes, archives (incl. parked PyQt6 GUI, Sphinx stubs) |
+| `planning/` | **Redirect stub only** → see [`docs/README.md`](docs/README.md) |
 | `documents/` | User drop folder for Document RAG (contents gitignored) |
 | `workspace/` | Coding-agent generated projects (gitignored) |
 | `data/` | Local memory / MCP defs (personal data gitignored) |
@@ -55,7 +55,7 @@ Practical map of the repo as of July 2026. Prefer this + [`README.md`](README.md
 | `TASK.md` / `PLANNING.md` | Redirects → roadmap |
 | `PATH_MIGRATION_GUIDE.md` | Historical path moves (2025 reorganization) |
 | `DOCKER_INSTRUCTIONS.md` | Parked Docker notes |
-| `planning/roadmap/suggested-features-2026-07.md` | What's next |
+| `docs/roadmap/suggested-features-2026-07.md` | What's next |
 
 ## Conventions
 

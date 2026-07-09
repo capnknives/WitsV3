@@ -22,4 +22,4 @@ status: "historical"
   [authentication-status.md](authentication-status.md)
 
 New operational incidents should be logged in the revival doc or a dated file under
-`planning/roadmap/`, not quietly appended here only.
+`docs/roadmap/`, not quietly appended here only.

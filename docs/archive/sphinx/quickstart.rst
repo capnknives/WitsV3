@@ -36,4 +36,4 @@ Next reading
 
 * Root ``README.md`` — capabilities, config, self-repair
 * ``AGENTS.md`` — agent hierarchy
-* ``planning/roadmap/suggested-features-2026-07.md`` — what's next
+* ``docs/roadmap/suggested-features-2026-07.md`` — what's next

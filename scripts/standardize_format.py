@@ -9,11 +9,11 @@ import datetime
 
 # Directories to process
 DIRECTORIES = [
-    "planning/architecture",
-    "planning/implementation",
-    "planning/roadmap",
-    "planning/tasks",
-    "planning/technical-notes"
+    "docs/architecture",
+    "docs/implementation",
+    "docs/roadmap",
+    "docs/tasks",
+    "docs/technical-notes"
 ]
 
 def standardize_file(file_path):

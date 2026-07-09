@@ -8,10 +8,10 @@ WitsV3 is a local-first LLM orchestration system with a FastAPI Web UI (`run_web
 
 ## Read this first (in order)
 1. `/home/runner/work/WitsV3/WitsV3/README.md` (current product behavior)
-2. `/home/runner/work/WitsV3/WitsV3/planning/roadmap/suggested-features-2026-07.md` (active priorities)
+2. `/home/runner/work/WitsV3/WitsV3/docs/roadmap/suggested-features-2026-07.md` (active priorities)
 3. `/home/runner/work/WitsV3/WitsV3/AGENTS.md` and `/home/runner/work/WitsV3/WitsV3/CLAUDE.md` (agent architecture + working conventions)
 
-Do **not** treat `planning/architecture/*` as source-of-truth for current behavior; it may lag.
+Do **not** treat `docs/architecture/*` as source-of-truth for current behavior; it may lag.
 
 ## Setup and validation commands
 From repo root:
@@ -40,7 +40,7 @@ black --check agents core tools web tests
 - Keep files modular (~500 lines target).
 - Avoid circular imports between `agents/`, `core/`, `tools/`, `web/`.
 - Add/adjust tests under `tests/` mirroring source layout when behavior changes.
-- Update forward planning in `planning/roadmap/suggested-features-2026-07.md`; root `TASK.md`/`PLANNING.md` are redirects.
+- Update forward planning in `docs/roadmap/suggested-features-2026-07.md`; root `TASK.md`/`PLANNING.md` are redirects.
 
 ## Known pitfalls and workarounds (encountered during onboarding)
 1. `make lint` failed initially with `No module named ruff`.

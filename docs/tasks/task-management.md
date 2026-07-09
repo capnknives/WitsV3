@@ -3,13 +3,13 @@ title: "WitsV3 Task Management"
 created: "2025-06-09"
 last_updated: "2026-07-07"
 status: "superseded"
-superseded_by: "planning/roadmap/suggested-features-2026-07.md"
+superseded_by: "docs/roadmap/suggested-features-2026-07.md"
 ---
 # WitsV3 Task Management
 
 > **Superseded (July 2026).** This file reflects 2025 phase planning and is no
-> longer maintained. Use **[`planning/roadmap/suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md)**
-> for the forward roadmap and **[`planning/roadmap/revival-2026-07.md`](../roadmap/revival-2026-07.md)**
+> longer maintained. Use **[`docs/roadmap/suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md)**
+> for the forward roadmap and **[`docs/roadmap/revival-2026-07.md`](../roadmap/revival-2026-07.md)**
 > for what shipped during the July revival.
 
 The content below is preserved for historical reference only.
@@ -81,7 +81,7 @@ The content below is preserved for historical reference only.
   - Codebase now production-ready with stable test suite
 
 - [x] **Documentation Reorganization** (2025-06-09)
-  - Created structured planning/ directory with subdirectories for different document types
+  - Created structured docs/ directory with subdirectories for different document types
   - Migrated 11+ markdown files from root to appropriate subdirectories
   - Created comprehensive file index and README files
   - Added proper metadata to all documents (title, creation date, last updated date)

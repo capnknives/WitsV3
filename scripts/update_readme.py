@@ -14,13 +14,13 @@ DOCS_SECTION = """
 
 All project documentation is now organized in the `/planning` directory:
 
-- **[Architecture](planning/architecture/)** - System design and components
-- **[Implementation](planning/implementation/)** - Implementation details
-- **[Roadmap](planning/roadmap/)** - Future plans and enhancements
-- **[Tasks](planning/tasks/)** - Task tracking and management
-- **[Technical Notes](planning/technical-notes/)** - Debug info and fixes
+- **[Architecture](docs/architecture/)** - System design and components
+- **[Implementation](docs/implementation/)** - Implementation details
+- **[Roadmap](docs/roadmap/)** - Future plans and enhancements
+- **[Tasks](docs/tasks/)** - Task tracking and management
+- **[Technical Notes](docs/technical-notes/)** - Debug info and fixes
 
-See the [Planning Documentation](planning/README.md) for more details.
+See the [Planning Documentation](docs/README.md) for more details.
 """
 
 def update_readme():

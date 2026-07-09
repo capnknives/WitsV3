@@ -6,7 +6,7 @@ Welcome to WitsV3's documentation!
    These Sphinx pages are **secondary** and largely historical. The canonical,
    maintained product guide is the repository root ``README.md``
    (Web UI first, Ollama local, July 2026 status). Forward work lives in
-   ``planning/roadmap/suggested-features-2026-07.md``.
+   ``docs/roadmap/suggested-features-2026-07.md``.
 
 WitsV3 is a local-first LLM orchestration system: control center + ReAct
 orchestrator + tools + memory, primarily used via ``python run_web.py``.

@@ -7,9 +7,9 @@ status: "historical"
 
 # WitsV3 Path Migration Guide
 
-> **Historical.** Captures the 2025 documentation reorganization. Root `TASK.md` /
-> `PLANNING.md` are now **redirect stubs** (not full copies under `planning/tasks/`).
-> For current layout see [`FILE_STRUCTURE.md`](FILE_STRUCTURE.md) and [`README.md`](README.md).
+> **July 2026 update:** Planning docs moved again from `planning/` to `docs/`.
+> `planning/` is now a redirect stub; see [`docs/README.md`](docs/README.md).
+
 
 This document maps previous file locations to the reorganized structure. Use it when
 updating old imports or reading archived docs.

@@ -27,7 +27,7 @@ A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it
 
 **Recently shipped (July 2026):** Web UI + PWA, Document RAG, multi-provider web search, smart model routing, MCP registry discover/install, orchestrator JSON robustness, synthesis guard, one-click chat export, coding + self-repair, daily self-repair schedule, guest / family-tester access (full Phase 3–4), **Phase 1** (follow-up intent, hybrid doc search, memory flush, evidence gate, multi-session Chats panel), guest profile fact editor, **chat slash commands** (type `/` in the composer).
 
-**What's next:** **Phase 2.1** — Ollama model pull/status in `/settings`. See [`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md).
+**What's next:** **Phase 2.1** — Ollama model pull/status in `/settings`. See [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md).
 
 ---
 
@@ -129,7 +129,7 @@ Let someone on your LAN (e.g. a nephew) chat **without** your owner token:
 2. Set `web_ui.guest_access.enabled: true` in `config.yaml`
 3. They open `http://<your-lan-ip>:8000/join`, enter the invite code + their name
 
-Guests get chat-only UI, a filtered tool allowlist (no file write / self-repair / MCP / settings), and a remembered identity per browser/device. Owner manages testers on **`/settings`** (age band, profile view, revoke, merge duplicates). Content blocklists live in **`config/guest_policy.yaml`**. Full design: [`planning/roadmap/guest-tester-access-2026-07.md`](planning/roadmap/guest-tester-access-2026-07.md).
+Guests get chat-only UI, a filtered tool allowlist (no file write / self-repair / MCP / settings), and a remembered identity per browser/device. Owner manages testers on **`/settings`** (age band, profile view, revoke, merge duplicates). Content blocklists live in **`config/guest_policy.yaml`**. Full design: [`docs/roadmap/guest-tester-access-2026-07.md`](docs/roadmap/guest-tester-access-2026-07.md).
 
 Other entry points:
 
@@ -230,7 +230,7 @@ WitsV3/
 ├── tests/            # Pytest suite (~406 collected)
 ├── documents/        # Drop folder for RAG (gitignored contents)
 ├── workspace/        # Coding-agent scaffolds (gitignored)
-├── planning/         # Architecture, roadmap, historical notes
+├── docs/         # Architecture, roadmap, historical notes
 ├── config.yaml       # Main config
 ├── run_web.py        # Web entry
 ├── run.py            # CLI + --test + daily self-repair schedule
@@ -247,9 +247,9 @@ WitsV3/
 | [`WORKTREES.md`](WORKTREES.md) | Personal vs Cursor vs Claude local folders |
 | [`AGENTS.md`](AGENTS.md) | Agent hierarchy and conventions |
 | [`FILE_STRUCTURE.md`](FILE_STRUCTURE.md) | Directory reference |
-| [`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md) | **What's next** (canonical) |
-| [`planning/roadmap/revival-2026-07.md`](planning/roadmap/revival-2026-07.md) | July 2026 shipped work log |
-| [`planning/README.md`](planning/README.md) | Index of all planning docs |
+| [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md) | **What's next** (canonical) |
+| [`docs/roadmap/revival-2026-07.md`](docs/roadmap/revival-2026-07.md) | July 2026 shipped work log |
+| [`docs/README.md`](docs/README.md) | Index of all planning docs |
 | [`TASK.md`](TASK.md) / [`PLANNING.md`](PLANNING.md) | Redirects to the docs above |
 | [`docs/SYNTHETIC_BRAIN.md`](docs/SYNTHETIC_BRAIN.md) | Historical “synthetic brain” initiative (not current product) |
 | [`DOCKER_INSTRUCTIONS.md`](DOCKER_INSTRUCTIONS.md) | Parked background-agent container notes |
@@ -263,7 +263,7 @@ Changelog detail lives in the revival log and git history — this README stays 
 - Tests for new behavior (`tests/` mirrors packages); async + mocks for Ollama/IO  
 - Type hints, Google-style docstrings, black / pep8  
 - Prefer config over hardcoded values; keep edits inside the project tree for tool safety  
-- Forward work: update `planning/roadmap/suggested-features-2026-07.md`, not the retired `TASK.md` body  
+- Forward work: update `docs/roadmap/suggested-features-2026-07.md`, not the retired `TASK.md` body  
 
 ## License
 

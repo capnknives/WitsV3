@@ -54,7 +54,7 @@ e2f538f  Improve ReAct search quality: lower reasoning temp, richer observations
 90c7460  Tier 2/3 cleanup: doc truth pass, wire up neural web tools, archive dead code
 ```
 
-Everything below `856af3b` on this branch is shared revival history (orchestrator JSON, web search rewrite, MCP registry, WCCA routing, etc.) — see `planning/roadmap/revival-2026-07.md` for Claude's log.
+Everything below `856af3b` on this branch is shared revival history (orchestrator JSON, web search rewrite, MCP registry, WCCA routing, etc.) — see `docs/roadmap/revival-2026-07.md` for Claude's log.
 
 ---
 
@@ -233,7 +233,7 @@ obvious next investments. Ordered by leverage-to-effort.
 2. ✅ **De-duplicated tooling config** — single source in `pyproject.toml`; removed `pytest.ini`, `mypy.ini`, `.isort.cfg`, `.coveragerc`, `.flake8`.
 3. ✅ **`[tool.ruff]` + `.pre-commit-config.yaml`** — ruff/black/isort + basic hygiene hooks. Install: `pip install pre-commit && pre-commit install`.
 4. ✅ **`web/` under coverage** — `--cov=web` in pytest addopts and `[tool.coverage.run] source`.
-5. ✅ **`.cursorrules` PLANNING.md pointer** — now points at `planning/architecture/system-architecture.md` + revival roadmap.
+5. ✅ **`.cursorrules` PLANNING.md pointer** — now points at `docs/architecture/system-architecture.md` + revival roadmap.
 
 Also fixed while wiring CI: `resolve_max_embedding_chars()` ignores non-int MagicMock values (FAISS tests), missing `import os` in `file_tools.py`, four bare `except:` → `except Exception:`.
 
@@ -272,7 +272,7 @@ Also fixed while wiring CI: `resolve_max_embedding_chars()` ignores non-int Magi
     `core/neural_memory_backend_fixed.py`, `core/tool_registry_fixed.py`,
     `core/cognitive_architecture_updated.py` — plus their two standalone
     tests, which only tested the orphans themselves.
-12. ✅ **`gui/` archived** to `planning/archive/gui/` (git history preserved
+12. ✅ **`gui/` archived** to `docs/archive/gui/` (git history preserved
     via `git mv`).
 13. ✅ **Root-level `test_*.py` cleaned up.** 9 still-valid standalone smoke
     scripts (`test_authentication.py`, `test_automatic_pruning.py`,
@@ -329,5 +329,5 @@ web/static/app.js                 # error cards + amber dot
 web/static/style.css              # warn dot + error hint styles
 tests/web/test_user_errors.py     # NEW
 tests/web/test_web_server.py      # routing + ollama-down tests
-planning/roadmap/composer-orchestrator-search-quality-2026-07.md  # this file
+docs/roadmap/composer-orchestrator-search-quality-2026-07.md  # this file
 ```

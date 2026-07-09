@@ -116,7 +116,7 @@ or directly to **`main`** when verified. **`main` was promoted** July 8, 2026
 
 ### Parked (explicitly out of scope for now)
 - Docker packaging, Supabase cloud sync
-- PyQt6 GUI — archived July 7 2026 to `planning/archive/gui/` (was `gui/`); web UI is the replacement
+- PyQt6 GUI — archived July 7 2026 to `docs/archive/gui/` (was `gui/`); web UI is the replacement
 
 ---
 

@@ -374,7 +374,7 @@ def get_llm_interface(config: WitsV3Config) -> BaseLLMInterface:
 
         logging.getLogger("WitsV3.LLMInterface").warning(
             "llm_interface.default_provider 'adaptive' is deprecated and ignored — "
-            "using Ollama. See planning/archive/adaptive_llm/README.md and "
+            "using Ollama. See docs/archive/adaptive_llm/README.md and "
             "core/model_router.py for smart routing."
         )
         return OllamaInterface(config)

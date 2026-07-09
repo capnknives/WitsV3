@@ -9,7 +9,7 @@ status: "reference"
 > **Status note (2026-07-08):** This document remains a useful **component map**, but
 > sections labeled “PRODUCTION READY” / mid-2025 metrics are **historical**. For how to
 > run the product and what shipped recently, use [`README.md`](../../README.md) and
-> [`planning/roadmap/suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md).
+> [`docs/roadmap/suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md).
 > The primary user interface is now the **Web UI**, not CLI-only.
 
 ## Table of Contents

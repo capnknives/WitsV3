@@ -5,7 +5,7 @@ were previously unreachable: the tool_registry only auto-discovers tools with
 zero required constructor args, and these took (config, llm_interface). They
 also had a constructor bug (`super().__init__(config)` against a BaseTool
 that expects `(name, description)`), so they would raise if ever
-instantiated. See planning/roadmap/composer-orchestrator-search-quality-2026-07.md
+instantiated. See docs/roadmap/composer-orchestrator-search-quality-2026-07.md
 Tier 3 #9.
 """
 

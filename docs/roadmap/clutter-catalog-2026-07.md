@@ -69,7 +69,7 @@ Safe, high confusion / line-count wins:
 
 | Path | Lines | Category | Evidence | Recommendation |
 |------|------:|----------|----------|----------------|
-| `synthetic_brain_stubs.py` | 94 | STUB | Stub LLM/KG/WM; only used by integration | ✅ **archived** July 8 → `planning/archive/synthetic_brain/` |
+| `synthetic_brain_stubs.py` | 94 | STUB | Stub LLM/KG/WM; only used by integration | ✅ **archived** July 8 → `docs/archive/synthetic_brain/` |
 | `synthetic_brain_integration.py` | 87 | ORPHAN/STUB | Fallback wrappers; no production importer | ✅ **archived** |
 | `cognitive_architecture.py` | 367 | ORPHAN | Only tests + `__main__`; wrong KG constructor vs real API | ✅ **archived** |
 | `memory_handler.py` | 320 | STUB/ORPHAN | Procedural memory “not yet implemented”; wrong KG/WM APIs; not on `MemoryManager` path | ✅ **archived** |
@@ -78,7 +78,7 @@ Safe, high confusion / line-count wins:
 
 | Path | Lines | Category | Evidence | Recommendation |
 |------|------:|----------|----------|----------------|
-| `adaptive_llm_interface.py` | 302 | DORMANT | Header + `get_llm_interface()` **ignores** `adaptive` → Ollama | **archive** (docs already in `planning/archive/adaptive_llm/`) |
+| `adaptive_llm_interface.py` | 302 | DORMANT | Header + `get_llm_interface()` **ignores** `adaptive` → Ollama | **archive** (docs already in `docs/archive/adaptive_llm/`) |
 | `adaptive_llm_config.py` | ~163 | DORMANT | Only adaptive stack | **archive** |
 | `adaptive/*` (tokenizer, tracker, response_generator) | ~500 | DORMANT | Placeholder tokenize/decode | **archive** |
 | `complexity_analyzer.py` | 265 | DORMANT | Adaptive + `tests/test_adaptive_llm.py` | **archive** |
@@ -155,9 +155,9 @@ Silent no-ops in cron jobs are worse than missing jobs — they look healthy in 
 
 | Location | Contents |
 |----------|----------|
-| `planning/archive/gui/` | PyQt6 matrix UI + book-writing GUI — replaced by web UI |
-| `planning/archive/adaptive_llm/README.md` | Deprecation note (July 2026) |
-| `planning/archive/originals/` | Pre-revival docs & roadmaps |
+| `docs/archive/gui/` | PyQt6 matrix UI + book-writing GUI — replaced by web UI |
+| `docs/archive/adaptive_llm/README.md` | Deprecation note (July 2026) |
+| `docs/archive/originals/` | Pre-revival docs & roadmaps |
 | `scripts/manual_tests/` | Old root smoke scripts moved in Tier 3 |
 
 ---
@@ -168,8 +168,8 @@ Silent no-ops in cron jobs are worse than missing jobs — they look healthy in 
 |------|-------|----------------|
 | `docs/IMPLEMENTATION_STATUS.md` / `*_NEXT_STEPS.md` / `SYNTHETIC_BRAIN_*.md` | Still describe stubs as active 2025 work | Historical headers already partly added — finish truth pass |
 | `FILE_STRUCTURE.md` | Lists dormant modules as first-class | Update after deletes |
-| `planning/tasks/task-management.md` | Marked superseded | leave |
-| `planning/roadmap/neural-web-roadmap.md` | 2025 design | historical — leave |
+| `docs/tasks/task-management.md` | Marked superseded | leave |
+| `docs/roadmap/neural-web-roadmap.md` | 2025 design | historical — leave |
 
 Canonical: `suggested-features-2026-07.md` (forward) + `revival-2026-07.md` (shipped log).
 
@@ -200,8 +200,8 @@ Canonical: `suggested-features-2026-07.md` (forward) + `revival-2026-07.md` (shi
 2. ✅ Delete root `torch.py` (unused after adaptive archive).
 
 ### Wave C — Archive dormant clusters
-1. ✅ **DONE July 8 2026** — Adaptive LLM + `core/adaptive/` → `planning/archive/adaptive_llm/core/`; `tests/test_adaptive_llm.py` + `tests/config.yaml` removed.
-2. ✅ **DONE July 8 2026** — Synthetic brain + cognitive + `memory_handler` → `planning/archive/synthetic_brain/`.
+1. ✅ **DONE July 8 2026** — Adaptive LLM + `core/adaptive/` → `docs/archive/adaptive_llm/core/`; `tests/test_adaptive_llm.py` + `tests/config.yaml` removed.
+2. ✅ **DONE July 8 2026** — Synthetic brain + cognitive + `memory_handler` → `docs/archive/synthetic_brain/`.
 
 ### Wave D — Product decisions (don’t delete until decided)
 1. Neural stack (`working_memory`, `knowledge_graph`, `cross_domain_learning`, neural orchestrator): **ship as default** or **mark research-only** in README.

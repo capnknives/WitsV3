@@ -2,7 +2,7 @@
 
 > **Not the recommended way to run WitsV3.** Day-to-day use is local:
 > `python run_web.py` (or `run.py`). Docker packaging is explicitly **parked** on the
-> roadmap — see [`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md) §4.
+> roadmap — see [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md) §4.
 
 What exists for experimental / background use:
 
