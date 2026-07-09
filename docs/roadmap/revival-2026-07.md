@@ -116,7 +116,7 @@ or directly to **`main`** when verified. **`main` was promoted** July 8, 2026
 
 ### Parked (explicitly out of scope for now)
 - Docker packaging, Supabase cloud sync
-- PyQt6 GUI — archived July 7 2026 to `docs/archive/gui/` (was `gui/`); web UI is the replacement
+- PyQt6 GUI — archived July 7 2026; **pruned from tree July 8 2026** (tag `archive-pre-prune-2026-07`); web UI is the replacement
 
 ---
 
@@ -168,4 +168,10 @@ Client actions: `/help`, `/new`, `/export`, panel shortcuts; owner chat commands
 **Tiers 1–4 shipped July 7 2026.** Detail preserved in
 [`composer-orchestrator-search-quality-2026-07.md`](composer-orchestrator-search-quality-2026-07.md)
 (Tier audit section). Second-pass 500-line splits and CI lint expansion are
-tracked in [`suggested-features-2026-07.md`](suggested-features-2026-07.md) § P2–P3.
+(tracked in [`suggested-features-2026-07.md`](suggested-features-2026-07.md) § P2–P3.
+
+### Repo footprint consolidation (July 8 2026)
+
+- **Phase 0** — removed dead root artifacts (`models/`, `WitsV3/`, orphan config); utility scripts → `scripts/`
+- **Phase 1** — merged `planning/` into `docs/`; `planning/` redirect stub only
+- **Phase 2a** — tagged `archive-pre-prune-2026-07`; pruned 61 files from `docs/archive/gui/` (PyQt6 + book GUI); stub README + git tag for recovery

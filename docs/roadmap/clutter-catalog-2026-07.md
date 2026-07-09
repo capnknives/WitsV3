@@ -155,7 +155,7 @@ Silent no-ops in cron jobs are worse than missing jobs — they look healthy in 
 
 | Location | Contents |
 |----------|----------|
-| `docs/archive/gui/` | PyQt6 matrix UI + book-writing GUI — replaced by web UI |
+| `docs/archive/gui/` | Pruned July 8 2026 — stub + tag `archive-pre-prune-2026-07` (web UI is the client) |
 | `docs/archive/adaptive_llm/README.md` | Deprecation note (July 2026) |
 | `docs/archive/originals/` | Pre-revival docs & roadmaps |
 | `scripts/manual_tests/` | Old root smoke scripts moved in Tier 3 |

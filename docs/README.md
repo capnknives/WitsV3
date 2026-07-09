@@ -35,7 +35,7 @@ Root redirects: [`TASK.md`](../TASK.md), [`PLANNING.md`](../PLANNING.md), [`plan
 | [`implementation/`](implementation/) | Implementation write-ups (many historical) |
 | [`tasks/`](tasks/) | Superseded task lists → use roadmap |
 | [`technical-notes/`](technical-notes/) | Debug / fix notes (prefer consolidated) |
-| [`archive/`](archive/) | Originals, parked GUI, Sphinx stubs, historical doc sets |
+| [`archive/`](archive/) | Originals, Sphinx stubs, historical docs; [`archive/gui/`](archive/gui/) pruned — tag `archive-pre-prune-2026-07` |
 
 ## Documentation standards
 
