@@ -2,7 +2,9 @@
 
 All personal/runtime files live under ``var/`` by default (configurable via
 ``runtime_paths.root``). Legacy top-level folders (``data/``, ``logs/``, …)
-are migrated into ``var/`` on first startup when the new location is absent.
+are migrated into ``var/`` on startup. When ``var/<subdir>/`` already exists
+(e.g. git-tracked ``var/data/`` templates), legacy contents are merged in and
+the empty legacy folder is removed.
 """
 
 from __future__ import annotations
@@ -13,6 +15,16 @@ import shutil
 from pathlib import Path
 
 logger = logging.getLogger("WitsV3.RuntimePaths")
+
+# Files tracked in git under var/data/ — keep the repo copy on conflict unless
+# legacy is clearly the live runtime file (handled via _should_prefer_legacy_file).
+TRACKED_DATA_FILENAMES = frozenset(
+    {
+        "README.md",
+        "mcp_config.json",
+        "mcp_tools.json",
+    }
+)
 
 # Package location (stable); runtime paths resolve from the process cwd so tests
 # and scripts that chdir into an isolated directory stay sandboxed.
@@ -118,8 +130,68 @@ def resolve_project_path(relative: str | Path, root: str = RUNTIME_ROOT_NAME) ->
     return new_path
 
 
+def _is_tracked_data_file(name: str) -> bool:
+    return name in TRACKED_DATA_FILENAMES or name.endswith(".template")
+
+
+def _should_prefer_legacy_file(legacy: Path, target: Path) -> bool:
+    """Prefer the legacy file when it looks like the pre-migration live data."""
+    if _is_tracked_data_file(legacy.name):
+        return False
+    try:
+        legacy_stat = legacy.stat()
+        target_stat = target.stat()
+    except OSError:
+        return True
+    if legacy_stat.st_size > target_stat.st_size:
+        return True
+    return legacy_stat.st_mtime > target_stat.st_mtime
+
+
+def _merge_legacy_tree(legacy: Path, target: Path) -> list[str]:
+    """Merge legacy runtime tree into an existing var/ target (recursive)."""
+    actions: list[str] = []
+    target.mkdir(parents=True, exist_ok=True)
+
+    for item in list(legacy.iterdir()):
+        dest = target / item.name
+        if item.is_dir():
+            actions.extend(_merge_legacy_tree(item, dest))
+            try:
+                item.rmdir()
+            except OSError:
+                pass
+            continue
+
+        if not dest.exists():
+            shutil.move(str(item), str(dest))
+            actions.append(f"merged {item.name}")
+            continue
+
+        if _is_tracked_data_file(item.name):
+            item.unlink(missing_ok=True)
+            continue
+
+        if _should_prefer_legacy_file(item, dest):
+            dest.unlink(missing_ok=True)
+            shutil.move(str(item), str(dest))
+            actions.append(f"replaced {item.name} from legacy")
+        else:
+            item.unlink(missing_ok=True)
+
+    return actions
+
+
+def _remove_empty_dir(path: Path) -> bool:
+    try:
+        path.rmdir()
+        return True
+    except OSError:
+        return False
+
+
 def migrate_legacy_runtime_dirs(root: str = RUNTIME_ROOT_NAME) -> list[str]:
-    """Move legacy top-level runtime dirs into var/ when the target is absent."""
+    """Move or merge legacy top-level runtime dirs into var/."""
     moved: list[str] = []
     base = project_root()
     rt = base / root
@@ -131,6 +203,16 @@ def migrate_legacy_runtime_dirs(root: str = RUNTIME_ROOT_NAME) -> list[str]:
             shutil.move(str(legacy), str(target))
             moved.append(f"{sub}/ -> {root}/{sub}/")
             logger.info("Migrated runtime directory %s -> %s", legacy, target)
+        elif legacy.exists() and legacy.is_dir() and target.exists():
+            merged = _merge_legacy_tree(legacy, target)
+            if merged:
+                moved.append(f"{sub}/ merged into {root}/{sub}/ ({len(merged)} items)")
+                logger.info(
+                    "Merged legacy %s into %s (%d items)", legacy, target, len(merged)
+                )
+            if _remove_empty_dir(legacy):
+                moved.append(f"removed empty legacy {sub}/")
+                logger.info("Removed empty legacy directory %s", legacy)
         elif not target.exists():
             target.mkdir(parents=True, exist_ok=True)
     return moved
