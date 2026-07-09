@@ -1,0 +1,15 @@
+id: doc_qa
+description: Document Q&A via document_search when user has ingested files.
+triggers:
+  signals:
+    - summarize my
+    - summarize the
+    - my audit report
+    - my notes
+    - search my documents
+  requires_doc_inventory: true
+steps:
+  - tool: document_search
+    args_from: search_query
+synthesis: "Here is what I found in your documents."
+synthesis_llm: true

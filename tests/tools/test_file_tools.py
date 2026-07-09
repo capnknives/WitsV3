@@ -39,3 +39,25 @@ async def test_write_file_refuses_outside_project():
     result = await tool.execute(file_path=outside, content="should not land")
     assert result.startswith("Error:")
     assert "project directory" in result
+
+
+@pytest.mark.asyncio
+async def test_read_file_refuses_outside_allowed_roots(monkeypatch, tmp_path):
+    import core.filesystem_policy as fp
+    import core.safe_code_editor as sce
+
+    monkeypatch.setattr(sce, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(fp, "PROJECT_ROOT", tmp_path)
+    inside = tmp_path / "allowed.txt"
+    inside.write_text("ok", encoding="utf-8")
+
+    tool = __import__("tools.file_tools", fromlist=["FileReadTool"]).FileReadTool()
+    result = await tool.execute(file_path=str(inside), user_role="owner")
+    assert result == "ok"
+
+    outside = (
+        "C:/Windows/win.ini" if sys.platform == "win32" else "/etc/hosts"
+    )
+    result = await tool.execute(file_path=outside, user_role="guest")
+    assert result.startswith("Error:")
+    assert "allowed" in result.lower()

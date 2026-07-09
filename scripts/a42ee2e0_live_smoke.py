@@ -127,9 +127,9 @@ async def routing_checks(wcca) -> None:
             lambda i: i.get("suggested_response") == "orchestrator",
         ),
         (
-            "codebase intro route",
+            "codebase tour playbook",
             "What can you tell me about your codebase wits?",
-            lambda i: i.get("routing_destination") == "codebase_intro",
+            lambda i: i.get("playbook_id") == "codebase_tour",
         ),
         (
             "introspection skips coding agent",

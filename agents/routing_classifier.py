@@ -23,7 +23,9 @@ RouteDestination = Literal[
     "guest_chat_history",
     "guest_profile",
     "knowledge_log",
-    "codebase_intro",
+    "read_file_direct",
+    "playbook",
+    "continuation",
 ]
 
 # --- shared signal lists (single source of truth for routing heuristics) ---
@@ -172,6 +174,37 @@ SELF_REPAIR_SIGNALS = (
     "initiate self repair",
     "initiate self-repair",
     "repair yourself",
+    "diagnose errors",
+    "diagnose the log",
+    "diagnose log",
+    "diagnose application log",
+    "run tests",
+    "run the test suite",
+    "run pytest",
+    "failing tests",
+)
+
+MATH_CALCULATOR_RE = re.compile(
+    r"\b(square[- ]?root|sqrt|calculate|compute|what is|what's)\b.*\b(\d+[\d.,]*)\b"
+    r"|\b(\d+[\d.,]*)\s*[\+\-\*\/\^]\s*(\d+[\d.,]*)",
+    re.IGNORECASE,
+)
+
+EXPLICIT_READ_FILE_RE = re.compile(
+    r"\bread\s+(?:the\s+)?(?:file\s+)?([^\s?\"']+\.(?:py|md|txt|json|yaml|yml|log|html|csv|pdf))\b",
+    re.IGNORECASE,
+)
+
+DOWNLOADS_READ_SIGNALS = (
+    "downloads",
+    r"d:\downloads",
+    "my downloads",
+    "competitive landscape",
+)
+
+DOWNLOADS_FILE_RE = re.compile(
+    r"(?:downloads[/\\]|d:\\downloads[/\\])?([^\s?\"']+\.(?:pdf|md|txt|docx?|csv|json|yaml|yml))\b",
+    re.IGNORECASE,
 )
 
 STORY_NOUN_RE = re.compile(
@@ -332,6 +365,9 @@ class RouteDecision:
     destination: RouteDestination
     reason: str
     orchestrator_notes: str = ""
+    preferred_tool: str = ""
+    playbook_id: str = ""
+    file_path: str = ""
 
     def to_intent(self) -> dict[str, Any] | None:
         """Map to WCCA intent dict, or None when the caller should run the intent LLM."""
@@ -375,7 +411,7 @@ class RouteDecision:
                 "confidence": 0.85,
             }
         if self.destination == "orchestrator":
-            return {
+            intent: dict[str, Any] = {
                 "type": "task",
                 "complexity": "moderate",
                 "requires_tools": True,
@@ -383,16 +419,9 @@ class RouteDecision:
                 "notes": self.orchestrator_notes or self.reason,
                 "confidence": 0.85,
             }
-        if self.destination == "codebase_intro":
-            return {
-                "type": "task",
-                "complexity": "moderate",
-                "requires_tools": True,
-                "suggested_response": "orchestrator",
-                "routing_destination": "codebase_intro",
-                "notes": self.orchestrator_notes or self.reason,
-                "confidence": 0.9,
-            }
+            if self.preferred_tool:
+                intent["preferred_tool"] = self.preferred_tool
+            return intent
         if self.destination in ("guest_chat_history", "guest_profile", "knowledge_log"):
             return {
                 "type": "task",
@@ -400,6 +429,36 @@ class RouteDecision:
                 "requires_tools": True,
                 "suggested_response": "direct_tool",
                 "routing_destination": self.destination,
+                "notes": self.reason,
+                "confidence": 0.9,
+            }
+        if self.destination == "read_file_direct":
+            return {
+                "type": "task",
+                "complexity": "simple",
+                "requires_tools": True,
+                "suggested_response": "direct_tool",
+                "routing_destination": "read_file_direct",
+                "file_path": self.file_path,
+                "notes": self.reason,
+                "confidence": 0.9,
+            }
+        if self.destination == "playbook":
+            return {
+                "type": "goal_defined",
+                "complexity": "moderate",
+                "requires_tools": True,
+                "suggested_response": "playbook",
+                "playbook_id": self.playbook_id,
+                "notes": self.reason,
+                "confidence": 0.9,
+            }
+        if self.destination == "continuation":
+            return {
+                "type": "task",
+                "complexity": "simple",
+                "requires_tools": False,
+                "suggested_response": "continuation",
                 "notes": self.reason,
                 "confidence": 0.9,
             }
@@ -413,6 +472,7 @@ class RoutingContext:
     doc_inventory: dict[str, int] = field(default_factory=dict)
     session_id: str | None = None
     active_specialized_agent: str | None = None
+    last_task_route: str | None = None
     conversation_history: ConversationHistory | None = None
     greeting_only_direct: bool = True
 
@@ -424,6 +484,36 @@ def doc_routing_hints(doc_inventory: dict[str, int]) -> set[str]:
         hints.add(name)
         hints.update(w for w in re.split(r"[\W_]+", Path(path).stem.lower()) if len(w) >= 4)
     return hints
+
+
+def needs_math_calculator(message: str) -> bool:
+    """Pure math that should use calculator, not web_search."""
+    if needs_web_search(message):
+        return False
+    return bool(MATH_CALCULATOR_RE.search(message))
+
+
+def needs_explicit_file_read(message: str) -> str | None:
+    """Return file path when user names a specific file to read."""
+    match = EXPLICIT_READ_FILE_RE.search(message)
+    if match:
+        return match.group(1)
+    return None
+
+
+def needs_downloads_file_read(message: str) -> str | None:
+    """Return Downloads-relative path when user asks about files in Downloads."""
+    lowered = message.lower()
+    if not any(sig in lowered for sig in DOWNLOADS_READ_SIGNALS):
+        return None
+    match = DOWNLOADS_FILE_RE.search(message)
+    if match:
+        name = match.group(1).lstrip("/\\")
+        return name
+    # Generic "list downloads" — no specific file
+    if any(p in lowered for p in ("list", "show", "what's in", "whats in")):
+        return "__downloads_dir__"
+    return None
 
 
 def needs_web_search(message: str) -> bool:
@@ -558,6 +648,8 @@ def requires_orchestrator(message: str, doc_inventory: dict[str, int]) -> bool:
     if needs_guest_admin_review(message):
         return True
     if needs_file_write(message):
+        return True
+    if needs_math_calculator(message):
         return True
     lowered = message.lower()
     doc_hints = doc_routing_hints(doc_inventory)
@@ -748,6 +840,15 @@ def classify_message(ctx: RoutingContext) -> RouteDecision:
         )
 
     if needs_file_write(message):
+        from core.playbooks import match_playbook
+
+        pb = match_playbook(message, doc_inventory=ctx.doc_inventory)
+        if pb:
+            return RouteDecision(
+                "playbook",
+                f"Save/export playbook — {pb}",
+                playbook_id=pb,
+            )
         return RouteDecision(
             "orchestrator",
             "Save/export to file — routing to orchestrator.",
@@ -757,9 +858,35 @@ def classify_message(ctx: RoutingContext) -> RouteDecision:
 
     if needs_codebase_intro(message):
         return RouteDecision(
-            "codebase_intro",
-            "Codebase introspection — read project files before answering.",
-            "Read README.md, AGENTS.md, and key architecture docs via filesystem tools.",
+            "playbook",
+            "Codebase introspection — codebase_tour playbook.",
+            playbook_id="codebase_tour",
+        )
+
+    explicit_path = needs_explicit_file_read(message)
+    if explicit_path and role != "guest":
+        return RouteDecision(
+            "read_file_direct",
+            f"Explicit file read — {explicit_path}",
+            file_path=explicit_path,
+        )
+
+    downloads_path = needs_downloads_file_read(message)
+    if downloads_path and role != "guest":
+        return RouteDecision(
+            "read_file_direct",
+            f"Downloads file read — {downloads_path}",
+            file_path=downloads_path,
+        )
+
+    from core.playbooks import match_playbook
+
+    playbook_id = match_playbook(message, doc_inventory=ctx.doc_inventory)
+    if playbook_id:
+        return RouteDecision(
+            "playbook",
+            f"Playbook match — {playbook_id}",
+            playbook_id=playbook_id,
         )
 
     if role != "guest" and needs_self_repair(message):
@@ -776,6 +903,7 @@ def classify_message(ctx: RoutingContext) -> RouteDecision:
 
     if requires_orchestrator(message, ctx.doc_inventory):
         notes = "Routing to orchestrator for tool use."
+        preferred = "calculator" if needs_math_calculator(message) else ""
         if needs_web_search(message):
             notes = (
                 "Needs current/external info or an explicit lookup — "
@@ -783,7 +911,21 @@ def classify_message(ctx: RoutingContext) -> RouteDecision:
             )
         elif any(h in message.lower() for h in DOCUMENT_TOOL_HINTS):
             notes = "References user documents/files — routing to orchestrator."
-        return RouteDecision("orchestrator", "Tool/orchestrator guard matched.", notes)
+        return RouteDecision(
+            "orchestrator",
+            "Tool/orchestrator guard matched.",
+            notes,
+            preferred_tool=preferred,
+        )
+
+    if (
+        ctx.last_task_route in ("orchestrator", "playbook")
+        and is_agent_continuation_phrase(message)
+    ):
+        return RouteDecision(
+            "continuation",
+            f"Continuation phrase — resume prior {ctx.last_task_route} task.",
+        )
 
     if ctx.conversation_history and is_conversation_follow_up(message, ctx.conversation_history):
         routing_message = follow_up_routing_message(message, ctx.conversation_history)

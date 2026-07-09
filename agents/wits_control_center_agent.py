@@ -42,6 +42,7 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         memory_manager: MemoryManager | None = None,
         orchestrator_agent: Any | None = None,
         specialized_agents: dict[str, Any] | None = None,
+        playbook_executor: Any | None = None,
     ):
         """
         Initialize the Control Center Agent.
@@ -58,6 +59,7 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
 
         self.orchestrator_agent = orchestrator_agent
         self.specialized_agents = specialized_agents or {}
+        self.playbook_executor = playbook_executor
 
         # session_id -> the original request that triggered a clarifying
         # question we're still waiting on an answer to. See run()'s merge
@@ -71,6 +73,10 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         # session, so a bare follow-up like "okay, make it" or "write it all"
         # resumes that agent instead of being judged as standalone chat.
         self._active_specialized_agent: dict[str, str] = {}
+
+        # session_id -> last completed task metadata for cheap "continue" follow-ups
+        # after orchestrator/playbook turns (specialists use _active_specialized_agent).
+        self._last_task_context: dict[str, dict[str, str]] = {}
 
         # Use control center specific model
         self.model_name = config.ollama_settings.control_center_model
@@ -163,6 +169,17 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         try:
             # Initial processing
             yield self.stream_thinking("Analyzing your request...")
+
+            # Inject tiered core memory into session context when enabled
+            mm_cfg = getattr(self.config, "memory_manager", None)
+            if mm_cfg and getattr(mm_cfg, "tiered_enabled", False) and user_role != "guest":
+                from core.core_memory import get_core_memory_store
+
+                core_block = get_core_memory_store(self.config).as_prompt_block()
+                if core_block:
+                    self._guest_personalization_context = (
+                        f"{self._guest_personalization_context}\n\nCORE MEMORY:\n{core_block}".strip()
+                    )
 
             # Store user input in memory
             await self.store_memory(
@@ -294,7 +311,70 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
-        # Save/export must reach the orchestrator before specialized agents
+        if routing_destination == "read_file_direct":
+            file_path = intent_analysis.get("file_path", "")
+            user_role = getattr(self, "_request_user_role", "owner")
+            from core.filesystem_policy import configured_read_roots, resolve_allowed_read_path
+
+            yield self.stream_thinking(f"Reading {file_path}...")
+            if self.orchestrator_agent and self.orchestrator_agent.tool_registry:
+                try:
+                    tool_name = "read_file"
+                    tool_args: dict[str, Any] = {"user_role": user_role}
+                    if file_path == "__downloads_dir__":
+                        tool_name = "list_directory"
+                        downloads_roots = [
+                            r for r in configured_read_roots(self.config) if r.name.lower() == "downloads"
+                        ]
+                        if not downloads_roots:
+                            downloads_roots = [
+                                r
+                                for r in configured_read_roots(self.config)
+                                if str(r).lower().endswith("downloads")
+                            ]
+                        tool_args["directory_path"] = str(downloads_roots[0] if downloads_roots else configured_read_roots(self.config)[-1])
+                    else:
+                        candidate = file_path
+                        if "/" not in candidate and "\\" not in candidate:
+                            for root in configured_read_roots(self.config):
+                                if str(root).lower().endswith("downloads"):
+                                    candidate = str(root / candidate)
+                                    break
+                        resolve_allowed_read_path(candidate, role=user_role, config=self.config)
+                        tool_args["file_path"] = candidate
+                    result = await self.orchestrator_agent.tool_registry.execute_tool(
+                        tool_name, **tool_args
+                    )
+                    content = result.get("content", result) if isinstance(result, dict) else str(result)
+                    yield self.stream_result(str(content)[:8000])
+                except Exception as e:
+                    yield self.stream_error(f"Could not read {file_path}: {e}")
+            return
+
+        if suggested_response == "playbook" and intent_analysis.get("playbook_id"):
+            playbook_id = intent_analysis["playbook_id"]
+            executor = getattr(self, "playbook_executor", None)
+            if executor:
+                self._record_task_context(session_id, "playbook", user_input, playbook_id=playbook_id)
+                yield self.stream_thinking(f"Executing playbook: {playbook_id}")
+                async for stream_data in executor.run(
+                    user_input=user_input,
+                    conversation_history=conversation_history,
+                    session_id=session_id,
+                    playbook_id=playbook_id,
+                    user_role=getattr(self, "_request_user_role", "owner"),
+                ):
+                    yield stream_data
+                return
+
+        if suggested_response == "continuation":
+            async for stream_data in self._stream_task_continuation(
+                user_input, conversation_history, session_id
+            ):
+                yield stream_data
+            return
+
+        # Save/export via orchestrator when playbook did not match
         # (2026-07-08: "save our conversation as debugthisoneplz" hit SystemDoctor).
         if self._needs_file_write(user_input) and self.orchestrator_agent:
             yield self.stream_thinking("Saving conversation to file via orchestrator...")
@@ -305,19 +385,7 @@ User input: {user_input}
                 user_role=getattr(self, "_request_user_role", "owner"),
                 guest_profile=getattr(self, "_request_guest_profile", None),
                 guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
-            ):
-                yield stream_data
-            return
-
-        if routing_destination == "codebase_intro" and self.orchestrator_agent:
-            yield self.stream_thinking("Reading project files for codebase overview...")
-            async for stream_data in self.orchestrator_agent.run(
-                user_input=user_input,
-                conversation_history=conversation_history,
-                session_id=session_id,
-                user_role=getattr(self, "_request_user_role", "owner"),
-                guest_profile=getattr(self, "_request_guest_profile", None),
-                guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
+                preferred_tool=intent_analysis.get("preferred_tool", ""),
             ):
                 yield stream_data
             return
@@ -396,7 +464,13 @@ User input: {user_input}
                         "specialized",
                     )
                 )
+                from agents.agent_handoff import handoff_stream_note
+
+                handoff_note = handoff_stream_note(agent_type)
+                if handoff_note:
+                    yield self.stream_thinking(handoff_note)
                 self._active_specialized_agent[session_id] = agent_type
+                self._record_task_context(session_id, agent_type, user_input)
                 yield self.stream_thinking(f"Using {agent_type} agent for: {user_input}")
 
                 async for stream_data in specialized_agent.run(
@@ -407,71 +481,44 @@ User input: {user_input}
                     yield stream_data
                 return
 
-        # For complex tasks, use enhanced capabilities if available
+        # Enhanced capabilities: skip extra compose LLM — delegate straight to orchestrator.
         if (
             getattr(self, "_request_user_role", "owner") != "guest"
             and self.has_enhanced_capabilities
             and requires_tools
             and complexity in ["moderate", "complex", "research"]
+            and self.orchestrator_agent
         ):
-            yield self.stream_thinking("Using enhanced capabilities for complex task...")
-
-            if self.meta_reasoning and self.tool_composer:
-                try:
-                    # Get capabilities from intent analysis
-                    required_capabilities = intent_analysis.get(
-                        "required_capabilities", ["general_processing"]
-                    )
-
-                    # Map capabilities to available tools
-                    available_tools = []
-                    capability_to_tool = {
-                        "code_generation": "python_execution",
-                        "math": "math_operations",
-                        "data_analysis": "math_operations",
-                        "general_processing": "think",
-                    }
-
-                    for capability in required_capabilities:
-                        if capability in capability_to_tool:
-                            available_tools.append(capability_to_tool[capability])
-
-                    if not available_tools:
-                        available_tools = ["think", "calculator"]
-
-                    # Create a workflow for the task
-                    workflow = await self.tool_composer.compose_workflow(
-                        user_input,
-                        available_tools,
-                        constraints={"source": "user_interaction"},
-                    )
-
-                    yield self.stream_thinking(
-                        f"Created workflow with {len(workflow.nodes)} steps using {workflow.strategy.value} strategy."
-                    )
-
-                    # For now, delegate to orchestrator as we're not fully implementing workflow execution
-                    if self.orchestrator_agent:
-                        yield self.stream_thinking("Delegating to orchestrator for execution...")
-                        async for stream_data in self.orchestrator_agent.run(
-                            user_input=user_input,
-                            conversation_history=conversation_history,
-                            session_id=session_id,
-                            user_role=getattr(self, "_request_user_role", "owner"),
-                            guest_profile=getattr(self, "_request_guest_profile", None),
-                            guest_personalization_context=getattr(
-                                self, "_guest_personalization_context", ""
-                            ),
-                        ):
-                            yield stream_data
-                        return
-                except Exception as e:
-                    self.logger.error(f"Error using enhanced capabilities: {e}")
-                    # Fall through to the generic orchestrator below
+            yield self.stream_thinking("Delegating complex task to orchestrator...")
+            self._record_task_context(
+                session_id,
+                "orchestrator",
+                user_input,
+                preferred_tool=intent_analysis.get("preferred_tool", ""),
+            )
+            async for stream_data in self.orchestrator_agent.run(
+                user_input=user_input,
+                conversation_history=conversation_history,
+                session_id=session_id,
+                user_role=getattr(self, "_request_user_role", "owner"),
+                guest_profile=getattr(self, "_request_guest_profile", None),
+                guest_personalization_context=getattr(
+                    self, "_guest_personalization_context", ""
+                ),
+                preferred_tool=intent_analysis.get("preferred_tool", ""),
+            ):
+                yield stream_data
+            return
 
         # Default: delegate to orchestrator for tool-based execution
         if self.orchestrator_agent and (requires_tools or suggested_response == "orchestrator"):
             yield self.stream_thinking("Delegating to orchestrator...")
+            self._record_task_context(
+                session_id,
+                "orchestrator",
+                user_input,
+                preferred_tool=intent_analysis.get("preferred_tool", ""),
+            )
             async for stream_data in self.orchestrator_agent.run(
                 user_input=user_input,
                 conversation_history=conversation_history,
@@ -479,6 +526,7 @@ User input: {user_input}
                 user_role=getattr(self, "_request_user_role", "owner"),
                 guest_profile=getattr(self, "_request_guest_profile", None),
                 guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
+                preferred_tool=intent_analysis.get("preferred_tool", ""),
             ):
                 yield stream_data
             return

@@ -1,0 +1,338 @@
+# Reusable conversational + task smoke scenarios for WitsV3.
+# Run via: python scripts/conversation_task_smoke.py [--quick|--live]
+
+version: 1
+
+scenarios:
+  # --- operator (no LLM) ---
+  - id: op-faiss
+    tier: operator
+    requires_live: false
+    check: memory_backend
+    expect: faiss_cpu
+
+  - id: op-memory-init
+    tier: operator
+    requires_live: false
+    check: memory_init
+
+  - id: op-mcp-health
+    tier: operator
+    requires_live: false
+    check: mcp_health
+
+  - id: op-tool-metrics
+    tier: operator
+    requires_live: false
+    check: tool_metrics
+
+  - id: op-offline-mode
+    tier: operator
+    requires_live: false
+    check: offline_mode_config
+
+  # --- routing (deterministic, no LLM) ---
+  - id: route-save
+    tier: routing
+    requires_live: false
+    message: save our conversation as debugthisoneplz
+    assert:
+      suggested_response: playbook
+      playbook_id: save_conversation
+
+  - id: route-save-copy
+    tier: routing
+    requires_live: false
+    message: Save a copy of our conversation as importantissues01
+    assert:
+      suggested_response: playbook
+      playbook_id: save_conversation
+
+  - id: route-codebase
+    tier: routing
+    requires_live: false
+    message: What can you tell me about your codebase wits?
+    assert:
+      suggested_response: playbook
+      playbook_id: codebase_tour
+
+  - id: route-introspection-skip-coding
+    tier: routing
+    requires_live: false
+    message: No, I want you to actually look at your own files, the code.
+    check: specialist_none
+
+  - id: route-math
+    tier: routing
+    requires_live: false
+    message: what is the square-root of 75231
+    assert:
+      suggested_response: orchestrator
+      preferred_tool: calculator
+
+  - id: route-doc-qa
+    tier: routing
+    requires_live: false
+    message: summarize my audit report
+    doc_inventory:
+      audit_report.pdf: 12
+    assert:
+      suggested_response: playbook
+      playbook_id: doc_qa
+
+  - id: route-self-repair
+    tier: routing
+    requires_live: false
+    message: run self repair on the codebase
+    assert:
+      specialized_agent: self_repair
+
+  - id: route-diagnose-logs
+    tier: routing
+    requires_live: false
+    message: diagnose errors in the application log
+    assert:
+      specialized_agent: self_repair
+
+  - id: route-followup
+    tier: routing
+    requires_live: false
+    history:
+      - role: user
+        content: summarize the audit report you have access to.
+      - role: assistant
+        content: Which report would you like me to summarize?
+    message: the compliance one
+    doc_inventory:
+      audit_report.md: 3
+    check: orchestrator_guard
+
+  - id: route-doc-with-inventory
+    tier: routing
+    requires_live: false
+    message: summarize my audit report
+    doc_inventory:
+      audit_report.md: 3
+    assert:
+      suggested_response: playbook
+      playbook_id: doc_qa
+
+  - id: route-explicit-read
+    tier: routing
+    requires_live: false
+    message: read the file README.md
+    assert:
+      routing_destination: read_file_direct
+
+  - id: route-downloads-read
+    tier: routing
+    requires_live: false
+    message: read WitsV3_Competitive_Landscape.pdf in my downloads
+    role: owner
+    assert:
+      routing_destination: read_file_direct
+
+  - id: route-downloads-guest-denied
+    tier: routing
+    requires_live: false
+    message: read WitsV3_Competitive_Landscape.pdf in downloads
+    role: guest
+    assert:
+      suggested_response: orchestrator
+
+  - id: mt-memory-promote
+    tier: multiturn
+    requires_live: false
+    turns:
+      - message: remember my favorite color is blue
+        assert:
+          stream_type: result
+      - message: what is my favorite color
+        assert:
+          stream_type: result
+
+  - id: family-adult-downloads-read
+    tier: routing
+    requires_live: false
+    message: list my downloads folder
+    role: owner
+    assert:
+      routing_destination: read_file_direct
+
+  - id: route-continue-orchestrator
+    tier: routing
+    requires_live: false
+    message: continue
+    last_task_route: orchestrator
+    last_task_goal: what is the square-root of 75231
+    assert:
+      suggested_response: continuation
+
+  # --- direct (live or mock) ---
+  - id: direct-remember
+    tier: direct
+    requires_live: true
+    message: remember my dog is named Rex
+    assert:
+      stream_type: result
+      stream_contains: stored
+      no_orchestrator: true
+
+  - id: direct-greeting
+    tier: direct
+    requires_live: true
+    message: hello
+    assert:
+      stream_type: result
+      no_tool_calls: true
+
+  # --- orchestrator (live) ---
+  - id: orch-sqrt
+    tier: orchestrator
+    requires_live: true
+    message: what is the square-root of 75231
+    timeout: 120
+    assert:
+      stream_not_contains: web_search
+      regex: "274\\.2\\d*"
+
+  - id: orch-codebase
+    tier: orchestrator
+    requires_live: true
+    message: What can you tell me about your codebase wits?
+    timeout: 180
+    assert:
+      stream_contains_any:
+        - read_file
+        - list_directory
+        - README
+      stream_not_contains_with_unless:
+        BLUEBIRD: read_file
+      stream_not_contains_any:
+        - witwatersrand
+        - university of the wits
+
+  - id: orch-save
+    tier: orchestrator
+    requires_live: true
+    message: save our conversation as debugthisoneplz
+    timeout: 120
+    assert:
+      export_file: debugthisoneplz.txt
+      stream_not_contains: Selected self-repair agent
+
+  - id: orch-save2
+    tier: orchestrator
+    requires_live: true
+    message: Save a copy of our conversation as importantissues01
+    timeout: 120
+    assert:
+      export_file: importantissues01.txt
+
+  - id: orch-edge
+    tier: orchestrator
+    requires_live: true
+    message: Please open microsoft edge
+    timeout: 120
+    assert:
+      mcp_list_tools_max: 4
+
+  - id: orch-water
+    tier: orchestrator
+    requires_live: true
+    message: Is water wet?
+    timeout: 60
+    assert:
+      final_non_empty: true
+
+  # --- multiturn (live) ---
+  - id: mt-session-persist
+    tier: multiturn
+    requires_live: true
+    depends_on: orch-sqrt
+    check: session_persisted
+    min_messages: 2
+
+  # --- guest (routing) ---
+  - id: guest-no-specialist
+    tier: guest
+    requires_live: false
+    message: fix bugs in the codebase
+    role: guest
+    check: guest_no_specialist
+
+  - id: guest-orchestrator-chat
+    tier: guest
+    requires_live: false
+    message: what is 2 plus 2
+    role: guest
+    assert:
+      suggested_response: orchestrator
+
+  # --- performance (live budgets; requires --live --metrics) ---
+  - id: perf-sqrt
+    tier: performance
+    requires_live: true
+    message: what is the square-root of 75231
+    timeout: 120
+    assert:
+      llm_calls_max: 1
+      react_iterations_max: 2
+      wall_ms_max: 5000
+      regex: "274\\.2\\d*"
+
+  - id: perf-save
+    tier: performance
+    requires_live: true
+    message: save our conversation as debugthisoneplz
+    timeout: 120
+    assert:
+      llm_calls_max: 0
+      react_iterations_max: 0
+      wall_ms_max: 3000
+      export_file: debugthisoneplz.txt
+
+  - id: perf-codebase
+    tier: performance
+    requires_live: true
+    message: What can you tell me about your codebase wits?
+    timeout: 180
+    assert:
+      llm_calls_max: 2
+      react_iterations_max: 1
+      wall_ms_max: 20000
+      stream_contains_any:
+        - read_file
+        - list_directory
+        - README
+      stream_not_contains_any:
+        - witwatersrand
+        - university of the wits
+
+  # --- multiturn (live, scripted turns) ---
+  - id: mt-clarify
+    tier: multiturn
+    requires_live: true
+    timeout: 120
+    turns:
+      - message: tell me about the project
+        expect_clarification: true
+      - message: specifically the wits v3 codebase
+        check_intent:
+          suggested_response: playbook
+          playbook_id: codebase_tour
+
+  - id: mt-continue
+    tier: multiturn
+    requires_live: true
+    timeout: 120
+    turns:
+      - message: what is the square-root of 75231
+        assert:
+          regex: "274\\.2\\d*"
+      - message: continue
+        assert:
+          final_non_empty: true
+    assert:
+      llm_calls_max: 2
+      react_iterations_max: 1

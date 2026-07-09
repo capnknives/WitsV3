@@ -18,31 +18,39 @@ class FileReadTool(BaseTool):
     def __init__(self):
         super().__init__(name="read_file", description="Read the contents of a text file")
 
-    async def execute(self, file_path: str, encoding: str = "utf-8") -> str:
+    async def execute(self, file_path: str, encoding: str = "utf-8", user_role: str = "owner") -> str:
         """
         Read file contents.
 
         Args:
             file_path: Path to the file to read
             encoding: File encoding (default: utf-8)
+            user_role: owner | guest | RBAC role for read-root policy
 
         Returns:
             File contents as string
         """
+        from core.config import load_config
+        from core.filesystem_policy import resolve_allowed_read_path
+
         try:
-            file_path = Path(file_path).resolve()
+            config = load_config()
+            resolved = resolve_allowed_read_path(file_path, role=user_role, config=config)
+        except PermissionError as e:
+            self.logger.error(str(e))
+            return f"Error: {e}"
 
-            # Basic security check - ensure file exists and is readable
-            if not file_path.exists():
-                return f"Error: File {file_path} does not exist"
+        try:
+            if not resolved.exists():
+                return f"Error: File {resolved} does not exist"
 
-            if not file_path.is_file():
-                return f"Error: {file_path} is not a file"
+            if not resolved.is_file():
+                return f"Error: {resolved} is not a file"
 
-            async with aiofiles.open(file_path, encoding=encoding) as f:
+            async with aiofiles.open(resolved, encoding=encoding) as f:
                 content = await f.read()
 
-            self.logger.info(f"Read file: {file_path} ({len(content)} characters)")
+            self.logger.info(f"Read file: {resolved} ({len(content)} characters)")
             return content
 
         except Exception as e:
@@ -145,20 +153,33 @@ class ListDirectoryTool(BaseTool):
     def __init__(self):
         super().__init__(name="list_directory", description="List the contents of a directory")
 
-    async def execute(self, directory_path: str, include_hidden: bool = False) -> str:
+    async def execute(
+        self, directory_path: str, include_hidden: bool = False, user_role: str = "owner"
+    ) -> str:
         """
         List directory contents.
 
         Args:
             directory_path: Path to the directory to list
             include_hidden: Whether to include hidden files/directories
+            user_role: owner | guest | RBAC role for read-root policy
 
         Returns:
             Directory listing as formatted string
         """
-        try:
-            directory_path = Path(directory_path).resolve()
+        from core.config import load_config
+        from core.filesystem_policy import resolve_allowed_read_path
 
+        try:
+            config = load_config()
+            directory_path = resolve_allowed_read_path(
+                directory_path, role=user_role, config=config
+            )
+        except PermissionError as e:
+            self.logger.error(str(e))
+            return f"Error: {e}"
+
+        try:
             if not directory_path.exists():
                 return f"Error: Directory {directory_path} does not exist"
 

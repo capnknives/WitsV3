@@ -111,6 +111,22 @@ class AgentSettings(BaseModel):
         validate_assignment = True
 
 
+class OrchestratorSettings(BaseModel):
+    """Orchestrator loop configuration (ReAct vs native tool calling)."""
+
+    tool_calling_mode: str = Field(
+        default="json_react",
+        description="json_react (default) or ollama_native (pilot)",
+    )
+    prompt_rules_path: str = Field(default="config/orchestrator_prompt.yaml")
+    history_turns: int = Field(default=5, ge=1, le=20)
+    observation_window: int = Field(default=5, ge=1, le=20)
+    document_inventory_limit: int = Field(default=5000, gt=0)
+
+    class Config:
+        validate_assignment = True
+
+
 class NeuralWebSettings(BaseModel):
     activation_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
     decay_rate: float = Field(default=0.1, ge=0.0, le=1.0)
@@ -161,6 +177,15 @@ class MemoryManagerSettings(BaseModel):
         gt=0,
         description="Max characters sent to the embedding model (nomic-embed-text limit)",
     )
+    tiered_enabled: bool = Field(
+        default=True,
+        description="Enable core memory block + archival FAISS tiering",
+    )
+    core_max_tokens: int = Field(
+        default=2048,
+        gt=0,
+        description="Max tokens for always-in-prompt core memory block",
+    )
 
     # Enhanced pruning settings
     enable_auto_pruning: bool = Field(default=True, description="Enable automatic memory pruning")
@@ -177,11 +202,42 @@ class MemoryManagerSettings(BaseModel):
     neural_web_settings: NeuralWebSettings = Field(default_factory=NeuralWebSettings)
 
 
+class PIIRedactionSettings(BaseModel):
+    enabled: bool = Field(default=True, description="Enable PII redaction layer")
+    redact_before_store: bool = Field(
+        default=True, description="Redact PII before persisting memory segments"
+    )
+    redact_owner: bool = Field(
+        default=False, description="Also redact owner-visible content (default: guests only)"
+    )
+    patterns: list[str] = Field(
+        default_factory=list,
+        description="Extra regex patterns for PII detection",
+    )
+
+
 class SecuritySettings(BaseModel):
     offline_mode: bool = Field(
         default=False,
         description="Air-gap mode: block web_search and MCP registry/connect egress",
     )
+    filesystem_read_roots: list[str] = Field(
+        default_factory=lambda: [r"D:\Downloads"],
+        description="Extra read-only directories for owner sessions (project root always allowed)",
+    )
+    document_ingest_roots: list[str] = Field(
+        default_factory=lambda: [r"D:\Downloads"],
+        description="Additional folders ingest_documents scans besides documents_path",
+    )
+    sandbox_mode: str = Field(
+        default="off",
+        description="off | subprocess | docker — optional execution boundary",
+    )
+    sandbox_image: str = Field(
+        default="witsv3-sandbox",
+        description="Docker image for sandbox_mode=docker",
+    )
+    pii_redaction: PIIRedactionSettings = Field(default_factory=PIIRedactionSettings)
     python_execution_network_access: bool = Field(
         default=False, description="Allow network access in Python execution tool"
     )
@@ -497,6 +553,7 @@ class WitsV3Config(BaseModel):
     web_search: WebSearchSettings = Field(default_factory=WebSearchSettings)
     self_repair: SelfRepairSettings = Field(default_factory=SelfRepairSettings)
     knowledge_log: KnowledgeLogSettings = Field(default_factory=KnowledgeLogSettings)
+    orchestrator: OrchestratorSettings = Field(default_factory=OrchestratorSettings)
 
     class Config:
         validate_assignment = True

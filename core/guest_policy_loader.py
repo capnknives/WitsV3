@@ -56,3 +56,15 @@ def policy_patterns(
     if not items:
         return fallback
     return _compile_patterns(items)
+
+
+def policy_roles() -> dict[str, Any]:
+    data = load_guest_policy()
+    roles = data.get("roles")
+    return roles if isinstance(roles, dict) else {}
+
+
+def default_policy_role() -> str:
+    data = load_guest_policy()
+    role = data.get("default_role")
+    return str(role).strip().lower() if role else "guest"

@@ -207,14 +207,21 @@ class WitsV3System:
                 )
                 logger.info("Neural orchestrator initialized")
             else:
-                self.orchestrator = LLMDrivenOrchestrator(
-                    agent_name="LLMOrchestrator",
-                    config=self.config,
-                    llm_interface=self.llm_interface,
-                    memory_manager=self.memory_manager,
-                    tool_registry=self.tool_registry
+                self.orchestrator = self._create_orchestrator()
+                logger.info(
+                    "Orchestrator initialized (%s)",
+                    self.config.orchestrator.tool_calling_mode,
                 )
-                logger.info("LLM-driven orchestrator initialized")
+
+            from agents.playbook_executor import PlaybookExecutor
+
+            self.playbook_executor = PlaybookExecutor(
+                agent_name="PlaybookExecutor",
+                config=self.config,
+                llm_interface=self.llm_interface,
+                memory_manager=self.memory_manager,
+                tool_registry=self.tool_registry,
+            )
 
             # Initialize control center
             self.control_center = WitsControlCenterAgent(
@@ -223,6 +230,7 @@ class WitsV3System:
                 llm_interface=self.llm_interface,
                 memory_manager=self.memory_manager,
                 orchestrator_agent=self.orchestrator,
+                playbook_executor=self.playbook_executor,
                 specialized_agents={
                     "book_writing": self.book_writing_agent,
                     "coding": self.coding_agent,
@@ -333,6 +341,27 @@ class WitsV3System:
             sys.exit(0)
         except Exception as e:
             logger.error(f"Failed to restart system: {e}")
+
+    def _create_orchestrator(self):
+        """Factory: JSON ReAct (default) or native Ollama tool-calling pilot."""
+        mode = getattr(self.config.orchestrator, "tool_calling_mode", "json_react")
+        if mode == "ollama_native":
+            from agents.native_tool_orchestrator import NativeToolOrchestrator
+
+            return NativeToolOrchestrator(
+                agent_name="NativeToolOrchestrator",
+                config=self.config,
+                llm_interface=self.llm_interface,
+                memory_manager=self.memory_manager,
+                tool_registry=self.tool_registry,
+            )
+        return LLMDrivenOrchestrator(
+            agent_name="LLMOrchestrator",
+            config=self.config,
+            llm_interface=self.llm_interface,
+            memory_manager=self.memory_manager,
+            tool_registry=self.tool_registry,
+        )
 
     async def _initialize_specialized_agents(self):
         """Initialize specialized agents with neural web integration"""

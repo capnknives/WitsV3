@@ -1,0 +1,8 @@
+FROM python:3.11-slim
+
+WORKDIR /workspace
+
+RUN pip install --no-cache-dir pytest
+
+# Project is mounted at /workspace at runtime
+CMD ["python", "-c", "print('witsv3-sandbox ready')"]

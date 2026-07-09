@@ -165,6 +165,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "guest_profile": guest_profile,
             "guest_age_band": guest_age_band,
             "guest_personalization_context": kwargs.get("guest_personalization_context", ""),
+            "preferred_tool": kwargs.get("preferred_tool", ""),
         }
         self._react_state_for_tools = react_state
 
@@ -200,6 +201,11 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         while not state["completed"] and self.current_iteration < self.max_iterations:
             self.current_iteration += 1
 
+            from core.smoke_metrics import get_current, smoke_metrics_enabled
+
+            if smoke_metrics_enabled() and get_current():
+                get_current().record_react_iteration()
+
             yield self.stream_thinking(
                 f"ReAct iteration {self.current_iteration}/{self.max_iterations}"
             )
@@ -208,6 +214,12 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             reasoning_prompt = self._build_reasoning_prompt(state)
 
             yield self.stream_thinking("Analyzing the situation and planning next steps...")
+
+            short_answer = await self._try_deterministic_shortcircuit(state, session_id)
+            if short_answer is not None:
+                async for stream_data in self._emit_final_answer(short_answer, state, session_id):
+                    yield stream_data
+                continue
 
             reasoning_response = await self.generate_response(
                 reasoning_prompt,
@@ -273,14 +285,8 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                 if not done:
                     yield self.stream_thinking(state["observations"][-1])
                     continue
-
-                yield self.stream_result(final_answer)
-                await self.store_memory(
-                    content=f"Final Answer: {final_answer}",
-                    segment_type="FINAL_ANSWER",
-                    importance=1.0,
-                    metadata={"session_id": session_id},
-                )
+                async for stream_data in self._emit_final_answer(final_answer, state, session_id):
+                    yield stream_data
 
             else:
                 coerced = self._coerce_unknown_action(parsed_reasoning)
@@ -301,13 +307,10 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                         if not done:
                             yield self.stream_thinking(state["observations"][-1])
                             continue
-                        yield self.stream_result(final_answer)
-                        await self.store_memory(
-                            content=f"Final Answer: {final_answer}",
-                            segment_type="FINAL_ANSWER",
-                            importance=1.0,
-                            metadata={"session_id": session_id},
-                        )
+                        async for stream_data in self._emit_final_answer(
+                            final_answer, state, session_id
+                        ):
+                            yield stream_data
                         continue
 
                 observation = (
@@ -493,7 +496,51 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         if not tool:
             raise Exception(f"Tool {tool_name} not found")
 
-        return await tool.execute(**tool_args)
+        try:
+            return await self.tool_registry.execute_tool(tool_name, **tool_args)
+        except Exception as e:
+            handler = getattr(self, "_handle_tool_failure", None)
+            if handler:
+                return await handler(tool_name, e)
+            raise
+
+    async def _emit_final_answer(
+        self, final_answer: str, state: dict[str, Any], session_id: str | None
+    ) -> AsyncGenerator[StreamData, None]:
+        """Yield result stream and persist a completed final answer."""
+        state["completed"] = True
+        state["final_answer"] = final_answer
+        yield self.stream_result(final_answer)
+        await self.store_memory(
+            content=f"Final Answer: {final_answer}",
+            segment_type="FINAL_ANSWER",
+            importance=1.0,
+            metadata={"session_id": session_id},
+        )
+
+    async def _try_deterministic_shortcircuit(
+        self, state: dict[str, Any], session_id: str | None
+    ) -> str | None:
+        """Skip LLM reasoning when goal + state imply a single tool call."""
+        if state.get("observations"):
+            return None
+        preferred = state.get("preferred_tool") or ""
+        goal = state.get("goal", "")
+        if preferred == "calculator" or (
+            preferred == "" and getattr(self, "_goal_is_pure_math", None) and self._goal_is_pure_math(goal)
+        ):
+            expr = self._extract_calculator_expression(goal)
+            args = self._normalize_calculator_args({"expression": expr})
+            try:
+                result = await self._call_tool("calculator", args, state)
+                obs = self._format_tool_observation("calculator", result)
+                state["observations"].append(obs)
+                if isinstance(result, dict):
+                    return str(result.get("result", result.get("content", obs)))
+                return str(result)
+            except Exception:
+                return None
+        return None
 
     def _coerce_unknown_action(self, parsed: dict[str, Any]) -> dict[str, Any] | None:
         """Last-chance fix when action_type is a tool name. Override in subclasses."""

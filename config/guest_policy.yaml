@@ -46,3 +46,44 @@ child_extra_terms:
   - dating app
   - gore
   - how to kill
+
+# RBAC roles (additive; owner always has full access)
+roles:
+  owner:
+    read_roots:
+      - project
+      - downloads
+    allowed_tools: ["*"]
+  family_adult:
+    read_roots:
+      - project
+      - downloads
+    allowed_tools:
+      - web_search
+      - math_operations
+      - datetime
+      - read_file
+      - list_directory
+      - document_search
+      - ingest_documents
+      - read_conversation_history
+      - analyze_conversation
+      - enhanced_reasoning
+  family_kid:
+    read_roots:
+      - project
+    allowed_tools:
+      - math_operations
+      - datetime
+      - read_file
+      - list_directory
+      - read_conversation_history
+  viewer:
+    read_roots:
+      - project
+    allowed_tools:
+      - read_conversation_history
+      - datetime
+      - enhanced_reasoning
+
+default_role: guest

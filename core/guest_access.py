@@ -49,6 +49,50 @@ def guest_tools_for_age_band(age_band: str, config: Any | None = None) -> frozen
     return frozenset(allowed)
 
 
+def resolve_effective_role(user_role: str, guest_profile: dict[str, Any] | None = None) -> str:
+    """Map session user_role + guest profile to RBAC role name."""
+    from core.guest_policy_loader import default_policy_role
+
+    if (user_role or "owner").lower() != "guest":
+        return "owner"
+    if guest_profile and guest_profile.get("rbac_role"):
+        return str(guest_profile["rbac_role"]).strip().lower()
+    band = normalize_age_band((guest_profile or {}).get("age_band"))
+    if band == "adult":
+        return "family_adult"
+    if band == "child":
+        return "family_kid"
+    return default_policy_role()
+
+
+def tools_for_role(role: str, config: Any | None = None) -> frozenset[str] | None:
+    """Return allowed tools for RBAC role; None means all tools (owner)."""
+    role_key = (role or "owner").strip().lower()
+    if role_key in ("owner", ""):
+        return None
+    from core.guest_policy_loader import policy_roles
+
+    roles = policy_roles()
+    entry = roles.get(role_key) if isinstance(roles, dict) else None
+    if isinstance(entry, dict):
+        tools = entry.get("allowed_tools")
+        if tools == ["*"] or tools == "*":
+            return None
+        if isinstance(tools, list):
+            return frozenset(str(t) for t in tools)
+    if role_key == "guest":
+        return GUEST_ALLOWED_TOOLS
+    return GUEST_ALLOWED_TOOLS
+
+
+def is_tool_allowed(tool_name: str, role: str, config: Any | None = None) -> bool:
+    """Check whether *tool_name* is permitted for *role*."""
+    allowed = tools_for_role(role, config)
+    if allowed is None:
+        return True
+    return tool_name in allowed
+
+
 def normalize_age_band(value: str | None, *, default: str = "teen") -> str:
     from core.content_policy import normalize_age_band as _norm
 

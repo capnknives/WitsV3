@@ -125,9 +125,9 @@ Mapped against [`FEATURE_IDEAS/Top Local AI System Features.docx`](FEATURE_IDEAS
 | # | Item | Maps to | Effort | Verdict |
 |---|------|---------|--------|---------|
 | 3a | **Pragmatic:** FAISS default + session memory search in orchestrator | #21, #25, #29 | Medium | ✅ Done July 9 — see [`memory.md`](../architecture/memory.md) |
-| 3b | **Research:** Wire KG into document RAG (light GraphRAG) | #28 | Large | Only if ISO/compliance-style docs become primary use |
+| 3b | **Research:** Wire KG into document RAG (light GraphRAG) | #28 | Large | **Deferred** — `doc_qa` playbook covers daily use; revisit if compliance docs become primary |
 | 3c | **Research:** Neural web as product surface | #21, #28 | Large | See [`neural-web-roadmap.md`](neural-web-roadmap.md) — decide before investing |
-| 3d | SKILL.md-style orchestrator playbooks | #16 | Medium | Reusable workflows without full agent swarm |
+| 3d | SKILL.md-style orchestrator playbooks | #16 | Medium | ✅ Done July 9 — `save_conversation`, `codebase_tour`, `doc_qa` |
 
 ### Phase 4 — Parked (explicitly out of scope)
 
@@ -269,7 +269,23 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 | ~~**Automatic fact extraction**~~ | Heuristic owner-path promotion + WCCA remember | ✅ July 9 |
 | ~~**Verbose export with tool traces**~~ | `/export verbose` + `POST /api/export?verbose` | ✅ July 9 |
 | ~~**Diff/patch self-repair**~~ | SEARCH/REPLACE via `apply_verified_patch` for large files | ✅ July 9 |
-| **PII redaction** | Guest/owner export and memory hygiene | Open |
+| **PII redaction** | Guest/owner export and memory hygiene | ✅ July 9 (competitive landscape batch) |
+
+---
+
+## 7. Competitive landscape track (July 2026 PDF)
+
+Source: `WitsV3_Competitive_Landscape.pdf` — phased incorporation vs AnythingLLM, Open WebUI, OpenHands, Letta, etc.
+
+| Item | Notes | Status |
+|------|-------|--------|
+| **Filesystem read allowlist + D:\\Downloads** | `security.filesystem_read_roots`, `core/filesystem_policy.py` | ✅ July 9 |
+| **Tiered memory (core block + archival)** | `core/core_memory.py`, promotion tools | ✅ July 9 |
+| **Additive RBAC roles** | `config/guest_policy.yaml` roles + `guest_access.is_tool_allowed` | ✅ July 9 |
+| **PII redaction** | `core/pii_redaction.py` — memory store + guest responses | ✅ July 9 |
+| **Sandbox runner (optional)** | `core/sandbox_runner.py`, `Dockerfile.sandbox`, `sandbox_mode: off` default | ✅ July 9 |
+| **Agent hand-off graph** | `config/agent_graph.yaml`, `agents/agent_handoff.py` | ✅ July 9 |
+| **Telegram / desktop wrapper** | Deferred — revisit after family rollout | Open |
 
 ---
 
@@ -280,13 +296,13 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 3. ~~**Phase 2:** Operator UX (2.1–2.6)~~ ✅ Done July 9, 2026  
 4. ~~**Phase 3a:** FAISS default + session memory search~~ ✅ Done July 9, 2026  
 5. ~~**Next 10 actions (July 9):** verbose export, patch repair, auto facts, log diagnosis, injection guard, neural research gating, orchestrator split, doc sync~~ ✅ Done July 9, 2026  
-6. **Phase 3b–3d:** GraphRAG, neural web product surface (if desired), SKILL.md playbooks  
-7. **PII redaction** on export/memory (§5)  
-8. **Optional `ANTHROPIC_API_KEY`** — owner gate G2
+6. ~~**Pipeline forward batch (July 9):** codebase playbook routing, perf smoke tier, native A/B tooling, multiturn smoke, embedding cap, ADR guest table~~ ✅ Done July 9, 2026  
+7. ~~**PII redaction** on export/memory (§5)~~ ✅ July 9  
+8. **Competitive landscape deferred:** Telegram / native desktop wrapper (§7)  
+9. **Optional `ANTHROPIC_API_KEY`** — owner gate G2  
+10. **Phase 3b GraphRAG** — deferred unless compliance-style docs become primary (playbook `doc_qa` covers daily use)
 
-**Shipped (July 9):** System audit remediation + Next 10 batch — see [`revival-2026-07.md`](revival-2026-07.md).
-
-**Also shipped (pre-2.1):** Chat slash-command picker — type `/` for help, new chat, export, panels, owner process controls.
+**Shipped (July 9):** System audit remediation + Next 10 batch + pipeline forward batch — see [`revival-2026-07.md`](revival-2026-07.md) §5.
 
 ---
 

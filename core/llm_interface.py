@@ -21,11 +21,13 @@ logger = logging.getLogger(__name__)
 class LLMMessage:
     role: str
     content: str
+    name: str | None = None
 
 
 @dataclass
 class LLMResponse:
     content: str
+    tool_calls: list[dict[str, Any]] | None = None
 
 
 # Define a generic type for the retry function
@@ -211,6 +213,54 @@ class OllamaInterface(BaseLLMInterface):
 
         return await self._execute_with_retry("Text generation", _generate)
 
+    async def generate_chat(
+        self,
+        messages: list[LLMMessage],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        temperature: float | None = None,
+    ) -> LLMResponse:
+        """Ollama /api/chat with optional native tool calling."""
+        effective_model = model or self.ollama_settings.default_model
+        payload: dict[str, Any] = {
+            "model": effective_model,
+            "messages": [
+                {"role": m.role, "content": m.content, **({"name": m.name} if m.name else {})}
+                for m in messages
+            ],
+            "stream": False,
+            "options": {
+                "temperature": (
+                    temperature if temperature is not None else self.config.agents.default_temperature
+                )
+            },
+        }
+        if tools:
+            payload["tools"] = tools
+
+        async def _chat() -> LLMResponse:
+            response = await self.http_client.post(
+                f"{self.ollama_settings.url}/api/chat",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            message = data.get("message") or {}
+            content = message.get("content", "") or ""
+            raw_calls = message.get("tool_calls") or []
+            tool_calls: list[dict[str, Any]] = []
+            for call in raw_calls:
+                fn = call.get("function") or {}
+                tool_calls.append(
+                    {
+                        "name": fn.get("name", ""),
+                        "arguments": fn.get("arguments", {}),
+                    }
+                )
+            return LLMResponse(content=content, tool_calls=tool_calls or None)
+
+        return await self._execute_with_retry("Chat generation", _chat)
+
     async def stream_text(
         self,
         prompt: str,
@@ -318,8 +368,11 @@ class OllamaInterface(BaseLLMInterface):
                 break
 
     async def get_embedding(self, text: str, model: str | None = None) -> list[float]:
+        from core.memory_embedding import prepare_text_for_embedding
+
+        safe_text = prepare_text_for_embedding(text or "", self.config)
         effective_model = model or self.ollama_settings.embedding_model
-        payload = {"model": effective_model, "prompt": text}
+        payload = {"model": effective_model, "prompt": safe_text}
 
         async def _get_embedding() -> list[float]:
             response = await self.http_client.post(

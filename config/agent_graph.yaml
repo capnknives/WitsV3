@@ -1,0 +1,18 @@
+# Agent hand-off graph: intent -> primary agent -> fallbacks
+# Loaded by agents/agent_handoff.py
+
+handoffs:
+  coding:
+    primary: AdvancedCodingAgent
+    fallbacks:
+      - LLMDrivenOrchestrator
+  self_repair:
+    primary: SelfRepairAgent
+    fallbacks:
+      - LLMDrivenOrchestrator
+  book_writing:
+    primary: BookWritingAgent
+    fallbacks: []
+  orchestrator:
+    primary: LLMDrivenOrchestrator
+    fallbacks: []

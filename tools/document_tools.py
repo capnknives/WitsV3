@@ -210,62 +210,75 @@ class DocumentIngestTool(_DocumentToolBase):
         seen_paths = set()
         searchable: dict[str, int] = {}
 
-        for path in sorted(docs_dir.rglob("*")):
-            if not path.is_file() or path.suffix.lower() not in extensions:
-                continue
+        ingest_dirs = [docs_dir]
+        from core.filesystem_policy import document_ingest_roots
 
-            rel_path = path.relative_to(docs_dir).as_posix()
-            seen_paths.add(rel_path)
-            summary["files_scanned"] += 1
+        for extra in document_ingest_roots(self.config):
+            if extra.is_dir() and extra not in ingest_dirs:
+                ingest_dirs.append(extra)
 
-            try:
-                raw = path.read_bytes()
-                file_hash = hashlib.sha256(raw).hexdigest()
+        for docs_dir in ingest_dirs:
+            prefix = "" if docs_dir == Path(settings.documents_path) else f"{docs_dir.name}/"
 
-                if stored_hashes.get(rel_path) == file_hash:
-                    summary["files_unchanged"] += 1
-                    searchable[rel_path] = existing_counts.get(rel_path, 0)
+            for path in sorted(docs_dir.rglob("*")):
+                if not path.is_file() or path.suffix.lower() not in extensions:
                     continue
 
-                text = _read_file_text(path)
-                if text is None:
-                    continue
+                if docs_dir == Path(settings.documents_path):
+                    rel_path = path.relative_to(docs_dir).as_posix()
+                else:
+                    rel_path = f"{prefix}{path.name}"
+                seen_paths.add(rel_path)
+                summary["files_scanned"] += 1
 
-                chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
-                if not chunks:
-                    summary["files_unchanged"] += 1
-                    continue
+                try:
+                    raw = path.read_bytes()
+                    file_hash = hashlib.sha256(raw).hexdigest()
 
-                # Replace any previous version of this file
-                if rel_path in stored_hashes:
-                    await self.memory_manager.delete_segments(
-                        {"type": DOCUMENT_SEGMENT_TYPE, "file_path": rel_path}
-                    )
+                    if stored_hashes.get(rel_path) == file_hash:
+                        summary["files_unchanged"] += 1
+                        searchable[rel_path] = existing_counts.get(rel_path, 0)
+                        continue
 
-                ingested_at = datetime.now(timezone.utc).isoformat()
-                for i, chunk in enumerate(chunks):
-                    await self.memory_manager.add_memory(
-                        type=DOCUMENT_SEGMENT_TYPE,
-                        source=path.name,
-                        content_text=chunk,
-                        importance=0.6,
-                        metadata={
-                            "file_path": rel_path,
-                            "file_hash": file_hash,
-                            "chunk_index": i,
-                            "total_chunks": len(chunks),
-                            "ingested_at": ingested_at,
-                        },
-                    )
+                    text = _read_file_text(path)
+                    if text is None:
+                        continue
 
-                summary["files_ingested"] += 1
-                summary["chunks_added"] += len(chunks)
-                searchable[rel_path] = len(chunks)
-                self.logger.info(f"Ingested {rel_path}: {len(chunks)} chunks")
+                    chunks = _chunk_text(text, settings.chunk_size, settings.chunk_overlap)
+                    if not chunks:
+                        summary["files_unchanged"] += 1
+                        continue
 
-            except Exception as e:
-                self.logger.error(f"Error ingesting {rel_path}: {e}")
-                summary["errors"].append(f"{rel_path}: {e}")
+                    # Replace any previous version of this file
+                    if rel_path in stored_hashes:
+                        await self.memory_manager.delete_segments(
+                            {"type": DOCUMENT_SEGMENT_TYPE, "file_path": rel_path}
+                        )
+
+                    ingested_at = datetime.now(timezone.utc).isoformat()
+                    for i, chunk in enumerate(chunks):
+                        await self.memory_manager.add_memory(
+                            type=DOCUMENT_SEGMENT_TYPE,
+                            source=path.name,
+                            content_text=chunk,
+                            importance=0.6,
+                            metadata={
+                                "file_path": rel_path,
+                                "file_hash": file_hash,
+                                "chunk_index": i,
+                                "total_chunks": len(chunks),
+                                "ingested_at": ingested_at,
+                            },
+                        )
+
+                    summary["files_ingested"] += 1
+                    summary["chunks_added"] += len(chunks)
+                    searchable[rel_path] = len(chunks)
+                    self.logger.info(f"Ingested {rel_path}: {len(chunks)} chunks")
+
+                except Exception as e:
+                    self.logger.error(f"Error ingesting {rel_path}: {e}")
+                    summary["errors"].append(f"{rel_path}: {e}")
 
         # Remove chunks for files that no longer exist on disk
         for stale_path in set(stored_hashes) - seen_paths:

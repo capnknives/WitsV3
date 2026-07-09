@@ -556,7 +556,7 @@ async def test_remember_command_clears_pending_clarification_without_merging(wcc
 )
 async def test_document_mentions_route_to_orchestrator(wcca, message):
     intent = await wcca._analyze_user_intent(message, None)
-    assert intent["suggested_response"] == "orchestrator"
+    assert intent["suggested_response"] in ("orchestrator", "playbook")
     assert intent["requires_tools"] is True
 
 
@@ -634,9 +634,9 @@ def test_story_save_does_not_trigger_chat_export_routing(wcca):
 )
 async def test_save_to_file_routes_to_orchestrator(wcca, message):
     intent = await wcca._analyze_user_intent(message, None)
-    assert intent["suggested_response"] == "orchestrator"
+    assert intent["suggested_response"] == "playbook"
+    assert intent.get("playbook_id") == "save_conversation"
     assert intent["requires_tools"] is True
-    assert "write_file" in intent["notes"] or "save" in intent["notes"].lower()
 
 
 @pytest.mark.parametrize(
@@ -653,17 +653,29 @@ def test_transcript_a42ee2e0_save_phrases_need_file_write(wcca, message):
 @pytest.mark.asyncio
 async def test_transcript_a42ee2e0_debug_save_routes_orchestrator_not_self_repair(wcca):
     intent = await wcca._analyze_user_intent("save our conversation as debugthisoneplz", None)
-    assert intent["suggested_response"] == "orchestrator"
+    assert intent["suggested_response"] == "playbook"
+    assert intent.get("playbook_id") == "save_conversation"
     assert intent.get("specialized_agent") != "self_repair"
 
 
 @pytest.mark.asyncio
-async def test_codebase_question_routes_codebase_intro(wcca):
+async def test_codebase_question_routes_codebase_tour_playbook(wcca):
     intent = await wcca._analyze_user_intent(
         "What can you tell me about your codebase wits?", None
     )
-    assert intent["suggested_response"] == "orchestrator"
-    assert intent.get("routing_destination") == "codebase_intro"
+    assert intent["suggested_response"] == "playbook"
+    assert intent.get("playbook_id") == "codebase_tour"
+
+
+@pytest.mark.asyncio
+async def test_continue_after_orchestrator_routes_continuation(wcca):
+    session_id = "sess-orch-continue"
+    wcca._last_task_context[session_id] = {
+        "route": "orchestrator",
+        "goal": "what is the square-root of 75231",
+    }
+    intent = await wcca._analyze_user_intent("continue", None, session_id=session_id)
+    assert intent["suggested_response"] == "continuation"
 
 
 @pytest.mark.asyncio

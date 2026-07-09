@@ -10,6 +10,7 @@ What exists for experimental / background use:
 |----------|---------|
 | `Dockerfile` | Image for the main app (not actively productized) |
 | `Dockerfile.background` | Background agent image |
+| `Dockerfile.sandbox` | Optional sandbox image for `security.sandbox_mode: docker` |
 | `docker-compose.background.yml` | Compose file for the background agent path |
 
 There is **no** root `docker-compose.yml` for a full stack. Prefer local venv + Ollama.

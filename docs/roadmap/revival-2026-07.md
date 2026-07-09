@@ -1,7 +1,7 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
 **Branch tip:** `main` @ `7ef7d12` (July 9, 2026)  
-**Test suite:** **665 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q`)  
+**Test suite:** **689 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q`)  
 **Last updated:** July 9, 2026 (Phase 2.1 + system audit remediation)
 
 This document is the **shipped-work log** for the July 2026 revival: what landed,
@@ -210,7 +210,7 @@ misroutes, empty `importantissues01.txt`, export after restart showing 2 message
 | Save confabulation guard | Orchestrator rejects “saved/wrote” claims without successful `write_file` observation |
 | Session persistence | `core/session_store.py` — `var/sessions/*.json` restored on startup; persisted after each web turn |
 | Export UX warning | `/api/export` warns when `message_count` is suspiciously low after a titled session |
-| Codebase intro route | `codebase_intro` destination + bootstrap `list_directory` / `read_file` on README/AGENTS/architecture |
+| Codebase intro route | `codebase_tour` playbook (deterministic; orchestrator bootstrap is fallback only) |
 | Coding agent block | Introspection requests skip coding-agent keyword match |
 | Workspace script writes | Pong/script requests with “allowed file area” write to `var/workspace/<slug>/` with `py_compile` |
 | MCP / desktop guard | Repeat `list_mcp_tools` blocked after 2 calls; honest message when no MCP tool can open apps |
@@ -269,3 +269,100 @@ tracked in [`suggested-features-2026-07.md`](suggested-features-2026-07.md) § P
 | **Doc sync** | Gap analysis, config-surface-truth, Phase 4 root cleanup marked complete |
 
 Tests: **677 passed, 2 skipped** (`pytest tests/ -q --no-cov`).
+
+---
+
+## 5. July 9, 2026 — Conversation pipeline re-evaluation
+
+| Theme | What shipped |
+|-------|----------------|
+| **Smoke harness** | `scripts/conversation_task_smoke.py`, `scripts/smoke_scenarios.yaml`, `scripts/smoke_harness.py` |
+| **CI routing smoke** | `tests/integration/test_smoke_scenarios_mock.py` |
+| **ADR** | `docs/architecture/conversation-pipeline.md` |
+| **Routing expansion** | Math calculator, explicit file read, diagnose/run-tests self_repair, `preferred_tool` |
+| **Playbooks (3d)** | `config/playbooks/*.yaml`, `core/playbooks.py`, `agents/playbook_executor.py` |
+| **Orchestrator slim** | `config/orchestrator_prompt.yaml`, synthesis/observation mixin split, calculator short-circuit |
+| **Native tools pilot** | `orchestrator.tool_calling_mode: ollama_native`, `agents/native_tool_orchestrator.py` |
+| **WCCA** | Playbook + read_file_direct; removed compose-then-delegate extra LLM |
+
+Tests: **689 passed, 2 skipped**. Quick smoke: **17/17**.
+
+### Pipeline forward batch (July 9, 2026 — Next 10)
+
+| Theme | What shipped |
+|-------|----------------|
+| **Codebase → playbook** | `needs_codebase_intro()` routes to `codebase_tour` playbook (0 LLM target) |
+| **Performance smoke tier** | `perf-sqrt`, `perf-save`, `perf-codebase` budget assertions (`llm_calls_max`, `wall_ms_max`) |
+| **Native A/B tooling** | `scripts/smoke_ab_compare.py`, `--tool-mode` on `conversation_task_smoke.py` |
+| **Multiturn smoke** | `mt-clarify`, `mt-continue` with `turns:` harness support |
+| **Embedding cap** | `prepare_text_for_embedding`, skip `INTENT_ANALYSIS`/`REASONING` embeds, oversized `TOOL_RESPONSE` skip |
+| **ADR update** | Owner vs guest routing table, intent LLM short-circuit documented |
+| **doc_qa polish** | `synthesis_llm: true`, `route-doc-qa` smoke scenario |
+| **GraphRAG 3b** | Explicitly deferred in ADR + roadmap |
+
+**Pre-change live metrics baseline** (`WITS_SMOKE_METRICS=1`, json_react):
+
+| Scenario | llm_calls | react_iterations | wall_ms |
+|----------|-----------|------------------|---------|
+| orch-sqrt | 0 | 1 | 1300 |
+| orch-save | 0 | 0 | 700 |
+| orch-codebase | 5 | 5 | 90700 |
+| orch-edge | 2 | 1 | 6200 |
+| orch-water | 1 | 0 | 2100 |
+| direct-greeting | 1 | 0 | 2600 |
+| direct-remember | 0 | 0 | 800 |
+
+```json
+[
+  {"scenario_id": "orch-sqrt", "llm_calls": 0, "react_iterations": 1, "wall_ms": 1300, "route": "orchestrator"},
+  {"scenario_id": "orch-save", "llm_calls": 0, "react_iterations": 0, "wall_ms": 700, "route": "orchestrator"},
+  {"scenario_id": "orch-codebase", "llm_calls": 5, "react_iterations": 5, "wall_ms": 90700, "route": "orchestrator"},
+  {"scenario_id": "orch-edge", "llm_calls": 2, "react_iterations": 1, "wall_ms": 6200, "route": "orchestrator"},
+  {"scenario_id": "orch-water", "llm_calls": 1, "react_iterations": 0, "wall_ms": 2100, "route": "orchestrator"},
+  {"scenario_id": "direct-greeting", "llm_calls": 1, "react_iterations": 0, "wall_ms": 2600, "route": "direct"},
+  {"scenario_id": "direct-remember", "llm_calls": 0, "react_iterations": 0, "wall_ms": 800, "route": "direct"}
+]
+```
+
+**Native default gate:** A/B gate **passed** July 9, 2026 (`python scripts/smoke_ab_compare.py`). Fixed `NativeToolOrchestrator` tool `description` (must be string, not dict). Default promoted to `ollama_native`; rollback: `orchestrator.tool_calling_mode: json_react`.
+
+**Post-playbook live metrics** (`WITS_SMOKE_METRICS=1`, json_react, July 9 2026):
+
+| Scenario | llm_calls | react_iterations | wall_ms | Notes |
+|----------|-----------|------------------|---------|-------|
+| orch-sqrt | 0 | 1 | 1661 | calculator short-circuit |
+| orch-save | 0 | 0 | 719 | playbook |
+| orch-codebase | 0 | 0 | **767** | playbook (was 90700 / 5 LLM) |
+| orch-edge | 2 | 1 | 5721 | json_react |
+| perf-codebase | 0 | 0 | 805 | budget pass |
+| mt-clarify | 1 | 0 | 3048 | multiturn |
+| mt-continue | 1 | 0 | 6107 | cheap continuation (was 4 LLM / 15140) |
+
+Full live smoke: **31/31 passed** (18 quick routing + 13 live tiers including performance + multiturn).
+
+---
+
+## 6. Competitive landscape + Downloads batch (July 9, 2026)
+
+**Shipped from `WitsV3_Competitive_Landscape.pdf` roadmap:**
+
+- **Filesystem read allowlist** — `core/filesystem_policy.py`; owner reads `D:\Downloads` + project; guests project-only
+- **Tiered memory** — `core/core_memory.py` always-in-prompt block + `promote_to_core_memory` / `search_archival_memory` tools
+- **RBAC roles** — `family_adult`, `family_kid`, `viewer` in `config/guest_policy.yaml`
+- **PII redaction** — `core/pii_redaction.py` on memory store + guest-visible chat
+- **Sandbox runner** — `core/sandbox_runner.py`, `Dockerfile.sandbox` (`sandbox_mode: "off"` default)
+- **Agent hand-off graph** — `config/agent_graph.yaml`, `agents/agent_handoff.py`
+- **Hygiene** — `core/memory_embedding.py` split from `memory_manager.py`; orphan modules already removed per clutter catalog
+- **Tests** — +28 unit tests; smoke scenarios `route-downloads-read`, `family-adult-downloads-read`, `mt-memory-promote`
+
+**A/B hot paths** (orch-sqrt, orch-codebase, orch-edge):
+
+| Scenario | json_react llm / ms | ollama_native llm / ms |
+|----------|---------------------|-------------------------|
+| orch-sqrt | 0 / 1627 | 0 / 776 |
+| orch-codebase | 0 / 749 | 0 / 777 |
+| orch-edge | 2 / 6446 | 1 / 8284 |
+
+```json
+{"gate_passes": true, "json_react": {"orch-sqrt": {"llm_calls": 0, "wall_ms": 1626.7}, "orch-codebase": {"llm_calls": 0, "wall_ms": 749.0}, "orch-edge": {"llm_calls": 2, "wall_ms": 6445.5}}, "ollama_native": {"orch-sqrt": {"llm_calls": 0, "wall_ms": 776.0}, "orch-codebase": {"llm_calls": 0, "wall_ms": 776.5}, "orch-edge": {"llm_calls": 1, "wall_ms": 8283.5}}}
+```

@@ -130,6 +130,8 @@ Let someone on your LAN (e.g. a nephew) chat **without** your owner token:
 
 Guests get chat-only UI, a filtered tool allowlist (no file write / self-repair / MCP / settings), and a remembered identity per browser/device. Owner manages testers on **`/settings`** (age band, profile view, revoke, merge duplicates). Content blocklists live in **`config/guest_policy.yaml`**. Full design: [`docs/roadmap/guest-tester-access-2026-07.md`](docs/roadmap/guest-tester-access-2026-07.md).
 
+**Owner file access:** The owner can read/list files under the project and **`D:\Downloads`** (configure extra roots via `security.filesystem_read_roots` in `config.yaml` or `WITSV3_READ_ROOTS`). Guests and `family_kid` / `viewer` roles are restricted to project-only reads.
+
 Other entry points:
 
 ```bash
@@ -137,6 +139,19 @@ python run.py              # CLI
 python run.py --test       # Non-interactive self-check (init + LLM + tools + memory + agents)
 pytest tests/ -q --no-cov  # Full test suite
 ```
+
+### Smoke ladder (conversation + task capabilities)
+
+```bash
+pytest tests/integration/test_smoke_scenarios_mock.py -q --no-cov  # routing tier (CI-safe)
+python scripts/conversation_task_smoke.py --quick                  # operator + routing (no Ollama)
+python scripts/conversation_task_smoke.py --live --metrics         # full spread (requires Ollama)
+python scripts/conversation_task_smoke.py --live --only perf-sqrt,perf-save,perf-codebase --metrics
+python scripts/smoke_ab_compare.py --report json                    # json_react vs ollama_native A/B
+python scripts/a42ee2e0_live_smoke.py                              # transcript-specific regression
+```
+
+See [`docs/architecture/conversation-pipeline.md`](docs/architecture/conversation-pipeline.md) for the processing pipeline ADR.
 
 `run.py` and `run_web.py` both schedule the daily autonomous self-repair job in-process when enabled in config (no separate Docker service required).
 

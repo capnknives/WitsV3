@@ -9,127 +9,19 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum
 from typing import Any
-from uuid import uuid4
 
 from .config import WitsV3Config
+from .tool_composition_models import (
+    CompositionNode,
+    CompositionStrategy,
+    DataFlow,
+    ToolSpec,
+    Workflow,
+    WorkflowExecution,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class CompositionStrategy(Enum):
-    """Strategies for tool composition"""
-
-    SEQUENTIAL = "sequential"  # Tools run one after another
-    PARALLEL = "parallel"  # Tools run simultaneously
-    CONDITIONAL = "conditional"  # Tools run based on conditions
-    ITERATIVE = "iterative"  # Tools run in loops
-    ADAPTIVE = "adaptive"  # Strategy adapts based on results
-
-
-class DataFlow(Enum):
-    """How data flows between tools"""
-
-    PIPELINE = "pipeline"  # Output of one feeds input of next
-    BROADCAST = "broadcast"  # One output feeds multiple inputs
-    AGGREGATE = "aggregate"  # Multiple outputs combine into one
-    TRANSFORM = "transform"  # Data transformed between tools
-    FILTER = "filter"  # Data filtered between tools
-
-
-@dataclass
-class ToolSpec:
-    """Specification of a tool's capabilities"""
-
-    tool_name: str
-    input_schema: dict[str, Any]  # JSON schema for inputs
-    output_schema: dict[str, Any]  # JSON schema for outputs
-    capabilities: set[str] = field(default_factory=set)
-    resource_requirements: dict[str, float] = field(default_factory=dict)
-    average_execution_time: float = 1.0
-    success_rate: float = 0.95
-    can_parallelize: bool = True
-    idempotent: bool = True  # Safe to retry
-
-
-@dataclass
-class CompositionNode:
-    """Node in a tool composition graph"""
-
-    node_id: str = field(default_factory=lambda: str(uuid4()))
-    tool_name: str = ""
-    inputs: dict[str, Any] = field(default_factory=dict)
-    outputs: dict[str, Any] = field(default_factory=dict)
-    dependencies: list[str] = field(default_factory=list)  # Node IDs this depends on
-    conditions: list[dict[str, Any]] = field(default_factory=list)  # Conditions for execution
-    retry_policy: dict[str, Any] = field(default_factory=dict)
-    timeout: float = 300.0
-
-    def can_execute(self, completed_nodes: set[str]) -> bool:
-        """Check if node can execute based on dependencies"""
-        return all(dep in completed_nodes for dep in self.dependencies)
-
-
-@dataclass
-class Workflow:
-    """Represents a composed workflow of tools"""
-
-    workflow_id: str = field(default_factory=lambda: str(uuid4()))
-    name: str = ""
-    description: str = ""
-    nodes: list[CompositionNode] = field(default_factory=list)
-    edges: list[tuple[str, str]] = field(default_factory=list)  # (from_node, to_node)
-    strategy: CompositionStrategy = CompositionStrategy.SEQUENTIAL
-    data_flow: DataFlow = DataFlow.PIPELINE
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.now)
-
-    def get_execution_order(self) -> list[list[CompositionNode]]:
-        """Get nodes grouped by execution order (parallel groups)"""
-        # Topological sort with level grouping
-        levels = []
-        completed = set()
-        remaining = self.nodes.copy()
-
-        while remaining:
-            level = []
-            for node in remaining:
-                if node.can_execute(completed):
-                    level.append(node)
-
-            if not level:
-                # Circular dependency or disconnected nodes
-                level = [remaining[0]]  # Force progress
-
-            levels.append(level)
-            for node in level:
-                completed.add(node.node_id)
-                remaining.remove(node)
-
-        return levels
-
-
-@dataclass
-class WorkflowExecution:
-    """Tracks workflow execution state"""
-
-    execution_id: str = field(default_factory=lambda: str(uuid4()))
-    workflow_id: str = ""
-    status: str = "pending"  # pending, running, completed, failed
-    completed_nodes: set[str] = field(default_factory=set)
-    node_results: dict[str, Any] = field(default_factory=dict)
-    errors: list[dict[str, Any]] = field(default_factory=list)
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
-
-    @property
-    def duration(self) -> float | None:
-        if self.started_at and self.completed_at:
-            return (self.completed_at - self.started_at).total_seconds()
-        return None
 
 
 class ToolCompositionEngine(ABC):

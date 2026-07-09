@@ -1,0 +1,17 @@
+id: save_conversation
+description: Export session conversation to a file without full ReAct loop.
+triggers:
+    signals:
+    - save our conversation
+    - save this conversation
+    - save a copy
+    - save a copy of
+    - save a log
+    - export conversation
+    - save to file
+steps:
+  - tool: read_conversation_history
+    args: {}
+  - tool: write_file
+    args_from: export_path
+synthesis: "Saved our conversation to {path}."

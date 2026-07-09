@@ -17,31 +17,27 @@ from pydantic import BaseModel, Field
 
 from .config import MemoryManagerSettings, WitsV3Config, load_config
 from .llm_interface import BaseLLMInterface  # To get embeddings
+from .memory_embedding import (
+    DEFAULT_MAX_EMBEDDING_CHARS,
+    SKIP_EMBEDDING_SEGMENT_TYPES,
+    prepare_text_for_embedding,
+    resolve_max_embedding_chars,
+    truncate_for_embedding,
+)
 
-
-def truncate_for_embedding(text: str, max_chars: int, suffix: str = "…") -> str:
-    """Truncate *text* so the returned string length is at most *max_chars*."""
-    if len(text) <= max_chars:
-        return text
-    if len(suffix) >= max_chars:
-        return suffix[:max_chars]
-    return text[: max_chars - len(suffix)] + suffix
-
-
-DEFAULT_MAX_EMBEDDING_CHARS = 6000
-
-
-def resolve_max_embedding_chars(config_or_settings: Any) -> int:
-    """Return max embedding input length from config or memory settings."""
-    if config_or_settings is None:
-        return DEFAULT_MAX_EMBEDDING_CHARS
-    mm = getattr(config_or_settings, "memory_manager", config_or_settings)
-    if mm is None:
-        return DEFAULT_MAX_EMBEDDING_CHARS
-    value = getattr(mm, "max_embedding_chars", DEFAULT_MAX_EMBEDDING_CHARS)
-    if not isinstance(value, int) or value <= 0:
-        return DEFAULT_MAX_EMBEDDING_CHARS
-    return value
+# Re-export embedding helpers for backward compatibility (tests, neural backend).
+__all__ = [
+    "DEFAULT_MAX_EMBEDDING_CHARS",
+    "SKIP_EMBEDDING_SEGMENT_TYPES",
+    "MemorySegment",
+    "MemorySegmentContent",
+    "BaseMemoryBackend",
+    "BasicMemoryBackend",
+    "MemoryManager",
+    "prepare_text_for_embedding",
+    "resolve_max_embedding_chars",
+    "truncate_for_embedding",
+]
 
 
 # --- Pydantic Models for Memory Segments ---
@@ -127,18 +123,24 @@ class BaseMemoryBackend(ABC):
         return removed
 
     async def _generate_embedding_if_needed(self, segment: MemorySegment) -> None:
-        if segment.embedding is None:
-            text_to_embed = segment.content.text or segment.content.tool_output
-            if text_to_embed:
-                max_chars = resolve_max_embedding_chars(self.settings)
-                text_to_embed = truncate_for_embedding(text_to_embed, max_chars)
-                try:
-                    segment.embedding = await self.llm_interface.get_embedding(
-                        text_to_embed, model=self.config.ollama_settings.embedding_model
-                    )
-                except Exception as e:
-                    print(f"Error generating embedding for segment {segment.id}: {e}")
-                    # Decide if we want to store the segment without embedding or fail
+        if segment.embedding is not None:
+            return
+        if segment.type in SKIP_EMBEDDING_SEGMENT_TYPES:
+            return
+        text_to_embed = segment.content.text or segment.content.tool_output
+        if not text_to_embed:
+            return
+        max_chars = resolve_max_embedding_chars(self.settings)
+        if len(text_to_embed) > max_chars * 2 and segment.type in ("TOOL_RESPONSE", "TOOL_CALL"):
+            # Very large tool dumps: store text but skip vector index.
+            return
+        text_to_embed = truncate_for_embedding(text_to_embed, max_chars)
+        try:
+            segment.embedding = await self.llm_interface.get_embedding(
+                text_to_embed, model=self.config.ollama_settings.embedding_model
+            )
+        except Exception as e:
+            print(f"Error generating embedding for segment {segment.id}: {e}")
 
     async def _prune_if_needed(self):
         """Check if memory pruning is needed based on time interval, size, or count."""

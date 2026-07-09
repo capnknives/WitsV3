@@ -108,20 +108,27 @@ class NeuralMemoryBackend(BaseMemoryBackend):
         elif not segment.timestamp:
             segment.timestamp = datetime.now(timezone.utc)
 
-        # Generate embedding if needed and possible
         if (
             self.llm_interface
             and segment.content
-            and segment.content.text
+            and (segment.content.text or segment.content.tool_output)
             and not segment.embedding
         ):
-            try:
-                segment.embedding = await self.llm_interface.get_embedding(
-                    segment.content.text, model=self.config.ollama_settings.embedding_model
-                )
-                logger.debug(f"Generated embedding for segment {segment.id}")
-            except Exception as e:
-                logger.error(f"Failed to generate embedding for segment {segment.id}: {e}")
+            from core.memory_manager import (
+                SKIP_EMBEDDING_SEGMENT_TYPES,
+                prepare_text_for_embedding,
+            )
+
+            if segment.type not in SKIP_EMBEDDING_SEGMENT_TYPES:
+                raw = segment.content.text or segment.content.tool_output or ""
+                try:
+                    segment.embedding = await self.llm_interface.get_embedding(
+                        prepare_text_for_embedding(raw, self.config),
+                        model=self.config.ollama_settings.embedding_model,
+                    )
+                    logger.debug(f"Generated embedding for segment {segment.id}")
+                except Exception as e:
+                    logger.error(f"Failed to generate embedding for segment {segment.id}: {e}")
 
         # Add to segments list
         self.segments.append(segment)

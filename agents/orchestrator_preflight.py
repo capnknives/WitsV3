@@ -17,12 +17,20 @@ class OrchestratorPreflightMixin:
     TOOL_TOTAL_FAILURE_LIMIT = 3
     ORCHESTRATOR_BLOCKED_TOOLS = frozenset({"intent_analysis", "json_manipulate"})
 
-    def _guest_allowed_tools(self) -> frozenset[str]:
-        from core.guest_access import guest_tools_for_age_band
+    def _guest_allowed_tools(self, state: dict[str, Any] | None = None) -> frozenset[str]:
+        from core.guest_access import guest_tools_for_age_band, resolve_effective_role, tools_for_role
 
-        state = getattr(self, "_react_state_for_tools", None) or {}
-        age_band = state.get("guest_age_band", "teen")
-        return guest_tools_for_age_band(age_band, getattr(self, "config", None))
+        react_state = state or getattr(self, "_react_state_for_tools", None) or {}
+        user_role = react_state.get("user_role", "owner")
+        guest_profile = react_state.get("guest_profile")
+        effective = resolve_effective_role(user_role, guest_profile)
+        role_tools = tools_for_role(effective, getattr(self, "config", None))
+        if role_tools is not None:
+            return role_tools
+        if user_role == "guest":
+            age_band = react_state.get("guest_age_band", "teen")
+            return guest_tools_for_age_band(age_band, getattr(self, "config", None))
+        return frozenset()
 
     @staticmethod
     def _has_ingested_documents(state: dict[str, Any]) -> bool:
@@ -50,7 +58,7 @@ class OrchestratorPreflightMixin:
             injection = check_tool_injection(tool_name, tool_args)
             if injection:
                 return injection
-        if state.get("user_role") == "guest" and tool_name not in self._guest_allowed_tools():
+        if state.get("user_role") == "guest" and tool_name not in self._guest_allowed_tools(state):
             return (
                 f"Blocked {tool_name}: not available for guest users. "
                 f"Use web_search, math_operations, or datetime, or final_answer to respond."

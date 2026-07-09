@@ -1,0 +1,36 @@
+# Externalized ReAct orchestrator prompt rules (loaded by LLMDrivenOrchestrator).
+# Tune behavior here without editing Python.
+
+json_format: |
+  Respond with JSON in this format:
+  {
+      "thought": "your reasoning about the current situation and what to do next",
+      "action_type": "tool_call" | "final_answer",
+      "tool_name": "name of tool to use (ONLY when action_type is tool_call)",
+      "tool_args": {"query": "search terms"},
+      "final_answer": "your final answer (if action_type is final_answer)"
+  }
+
+rules:
+  - 'action_type must be exactly "tool_call" or "final_answer". NEVER put a tool name in action_type.'
+  - 'Use "tool_call" ONLY when you still lack information. Use "final_answer" as soon as observations are enough.'
+  - "For web_search put the user's exact title/name in the query. After web_search succeeds, NEXT action MUST be final_answer."
+  - "For web lookup goals NEVER call document_search. Answer ONLY about the subject named in GOAL."
+  - "If the goal needs current/recent information and web_search is available, you MUST call web_search."
+  - "web_search is for the public web. document_search ONLY searches uploaded private files."
+  - "When the goal asks about user documents, call document_search before answering."
+  - "MCP tools (mcp_*) — call list_mcp_tools ONCE, never more than twice."
+  - "For pure math (sqrt, arithmetic) use calculator once — do NOT call web_search."
+  - "ingest_documents takes NO arguments (empty tool_args)."
+  - 'read_file requires a file_path key. list_directory requires a directory_path key.'
+  - "To save/export conversation call read_conversation_history once with empty tool_args."
+  - "write_file for save/export omit content in tool_args (injected by system)."
+  - "When observations contain document_search EXCERPTS, write final_answer from those excerpts."
+  - "When observations contain web_search summary, make final_answer that summary phrased for the question."
+  - "Answer only the specific thing asked — not long noisy lists."
+  - "For WitsV3 system/guest/status questions use guest_accounts_list, guest_audit_summary, diagnose_log_errors."
+
+footer: Respond ONLY with valid JSON.
+
+history_turns: 5
+observation_window: 5

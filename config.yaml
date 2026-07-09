@@ -84,6 +84,8 @@ llm_interface:
 logging_level: INFO
 memory_manager:
   backend: faiss_cpu
+  tiered_enabled: true
+  core_max_tokens: 2048
   faiss_index_path: var/data/wits_faiss_index.bin
   max_memory_segments: 10000
   max_results_per_search: 5
@@ -130,6 +132,13 @@ routing:
   intent_history_turns: 5
   greeting_only_direct: true
   enable_meta_reasoning_intent: false
+orchestrator:
+  # A/B gate passed July 9 2026 (scripts/smoke_ab_compare.py). Rollback: json_react
+  tool_calling_mode: ollama_native
+  prompt_rules_path: config/orchestrator_prompt.yaml
+  history_turns: 5
+  observation_window: 5
+  document_inventory_limit: 5000
 personality:
   allow_runtime_switching: false
   enabled: true
@@ -138,6 +147,16 @@ personality:
 project_name: WitsV3
 security:
   offline_mode: false
+  filesystem_read_roots:
+    - D:\Downloads
+  document_ingest_roots:
+    - D:\Downloads
+  sandbox_mode: "off"
+  sandbox_image: witsv3-sandbox
+  pii_redaction:
+    enabled: true
+    redact_before_store: true
+    redact_owner: false
   # Set via WITSV3_AUTH_TOKEN_HASH in .env (never commit secrets here)
   auth_token_hash: ""
   authorized_network_override_user: richard_elliot

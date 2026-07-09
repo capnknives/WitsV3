@@ -471,6 +471,20 @@ def create_app(system) -> FastAPI:
                             ).add_fact(fact, source="auto_extraction", category="owner")
                         except Exception as fact_err:
                             logger.debug("Auto fact promotion skipped: %s", fact_err)
+                    mm_cfg = getattr(system.config, "memory_manager", None)
+                    if mm_cfg and getattr(mm_cfg, "tiered_enabled", False):
+                        from core.core_memory import get_core_memory_store
+
+                        store = get_core_memory_store(system.config)
+                        for fact in extract_promotable_facts(body.message, final_text):
+                            store.promote_fact(fact, source="auto_extraction")
+                        store.set_last_task_summary(final_text[:500])
+                if guest or auth_role != "owner":
+                    from core.pii_redaction import maybe_redact_for_guest
+
+                    final_text = maybe_redact_for_guest(
+                        final_text, system.config, role=auth_role
+                    )
                 try:
                     from core.session_store import persist_session
 

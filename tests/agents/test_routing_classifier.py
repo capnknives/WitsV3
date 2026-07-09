@@ -93,3 +93,26 @@ def test_imperative_commands_not_greetings(message):
     assert is_pure_greeting(message) is False
     ctx = RoutingContext(message=message, user_role="owner")
     assert classify_message(ctx).destination == "self_repair"
+
+
+def test_downloads_file_read_routes_owner():
+    from agents.routing_classifier import RoutingContext
+
+    ctx = RoutingContext(
+        message="read WitsV3_Competitive_Landscape.pdf in my downloads",
+        user_role="owner",
+    )
+    decision = classify_message(ctx)
+    assert decision.destination == "read_file_direct"
+    assert decision.file_path == "WitsV3_Competitive_Landscape.pdf"
+
+
+def test_downloads_file_read_blocked_for_guest():
+    from agents.routing_classifier import RoutingContext
+
+    ctx = RoutingContext(
+        message="read WitsV3_Competitive_Landscape.pdf in downloads",
+        user_role="guest",
+    )
+    decision = classify_message(ctx)
+    assert decision.destination != "read_file_direct"

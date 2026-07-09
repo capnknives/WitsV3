@@ -116,6 +116,22 @@ subprocess.check_output = restricted_subprocess
         Returns:
             Dictionary containing output, error, and execution status
         """
+        from core.config import load_config
+        from core.sandbox_runner import run_python_sandboxed, sandbox_mode
+
+        config = load_config()
+        mode = sandbox_mode(config)
+        if mode in ("subprocess", "docker"):
+            result = await run_python_sandboxed(
+                code, config=config, timeout=float(timeout or self.timeout)
+            )
+            return {
+                "success": result.success,
+                "output": result.output,
+                "error": result.error,
+                "return_code": result.return_code,
+            }
+
         try:
             # Create temporary directory for execution
             with tempfile.TemporaryDirectory() as temp_dir:

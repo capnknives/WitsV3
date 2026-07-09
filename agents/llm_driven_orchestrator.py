@@ -4,7 +4,10 @@ LLM-Driven Orchestrator Agent for WitsV3.
 Implements the ReAct loop with LLM-driven decision making.
 """
 
+from pathlib import Path
 from typing import Any
+
+import yaml
 
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from core.config import WitsV3Config
@@ -12,6 +15,13 @@ from core.json_llm_parser import parse_json_object, strip_think_blocks
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
 from core.schemas import ConversationHistory
+
+
+def _load_orchestrator_prompt_config(config: WitsV3Config) -> dict:
+    path = Path(config.orchestrator.prompt_rules_path)
+    if not path.is_file():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
 class LLMDrivenOrchestrator(BaseOrchestratorAgent):
@@ -50,6 +60,7 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
 
         # Available tools (will be populated from tool registry)
         self.available_tools = self._get_available_tools()
+        self._prompt_config = _load_orchestrator_prompt_config(config)
 
         self.logger.info(
             f"LLM-Driven Orchestrator initialized with {len(self.available_tools)} tools"
@@ -134,16 +145,20 @@ class LLMDrivenOrchestrator(BaseOrchestratorAgent):
         )
         history = state["history"]
         observations = state["observations"]
+        hist_n = self.config.orchestrator.history_turns
+        obs_n = self.config.orchestrator.observation_window
 
         # Build conversation history
         history_text = ""
         if history:
-            history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history[-3:]])
+            history_text = "\n".join(
+                [f"{msg['role']}: {msg['content']}" for msg in history[-hist_n:]]
+            )
 
         # Build observations
         observations_text = ""
         if observations:
-            observations_text = "\n".join([f"- {obs}" for obs in observations[-3:]])
+            observations_text = "\n".join([f"- {obs}" for obs in observations[-obs_n:]])
 
         lookup_hint = ""
         goal_lower = goal.lower()
@@ -200,37 +215,12 @@ AVAILABLE TOOLS:
 
 Think step by step about how to achieve the goal. Then decide on your next action.
 
-Respond with JSON in this format:
-{{
-    "thought": "your reasoning about the current situation and what to do next",
-    "action_type": "tool_call" | "final_answer",
-    "tool_name": "name of tool to use (ONLY when action_type is tool_call — e.g. web_search, document_search)",
-    "tool_args": {{"query": "search terms"}} (if using a tool — use real parameter names from the tool schema, never arg1/arg2),
-    "final_answer": "your final answer (if action_type is final_answer)"
-}}
+{self._prompt_config.get("json_format", "")}
 
 Important:
-- action_type must be exactly "tool_call" or "final_answer". NEVER put a tool name (web_search, document_search, write_file, etc.) in action_type — that field is not the tool name.
-- Use "tool_call" ONLY when you still lack information needed to answer. Use "final_answer" as soon as your observations are enough — do NOT repeat a search you already ran, and do NOT keep gathering once you can answer. One good web_search is usually enough.
-- For web_search: put the user's exact title/name in the query (e.g. \"Dragon Ball Advent Truth MUD\" not just \"Dragon Ball Legends\"). Include genre hints from the goal (MUD, text game, indie). If results do not mention the exact title, try ONE refined query with the full title before giving up. After web_search succeeds, your NEXT action MUST be final_answer — do not call other tools.
-- For web lookup goals: NEVER call document_search (private uploads are unrelated). Answer ONLY about the subject named in GOAL — do not respond as if the user pasted unrelated lists (e.g. trading cards) unless that text is literally in GOAL.
-- If the goal needs current, recent, or post-training information (news, events, dates, who did/won/died something, prices, weather) and web_search is available, you MUST call web_search. NEVER answer such questions from memory or refuse by citing a knowledge/training cutoff.
-- web_search is for the public web. document_search ONLY searches the user's own uploaded private files — do NOT use it for general knowledge, current events, or public figures; it returns unrelated personal documents and will mislead you.
-- When the goal asks about the user's documents, notes, files, or a named report, you MUST call document_search before answering. The USER DOCUMENTS list above is authoritative — if a file is listed there, it exists and is searchable; never claim it is missing or that you lack access. Use tool_args like {{"query": "summary main findings", "file_name": "Report.md"}} — query is required; file_name is optional to narrow to one file. NEVER use read_file, list_directory, or ingest_documents for ingested uploads — document_search already has the content.
-+- MCP tools (names starting with mcp_) are live when connected via the /mcp page. If the user asks whether an MCP server/tool is available, call list_mcp_tools ONCE, then use the matching mcp_* tool or explain the limitation. Never call list_mcp_tools more than twice.
-+- For pure math (sqrt, arithmetic, percentages): use calculator once — do NOT call web_search unless calculator failed.
-- ingest_documents takes NO arguments (empty tool_args {{}}). Do not pass arg1 or other placeholder keys.
-- read_file requires {{"file_path": "/path/to/file"}}. list_directory requires {{"directory_path": "/path/to/dir"}}. Do not call them without those keys.
-- To save/export conversation or chat to disk: call read_conversation_history once with empty tool_args {{}} — the system will auto-write to the path in the goal (if present) and finish. Do NOT call read_conversation_history repeatedly. Only call write_file yourself if auto-save did not run.
-- write_file requires {{"file_path": "...", "content": "..."}} but for save/export requests omit content in tool_args (it is injected). Use a sensible path under the project (e.g. var/exports/conversation_log.txt).
-- When observations contain document_search results, they include numbered EXCERPTS from the files. Write your final_answer from those excerpts. If excerpts were returned, NEVER say you do not have access or that nothing was uploaded.
-- If document_search returns no excerpts, try one broader query before concluding nothing matched.
-- When your observations contain web_search results, they include a "summary" line plus numbered SOURCES. The summary is usually the correct, already-extracted answer — make your final_answer that summary, phrased to address the exact question. Only override it if a source clearly contradicts it. Do NOT discard a correct summary just because the sources are broad "list of everyone who died in 2026" pages — those lists are noisy and easy to misread.
-- Answer only the specific thing asked. If the question is "who did X on <date>", give the single correct person for that exact date as a direct sentence, not a long list of many names and dates.
-- Do not claim you cannot access information a tool could retrieve; call the tool instead.
-- For questions about the WitsV3 system itself — who has signed up / joined, guest or family-tester accounts, a specific user's recent activity, server/system status, or recent errors — do NOT use document_search or web_search (they cannot see this). Use guest_accounts_list (who has joined / active accounts), guest_audit_summary (what a specific guest/user did recently), and diagnose_log_errors (recent errors/tracebacks in the running system) instead, and combine their results in your final_answer.
+{chr(10).join("- " + r for r in self._prompt_config.get("rules", []))}
 
-Respond ONLY with valid JSON."""
+{self._prompt_config.get("footer", "Respond ONLY with valid JSON.")}"""
 
         return prompt
 
@@ -469,37 +459,6 @@ Respond ONLY with valid JSON."""
 
         # For other errors, return a generic error message
         return {"error": f"Tool {tool_name} failed: {error_msg}", "status": "error"}
-
-    async def _call_tool(
-        self,
-        tool_name: str,
-        tool_args: dict[str, Any],
-        state: dict[str, Any] | None = None,
-    ) -> Any:
-        """
-        Call a tool with error handling.
-
-        Args:
-            tool_name: Name of the tool to call
-            tool_args: Arguments for the tool
-            state: Optional ReAct state for context injection
-
-        Returns:
-            Tool execution result
-        """
-        try:
-            if not self.tool_registry:
-                raise ValueError("No tool registry available")
-
-            if state is not None:
-                tool_args = await self._prepare_tool_args(tool_name, tool_args, state)
-
-            result = await self.tool_registry.execute_tool(tool_name, **tool_args)
-            return result
-
-        except Exception as e:
-            # Handle the error gracefully
-            return await self._handle_tool_failure(tool_name, e)
 
     def _coerce_unknown_action(self, parsed: dict[str, Any]) -> dict[str, Any] | None:
         """Apply action_type coercion for tool-name-as-action_type mistakes."""

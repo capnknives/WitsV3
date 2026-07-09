@@ -107,13 +107,15 @@ class BaseAgent(ABC):
             Generated text response
         """
         try:
-            # Only pass format/num_ctx when requested — some BaseLLMInterface
-            # implementations (and test fakes) don't accept the kwarg.
             extra_kwargs: dict[str, Any] = {}
             if response_format is not None:
                 extra_kwargs["format"] = response_format
             if num_ctx is not None:
                 extra_kwargs["num_ctx"] = num_ctx
+            from core.smoke_metrics import get_current, smoke_metrics_enabled
+
+            if smoke_metrics_enabled() and get_current():
+                get_current().record_llm_call()
             response = await self.llm_interface.generate_text(
                 prompt=prompt,
                 model=model_name or self.get_model_name(),
@@ -185,13 +187,14 @@ class BaseAgent(ABC):
         if not self.memory_manager:
             return None
 
+        from core.pii_redaction import maybe_redact_for_storage
+
+        role = getattr(self, "_request_user_role", "owner")
+        content = maybe_redact_for_storage(content, self.config, role=role)
+
         # nomic-embed-text rejects very long inputs; cap before persisting.
-        from core.memory_manager import (
-            MemorySegment,
-            MemorySegmentContent,
-            resolve_max_embedding_chars,
-            truncate_for_embedding,
-        )
+        from core.memory_embedding import resolve_max_embedding_chars, truncate_for_embedding
+        from core.memory_manager import MemorySegment, MemorySegmentContent
 
         max_chars = resolve_max_embedding_chars(self.config)
         content = truncate_for_embedding(content, max_chars, suffix="\n… [truncated for memory]")

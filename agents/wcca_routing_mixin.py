@@ -1,10 +1,11 @@
 # agents/wcca_routing_mixin.py
 """Orchestrator routing helpers for WitsControlCenterAgent."""
 
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents import routing_classifier as rc
-from core.schemas import ConversationHistory
+from core.schemas import ConversationHistory, StreamData
 
 
 class OrchestratorRoutingMixin:
@@ -218,6 +219,11 @@ class OrchestratorRoutingMixin:
                 if session_id and hasattr(self, "_active_specialized_agent")
                 else None
             ),
+            last_task_route=(
+                self._last_task_context.get(session_id, {}).get("route")
+                if session_id and hasattr(self, "_last_task_context")
+                else None
+            ),
             conversation_history=conversation_history,
             greeting_only_direct=self.config.routing.greeting_only_direct,
         )
@@ -229,3 +235,60 @@ class OrchestratorRoutingMixin:
         if any(h in lowered for h in rc.DOCUMENT_TOOL_HINTS):
             return True
         return any(h in lowered for h in rc.doc_routing_hints(doc_inventory))
+
+    def _record_task_context(
+        self,
+        session_id: str,
+        route: str,
+        goal: str,
+        **extra: str,
+    ) -> None:
+        """Remember the last task route so bare continuation phrases can resume cheaply."""
+        if not session_id:
+            return
+        self._last_task_context[session_id] = {"route": route, "goal": goal, **extra}
+        if route in ("book_writing", "coding", "self_repair"):
+            self._active_specialized_agent[session_id] = route
+
+    async def _stream_task_continuation(
+        self,
+        user_input: str,
+        conversation_history: ConversationHistory | None,
+        session_id: str,
+    ) -> AsyncGenerator[StreamData, None]:
+        """Cheap follow-up when the user says 'continue' after a prior task turn."""
+        ctx = self._last_task_context.get(session_id, {})
+        route = ctx.get("route", "")
+        if not route:
+            return
+
+        if route in self.specialized_agents:
+            yield self.stream_thinking(f"Resuming {route} agent...")
+            async for stream_data in self.specialized_agents[route].run(
+                user_input=user_input,
+                conversation_history=conversation_history,
+                session_id=session_id,
+            ):
+                yield stream_data
+            return
+
+        prior_answer = rc._last_assistant_message(conversation_history)
+        if route in ("orchestrator", "playbook") and prior_answer:
+            yield self.stream_thinking("Continuing from the previous answer...")
+            prior_goal = ctx.get("goal", "")
+            prompt = (
+                f"The user previously asked: {prior_goal}\n\n"
+                f"Your prior answer:\n{prior_answer[:3000]}\n\n"
+                f"The user now says: {user_input}\n\n"
+                "Continue or briefly elaborate in 1-3 sentences. "
+                "Do not claim new tool runs or filesystem actions."
+            )
+            reply = await self.generate_response(
+                prompt,
+                max_tokens=256,
+                temperature=0.3,
+            )
+            yield self.stream_result(reply)
+            return
+
+        yield self.stream_error("I could not continue the previous task from context.")

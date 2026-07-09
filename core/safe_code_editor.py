@@ -213,7 +213,16 @@ async def apply_verified_edit(
     resolved.parent.mkdir(parents=True, exist_ok=True)
     resolved.write_text(new_content, encoding="utf-8")
 
-    passed, test_output = await run_pytest(test_paths, timeout=timeout)
+    from core.config import load_config
+    from core.sandbox_runner import run_pytest_sandboxed, sandbox_mode
+
+    config = load_config()
+    if sandbox_mode(config) == "docker":
+        passed, test_output = await run_pytest_sandboxed(
+            test_paths, config=config, timeout=timeout
+        )
+    else:
+        passed, test_output = await run_pytest(test_paths, timeout=timeout)
 
     if not passed:
         if original_bytes is not None:

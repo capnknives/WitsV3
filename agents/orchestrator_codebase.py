@@ -55,7 +55,8 @@ class OrchestratorCodebaseMixin:
             return {}
         try:
             segments = await self.memory_manager.get_recent_memory(
-                limit=1_000_000, filter_dict={"type": "DOCUMENT_CHUNK"}
+                limit=getattr(self.config.orchestrator, "document_inventory_limit", 5000),
+                filter_dict={"type": "DOCUMENT_CHUNK"},
             )
         except Exception as e:
             self.logger.warning(f"Could not list ingested documents: {e}")
