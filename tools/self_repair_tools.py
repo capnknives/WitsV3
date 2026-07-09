@@ -293,8 +293,16 @@ class ApplyCodeFixTool(BaseTool):
         commit: bool = True,
     ) -> dict[str, Any]:
         test_paths = [test_path] if test_path else (guess_related_tests(file_path) or None)
+        from core.config import load_config
+
+        timeout = load_config().self_repair.test_timeout_seconds
         result = await apply_verified_edit(
-            file_path, new_content, reason=reason, test_paths=test_paths, commit=commit
+            file_path,
+            new_content,
+            reason=reason,
+            test_paths=test_paths,
+            commit=commit,
+            timeout=timeout,
         )
         return {
             "success": result.success,

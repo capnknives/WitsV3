@@ -354,7 +354,10 @@ async function sendMessage(text) {
           loadSessions();
         } else if (event === "stream") {
           if (payload.type === "thinking") addThinking(payload.content);
-          else if (payload.type === "tool_call" || payload.type === "action") addToolChip(payload.content);
+          else if (payload.type === "tool_call" || payload.type === "action") {
+            const phase = payload.metadata?.progress_phase;
+            addToolChip(phase ? `${payload.content} (${phase})` : payload.content);
+          }
           else if (payload.type === "observation") addObservationCard(payload.content, payload.source);
           else if (payload.type === "result") { addAssistantMsg(payload.content); sawResult = true; }
           else if (payload.type === "error") {

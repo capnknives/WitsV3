@@ -137,7 +137,20 @@ class ToolRegistry:
 
         try:
             self.logger.debug(f"Executing tool {tool_name} with validated args: {exec_kwargs}")
-            result = await tool.execute(**exec_kwargs)
+            from core.tool_metrics import tool_metrics
+
+            start = time.perf_counter()
+            success = True
+            error_msg: str | None = None
+            try:
+                result = await tool.execute(**exec_kwargs)
+            except Exception as e:
+                success = False
+                error_msg = str(e)
+                raise
+            finally:
+                elapsed_ms = (time.perf_counter() - start) * 1000.0
+                tool_metrics.record(tool_name, elapsed_ms, success=success, error=error_msg)
             self.logger.debug(f"Tool {tool_name} completed successfully")
             return result
         except Exception as e:

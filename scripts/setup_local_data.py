@@ -41,6 +41,14 @@ def setup_local_data():
         else:
             print(f"⚠️  Template {template_name} not found")
 
+    # Migrate legacy repo-root data/knowledge_log.json → var/data/
+    legacy_klog = Path("data/knowledge_log.json")
+    target_klog = data_path / "knowledge_log.json"
+    if legacy_klog.exists() and not target_klog.exists():
+        print("📄 Migrating data/knowledge_log.json → var/data/knowledge_log.json...")
+        target_klog.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(legacy_klog, target_klog)
+
     print("\n🎉 Local data setup complete!")
     print("\n📝 Runtime data lives under var/ (data, documents, exports, logs, workspace, cache).")
     print("Personal files are gitignored. To reset memory, delete var/data/wits_memory.json "

@@ -24,6 +24,7 @@ if hasattr(sys.stderr, "reconfigure"):
 import uvicorn
 
 from core.config import load_config
+from core.logging_config import apply_logging_level
 from core.guest_access import guest_access_enabled
 from run import WitsV3System
 from web.server import create_app
@@ -174,6 +175,7 @@ def startup_urls(config, port: int, web_token: str) -> tuple[str, str | None]:
 
 async def main() -> int:
     config = load_config()
+    apply_logging_level(config.logging_level)
 
     if not config.web_ui.enabled:
         print("web_ui.enabled is false in config.yaml - nothing to do.")

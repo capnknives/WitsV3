@@ -1,4 +1,7 @@
 #
+# DESIGN-ONLY — not loaded at runtime. Synthetic-brain sketch from 2025.
+# Active config: config.yaml + config.local.yaml + config/*.yaml sidecars.
+#
 # WITS Synthetic Brain Core Configuration
 # This file defines the modular cognitive architecture of the WitsV3 Synthetic Brain
 

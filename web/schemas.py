@@ -94,6 +94,12 @@ class OllamaPullRequest(BaseModel):
     model: str
 
 
+class OfflineModeUpdate(BaseModel):
+    """Toggle air-gap / offline mode from settings."""
+
+    offline_mode: bool
+
+
 class DocumentDeleteRequest(BaseModel):
     """Remove a single ingested document file and its memory chunks."""
 

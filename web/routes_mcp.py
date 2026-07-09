@@ -11,6 +11,14 @@ from fastapi.responses import JSONResponse
 
 from web.schemas import MCPRegistryInstall, MCPServerAdd, MCPToolInvoke
 
+from core.mcp_health import (
+    all_server_health,
+    get_server_health,
+    record_connect_failure,
+    record_connect_success,
+    record_disconnect,
+)
+
 logger = logging.getLogger("WitsV3.WebUI")
 
 
@@ -78,6 +86,16 @@ def register_mcp_routes(app: FastAPI, system) -> None:
             registered.append(mcp_tool)
         return registered
 
+    def _offline_blocked() -> JSONResponse | None:
+        if system.config.security.offline_mode:
+            return JSONResponse(
+                {
+                    "detail": "Offline mode is enabled — MCP registry and connect are disabled.",
+                },
+                status_code=403,
+            )
+        return None
+
     async def _connect_mcp_server_entry(name: str, entry: dict[str, Any]):
         """Connect one configured MCP server; returns (ok, tools_or_error)."""
         import asyncio
@@ -105,14 +123,19 @@ def register_mcp_routes(app: FastAPI, system) -> None:
         try:
             ok = await asyncio.wait_for(adapter.add_server(server), timeout=connect_timeout)
         except asyncio.TimeoutError:
-            return False, (
+            err = (
                 f"connection timed out ({connect_timeout:.0f}s). "
                 "npx/uvx servers can take 1–2 minutes on first run — try Reconnect."
             )
+            record_connect_failure(name, err)
+            return False, err
         if not ok:
-            return False, "connection failed — check var/logs/witsv3.log for details"
+            err = "connection failed — check var/logs/witsv3.log for details"
+            record_connect_failure(name, err)
+            return False, err
 
         tools = _register_mcp_tools_for_server(adapter, name)
+        record_connect_success(name)
         logger.info(f"MCP server connected: {name} ({len(tools)} tools)")
         return True, tools
 
@@ -128,6 +151,8 @@ def register_mcp_routes(app: FastAPI, system) -> None:
             "connected": connected,
             "tool_count": tool_count,
             "registry_url": system.config.tool_system.mcp_registry_url,
+            "offline_mode": system.config.security.offline_mode,
+            "server_health": all_server_health(),
         }
 
     @app.get("/api/mcp/servers")
@@ -148,6 +173,7 @@ def register_mcp_routes(app: FastAPI, system) -> None:
                     "working_directory": entry.get("working_directory"),
                     "connected": name in connected,
                     "tool_count": tools_by_server.get(name, 0),
+                    "health": get_server_health(name),
                 }
             )
         return {"servers": servers}
@@ -190,6 +216,9 @@ def register_mcp_routes(app: FastAPI, system) -> None:
 
     @app.post("/api/mcp/servers/{name:path}/connect")
     async def mcp_connect_server(name: str):
+        denied = _offline_blocked()
+        if denied:
+            return denied
         entry = next(
             (s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None
         )
@@ -213,6 +242,9 @@ def register_mcp_routes(app: FastAPI, system) -> None:
 
     @app.post("/api/mcp/servers/{name:path}/reconnect")
     async def mcp_reconnect_server(name: str):
+        denied = _offline_blocked()
+        if denied:
+            return denied
         """Disconnect (if needed) and connect again — fixes stale 0-tool sessions."""
         entry = next(
             (s for s in _load_mcp_config().get("servers", []) if s.get("name") == name), None
@@ -240,6 +272,7 @@ def register_mcp_routes(app: FastAPI, system) -> None:
         if not adapter or name not in adapter.clients:
             return JSONResponse({"detail": "server not connected"}, status_code=409)
         await adapter.remove_server(name)
+        record_disconnect(name)
         removed = _unregister_mcp_tools_for_server(name)
         logger.info(f"MCP server disconnected via web UI: {name} ({removed} tools unregistered)")
         return {"disconnected": True, "tools_removed": removed}
@@ -312,6 +345,9 @@ def register_mcp_routes(app: FastAPI, system) -> None:
 
     @app.get("/api/mcp/registry/search")
     async def mcp_registry_search(q: str = "", limit: int = 10):
+        denied = _offline_blocked()
+        if denied:
+            return denied
         from core.mcp_registry_search import search_registry
 
         try:
@@ -331,6 +367,9 @@ def register_mcp_routes(app: FastAPI, system) -> None:
 
     @app.post("/api/mcp/registry/install")
     async def mcp_registry_install(body: MCPRegistryInstall):
+        denied = _offline_blocked()
+        if denied:
+            return denied
         name = body.name.strip()
         if not name or not body.command:
             return JSONResponse({"detail": "name and command are required"}, status_code=400)

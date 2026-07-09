@@ -1,7 +1,7 @@
 ---
 title: "WitsV3 Path Migration Guide"
 created: "2025-06-10"
-last_updated: "2026-07-08"
+last_updated: "2026-07-09"
 status: "historical"
 ---
 
@@ -26,9 +26,8 @@ updating old imports or reading archived docs.
 
 | Previous Location             | Current Location                                         | Notes                                                    |
 | ----------------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
-| `/*.md`                       | `/planning/**/*.md`                                      | All root Markdown files moved to planning subdirectories |
-| `/PLANNING.md`                | `/planning/architecture/system-architecture.md`          | Renamed and expanded                                     |
-| `/TASK.md`                    | `/planning/tasks/task-management.md`                     | Task tracking moved to planning directory                |
+| `/*.md` (root planning docs) | `/docs/**/*.md` | Canonical tree since July 2026 |
+| `/planning/**/*.md` (except README) | `/docs/` equivalents | **Deleted** — stub only |
 | `/CLAUDE_EVOLUTION_PROMPT.md` | `/planning/implementation/claude-evolution-prompt.md`    |                                                          |
 | `/AUTHENTICATION_STATUS.md`   | `/planning/technical-notes/consolidated-system-fixes.md` | Merged into consolidated document                        |
 | `/DEBUG_*.md`                 | `/planning/technical-notes/consolidated-system-fixes.md` | All debug docs consolidated                              |

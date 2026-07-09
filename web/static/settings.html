@@ -200,6 +200,28 @@
         <input type="number" id="escalation_max_tokens" min="256" max="16000" step="256" value="2048">
       </div>
 
+      <h2>Operator &amp; observability</h2>
+      <div class="setting">
+        <div class="toggle-row">
+          <div>
+            <label for="offline_mode">Offline / air-gap mode</label>
+            <div class="hint" style="margin-bottom:0">Blocks web search and MCP registry/connect when enabled.</div>
+          </div>
+          <input type="checkbox" id="offline_mode">
+        </div>
+      </div>
+      <div class="setting">
+        <label>Scheduled tasks (read-only)</label>
+        <div class="hint">In-process self-repair cron plus entries from <code>config/background_agent.yaml</code>.</div>
+        <table id="tasks-table" class="metrics-table"><tbody></tbody></table>
+      </div>
+      <div class="setting">
+        <label>Tool usage (this session)</label>
+        <div class="hint">Call counts and average latency since the server started.</div>
+        <table id="tool-metrics-table" class="metrics-table"><tbody></tbody></table>
+        <button type="button" id="metrics-refresh-btn" style="margin-top:8px">Refresh metrics</button>
+      </div>
+
       <h2>Family testers</h2>
       <div id="guest-section" class="setting">
         <div class="hint" style="margin-bottom:12px">
@@ -613,6 +635,52 @@
       });
     }
 
+    async function loadTasks() {
+      const tbody = $("#tasks-table tbody");
+      tbody.innerHTML = "";
+      try {
+        const res = await api("/api/tasks");
+        if (!res.ok) return;
+        const { tasks } = await res.json();
+        for (const t of tasks || []) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${t.id}</td><td>${t.enabled ? "on" : "off"}</td><td><code>${t.schedule || "—"}</code></td><td>${t.description || ""}</td>`;
+          tbody.appendChild(tr);
+        }
+      } catch (e) { /* optional */ }
+    }
+
+    async function loadToolMetrics() {
+      const tbody = $("#tool-metrics-table tbody");
+      tbody.innerHTML = "";
+      try {
+        const res = await api("/api/metrics/tools");
+        if (!res.ok) return;
+        const { tools } = await res.json();
+        if (!tools.length) {
+          tbody.innerHTML = "<tr><td colspan='4'>No tool calls yet this session.</td></tr>";
+          return;
+        }
+        for (const row of tools) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${row.tool}</td><td>${row.calls}</td><td>${row.failures}</td><td>${row.avg_latency_ms} ms</td>`;
+          tbody.appendChild(tr);
+        }
+      } catch (e) { /* optional */ }
+    }
+
+    $("#metrics-refresh-btn").addEventListener("click", loadToolMetrics);
+    $("#offline_mode").addEventListener("change", async () => {
+      try {
+        const res = await api("/api/security/offline", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ offline_mode: $("#offline_mode").checked }),
+        });
+        setStatus(res.ok ? "Offline mode updated." : "Could not update offline mode.", res.ok);
+      } catch (e) { /* handled */ }
+    });
+
     async function loadGuests() {
       try {
         const res = await api("/api/guest/admin/accounts");
@@ -643,7 +711,10 @@
         $("#escalation_enabled").checked = s.escalation_enabled;
         $("#escalation_max_tokens").value = s.escalation_max_tokens;
         $("#key-warning").hidden = s.anthropic_key_configured;
+        $("#offline_mode").checked = !!s.offline_mode;
         updatePriceNote();
+        loadTasks();
+        loadToolMetrics();
         loadGuests();
       } catch (e) { /* handled */ }
     }

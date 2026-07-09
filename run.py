@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional, List
 
 from core.config import load_config, WitsV3Config
+from core.logging_config import apply_logging_level
 from core.runtime_paths import ensure_runtime_layout, main_log_path
 from core.conversation_compaction import maybe_flush_conversation_memory
 from core.llm_interface import OllamaInterface, BaseLLMInterface
@@ -472,8 +473,11 @@ class WitsV3System:
                 conversation_history=conversation,
                 session_id=session_id
             ):
-                if self.config.cli.show_thoughts or stream_data.type != "thinking":
-                    response_parts.append(self._format_stream_data(stream_data))
+                if stream_data.type == "thinking" and not self.config.cli.show_thoughts:
+                    continue
+                if stream_data.type in ("action", "tool_call") and not self.config.cli.show_tool_calls:
+                    continue
+                response_parts.append(self._format_stream_data(stream_data))
 
             final_response = "\n".join(response_parts)
             conversation.add_message("assistant", final_response)
@@ -520,6 +524,8 @@ class WitsV3System:
             return f"[ERROR] {stream_data.content}"
         elif stream_data.type == "clarification":
             return f"[CLARIFICATION] {stream_data.content}"
+        elif stream_data.type == "tool_call":
+            return f"[TOOL] {stream_data.content}"
         else:
             return f"[INFO] {stream_data.content}"
 
@@ -554,6 +560,7 @@ async def run_test_mode():
 
         # Load configuration
         config = load_config()
+        apply_logging_level(config.logging_level)
 
         # Initialize system
         system = WitsV3System(config)
@@ -583,6 +590,7 @@ async def run_cli():
     try:
         # Load configuration
         config = load_config("config.yaml")
+        apply_logging_level(config.logging_level)
 
         # Initialize system
         wits_system = WitsV3System(config)

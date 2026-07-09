@@ -1,8 +1,8 @@
 # WitsV3 Revival — July 2026 Status & Plan
 
-**Branch tip:** `main` @ `4c676c3` (promoted from `fix/revive-2026-07` July 8, 2026)  
-**Test suite:** **571 passed, 2 skipped** (July 8, 2026 — re-run `pytest -q`)  
-**Last updated:** July 8, 2026 (Phase 0 complete)
+**Branch tip:** `main` @ `7ef7d12` (July 9, 2026)  
+**Test suite:** **665 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q`)  
+**Last updated:** July 9, 2026 (Phase 2.1 + system audit remediation)
 
 This document is the **shipped-work log** for the July 2026 revival: what landed,
 what broke, and how it was fixed. It is **not** the forward backlog.
@@ -234,3 +234,20 @@ tracked in [`suggested-features-2026-07.md`](suggested-features-2026-07.md) § P
 - **Phase 2a** — tagged `archive-pre-prune-2026-07`; pruned 61 files from `docs/archive/gui/` (PyQt6 + book GUI); stub README + git tag for recovery
 - **Phase 2b** — tagged `archive-pre-prune-2b-2026-07`; pruned 27 files (`adaptive_llm/core/`, `sphinx/`, synthetic_brain code); stub READMEs + tag for recovery
 - **Phase 3** — `var/` runtime layout via `core/runtime_paths.py`; config defaults + auto-migration from legacy top-level folders
+
+---
+
+## 3. July 9, 2026 — Phase 2.1 + system audit remediation
+
+| Theme | What shipped |
+|-------|----------------|
+| **2.1 Ollama admin** | `web/ollama_admin.py`, Settings pull/status panel, API routes |
+| **Doc truth pass** | `planning/` stub only; `system-architecture.md` rewritten as component map; `docs/architecture/memory.md` added; revival log synced to 668 tests |
+| **2.2 MCP health** | `core/mcp_health.py`, per-server last error/uptime on `/mcp` + API |
+| **2.3 Tool analytics** | `core/tool_metrics.py`, `GET /api/metrics/tools`, Settings read-only panel |
+| **2.4 SSE tool progress** | `stream_tool_progress` for long tools (`web_search`, `ingest_documents`, `document_search`) |
+| **2.5 Background tasks UI** | `GET /api/tasks` — self-repair cron + `background_agent.yaml` entries |
+| **2.6 Offline mode** | `security.offline_mode` blocks web search + MCP egress |
+| **Config hygiene** | Wave 3: `logging_level`, `cli.show_tool_calls`, `test_timeout_seconds` wired; unknown YAML key warnings; `knowledge_log` → `var/data/` |
+| **Memory 3a** | Default `faiss_cpu`; session-filtered orchestrator search; optional fact promotion to knowledge log |
+| **Clutter** | Removed blocked `json_manipulate` tool + dummy `models/*.safetensors` |

@@ -93,7 +93,7 @@ def test_load_from_existing_config_yaml():
     assert config.ollama_settings.url is not None
 
     assert isinstance(config.memory_manager, MemoryManagerSettings)
-    assert config.memory_manager.backend is not None
+    assert config.memory_manager.backend == "faiss_cpu"
     assert isinstance(config.memory_manager.neural_web_settings, NeuralWebSettings)
 
 

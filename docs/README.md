@@ -19,7 +19,8 @@ Design notes, roadmaps, and historical material for WitsV3.
 |------|----------|
 | **What's next** | [`roadmap/suggested-features-2026-07.md`](roadmap/suggested-features-2026-07.md) |
 | **What shipped (July 2026)** | [`roadmap/revival-2026-07.md`](roadmap/revival-2026-07.md) |
-| **Architecture** | [`architecture/system-architecture.md`](architecture/system-architecture.md) *(mark as historical where dates say 2025)* |
+| **Architecture** | [`architecture/system-architecture.md`](architecture/system-architecture.md) *(component map)* |
+| **Memory model** | [`architecture/memory.md`](architecture/memory.md) |
 | **Dead/dormant code** | [`roadmap/clutter-catalog-2026-07.md`](roadmap/clutter-catalog-2026-07.md) |
 | **Tool registry truth** | [`roadmap/tool-registry-reality-2026-07.md`](roadmap/tool-registry-reality-2026-07.md) |
 | **Config surface truth** | [`roadmap/config-surface-truth-2026-07.md`](roadmap/config-surface-truth-2026-07.md) |

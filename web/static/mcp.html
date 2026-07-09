@@ -313,6 +313,15 @@
       const cmd = Array.isArray(s.command) ? s.command.join(" ") : (s.command || "");
       card.appendChild(el("div", "mcp-cmd", cmd + (s.working_directory ? `\n↳ ${s.working_directory}` : "")));
 
+      const health = s.health || {};
+      if (health.last_error) {
+        const err = el("div", "mcp-health-err", `Last error: ${health.last_error}`);
+        card.appendChild(err);
+      } else if (health.last_success_at) {
+        const ok = el("div", "mcp-health-ok", `Last connected: ${health.last_success_at}`);
+        card.appendChild(ok);
+      }
+
       const actions = el("div", "mcp-actions");
       if (s.connected) {
         if (zeroTools) {

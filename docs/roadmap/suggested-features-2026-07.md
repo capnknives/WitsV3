@@ -1,8 +1,8 @@
 # WitsV3 — Suggested Features & Roadmap
 
-**Last updated:** July 9, 2026 (Phase 2.1 shipped)  
+**Last updated:** July 9, 2026 (Phase 2 complete, 3a shipped)  
 **Working branch tip:** `cursor/work` / `claude/work` (merge into `fix/revive-2026-07` or `main`)  
-**Test suite:** **668 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q` before claiming green)
+**Test suite:** **665 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q` before claiming green)
 
 This is the **canonical forward roadmap**: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
@@ -41,7 +41,9 @@ Richard promoted **`fix/revive-2026-07` → `main`** July 8, 2026 (Phase 0 compl
 | Guest / family tester access (full Phase 3–4 + fact editor) | ✅ Shipped July 8 |
 | Chat slash-command picker (`/` menu, `GET /api/commands`) | ✅ Shipped July 8 |
 | Ollama model pull/status in `/settings` | ✅ Shipped July 9 (Phase 2.1) |
-| July revival feature backlog | ✅ **Closed** — Phase 2 operator UX next |
+| Phase 2 operator UX (2.2–2.6) | ✅ Shipped July 9 |
+| Memory Phase 3a (FAISS default + session memory search) | ✅ Shipped July 9 |
+| July revival feature backlog | ✅ **Closed** — Phase 3b+ research / Post–Phase 2 backlog next |
 
 ---
 
@@ -104,24 +106,24 @@ Mapped against [`FEATURE_IDEAS/Top Local AI System Features.docx`](FEATURE_IDEAS
 | 1.5 | ~~**Evidence sufficiency gate**~~ | #33 | Small–Medium | ✅ Done July 8 — synthesis guard blocks weak doc answers |
 | 1.6 | ~~**Multi-session chat UI**~~ | #21 | Medium | ✅ Done July 8 — `/api/sessions` + Chats panel |
 
-### Phase 2 — Operator UX & observability **(current)**
+### Phase 2 — Operator UX & observability ✅ complete (July 9, 2026)
 
 **Pre-2.1 polish (July 8 evening):** Chat slash-command picker — type `/` in the composer for a Cursor-style menu (`web/slash_commands.py`, `GET /api/commands`). Role-filtered: guests see `/help`, `/new`, `/export`, `/chats`, `/tools`; owner adds panels, navigation, `/shutdown`, `/restart`.
 
 | # | Item | Maps to | Effort |
 |---|------|---------|--------|
-| 2.1 | ~~Ollama model pull/status helper in `/settings`~~ | #8–9 | Small | ✅ Done July 9 — `GET /api/ollama/status`, `POST /api/ollama/pull`, settings panel |
-| 2.2 | MCP server health panel (state, last error) | #14, #20 | Small–Medium |
-| 2.3 | Tool usage analytics (latency, failures) | #20 | Medium |
-| 2.4 | Streaming tool progress in SSE | #20 | Medium |
-| 2.5 | Scheduled background tasks UI (read-only) | — | Small |
-| 2.6 | Offline / air-gap mode flag (disable web_search + MCP egress) | #6 | Small |
+| 2.1 | ~~Ollama model pull/status helper in `/settings`~~ | #8–9 | Small | ✅ Done July 9 |
+| 2.2 | ~~MCP server health panel (state, last error)~~ | #14, #20 | Small–Medium | ✅ Done July 9 |
+| 2.3 | ~~Tool usage analytics (latency, failures)~~ | #20 | Medium | ✅ Done July 9 |
+| 2.4 | ~~Streaming tool progress in SSE~~ | #20 | Medium | ✅ Done July 9 |
+| 2.5 | ~~Scheduled background tasks UI (read-only)~~ | — | Small | ✅ Done July 9 |
+| 2.6 | ~~Offline / air-gap mode flag~~ | #6 | Small | ✅ Done July 9 |
 
-### Phase 3 — Memory depth (pick one path)
+### Phase 3 — Memory depth **(current — 3a shipped July 9)**
 
 | # | Item | Maps to | Effort | Verdict |
 |---|------|---------|--------|---------|
-| 3a | **Pragmatic:** FAISS default + session memory search in orchestrator | #21, #25, #29 | Medium | Recommended — flip `memory_manager.backend: faiss_cpu` after validation |
+| 3a | **Pragmatic:** FAISS default + session memory search in orchestrator | #21, #25, #29 | Medium | ✅ Done July 9 — see [`memory.md`](../architecture/memory.md) |
 | 3b | **Research:** Wire KG into document RAG (light GraphRAG) | #28 | Large | Only if ISO/compliance-style docs become primary use |
 | 3c | **Research:** Neural web as product surface | #21, #28 | Large | See [`neural-web-roadmap.md`](neural-web-roadmap.md) — decide before investing |
 | 3d | SKILL.md-style orchestrator playbooks | #16 | Medium | Reusable workflows without full agent swarm |
@@ -258,18 +260,31 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 
 ---
 
+## 5. Post–Phase 2 backlog (track, don't implement yet)
+
+| Item | Notes |
+|------|-------|
+| **Prompt-injection classifier** | Owner-path guard before tool execution |
+| **Automatic fact extraction** | Promote durable facts from chat → knowledge log without explicit "remember" |
+| **Verbose export with tool traces** | Optional `/export` mode including tool_call/observation lines |
+| **Diff/patch self-repair** | Replace full-file LLM rewrite for large files |
+| **PII redaction** | Guest/owner export and memory hygiene |
+
+---
+
 ## 6. Suggested next chunk
 
 1. ~~**Phase 0:** Promote `fix/revive-2026-07` → `main`~~ ✅ Done July 8, 2026  
 2. ~~**Phase 1:** Trust & daily-use quality (all six items)~~ ✅ Done July 8, 2026  
-3. ~~**Phase 2.1:** Ollama model pull/status helper in `/settings`~~ ✅ Done July 9, 2026  
-4. **Phase 2.2–2.6:** MCP health, tool analytics, streaming progress, background-task visibility, offline mode  
+3. ~~**Phase 2:** Operator UX (2.1–2.6)~~ ✅ Done July 9, 2026  
+4. ~~**Phase 3a:** FAISS default + session memory search~~ ✅ Done July 9, 2026  
+5. **Phase 3b–3d or Post–Phase 2 backlog:** GraphRAG, neural web product surface, SKILL playbooks, security-lite items (§5 above)
 
-**Shipped (July 8 late):** Session persistence (`var/sessions/`) + reliable chat save/export (transcript `chat_export_a42ee2e0` fixes). Optional follow-up: verbose export mode with tool-trace lines (Phase 2.x).
+**Shipped (July 9):** System audit remediation — doc truth pass, operator observability bundle, config Waves 3–4 hygiene, memory architecture doc.
+
+**Optional follow-up:** Verbose export mode with tool-trace lines (§5).
 
 **Also shipped (pre-2.1):** Chat slash-command picker — type `/` for help, new chat, export, panels, owner process controls.
-
-Defer Phase 3 (FAISS default / GraphRAG / neural web) until Phase 2 operator UX is in place.
 
 ---
 

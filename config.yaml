@@ -70,7 +70,7 @@ self_repair:
 knowledge_log:
   # Cross-session aggregation of recurring errors (fed by self_repair's log
   # scan) and durable project facts. See core/knowledge_log.py.
-  file_path: data/knowledge_log.json
+  file_path: var/data/knowledge_log.json
   max_error_signatures: 200
   max_facts: 200
 escalation:
@@ -83,7 +83,7 @@ llm_interface:
   timeout_seconds: 120
 logging_level: INFO
 memory_manager:
-  backend: basic
+  backend: faiss_cpu
   faiss_index_path: var/data/wits_faiss_index.bin
   max_memory_segments: 10000
   max_results_per_search: 5
@@ -137,6 +137,7 @@ personality:
   profile_path: config/wits_personality.yaml
 project_name: WitsV3
 security:
+  offline_mode: false
   # Set via WITSV3_AUTH_TOKEN_HASH in .env (never commit secrets here)
   auth_token_hash: ""
   authorized_network_override_user: richard_elliot

@@ -178,6 +178,10 @@ class MemoryManagerSettings(BaseModel):
 
 
 class SecuritySettings(BaseModel):
+    offline_mode: bool = Field(
+        default=False,
+        description="Air-gap mode: block web_search and MCP registry/connect egress",
+    )
     python_execution_network_access: bool = Field(
         default=False, description="Allow network access in Python execution tool"
     )
@@ -458,7 +462,7 @@ class KnowledgeLogSettings(BaseModel):
     general conversational memory."""
 
     file_path: str = Field(
-        default="data/knowledge_log.json", description="Path to the knowledge log JSON file"
+        default="var/data/knowledge_log.json", description="Path to the knowledge log JSON file"
     )
     max_error_signatures: int = Field(
         default=200, gt=0, description="Cap on distinct tracked error signatures"
@@ -508,6 +512,7 @@ class WitsV3Config(BaseModel):
                     f"Warning: Configuration file '{config_path}' is empty. Using default values."
                 )
                 return cls()
+            _warn_unknown_top_level_keys(config_data)
             return cls(**config_data)
         except FileNotFoundError:
             print(f"Error: Configuration file '{config_path}' not found. Using default values.")
@@ -522,6 +527,13 @@ class WitsV3Config(BaseModel):
                 f"An unexpected error occurred while loading config '{config_path}': {e}. Using default values."
             )
             return cls()
+
+
+def _warn_unknown_top_level_keys(config_data: dict[str, Any]) -> None:
+    """Log unknown top-level YAML keys (Wave 4 guard — extra keys are ignored by Pydantic)."""
+    known = set(WitsV3Config.model_fields.keys())
+    for key in sorted(set(config_data.keys()) - known):
+        print(f"Warning: Unknown top-level config key '{key}' — ignored by WitsV3Config")
 
 
 def _apply_env_overrides(config: "WitsV3Config") -> "WitsV3Config":
@@ -633,6 +645,7 @@ def _apply_runtime_path_defaults(config: WitsV3Config) -> WitsV3Config:
     config.document_rag.documents_path = upgrade_runtime_path(
         config.document_rag.documents_path, root
     )
+    config.knowledge_log.file_path = upgrade_runtime_path(config.knowledge_log.file_path, root)
     return config
 
 

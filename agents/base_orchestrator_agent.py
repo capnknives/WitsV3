@@ -112,9 +112,22 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             metadata={"session_id": session_id},
         )
 
-        # Get relevant context from memory
+        # Get relevant context from memory (global + session-scoped)
         relevant_memories = await self.search_memory(goal, limit=5)
+        session_memories: list[Any] = []
+        if session_id:
+            session_memories = await self.search_memory(
+                goal, limit=3, filter_dict={"session_id": session_id}
+            )
         context = self._build_context_from_memories(relevant_memories)
+        if session_memories:
+            session_ctx = self._build_context_from_memories(session_memories)
+            if session_ctx.strip():
+                context = (
+                    f"{context}\n\nSession-scoped memory:\n{session_ctx}".strip()
+                    if context.strip()
+                    else f"Session-scoped memory:\n{session_ctx}"
+                )
         flush_context = ""
         if conversation_history and self.memory_manager and not self._skip_global_memory_store:
             from core.conversation_compaction import get_session_flush_context
@@ -373,6 +386,10 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
 
         yield self.stream_action(f"Calling tool: {tool_name} with args: {tool_args}")
 
+        _PROGRESS_TOOLS = frozenset({"web_search", "ingest_documents", "document_search"})
+        if tool_name in _PROGRESS_TOOLS:
+            yield self.stream_tool_progress(tool_name, "started", f"Running {tool_name}…")
+
         tool_result = None
         if self.tool_registry:
             try:
@@ -383,6 +400,9 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                 yield self.stream_error(f"Tool execution failed: {str(e)}")
         else:
             observation = f"Tool registry not available. Simulated call to {tool_name}."
+
+        if tool_name in _PROGRESS_TOOLS:
+            yield self.stream_tool_progress(tool_name, "completed", f"{tool_name} finished")
 
         if self._observation_indicates_failure(observation) or (
             isinstance(tool_result, dict) and self._tool_result_is_failure(tool_result)

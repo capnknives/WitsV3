@@ -208,18 +208,49 @@ class BaseAgent(ABC):
 
             segment_id = await self.memory_manager.add_segment(segment)
             self.logger.debug(f"Stored memory segment: {segment_id}")
+            await self._maybe_promote_to_knowledge_log(
+                content, segment_type, importance, metadata or {}
+            )
             return segment_id
         except Exception as e:
             self.logger.error(f"Error storing memory: {e}")
             return None
 
-    async def search_memory(self, query: str, limit: int = 5) -> list[Any]:
+    async def _maybe_promote_to_knowledge_log(
+        self,
+        content: str,
+        segment_type: str,
+        importance: float,
+        metadata: dict[str, Any],
+    ) -> None:
+        """Promote high-confidence remembered facts to the knowledge log (Phase 3a)."""
+        if importance < 0.9:
+            return
+        if segment_type != "USER_FACT" and not metadata.get("remember"):
+            return
+        if not getattr(self, "config", None):
+            return
+        try:
+            from core.knowledge_log import KnowledgeLogStore
+
+            log = KnowledgeLogStore(path=self.config.knowledge_log.file_path)
+            log.add_fact(content, source=self.agent_name, category="promoted_memory")
+        except Exception as e:
+            self.logger.debug("Knowledge log promotion skipped: %s", e)
+
+    async def search_memory(
+        self,
+        query: str,
+        limit: int = 5,
+        filter_dict: dict[str, Any] | None = None,
+    ) -> list[Any]:
         """
         Search memory for relevant information.
 
         Args:
             query: Search query
             limit: Maximum number of results
+            filter_dict: Optional metadata filter (e.g. session_id)
 
         Returns:
             List of relevant memory segments
@@ -228,12 +259,25 @@ class BaseAgent(ABC):
             return []
 
         try:
-            results = await self.memory_manager.search_memory(query, limit=limit)
+            results = await self.memory_manager.search_memory(
+                query, limit=limit, filter_dict=filter_dict
+            )
             self.logger.debug(f"Found {len(results)} memory results for query: {query}")
             return results
         except Exception as e:
             self.logger.error(f"Error searching memory: {e}")
             return []
+
+    def stream_tool_progress(
+        self, tool_name: str, phase: str, detail: str = ""
+    ) -> StreamData:
+        """SSE-friendly progress event for long-running tools (Phase 2.4)."""
+        return StreamData(
+            type="tool_call",
+            content=detail or f"{tool_name}: {phase}",
+            source=self.agent_name,
+            metadata={"tool_name": tool_name, "progress_phase": phase},
+        )
 
     def stream_thinking(self, thought: str) -> StreamData:
         """Create a thinking stream data object."""

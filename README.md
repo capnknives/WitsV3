@@ -14,7 +14,7 @@ A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it
 
 | Area | State |
 |------|--------|
-| Test suite | **668 passed, 2 skipped** — `pytest tests/ -q --no-cov` |
+| Test suite | **665 passed, 2 skipped** — `pytest tests/ -q --no-cov` |
 | Release branch | **`main`** promoted from `fix/revive-2026-07` @ `4c676c3` (Phase 0 complete) |
 | Models (default) | `qwen3:8b` (general + routing), `qwen2.5-coder:7b` (coding), `nomic-embed-text` (embeddings) |
 | GPU target | Configured models fit in ~8 GB VRAM when fully on-GPU |
@@ -187,7 +187,7 @@ Main file: `config.yaml` (schema/defaults in `core/config.py`).
 | `ollama_settings.embedding_model` | `nomic-embed-text` | Embeddings (768-dim) |
 | `memory_manager.backend` | `basic` | `basic`, `faiss_cpu`, `faiss_gpu`, or `neural` |
 | `memory_manager.vector_dim` | `768` | Must match embedding model |
-| `model_routing.enabled` | `true` | Size models by query complexity (`/settings`) |
+| `model_routing.enabled` | `false` (toggle in `/settings`) | Size models by query complexity when enabled |
 | `tool_system.mcp_connect_on_startup` | `false` | Skip slow MCP boot unless you want it |
 | `self_repair.enabled` | `true` | Diagnose / apply verified fixes |
 | `self_repair.daily_schedule_enabled` | `true` | In-process daily scan |

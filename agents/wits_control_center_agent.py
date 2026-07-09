@@ -428,7 +428,7 @@ User input: {user_input}
                     capability_to_tool = {
                         "code_generation": "python_execution",
                         "math": "math_operations",
-                        "data_analysis": "json_manipulate",
+                        "data_analysis": "math_operations",
                         "general_processing": "think",
                     }
 
@@ -437,7 +437,7 @@ User input: {user_input}
                             available_tools.append(capability_to_tool[capability])
 
                     if not available_tools:
-                        available_tools = ["think", "calculator", "json_manipulate"]
+                        available_tools = ["think", "calculator"]
 
                     # Create a workflow for the task
                     workflow = await self.tool_composer.compose_workflow(

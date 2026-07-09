@@ -25,7 +25,7 @@ from typing import Any
 
 logger = logging.getLogger("WitsV3.KnowledgeLog")
 
-DEFAULT_PATH = Path("data/knowledge_log.json")
+DEFAULT_PATH = Path("var/data/knowledge_log.json")
 MAX_FACT_LEN = 300
 
 

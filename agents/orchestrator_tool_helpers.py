@@ -59,6 +59,12 @@ class OrchestratorToolHelpersMixin:
         self, tool_name: str, tool_args: dict[str, Any], state: dict[str, Any]
     ) -> str | None:
         """Return a block message to skip doomed/repeat tool calls, or None to proceed."""
+        if getattr(self, "config", None) and self.config.security.offline_mode:
+            if tool_name == "web_search" or tool_name.startswith("mcp_"):
+                return (
+                    f"Blocked {tool_name}: offline mode is enabled — "
+                    "web search and MCP tools are disabled."
+                )
         if state.get("user_role") == "guest" and tool_name not in self._guest_allowed_tools():
             return (
                 f"Blocked {tool_name}: not available for guest users. "

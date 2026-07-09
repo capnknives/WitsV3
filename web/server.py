@@ -52,6 +52,7 @@ from web.owner_controls import (
 )
 from web.routes_guest import register_guest_routes
 from web.routes_mcp import register_mcp_routes
+from web.routes_ops import register_ops_routes
 from web.routes_personality import register_personality_routes
 from web.schemas import (
     ChatRequest,
@@ -840,6 +841,7 @@ def create_app(system) -> FastAPI:
                 for name, p in MODEL_PRICES.items()
             },
             "anthropic_key_configured": get_escalation_manager().api_key_configured(),
+            "offline_mode": cfg.security.offline_mode,
         }
 
     @app.post("/api/settings")
@@ -1012,6 +1014,7 @@ def create_app(system) -> FastAPI:
 
     register_guest_routes(app, system, guest_registry, guest_audit)
     register_mcp_routes(app, system)
+    register_ops_routes(app, system)
     register_personality_routes(app, system)
 
     return app
