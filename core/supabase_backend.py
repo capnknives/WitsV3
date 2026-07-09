@@ -85,7 +85,7 @@ class SupabaseMemoryBackend(BaseMemoryBackend):
             self.logger.error(f"Failed to initialize Supabase backend: {e}")
             raise
 
-    async def add_segment(self, segment: MemorySegment) -> str:
+    async def add_segment(self, segment: MemorySegment, *, persist: bool = True) -> str:
         """Add a memory segment to Supabase.
 
         Args:

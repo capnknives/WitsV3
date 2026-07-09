@@ -5,7 +5,7 @@ These give an agent (the self-repair agent, or the coding agent working on
 an existing file) a real detect -> diagnose -> fix -> verify loop instead of
 just talking about one:
 
-  - diagnose_log_errors: find real tracebacks/errors in logs/witsv3.log
+  - diagnose_log_errors: find real tracebacks/errors in var/logs/witsv3.log
   - run_test_suite: run pytest and report pass/fail
   - apply_code_fix: write a candidate fix, verify it, commit on success or
     revert to the original bytes on failure (core/safe_code_editor.py)
@@ -171,13 +171,13 @@ def parse_traceback_issues(log_text: str, max_issues: int) -> list[dict[str, Any
 
 
 class DiagnoseLogErrorsTool(BaseTool):
-    """Scan logs/witsv3.log for recent tracebacks and errors."""
+    """Scan var/logs/witsv3.log for recent tracebacks and errors."""
 
     def __init__(self):
         super().__init__(
             name="diagnose_log_errors",
             description=(
-                "Scan the trailing lines of logs/witsv3.log for real tracebacks and "
+                "Scan the trailing lines of var/logs/witsv3.log for real tracebacks and "
                 "ERROR/CRITICAL entries. Returns distinct issues with the source file "
                 "and line when resolvable from the traceback, so a fix can be targeted "
                 "at the right place. Makes no changes to the log or codebase — recurring "

@@ -23,7 +23,7 @@ C:\Users\capta\source\repos\capnknives\WitsV3-claude
 2. **Open Cursor’s project folder on `WitsV3-cursor`** when asking the Cursor agent to edit code.
 3. **Open Claude on `WitsV3-claude`** the same way.
 4. Agents push feature branches → merge into `fix/revive-2026-07` or `main` → pull `main` into `WitsV3` for personal use.
-5. Do not commit `.env`, `data/`, or memory files. Agent worktrees may share the personal `.venv` via a directory junction; that is intentional.
+5. Do not commit `.env`, `var/data/`, or memory files. Agent worktrees may share the personal `.venv` via a directory junction; that is intentional.
 
 **July 8, 2026:** `fix/revive-2026-07` was promoted to **`main`** (Phase 0 ship gate). Runtime can track `main`:
 

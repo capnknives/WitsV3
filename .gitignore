@@ -59,8 +59,10 @@ htmlcov/
 *.log
 logs/
 log/
-documents/*
-!documents/.gitkeep
+var/user_files/*
+!var/user_files/.gitkeep
+var/documents/*
+!var/documents/.gitkeep
 exports/*
 !exports/.gitkeep
 workspace/*

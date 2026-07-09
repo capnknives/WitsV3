@@ -10,6 +10,11 @@ status: "historical"
 > **July 2026 update:** Planning docs moved again from `planning/` to `docs/`.
 > `planning/` is now a redirect stub; see [`docs/README.md`](docs/README.md).
 
+> **Phase 3–4 (July 2026):** All mutable runtime data lives under `var/`.
+> Legacy top-level folders auto-migrate on startup. `var/documents/` was renamed
+> to `var/user_files/` (not to be confused with repo `docs/`). See
+> [`docs/architecture/paths-and-layout.md`](docs/architecture/paths-and-layout.md).
+
 
 This document maps previous file locations to the reorganized structure. Use it when
 updating old imports or reading archived docs.

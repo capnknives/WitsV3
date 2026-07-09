@@ -51,7 +51,7 @@ class CodingHandlersMixin:
         generated_code: str,
         session_id: str,
     ) -> str | None:
-        """Extract code from LLM output and write under workspace/<slug>/."""
+        """Extract code from LLM output and write under var/workspace/<slug>/."""
         code = extract_code_from_response(generated_code)
         if not code.strip():
             return None
@@ -148,7 +148,7 @@ class CodingHandlersMixin:
     async def _write_project_files(
         self, project: "CodeProject", files: dict[str, str]
     ) -> list[str]:
-        """Write generated project files to workspace/<project.name>/ and
+        """Write generated project files to var/workspace/<project.name>/ and
         syntax-check each .py file with py_compile, so a broken scaffold is
         reported immediately instead of silently sitting in memory as text.
         """

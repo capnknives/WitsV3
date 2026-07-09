@@ -155,6 +155,20 @@ async def run_operator_check(scenario: dict[str, Any], system, state: SmokeRunSt
         elif check == "offline_mode_config":
             ok = hasattr(system.config.security, "offline_mode")
             _record(state, sid, tier, ok)
+        elif check == "runtime_layout":
+            from core.runtime_paths import SUBDIRS, ensure_runtime_layout, project_root
+
+            ensure_runtime_layout("var")
+            root = project_root()
+            problems: list[str] = []
+            for sub in SUBDIRS:
+                if not (root / "var" / sub).is_dir():
+                    problems.append(f"missing var/{sub}")
+            for legacy in (*SUBDIRS, "documents"):
+                if (root / legacy).exists():
+                    problems.append(f"legacy {legacy}/ at repo root")
+            ok = not problems
+            _record(state, sid, tier, ok, "; ".join(problems) if problems else "var layout ok")
         elif check == "docker_sandbox_ready":
             from core.sandbox_runner import sandbox_mode
 

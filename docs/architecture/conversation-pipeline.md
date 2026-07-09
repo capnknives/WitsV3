@@ -49,8 +49,8 @@ Order of evaluation: see `classify_message()` in `agents/routing_classifier.py`.
 ## Decisions (July 2026)
 
 1. **Route more, React less** — Expand deterministic routing and SKILL-style playbooks (`config/playbooks/`) so fewer turns enter the 15-iteration JSON ReAct loop.
-2. **Keep JSON ReAct as fallback** — Synthesis guard and preflight are load-bearing for local models (`qwen3:8b`). Default is `ollama_native` after July 9 A/B gate; set `tool_calling_mode: json_react` to rollback.
-3. **Pilot native Ollama tool calling** — Opt-in via `orchestrator.tool_calling_mode: ollama_native` in `config.yaml`.
+2. **Keep JSON ReAct as default** — Synthesis guard and preflight are load-bearing for local models (`qwen3:8b`). July 9 A/B baseline (`WITS_SMOKE_METRICS=1`): `json_react` matched reliability on `orch-sqrt` / `orch-save` with predictable iteration counts. **`tool_calling_mode: json_react`** remains default; opt in to `ollama_native` via config or `--tool-mode` when experimenting.
+3. **Pilot native Ollama tool calling** — Opt-in via `orchestrator.tool_calling_mode: ollama_native` or smoke `--tool-mode ollama_native`. Compare with `scripts/smoke_ab_compare.py`.
 4. **Externalize prompt rules** — `config/orchestrator_prompt.yaml` for tunable orchestrator behavior without code edits.
 
 ## Per-turn LLM budget targets
@@ -80,7 +80,7 @@ Order of evaluation: see `classify_message()` in `agents/routing_classifier.py`.
 
 ```yaml
 orchestrator:
-  tool_calling_mode: ollama_native   # default after A/B gate; use json_react to rollback
+  tool_calling_mode: json_react   # default; ollama_native opt-in — see conversation-pipeline.md
   prompt_rules_path: config/orchestrator_prompt.yaml
   history_turns: 5
   observation_window: 5

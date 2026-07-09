@@ -6,7 +6,7 @@ general conversational memory (core/memory_manager.py) — this store answers
 reset every run:
 
   - Errors: tools/self_repair_tools.py's DiagnoseLogErrorsTool re-scans
-    logs/witsv3.log fresh on every call and discards the result. This store
+    var/logs/witsv3.log fresh on every call and discards the result. This store
     lets the same scan accumulate occurrence counts over time instead.
   - Facts: durable, owner-confirmed facts about the project (not casual
     guest chat facts, and not raw conversational memory).

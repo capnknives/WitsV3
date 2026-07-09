@@ -9,6 +9,7 @@ status: "active"
 
 ## Documents
 
+- **[paths-and-layout.md](paths-and-layout.md)** — three-bucket taxonomy (`docs/` vs `var/user_files/` vs `var/data/`)
 - **[system-architecture.md](system-architecture.md)** — component overview (treat mid-2025 “status” sections as historical)
 
 For live product status and install steps use the root [`README.md`](../../README.md).

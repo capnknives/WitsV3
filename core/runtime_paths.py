@@ -41,7 +41,11 @@ def project_root() -> Path:
 
 RUNTIME_ROOT_NAME = "var"
 
-SUBDIRS = ("data", "documents", "exports", "logs", "workspace", "cache", "sessions")
+# Canonical runtime subdirs under var/. ``user_files`` replaced ``documents`` in Phase 4.
+SUBDIRS = ("data", "user_files", "exports", "logs", "workspace", "cache", "sessions")
+
+# Legacy top-level / config path names mapped to canonical SUBDIR names.
+LEGACY_SUBDIR_ALIASES: dict[str, str] = {"documents": "user_files"}
 
 
 def runtime_root(root: str = RUNTIME_ROOT_NAME) -> Path:
@@ -56,8 +60,14 @@ def data_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
     return runtime_subdir("data", root)
 
 
+def user_files_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
+    """Personal RAG/upload corpus (PDFs, notes). Not repo ``docs/``."""
+    return runtime_subdir("user_files", root)
+
+
 def documents_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
-    return runtime_subdir("documents", root)
+    """Deprecated alias for :func:`user_files_dir`."""
+    return user_files_dir(root)
 
 
 def exports_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
@@ -96,11 +106,28 @@ def guest_user_profiles_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
     return data_dir(root) / "guest_user_profiles"
 
 
+def _canonical_subdir(name: str) -> str:
+    return LEGACY_SUBDIR_ALIASES.get(name, name)
+
+
 def upgrade_runtime_path(path: str, root: str = RUNTIME_ROOT_NAME) -> str:
     """Map legacy top-level runtime paths to the var/ layout."""
     norm = path.replace("\\", "/")
+    # var/documents → var/user_files (Phase 4 rename)
+    if norm == f"{root}/documents" or norm.startswith(f"{root}/documents/"):
+        suffix = norm[len(f"{root}/documents") :]
+        return f"{root}/user_files{suffix}"
     if norm.startswith(f"{root}/"):
         return norm
+    for legacy, canonical in LEGACY_SUBDIR_ALIASES.items():
+        if norm == legacy or norm.startswith(f"{legacy}/"):
+            suffix = norm[len(legacy) :]
+            return f"{root}/{canonical}{suffix}"
+    first = norm.split("/", 1)[0]
+    canonical = _canonical_subdir(first)
+    if canonical != first:
+        suffix = norm[len(first) :]
+        return f"{root}/{canonical}{suffix}"
     for sub in SUBDIRS:
         if norm == sub or norm.startswith(f"{sub}/"):
             return f"{root}/{norm}"
@@ -196,6 +223,31 @@ def migrate_legacy_runtime_dirs(root: str = RUNTIME_ROOT_NAME) -> list[str]:
     base = project_root()
     rt = base / root
     rt.mkdir(parents=True, exist_ok=True)
+
+    # Phase 4: top-level documents/ → var/user_files/ (not var/documents/)
+    legacy_documents = base / "documents"
+    target_user_files = rt / "user_files"
+    if legacy_documents.exists() and legacy_documents.is_dir():
+        if not target_user_files.exists():
+            shutil.move(str(legacy_documents), str(target_user_files))
+            moved.append(f"documents/ -> {root}/user_files/")
+            logger.info("Migrated %s -> %s", legacy_documents, target_user_files)
+        else:
+            merged = _merge_legacy_tree(legacy_documents, target_user_files)
+            if merged:
+                moved.append(
+                    f"documents/ merged into {root}/user_files/ ({len(merged)} items)"
+                )
+                logger.info(
+                    "Merged legacy %s into %s (%d items)",
+                    legacy_documents,
+                    target_user_files,
+                    len(merged),
+                )
+            if _remove_empty_dir(legacy_documents):
+                moved.append("removed empty legacy documents/")
+                logger.info("Removed empty legacy directory %s", legacy_documents)
+
     for sub in SUBDIRS:
         legacy = base / sub
         target = rt / sub
@@ -215,6 +267,26 @@ def migrate_legacy_runtime_dirs(root: str = RUNTIME_ROOT_NAME) -> list[str]:
                 logger.info("Removed empty legacy directory %s", legacy)
         elif not target.exists():
             target.mkdir(parents=True, exist_ok=True)
+
+    # Phase 4: var/documents/ → var/user_files/
+    old_var_documents = rt / "documents"
+    if old_var_documents.exists() and old_var_documents.is_dir():
+        target_user_files.mkdir(parents=True, exist_ok=True)
+        merged = _merge_legacy_tree(old_var_documents, target_user_files)
+        if merged:
+            moved.append(
+                f"{root}/documents/ merged into {root}/user_files/ ({len(merged)} items)"
+            )
+            logger.info(
+                "Merged %s into %s (%d items)",
+                old_var_documents,
+                target_user_files,
+                len(merged),
+            )
+        if _remove_empty_dir(old_var_documents):
+            moved.append(f"removed empty {root}/documents/")
+            logger.info("Removed empty directory %s", old_var_documents)
+
     return moved
 
 

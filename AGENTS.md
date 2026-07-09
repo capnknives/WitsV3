@@ -62,12 +62,12 @@ Optional scheduled tasks (memory maintenance, metrics, self-repair parity). Pref
 
 ### AdvancedCodingAgent
 
-- Project scaffolds written under `workspace/<name>/` with `py_compile` checks
+- Project scaffolds written under `var/workspace/<name>/` with `py_compile` checks
 - Requests that name an existing project file use the same verified-edit pipeline as self-repair (`core/safe_code_editor.py`)
 
 ### SelfRepairAgent
 
-1. Target a named file, or scan `logs/witsv3.log` (then failing tests if needed)  
+1. Target a named file, or scan `var/logs/witsv3.log` (then failing tests if needed)  
 2. Ask the LLM for a full corrected file  
 3. Apply via `apply_code_fix` (pytest gate + git commit or full revert)  
 4. Optionally restart if `self_repair.restart_after_fix` is enabled  

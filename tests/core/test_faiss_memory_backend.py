@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import faiss
@@ -283,3 +284,76 @@ async def test_faiss_gpu_backend_fallback(mock_config):
 
         results = await backend.search_segments("Test", limit=1)
         assert len(results) == 1
+
+
+@pytest.mark.asyncio
+async def test_faiss_json_load_failure_quarantines_stale_index(mock_config):
+    """Stale FAISS must not load when JSON is corrupt."""
+    llm = DummyLLM()
+    index_path = Path(mock_config.memory_manager.faiss_index_path)
+    memory_path = Path(mock_config.memory_manager.memory_file_path)
+
+    backend1 = FaissCPUMemoryBackend(mock_config, llm)
+    await backend1.initialize()
+    segment = MemorySegment(
+        id="stale-test",
+        type="test",
+        source="unit-test",
+        content=MemorySegmentContent(text="stale index content"),
+    )
+    await backend1.add_segment(segment)
+    assert index_path.exists()
+
+    memory_path.write_text("[{not valid json", encoding="utf-8")
+
+    backend2 = FaissCPUMemoryBackend(mock_config, llm)
+    await backend2.initialize()
+
+    assert len(backend2.segments) == 0
+    assert backend2.index.ntotal == 0
+
+
+@pytest.mark.asyncio
+async def test_faiss_batch_persist_defers_disk_write(mock_config):
+    """persist=False batches until flush."""
+    llm = DummyLLM()
+    memory_path = Path(mock_config.memory_manager.memory_file_path)
+    backend = FaissCPUMemoryBackend(mock_config, llm)
+    await backend.initialize()
+
+    for i in range(3):
+        segment = MemorySegment(
+            id=f"batch-{i}",
+            type="test",
+            source="unit-test",
+            content=MemorySegmentContent(text=f"batch segment {i}"),
+        )
+        await backend.add_segment(segment, persist=False)
+
+    assert not memory_path.exists() or memory_path.stat().st_size == 0 or backend._persist_pending
+
+    await backend.flush_persist()
+    assert memory_path.exists()
+    assert len(backend.segments) == 3
+
+
+@pytest.mark.asyncio
+async def test_faiss_atomic_save_survives_reload(mock_config):
+    """Saved JSON is valid and reloads all segments."""
+    llm = DummyLLM()
+    backend1 = FaissCPUMemoryBackend(mock_config, llm)
+    await backend1.initialize()
+    for i in range(4):
+        await backend1.add_segment(
+            MemorySegment(
+                id=f"atomic-{i}",
+                type="test",
+                source="unit-test",
+                content=MemorySegmentContent(text=f"atomic save {i}"),
+            )
+        )
+
+    backend2 = FaissCPUMemoryBackend(mock_config, llm)
+    await backend2.initialize()
+    assert len(backend2.segments) == 4
+    assert backend2.index.ntotal == 4

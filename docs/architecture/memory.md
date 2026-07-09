@@ -17,7 +17,7 @@ Install/run context: [`README.md`](../../README.md).
 | **Episodic segments** | `var/data/wits_memory.json` (+ FAISS index when `backend: faiss_cpu`) | Embeddings + metadata for semantic search |
 | **Sessions** | `var/sessions/*.json` | Full chat transcripts for the Web UI |
 | **Knowledge log** | `var/data/knowledge_log.json` | Recurring errors + durable owner facts |
-| **Documents** | `var/documents/` | RAG corpus (hybrid BM25 + vector via `document_search`) |
+| **Documents** | `var/user_files/` | RAG corpus (hybrid BM25 + vector via `document_search`) |
 | **Guest profiles** | `var/data/guest_profiles/` | Isolated tester facts (no global memory writes) |
 
 ## Default backend (Phase 3a)
@@ -66,3 +66,39 @@ WitsV3 has **durable episodic + semantic memory** suitable for a personal assist
 Automatic continuous learning from every turn is limited to heuristic owner-path
 fact promotion; deeper learning remains in the Phase 3b+ backlog
 ([`suggested-features-2026-07.md`](../roadmap/suggested-features-2026-07.md)).
+
+## Operations runbook (JSON + FAISS)
+
+`wits_memory.json` and `wits_faiss_index.bin` must stay **in sync**. Always backup
+and restore them as a pair.
+
+### Symptoms
+
+| Symptom | Likely cause |
+|---------|----------------|
+| `Error loading memory segments from disk` on boot | Truncated JSON (non-atomic write during bulk ingest) |
+| FAISS `ntotal` >> segment count | Stale index loaded after JSON parse failure (fixed July 9 hardening) |
+| Parse error line/char moves as file grows | Another process is mid-write — stop Wits/smoke first |
+
+### Backup / restore
+
+```powershell
+# From WitsV3-claude after stopping run_web.py and smoke harnesses:
+powershell -File scripts/restore_runtime_memory.ps1
+```
+
+Manual restore copies from personal runtime `WitsV3/var/data/` (see script).
+After restore, validate: `python scripts/analyze_memory.py`.
+
+### Rebuild document chunks
+
+If you need more than the restored baseline, run **ingest_documents** (Web UI or
+tool) after JSON+FAISS are healthy. Ingest batches chunk writes (single persist per
+file since July 9).
+
+### Hardening (shipped July 9)
+
+- Atomic `.tmp` + `replace()` for JSON and FAISS ([`core/faiss_memory_backend.py`](../../core/faiss_memory_backend.py))
+- `asyncio.Lock` on load/save
+- JSON load failure quarantines stale FAISS and rebuilds index
+- `persist=False` + `flush()` for bulk ingest ([`tools/document_tools.py`](../../tools/document_tools.py))

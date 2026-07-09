@@ -32,6 +32,11 @@ from scripts.smoke_harness import filter_scenarios, load_scenarios, run_scenario
 async def main() -> int:
     parser = argparse.ArgumentParser(description="WitsV3 conversation + task smoke test")
     parser.add_argument("--quick", action="store_true", help="operator + routing only (no LLM turns)")
+    parser.add_argument(
+        "--isolated",
+        action="store_true",
+        help="use temp var/ + basic memory backend (fast; does not touch live corpus)",
+    )
     parser.add_argument("--live", action="store_true", help="include live Ollama scenarios")
     parser.add_argument("--only", metavar="IDS", help="comma-separated scenario ids")
     parser.add_argument(
@@ -55,6 +60,18 @@ async def main() -> int:
     if args.metrics:
         os.environ["WITS_SMOKE_METRICS"] = "1"
 
+    # Quick mode uses isolated temp var/ + basic memory so smoke finishes in seconds.
+    if args.quick:
+        args.isolated = True
+
+    if args.isolated:
+        import shutil
+        import tempfile
+
+        isolated_root = Path(tempfile.mkdtemp(prefix="wits_smoke_"))
+        os.environ["WITSV3_PROJECT_ROOT"] = str(isolated_root)
+        print(f"Isolated smoke root: {isolated_root}")
+
     ensure_runtime_layout()
     exports_dir().mkdir(parents=True, exist_ok=True)
     sessions_dir().mkdir(parents=True, exist_ok=True)
@@ -74,6 +91,15 @@ async def main() -> int:
     from core.config import load_config
 
     config = load_config("config.yaml")
+    if args.isolated:
+        # Reason: --quick/--isolated must not touch live FAISS or re-embed Downloads.
+        config.memory_manager.backend = "basic"
+        config.memory_manager.memory_file_path = str(
+            Path(os.environ["WITSV3_PROJECT_ROOT"]) / "var" / "data" / "wits_memory.json"
+        )
+        config.document_rag.auto_ingest_on_startup = False
+        if hasattr(config.security, "document_ingest_roots"):
+            config.security.document_ingest_roots = []
     if args.tool_mode:
         config.orchestrator.tool_calling_mode = args.tool_mode
         print(f"Tool mode override: {args.tool_mode}")

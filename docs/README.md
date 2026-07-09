@@ -20,6 +20,7 @@ Design notes, roadmaps, and historical material for WitsV3.
 | **What's next** | [`roadmap/suggested-features-2026-07.md`](roadmap/suggested-features-2026-07.md) |
 | **What shipped (July 2026)** | [`roadmap/revival-2026-07.md`](roadmap/revival-2026-07.md) |
 | **Architecture** | [`architecture/system-architecture.md`](architecture/system-architecture.md) *(component map)* |
+| **Paths & layout** | [`architecture/paths-and-layout.md`](architecture/paths-and-layout.md) |
 | **Memory model** | [`architecture/memory.md`](architecture/memory.md) |
 | **Agent integration** | [`../agents/integration_guide.md`](../agents/integration_guide.md) |
 | **Dead/dormant code** | [`roadmap/clutter-catalog-2026-07.md`](roadmap/clutter-catalog-2026-07.md) |

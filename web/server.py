@@ -540,7 +540,7 @@ def create_app(system) -> FastAPI:
 
     @app.post("/api/export")
     async def export_conversation(body: ExportRequest, request: Request):
-        """Write the current session transcript to exports/ (one-click export)."""
+        """Write the current session transcript to var/exports/ (one-click export)."""
         guest = getattr(request.state, "guest", None)
         raw_session = body.session_id
         if not raw_session:

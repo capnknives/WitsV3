@@ -32,6 +32,19 @@ async def test_apply_verified_edit_reverts_on_test_failure(tmp_path):
         sce.resolve_within_project(str(target))
 
 
+def _force_subprocess_pytest_path(monkeypatch):
+    """apply_verified_edit uses Docker when config.security.sandbox_mode is docker.
+
+    Stub load_config so unit tests exercise the local run_pytest path only.
+    """
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "core.config.load_config",
+        lambda *a, **k: SimpleNamespace(security=SimpleNamespace(sandbox_mode="off")),
+    )
+
+
 @pytest.mark.asyncio
 async def test_apply_verified_edit_writes_and_reverts_in_project(monkeypatch):
     """Use a real scratch file inside the project so resolve_within_project succeeds,
@@ -43,6 +56,7 @@ async def test_apply_verified_edit_writes_and_reverts_in_project(monkeypatch):
     async def fake_fail(*args, **kwargs):
         return False, "1 failed, 0 passed"
 
+    _force_subprocess_pytest_path(monkeypatch)
     monkeypatch.setattr(sce, "run_pytest", fake_fail)
     try:
         result = await sce.apply_verified_edit(
@@ -63,6 +77,7 @@ async def test_apply_verified_edit_restores_original_bytes_on_failure(monkeypatc
     async def fake_fail(*args, **kwargs):
         return False, "boom"
 
+    _force_subprocess_pytest_path(monkeypatch)
     monkeypatch.setattr(sce, "run_pytest", fake_fail)
     try:
         result = await sce.apply_verified_edit(
@@ -82,6 +97,7 @@ async def test_apply_verified_edit_writes_without_commit_on_success(monkeypatch)
     async def fake_pass(*args, **kwargs):
         return True, "1 passed"
 
+    _force_subprocess_pytest_path(monkeypatch)
     monkeypatch.setattr(sce, "run_pytest", fake_pass)
     try:
         result = await sce.apply_verified_edit(

@@ -70,7 +70,7 @@ or directly to **`main`** when verified. **`main` was promoted** July 8, 2026
 
 ---
 
-## 2. Error-log triage (from `logs/witsv3.log`, July 6–7 chats)
+## 2. Error-log triage (from `var/logs/witsv3.log`, July 6–7 chats)
 
 | Error | Status |
 |---|---|
@@ -234,6 +234,7 @@ tracked in [`suggested-features-2026-07.md`](suggested-features-2026-07.md) § P
 - **Phase 2a** — tagged `archive-pre-prune-2026-07`; pruned 61 files from `docs/archive/gui/` (PyQt6 + book GUI); stub README + git tag for recovery
 - **Phase 2b** — tagged `archive-pre-prune-2b-2026-07`; pruned 27 files (`adaptive_llm/core/`, `sphinx/`, synthetic_brain code); stub READMEs + tag for recovery
 - **Phase 3** — `var/` runtime layout via `core/runtime_paths.py`; config defaults + auto-migration from legacy top-level folders
+- **Phase 4 — Path cohesion** — `var/documents/` → `var/user_files/`; [`paths-and-layout.md`](../architecture/paths-and-layout.md) glossary; vocabulary pass (`var/logs/`, `var/workspace/`); `op-runtime-layout` smoke check
 
 ---
 
@@ -324,7 +325,21 @@ Tests: **689 passed, 2 skipped**. Quick smoke: **17/17**.
 ]
 ```
 
-**Native default gate:** A/B gate **passed** July 9, 2026 (`python scripts/smoke_ab_compare.py`). Fixed `NativeToolOrchestrator` tool `description` (must be string, not dict). Default promoted to `ollama_native`; rollback: `orchestrator.tool_calling_mode: json_react`.
+**Native tool-calling gate (July 9):** A/B harness available (`scripts/smoke_ab_compare.py`). **`json_react` remains default** in `config.yaml` — native mode is opt-in (`ollama_native` / `--tool-mode`) until live perf proves consistent wins over the baseline table above.
+
+---
+
+## 6. July 9, 2026 — Phase 4 path cohesion + FAISS memory hardening
+
+| Theme | What shipped |
+|-------|----------------|
+| **Phase 4 paths** | `var/user_files/` rename; [`paths-and-layout.md`](../architecture/paths-and-layout.md); vocabulary pass; `op-runtime-layout` smoke |
+| **FAISS durability** | Atomic JSON/FAISS writes, IO lock, stale-index quarantine on JSON failure, ingest `persist=False` + `flush()` |
+| **Fast smoke** | `--quick` auto-enables `--isolated` (temp `var/` + `basic` backend) |
+| **Ops** | `scripts/restore_runtime_memory.ps1`; memory runbook in [`memory.md`](../architecture/memory.md) |
+| **Factory split** | `core/memory_backend_factory.py` extracted from `memory_manager.py` |
+
+**Incident:** Deep-verify smoke hung on corrupt `wits_memory.json` (~70MB mid-write). Restore JSON+FAISS pair from `WitsV3` sibling; re-ingest documents if needed.
 
 **Post-playbook live metrics** (`WITS_SMOKE_METRICS=1`, json_react, July 9 2026):
 

@@ -986,8 +986,8 @@ async function loadDocs() {
     const body = await res.json();
     const files = body.files || [];
     $("#docs-count").textContent = files.length
-      ? `${files.length} document${files.length === 1 ? "" : "s"} · ${body.total_chunks || 0} chunks`
-      : "No documents yet";
+      ? `${files.length} user file${files.length === 1 ? "" : "s"} · ${body.total_chunks || 0} chunks`
+      : "No user files yet";
     box.innerHTML = "";
     if (!files.length) {
       box.appendChild(el("div", "doc-empty", "Nothing here yet. Upload a file to make it searchable."));
@@ -1009,7 +1009,7 @@ async function loadDocs() {
       }
 
       const del = el("button", "doc-del", "🗑");
-      del.title = "Delete document";
+      del.title = "Delete file";
       del.addEventListener("click", () => confirmDeleteDoc(del, f.name));
 
       item.appendChild(icon);
@@ -1102,7 +1102,7 @@ dropZone.addEventListener("drop", (e) => {
 
 $("#docs-reindex").addEventListener("click", async () => {
   try {
-    docStatus("Re-indexing all documents…");
+    docStatus("Re-indexing all user files…");
     const res = await api("/api/documents/reindex", { method: "POST" });
     if (res.ok) {
       const body = await res.json();
@@ -1187,7 +1187,7 @@ async function bootstrapAuth() {
   } else {
     const restored = await restoreSessionIfAny();
     if (!restored) {
-      addAssistantMsg("Hey Richard — WITS is online. Ask me anything, type / for commands, or open the ☰ panel for tools, memory and documents. Owner commands: /shutdown · /restart (require your web token).");
+      addAssistantMsg("Hey Richard — WITS is online. Ask me anything, type / for commands, or open the ☰ panel for tools, memory and user files. Owner commands: /shutdown · /restart (require your web token).");
     }
   }
   loadSlashCommands();

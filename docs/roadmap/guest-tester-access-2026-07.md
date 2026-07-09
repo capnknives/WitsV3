@@ -94,8 +94,8 @@ sequenceDiagram
 File-backed registry (local-first, no new deps):
 
 ```
-data/guest_profiles.json   # guest_id, display_name, device_ids[], first_seen, last_seen, revoked
-data/guest_sessions/       # optional: persisted chat exports per guest (future)
+var/data/guest_profiles.json   # guest_id, display_name, device_ids[], first_seen, last_seen, revoked
+var/data/guest_sessions/       # optional: persisted chat exports per guest (future)
 ```
 
 In-memory guest chat still uses `session_histories`, but keyed as `guest:{guest_id}:{session_id}` so owner and guest transcripts do not mix.
@@ -207,7 +207,7 @@ Do **not** ship guest chat without tool/route locks.
 
 - [x] `GuestAccessSettings` in `core/config.py` + `config.yaml` (default `enabled: false`)
 - [x] `.env`: `WITSV3_GUEST_INVITE` + `WITSV3_GUEST_SECRET` (signing)
-- [x] `data/guest_profiles.json` + `core/guest_access.py` registry
+- [x] `var/data/guest_profiles.json` + `core/guest_access.py` registry
 - [x] `web/guest_auth.py` — issue/validate guest tokens; middleware accepts owner **or** guest
 - [x] Public: `POST /api/guest/register`, `GET /api/guest/status`, `GET /api/guest/me`
 - [x] Owner-only route deny for guests (settings, MCP, personality, docs mutate, memory prune, owner, escalations)
@@ -224,9 +224,9 @@ Do **not** ship guest chat without tool/route locks.
 - [x] Wire input/output checks on guest chat stream (`web/server.py`)
 - [x] Owner-assigned age bands (`PATCH /api/guest/admin/age-band`, `guest_set_age_band` tool); guests cannot self-promote
 - [x] Tests with blocked prompt fixtures (`tests/web/test_guest_age_band.py`)
-- [ ] `config/guest_policy.yaml` (externalize blocklist)
-- [ ] Force strict safesearch for guest web_search
-- [ ] Guest-specific system prompt slice in WCCA/orchestrator
+- [x] `config/guest_policy.yaml` (externalize blocklist)
+- [x] Force strict safesearch for guest `web_search` (`tools/web_search_tool.py`, `tests/tools/test_web_search_tool.py`)
+- [x] Guest-specific system prompt slice in WCCA/orchestrator (`core/content_policy.guest_system_prompt_slice`)
 
 **Exit criteria:** Obvious inappropriate queries refused without tool calls.
 
@@ -234,7 +234,7 @@ Do **not** ship guest chat without tool/route locks.
 
 ### Phase 3b — Guest interest profiles (~0.5 session)
 
-- [x] `core/guest_user_profile.py` — JSON doc per guest under `data/guest_user_profiles/<guest_id>.json`
+- [x] `core/guest_user_profile.py` — JSON doc per guest under `var/data/guest_user_profiles/<guest_id>.json`
 - [x] Post-turn profile update from guest chat (`web/server.py`) — interests, self-reported facts, topic history
 - [x] Owner tool `guest_user_profile_summary` (`tools/guest_profile_tool.py`)
 - [x] Guest chat personalization context injected into WCCA/orchestrator (not stored in global memory)
@@ -248,7 +248,7 @@ Do **not** ship guest chat without tool/route locks.
 - [x] Settings panel: guest list, age tier, profile view, **revoke** + **merge duplicates**
 - [x] Startup banner: guest join URL + QR **without owner token** (July 8 security fix)
 - [ ] README + `.env.example` docs
-- [x] Guest audit log: `data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl` + `scripts/guest_smoke_test.py`
+- [x] Guest audit log: `var/data/guest_audit/<guest_id>/YYYY-MM-DD.jsonl` + `scripts/guest_smoke_test.py`
 
 **Exit criteria:** Owner can manage testers without editing `.env` by hand.
 

@@ -31,7 +31,7 @@ web_ui:
     adult_allow_document_search: true
 document_rag:
   enabled: true
-  documents_path: var/documents
+  documents_path: var/user_files
   chunk_size: 1200
   chunk_overlap: 150
   auto_ingest_on_startup: true
@@ -134,7 +134,7 @@ routing:
   enable_meta_reasoning_intent: false
 orchestrator:
   # A/B gate passed July 9 2026 (scripts/smoke_ab_compare.py). Rollback: json_react
-  tool_calling_mode: ollama_native
+  tool_calling_mode: json_react
   prompt_rules_path: config/orchestrator_prompt.yaml
   history_turns: 5
   observation_window: 5

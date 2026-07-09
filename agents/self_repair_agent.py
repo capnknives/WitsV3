@@ -3,7 +3,7 @@
 Real detect -> diagnose -> fix -> verify -> (optionally) restart loop:
 
   1. Detect: if the request names a specific existing project file, target
-     that; otherwise scan logs/witsv3.log for recent tracebacks/errors via
+     that; otherwise scan var/logs/witsv3.log for recent tracebacks/errors via
      the diagnose_log_errors tool.
   2. Diagnose: read the target file and ask the LLM for a full corrected
      version.
@@ -111,7 +111,7 @@ class SelfRepairAgent(BaseAgent):
             yield self.stream_observation(f"Targeting {file_path} as requested.")
         elif diagnose_tool is not None:
             yield self.stream_thinking(
-                "No specific file named — scanning logs/witsv3.log for recent errors..."
+                "No specific file named — scanning var/logs/witsv3.log for recent errors..."
             )
             diag = await diagnose_tool.execute(
                 lines=settings.log_scan_lines, max_issues=settings.max_issues_per_run

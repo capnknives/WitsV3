@@ -1,13 +1,31 @@
 """Tests for the Python execution tool."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from tools.python_execution_tool import PythonExecutionTool
 
 
 @pytest.fixture
-def python_execution_tool():
-    """Create a PythonExecutionTool instance for testing."""
+def python_execution_tool(monkeypatch):
+    """Create a PythonExecutionTool using the in-process sandbox path.
+
+    Reason: config.yaml may set security.sandbox_mode=docker; these unit tests
+    assert the legacy restricted-script semantics (strip, stderr, truncate).
+    """
+
+    def _fake_load_config(*_a, **_k):
+        return SimpleNamespace(
+            security=SimpleNamespace(
+                sandbox_mode="off",
+                python_execution_network_access=False,
+                python_execution_subprocess_access=False,
+            )
+        )
+
+    monkeypatch.setattr("core.config.load_config", _fake_load_config)
+    monkeypatch.setattr("tools.python_execution_tool.load_config", _fake_load_config)
     return PythonExecutionTool()
 
 

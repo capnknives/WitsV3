@@ -2,7 +2,7 @@
 """
 Document RAG tools for WitsV3.
 
-Drop files into the configured documents folder (default: ./documents) and
+Drop files into the configured user-files folder (default: ``var/user_files``) and
 they are chunked, embedded, and stored as DOCUMENT_CHUNK memory segments.
 Agents can then answer questions from them via the document_search tool.
 
@@ -269,7 +269,9 @@ class DocumentIngestTool(_DocumentToolBase):
                                 "total_chunks": len(chunks),
                                 "ingested_at": ingested_at,
                             },
+                            persist=False,
                         )
+                    await self.memory_manager.flush()
 
                     summary["files_ingested"] += 1
                     summary["chunks_added"] += len(chunks)

@@ -162,7 +162,7 @@ See [`docs/architecture/conversation-pipeline.md`](docs/architecture/conversatio
 | Capability | How |
 |------------|-----|
 | Chat with streaming thinking / tools | Web UI or CLI |
-| Ask about your files | Drop into `var/documents/` (auto-ingest) or upload in the UI; ask in plain English |
+| Ask about your files | Drop into `var/user_files/` (auto-ingest) or upload in the UI; ask in plain English |
 | Search the web | `web_search` — Tavily → Brave → DuckDuckGo |
 | Edit project code safely | “Fix the bug in `tools/foo.py`” → verified-edit pipeline |
 | Autonomous maintenance | Daily self-repair scan (config: `self_repair.*`) |
@@ -171,7 +171,7 @@ See [`docs/architecture/conversation-pipeline.md`](docs/architecture/conversatio
 
 ### Document RAG
 
-Files in `var/documents/` are chunked, embedded (`nomic-embed-text`), and searchable. Built-in: `.txt` `.md` `.py` `.json` `.csv` `.html` `.log` (`.pdf` needs `pypdf`, already in requirements). Changed files re-ingest; deletes clean up. Tune under `document_rag:` in `config.yaml`.
+Files in `var/user_files/` are chunked, embedded (`nomic-embed-text`), and searchable. Built-in: `.txt` `.md` `.py` `.json` `.csv` `.html` `.log` (`.pdf` needs `pypdf`, already in requirements). Changed files re-ingest; deletes clean up. Tune under `document_rag:` in `config.yaml`.
 
 ### Self-repair & coding agent
 
@@ -183,7 +183,7 @@ Shared pipeline in `core/safe_code_editor.py`:
 4. Pass → git commit · Fail → restore exact original (nothing broken left on disk)
 
 - Named file in the request → that file is targeted  
-- No file named → self-repair scans `logs/witsv3.log` (then failing tests if needed)  
+- No file named → self-repair scans `var/logs/witsv3.log` (then failing tests if needed)  
 - New projects from the coding agent land in `var/workspace/<name>/` with `py_compile` checks  
 - Edits stay inside the project tree (`resolve_within_project()`)
 

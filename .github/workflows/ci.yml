@@ -35,6 +35,19 @@ jobs:
       - name: Run tests
         run: python -m pytest tests/ -q
 
+      - name: Runtime layout operator check
+        run: |
+          python -c "
+          from core.runtime_paths import SUBDIRS, ensure_runtime_layout, project_root
+          ensure_runtime_layout('var')
+          root = project_root()
+          for sub in SUBDIRS:
+              assert (root / 'var' / sub).is_dir(), f'missing var/{sub}'
+          for legacy in (*SUBDIRS, 'documents'):
+              assert not (root / legacy).exists(), f'legacy {legacy}/ at repo root'
+          print('op-runtime-layout OK')
+          "
+
       - name: Upload coverage
         if: matrix.python-version == '3.10'
         uses: actions/upload-artifact@v4

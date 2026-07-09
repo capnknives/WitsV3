@@ -171,11 +171,11 @@ python run_web.py
 1. Ask: **"Who died on June 14, 2026?"** (or any dated current-events question).
 2. Watch the thinking/tool chips — expect **one** `web_search`, not a loop.
 3. Answer should be a **single direct sentence**, not a long list of unrelated names.
-4. Check `logs/witsv3.log` — observation text should show numbered `[1]`, `[2]` sources, not a raw dict.
+4. Check `var/logs/witsv3.log` — observation text should show numbered `[1]`, `[2]` sources, not a raw dict.
 
 ### D. document_search vs web_search (Composer prompt + inherited routing)
 
-1. With a doc in `documents/` (e.g. an audit PDF), ask about **that file** — should use `document_search`, not web.
+1. With a doc in `var/user_files/` (e.g. an audit PDF), ask about **that file** — should use `document_search`, not web.
 2. Ask about a **public figure / news event** — should use `web_search`, **not** `document_search`.
 
 ### E. Automated tests (Composer touched)
@@ -195,7 +195,7 @@ Expected: all pass (web suite was **31 passed** on July 7, 2026).
 1. After a few chat turns, ask: **"Save a log of our conversations as exports/chat_log.txt"**
 2. Expect orchestrator delegation (not a direct "I saved it" reply with no tool).
 3. In thinking/logs: `read_conversation_history` then `write_file` with `file_path` only (content injected).
-4. Confirm `exports/chat_log.txt` exists with USER/ASSISTANT lines.
+4. Confirm `var/exports/chat_log.txt` exists with USER/ASSISTANT lines.
 
 ```bash
 pytest tests/agents/test_orchestrator_save_file.py tests/core/test_tool_registry_kwargs.py -q -o addopts=

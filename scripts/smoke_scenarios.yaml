@@ -31,6 +31,11 @@ scenarios:
     requires_live: false
     check: offline_mode_config
 
+  - id: op-runtime-layout
+    tier: operator
+    requires_live: false
+    check: runtime_layout
+
   - id: sandbox-docker-ready
     tier: operator
     requires_live: false

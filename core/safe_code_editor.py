@@ -137,7 +137,7 @@ async def run_pytest(
     ("Traceback (most recent call last): ... File \"...\", line N") instead
     of pytest's own assertion-rewrite style — that's the same format
     tools.self_repair_tools.parse_traceback_issues() already parses from
-    logs/witsv3.log, so a failing test can feed the same issue-extraction
+    var/logs/witsv3.log, so a failing test can feed the same issue-extraction
     path as a logged runtime error.
     """
     args = [sys.executable, "-m", "pytest", "-q", "-o", "addopts=", "--tb=native"]

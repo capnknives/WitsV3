@@ -52,6 +52,9 @@ def rag_env(tmp_path, monkeypatch):
     config.document_rag.documents_path = str(docs_dir)
     config.document_rag.chunk_size = 200
     config.document_rag.chunk_overlap = 40
+    # Reason: SecuritySettings defaults include D:\Downloads; unit tests must stay isolated.
+    config.security.document_ingest_roots = []
+    config.security.filesystem_read_roots = []
 
     llm = DummyLLM()
     memory = MemoryManager(config=config, llm_interface=llm)

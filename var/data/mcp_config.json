@@ -74,7 +74,7 @@
     },
     "logging": {
         "level": "INFO",
-        "file": "logs/mcp.log",
+        "file": "var/logs/mcp.log",
         "max_size": 10485760,
         "backup_count": 5
     }

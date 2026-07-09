@@ -77,7 +77,7 @@ class BaseMemoryBackend(ABC):
         pass
 
     @abstractmethod
-    async def add_segment(self, segment: MemorySegment) -> str:
+    async def add_segment(self, segment: MemorySegment, *, persist: bool = True) -> str:
         pass
 
     @abstractmethod
@@ -243,12 +243,13 @@ class BasicMemoryBackend(BaseMemoryBackend):
             except Exception as e:
                 print(f"Error saving memory to {self.memory_file}: {e}")
 
-    async def add_segment(self, segment: MemorySegment) -> str:
+    async def add_segment(self, segment: MemorySegment, *, persist: bool = True) -> str:
         if not self.is_initialized:
             await self.initialize()
         await self._generate_embedding_if_needed(segment)
         self.segments.append(segment)
-        await self._save_to_disk()
+        if persist:
+            await self._save_to_disk()
         await self._prune_if_needed()
         return segment.id
 
@@ -451,35 +452,24 @@ class MemoryManager:
     def __init__(self, config: WitsV3Config, llm_interface: BaseLLMInterface):
         self.config = config
         self.llm_interface = llm_interface
-        self.backend: BaseMemoryBackend
+        from .memory_backend_factory import create_memory_backend
 
-        if config.memory_manager.backend == "basic":
-            self.backend = BasicMemoryBackend(config, llm_interface)
-        elif config.memory_manager.backend == "faiss_cpu":
-            from .faiss_memory_backend import FaissCPUMemoryBackend
-
-            self.backend = FaissCPUMemoryBackend(config, llm_interface)
-        elif config.memory_manager.backend == "faiss_gpu":
-            from .faiss_memory_backend import FaissGPUMemoryBackend
-
-            self.backend = FaissGPUMemoryBackend(config, llm_interface)
-        elif config.memory_manager.backend == "neural":
-            from .neural_memory_backend import NeuralMemoryBackend
-
-            self.backend = NeuralMemoryBackend(config, llm_interface)
-        elif config.memory_manager.backend == "supabase":
-            from .supabase_backend import SupabaseMemoryBackend
-
-            self.backend = SupabaseMemoryBackend(config, llm_interface)
-        elif config.memory_manager.backend == "supabase_neural":
-            from .supabase_backend import SupabaseMemoryBackend
-
-            self.backend = SupabaseMemoryBackend(config, llm_interface)
-        else:
-            raise ValueError(f"Unsupported memory backend: {config.memory_manager.backend}")
+        self.backend = create_memory_backend(config, llm_interface)
+        self._batch_persist_depth = 0
 
     async def initialize(self):
         await self.backend.initialize()
+
+    def _should_persist(self, persist: bool | None) -> bool:
+        if persist is not None:
+            return persist
+        return self._batch_persist_depth == 0
+
+    async def flush(self) -> None:
+        """Persist deferred segment adds (FAISS batch ingest)."""
+        flush = getattr(self.backend, "flush_persist", None)
+        if flush is not None:
+            await flush()
 
     async def add_memory(
         self,
@@ -491,6 +481,8 @@ class MemoryManager:
         tool_output: str | None = None,
         importance: float = 0.5,
         metadata: dict[str, Any] | None = None,
+        *,
+        persist: bool | None = None,
     ) -> str:
         segment_content = MemorySegmentContent(
             text=content_text, tool_name=tool_name, tool_args=tool_args, tool_output=tool_output
@@ -502,7 +494,15 @@ class MemoryManager:
             importance=importance,
             metadata=metadata or {},
         )
-        return await self.backend.add_segment(segment)
+        return await self.backend.add_segment(segment, persist=self._should_persist(persist))
+
+    async def add_memory_batch(self, segments: list[MemorySegment]) -> list[str]:
+        """Add multiple segments with a single disk persist (FAISS ingest)."""
+        ids: list[str] = []
+        for segment in segments:
+            ids.append(await self.backend.add_segment(segment, persist=False))
+        await self.flush()
+        return ids
 
     async def get_memory(self, segment_id: str) -> MemorySegment | None:
         return await self.backend.get_segment(segment_id)
@@ -526,9 +526,9 @@ class MemoryManager:
         return await self.backend.delete_segments(filter_dict)
 
     # Additional convenience method used by agents
-    async def add_segment(self, segment: MemorySegment) -> str:
+    async def add_segment(self, segment: MemorySegment, *, persist: bool = True) -> str:
         """Direct method to add a memory segment"""
-        return await self.backend.add_segment(segment)
+        return await self.backend.add_segment(segment, persist=persist)
 
 
 # Example usage (for testing this file directly)

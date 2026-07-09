@@ -159,7 +159,7 @@ class RuntimePathsSettings(BaseModel):
 
     root: str = Field(
         default="var",
-        description="Top-level directory for all runtime/personal data (subdirs: data, documents, exports, logs, workspace, cache)",
+        description="Top-level directory for all runtime/personal data (subdirs: data, user_files, exports, logs, workspace, cache, sessions)",
     )
 
 
@@ -349,7 +349,8 @@ class WebUISettings(BaseModel):
 class DocumentRAGSettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the document RAG system")
     documents_path: str = Field(
-        default="var/documents", description="Folder watched for documents to ingest"
+        default="var/user_files",
+        description="Folder for user RAG files (uploads, PDFs). Not repo docs/.",
     )
     chunk_size: int = Field(default=1200, gt=0, description="Target chunk size in characters")
     chunk_overlap: int = Field(

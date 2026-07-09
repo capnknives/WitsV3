@@ -25,4 +25,4 @@ Creates `var/` subdirs and copies templates to live files when missing.
 
 ## Legacy migration
 
-On first startup, existing top-level `data/`, `logs/`, `documents/`, etc. are moved into `var/` automatically when the new path does not yet exist.
+On first startup, existing top-level `data/`, `logs/`, `documents/`, etc. are merged into `var/` automatically (`var/user_files/` for uploads; not repo `docs/`).

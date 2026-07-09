@@ -22,6 +22,7 @@ Richard promoted **`fix/revive-2026-07` → `main`** July 8, 2026 (Phase 0 compl
 |------|--------|
 | Web UI (chat, settings, personality, MCP manager, chat export) | ✅ Shipped |
 | Document RAG + `document_search` | ✅ Shipped |
+| Runtime path cohesion (`var/user_files`, glossary, migration) | ✅ Shipped July 9 — see [`paths-and-layout.md`](../architecture/paths-and-layout.md) |
 | Smart model routing (`core/model_router.py` + `/settings`) | ✅ Shipped |
 | Orchestrator JSON robustness + WCCA intent JSON repair | ✅ Shipped |
 | Orchestrator result synthesis guard | ✅ Shipped (`4e37d6a`) |
@@ -301,6 +302,8 @@ Source: `WitsV3_Competitive_Landscape.pdf` — phased incorporation vs AnythingL
 8. **Competitive landscape deferred:** Telegram / native desktop wrapper (§7)  
 9. **Optional `ANTHROPIC_API_KEY`** — owner gate G2  
 10. **Phase 3b GraphRAG** — deferred unless compliance-style docs become primary (playbook `doc_qa` covers daily use)
+
+**July 9 afternoon — chosen next sprint:** **Polish & stability** (memory hardening, fast smoke `--isolated`, Phase 4 path cohesion, clutter Wave A). GraphRAG / Telegram / neural surface remain deferred.
 
 **Shipped (July 9):** System audit remediation + Next 10 batch + pipeline forward batch — see [`revival-2026-07.md`](revival-2026-07.md) §5.
 

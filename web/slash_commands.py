@@ -41,7 +41,7 @@ SLASH_COMMANDS: list[dict[str, Any]] = [
         "id": "export",
         "command": "/export",
         "aliases": [],
-        "description": "Export this chat to a text file in exports/",
+        "description": "Export this chat to a text file in var/exports/",
         "roles": ["owner", "guest"],
         "dispatch": "client",
         "client_action": "export",

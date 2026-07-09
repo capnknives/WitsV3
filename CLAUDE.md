@@ -71,8 +71,8 @@ Agent hierarchy (`agents/`, all extend `BaseAgent`):
 
 - `WitsControlCenterAgent` — entry point for every user turn; parses intent and routes to specialists **before** falling back to generic paths (the specialists below are load-bearing, not dead code).
 - `BaseOrchestratorAgent` → `LLMDrivenOrchestrator` — the ReAct loop (plan → call tools → read observations). Has a **synthesis guard** that rejects final answers ignoring usable search/tool observations (retries once, then auto-synthesizes). Handles JSON robustness for local models (`format=json` + repair-reparse).
-- `AdvancedCodingAgent` — new projects scaffold under `workspace/<name>/` with `py_compile` checks; edits to an existing named file go through the same verified-edit pipeline as self-repair.
-- `SelfRepairAgent` — targets a named file, or scans `logs/witsv3.log` (then failing tests) when none is named; asks the LLM for a full corrected file; applies via the verified-edit pipeline; optional restart gated by `self_repair.restart_after_fix`.
+- `AdvancedCodingAgent` — new projects scaffold under `var/workspace/<name>/` with `py_compile` checks; edits to an existing named file go through the same verified-edit pipeline as self-repair.
+- `SelfRepairAgent` — targets a named file, or scans `var/logs/witsv3.log` (then failing tests) when none is named; asks the LLM for a full corrected file; applies via the verified-edit pipeline; optional restart gated by `self_repair.restart_after_fix`.
 - `BackgroundAgent` — scheduled maintenance; mainly for the Docker background path. For local use, prefer the in-process daily self-repair schedule that `run.py` / `run_web.py` already register.
 - `BookWritingAgent` — long-form content, not part of the filesystem-edit path.
 

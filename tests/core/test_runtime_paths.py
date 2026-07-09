@@ -13,7 +13,8 @@ from core.runtime_paths import (
 
 def test_upgrade_runtime_path_maps_legacy_roots():
     assert upgrade_runtime_path("data/wits_memory.json") == "var/data/wits_memory.json"
-    assert upgrade_runtime_path("documents") == "var/documents"
+    assert upgrade_runtime_path("documents") == "var/user_files"
+    assert upgrade_runtime_path("var/documents/report.pdf") == "var/user_files/report.pdf"
     assert upgrade_runtime_path("logs/witsv3.log") == "var/logs/witsv3.log"
     assert upgrade_runtime_path("var/data/x.json") == "var/data/x.json"
 
@@ -34,7 +35,7 @@ def test_migrate_legacy_data_dir(tmp_path, monkeypatch):
 def test_ensure_runtime_layout_creates_subdirs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     ensure_runtime_layout("var")
-    for sub in ("data", "documents", "exports", "logs", "workspace", "cache", "sessions"):
+    for sub in ("data", "user_files", "exports", "logs", "workspace", "cache", "sessions"):
         assert (tmp_path / "var" / sub).is_dir()
 
 
@@ -96,6 +97,53 @@ def test_merge_removes_empty_legacy_dir_when_only_stale_dupes(tmp_path, monkeypa
     assert (target / "knowledge_log.json").read_text(encoding="utf-8").startswith("live")
 
 
+def test_migrate_var_documents_into_user_files(tmp_path, monkeypatch):
+    """Phase 4: var/documents/ merges into var/user_files/."""
+    monkeypatch.chdir(tmp_path)
+    old = tmp_path / "var" / "documents"
+    target = tmp_path / "var" / "user_files"
+    old.mkdir(parents=True)
+    target.mkdir(parents=True)
+    (old / "report.pdf").write_bytes(b"%PDF-1.4")
+    (target / "notes.md").write_text("# notes", encoding="utf-8")
+
+    migrate_legacy_runtime_dirs("var")
+
+    assert not old.exists()
+    assert (target / "report.pdf").is_file()
+    assert (target / "notes.md").read_text(encoding="utf-8") == "# notes"
+
+
+def test_migrate_top_level_documents_to_user_files(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    legacy = tmp_path / "documents"
+    legacy.mkdir()
+    (legacy / "upload.txt").write_text("hello", encoding="utf-8")
+
+    migrate_legacy_runtime_dirs("var")
+
+    assert not legacy.exists()
+    assert (tmp_path / "var" / "user_files" / "upload.txt").is_file()
+
+
+def test_no_legacy_top_level_subdirs_after_ensure(tmp_path, monkeypatch):
+    from core.runtime_paths import SUBDIRS
+
+    monkeypatch.chdir(tmp_path)
+    for sub in SUBDIRS:
+        (tmp_path / sub).mkdir()
+        (tmp_path / sub / "stub.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "documents").mkdir()
+    (tmp_path / "documents" / "old.pdf").write_bytes(b"x")
+
+    ensure_runtime_layout("var")
+
+    for sub in SUBDIRS:
+        assert not (tmp_path / sub).exists(), f"legacy {sub}/ should be gone"
+    assert not (tmp_path / "documents").exists()
+    assert (tmp_path / "var" / "user_files").is_dir()
+
+
 def test_load_config_upgrades_legacy_yaml_paths(tmp_path):
     from core.config import load_config
 
@@ -113,5 +161,5 @@ tool_system:
     )
     config = load_config(str(cfg_file))
     assert config.memory_manager.memory_file_path == "var/data/wits_memory.json"
-    assert config.document_rag.documents_path == "var/documents"
+    assert config.document_rag.documents_path == "var/user_files"
     assert config.tool_system.mcp_tool_definitions_path == "var/data/mcp_tools.json"

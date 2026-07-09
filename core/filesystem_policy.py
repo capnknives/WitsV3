@@ -41,7 +41,8 @@ def configured_read_roots(config: Any | None = None) -> list[Path]:
     roots: list[Path] = [project_read_root()]
     security = getattr(config, "security", None) if config else None
     extra = getattr(security, "filesystem_read_roots", None) if security else None
-    if extra:
+    # Reason: [] means "no extras" (tests/smoke); None means use built-in defaults.
+    if extra is not None:
         roots.extend(_normalize_roots(extra))
     else:
         roots.extend(_normalize_roots(_DEFAULT_OWNER_EXTRA_ROOTS))
@@ -137,8 +138,8 @@ def document_ingest_roots(config: Any | None = None) -> list[Path]:
     """Extra folders scanned by ingest_documents (in addition to documents_path)."""
     security = getattr(config, "security", None) if config else None
     extra = getattr(security, "document_ingest_roots", None) if security else None
-    if extra:
+    # Reason: [] means "documents_path only"; None falls back to non-project read roots.
+    if extra is not None:
         return _normalize_roots(extra)
-    # Default: owner Downloads when configured
     downloads = [r for r in configured_read_roots(config) if r != project_read_root()]
     return downloads

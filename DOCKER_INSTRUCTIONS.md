@@ -28,7 +28,7 @@ Wits itself (Web UI, agents, memory, Ollama) still runs on the host. Docker does
 
 - `start_web_ui.bat` runs `scripts/ensure_docker_desktop.ps1` before `run_web.py`
 - `run.py` / `run_web.py` call `ensure_docker_sandbox_ready()` at init — Wits fails fast if Docker is down
-- Log line to confirm: `Docker sandbox ready` in `logs/witsv3.log`
+- Log line to confirm: `Docker sandbox ready` in `var/logs/witsv3.log`
 
 **Verify**
 

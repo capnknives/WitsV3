@@ -83,7 +83,7 @@ class NeuralMemoryBackend(BaseMemoryBackend):
 
     # ========== REQUIRED INTERFACE METHODS ==========
 
-    async def add_segment(self, segment: MemorySegment) -> str:
+    async def add_segment(self, segment: MemorySegment, *, persist: bool = True) -> str:
         """
         Add a memory segment to storage and create corresponding neural web concepts.
         This is the CORRECT interface method (not add_memory).
