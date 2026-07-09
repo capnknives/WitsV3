@@ -70,6 +70,7 @@ async def main() -> int:
 
         isolated_root = Path(tempfile.mkdtemp(prefix="wits_smoke_"))
         os.environ["WITSV3_PROJECT_ROOT"] = str(isolated_root)
+        os.environ["WITS_SMOKE_ISOLATED"] = "1"
         print(f"Isolated smoke root: {isolated_root}")
 
     ensure_runtime_layout()
@@ -91,15 +92,19 @@ async def main() -> int:
     from core.config import load_config
 
     config = load_config("config.yaml")
+    # Reason: smoke must never re-ingest Downloads / re-embed the corpus on boot.
+    config.document_rag.auto_ingest_on_startup = False
     if args.isolated:
-        # Reason: --quick/--isolated must not touch live FAISS or re-embed Downloads.
+        # Reason: --quick/--isolated must not touch live FAISS.
         config.memory_manager.backend = "basic"
         config.memory_manager.memory_file_path = str(
             Path(os.environ["WITSV3_PROJECT_ROOT"]) / "var" / "data" / "wits_memory.json"
         )
-        config.document_rag.auto_ingest_on_startup = False
         if hasattr(config.security, "document_ingest_roots"):
             config.security.document_ingest_roots = []
+        # Reason: fast path must not require Docker Desktop; sandbox scenarios skip.
+        if hasattr(config.security, "sandbox_mode"):
+            config.security.sandbox_mode = "off"
     if args.tool_mode:
         config.orchestrator.tool_calling_mode = args.tool_mode
         print(f"Tool mode override: {args.tool_mode}")

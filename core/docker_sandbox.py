@@ -75,12 +75,21 @@ def _docker_desktop_exe() -> Path | None:
 
 
 async def _run(cmd: list[str], *, timeout: float = 60.0) -> tuple[int, str]:
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        env=_docker_env(),
-    )
+    # Reason: resolve bare "docker" to the discovered exe so PATH-less shells work.
+    if cmd and cmd[0] == "docker":
+        exe = _docker_exe()
+        if not exe:
+            return -1, "docker CLI not found on PATH"
+        cmd = [exe, *cmd[1:]]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=_docker_env(),
+        )
+    except FileNotFoundError as exc:
+        return -1, f"docker executable missing: {exc}"
     try:
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except asyncio.TimeoutError:

@@ -6,6 +6,7 @@ Provides vector similarity search capabilities for memory segments.
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -22,11 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 def _atomic_replace(tmp_path: Path, final_path: Path) -> None:
-    """Rename temp file into place (Windows-safe replace)."""
+    """Atomically rename temp file into place (os.replace overwrites on Windows).
+
+    Do not unlink the destination first — that creates a window where the
+    final path is missing and a crash leaves no readable memory file.
+    """
     final_path.parent.mkdir(parents=True, exist_ok=True)
-    if final_path.exists():
-        final_path.unlink()
-    tmp_path.replace(final_path)
+    # Reason: Path.replace → os.replace; overwrites dst without a delete gap.
+    os.replace(tmp_path, final_path)
 
 
 class FaissCPUMemoryBackend(BaseMemoryBackend):
@@ -196,6 +200,8 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
                 )
             self._create_new_index()
             await self._populate_index()
+            # Reason: persist rebuilt index so the next boot does not rebuild again.
+            await self._save_to_disk()
 
     async def delete_segments(self, filter_dict) -> int:
         """Delete matching segments and rebuild the FAISS index."""

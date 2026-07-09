@@ -287,6 +287,38 @@ async def test_faiss_gpu_backend_fallback(mock_config):
 
 
 @pytest.mark.asyncio
+async def test_faiss_mismatch_rebuild_persists_index(mock_config):
+    """Index/segment mismatch rebuild must write the corrected FAISS file."""
+    llm = DummyLLM()
+    index_path = Path(mock_config.memory_manager.faiss_index_path)
+
+    backend1 = FaissCPUMemoryBackend(mock_config, llm)
+    await backend1.initialize()
+    for i in range(2):
+        await backend1.add_segment(
+            MemorySegment(
+                id=f"persist-rebuild-{i}",
+                type="test",
+                source="unit-test",
+                content=MemorySegmentContent(text=f"persist rebuild {i}"),
+            )
+        )
+    assert index_path.exists()
+
+    # Corrupt on-disk index count relative to JSON by writing an empty index.
+    empty = faiss.IndexFlatL2(mock_config.memory_manager.vector_dim)
+    faiss.write_index(empty, str(index_path))
+
+    backend2 = FaissCPUMemoryBackend(mock_config, llm)
+    await backend2.initialize()
+    assert backend2.index.ntotal == 2
+
+    backend3 = FaissCPUMemoryBackend(mock_config, llm)
+    await backend3.initialize()
+    assert backend3.index.ntotal == 2
+
+
+@pytest.mark.asyncio
 async def test_faiss_json_load_failure_quarantines_stale_index(mock_config):
     """Stale FAISS must not load when JSON is corrupt."""
     llm = DummyLLM()
@@ -357,3 +389,80 @@ async def test_faiss_atomic_save_survives_reload(mock_config):
     await backend2.initialize()
     assert len(backend2.segments) == 4
     assert backend2.index.ntotal == 4
+
+
+@pytest.mark.asyncio
+async def test_faiss_mid_write_truncation_does_not_corrupt_final(mock_config, monkeypatch):
+    """Crash mid-write must leave the previous final JSON intact (no unlink gap)."""
+    llm = DummyLLM()
+    memory_path = Path(mock_config.memory_manager.memory_file_path)
+    backend = FaissCPUMemoryBackend(mock_config, llm)
+    await backend.initialize()
+    await backend.add_segment(
+        MemorySegment(
+            id="before-crash",
+            type="test",
+            source="unit-test",
+            content=MemorySegmentContent(text="stable baseline"),
+        )
+    )
+    baseline = memory_path.read_text(encoding="utf-8")
+    assert "before-crash" in baseline
+
+    real_replace = os.replace
+
+    def boom_on_final(src, dst, *args, **kwargs):
+        dst_path = Path(dst)
+        if dst_path == memory_path:
+            raise OSError("simulated crash during atomic replace")
+        return real_replace(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(os, "replace", boom_on_final)
+
+    with pytest.raises(OSError, match="simulated crash"):
+        await backend.add_segment(
+            MemorySegment(
+                id="after-crash",
+                type="test",
+                source="unit-test",
+                content=MemorySegmentContent(text="should not land"),
+            )
+        )
+
+    # Final path still holds the pre-crash snapshot (atomic replace never completed).
+    assert memory_path.read_text(encoding="utf-8") == baseline
+    assert "after-crash" not in baseline
+
+
+@pytest.mark.asyncio
+async def test_faiss_concurrent_save_and_load_under_lock(mock_config):
+    """Overlapping save/load must not raise or leave unreadable JSON."""
+    import asyncio
+    import json
+
+    llm = DummyLLM()
+    memory_path = Path(mock_config.memory_manager.memory_file_path)
+    backend = FaissCPUMemoryBackend(mock_config, llm)
+    await backend.initialize()
+
+    async def writer(n: int) -> None:
+        await backend.add_segment(
+            MemorySegment(
+                id=f"concurrent-{n}",
+                type="test",
+                source="unit-test",
+                content=MemorySegmentContent(text=f"concurrent write {n}"),
+            )
+        )
+
+    async def reader() -> None:
+        # Hold the same lock path as production loads; must not see partial JSON.
+        async with backend._io_lock:
+            if memory_path.exists() and memory_path.stat().st_size > 0:
+                data = json.loads(memory_path.read_text(encoding="utf-8"))
+                assert isinstance(data, list)
+
+    await asyncio.gather(*(writer(i) for i in range(5)), *(reader() for _ in range(5)))
+    assert memory_path.exists()
+    loaded = json.loads(memory_path.read_text(encoding="utf-8"))
+    assert len(loaded) == 5

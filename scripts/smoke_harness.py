@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -126,7 +127,11 @@ async def run_operator_check(scenario: dict[str, Any], system, state: SmokeRunSt
     with scenario_metrics(sid, route="operator") if smoke_metrics_enabled() else _null_ctx():
         if check == "memory_backend":
             backend = system.config.memory_manager.backend
-            _record(state, sid, tier, backend == scenario.get("expect", "faiss_cpu"), backend)
+            expect = scenario.get("expect", "faiss_cpu")
+            # Reason: --quick/--isolated forces basic to avoid live FAISS/embed storms.
+            if os.environ.get("WITS_SMOKE_ISOLATED") == "1":
+                expect = "basic"
+            _record(state, sid, tier, backend == expect, backend)
         elif check == "memory_init":
             ok = False
             if system.memory_manager:

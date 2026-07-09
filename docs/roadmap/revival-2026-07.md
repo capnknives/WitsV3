@@ -381,3 +381,26 @@ Full live smoke: **31/31 passed** (18 quick routing + 13 live tiers including pe
 ```json
 {"gate_passes": true, "json_react": {"orch-sqrt": {"llm_calls": 0, "wall_ms": 1626.7}, "orch-codebase": {"llm_calls": 0, "wall_ms": 749.0}, "orch-edge": {"llm_calls": 2, "wall_ms": 6445.5}}, "ollama_native": {"orch-sqrt": {"llm_calls": 0, "wall_ms": 776.0}, "orch-codebase": {"llm_calls": 0, "wall_ms": 776.5}, "orch-edge": {"llm_calls": 1, "wall_ms": 8283.5}}}
 ```
+
+---
+
+## 7. Memory incident + FAISS/smoke polish (July 9, 2026 afternoon)
+
+**Incident:** Deep-verify smoke hung on corrupt `wits_memory.json` (non-atomic mid-write during bulk ingest). Restored JSON+FAISS pair from personal `WitsV3` (152 segments). A later live smoke without ingest disabled re-grew the corpus to ~1728 segments via Downloads auto-ingest — restored again.
+
+**Shipped hardening (verify + follow-up polish):**
+
+| Item | Detail |
+|------|--------|
+| Atomic writes | `.tmp` + `os.replace()` for JSON and FAISS (no unlink gap) |
+| Consistency | `asyncio.Lock`; JSON fail quarantines stale FAISS; mismatch rebuild **persists** |
+| Ingest debounce | `persist=False` + `flush()` per file in `document_tools.py` |
+| Tests | Mid-write, concurrent lock, quarantine, rebuild-persist (`tests/core/test_faiss_memory_backend.py`) |
+| Runbook | `docs/architecture/memory.md` Operations section + `scripts/restore_runtime_memory.ps1` |
+| Fast smoke | `--quick` → isolated temp root, `basic` memory, sandbox off; **~6s / 24 passed** |
+| Smoke safety | Always disable `auto_ingest_on_startup` in `conversation_task_smoke.py` |
+| CI | Runtime layout operator check in `.github/workflows/ci.yml` |
+| Live baseline | `orch-sqrt` PASS (~13s) after ingest-off fix |
+| Product gate | Keep `json_react` default; native opt-in; next slice = polish & stability |
+
+**Owner follow-up:** commit remaining uncommitted FAISS/smoke polish on `fix/revive-2026-07`, then promote.

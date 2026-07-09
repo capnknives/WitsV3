@@ -307,6 +307,8 @@ Source: `WitsV3_Competitive_Landscape.pdf` — phased incorporation vs AnythingL
 
 **Shipped (July 9):** System audit remediation + Next 10 batch + pipeline forward batch — see [`revival-2026-07.md`](revival-2026-07.md) §5.
 
+**Shipped (July 9 evening):** Next-20 Wave C–F verified — FAISS atomic/lock/ingest debounce + corruption tests, `--quick` isolated smoke (~6s), CI runtime-layout check, live `orch-sqrt` baseline, keep `json_react` default. See [`revival-2026-07.md`](revival-2026-07.md) §7. **Still open:** commit remaining polish on `fix/revive-2026-07` and promote; optional further splits for WCCA / smoke_harness (>500 lines).
+
 ---
 
 *When this doc goes stale: bump the header date, re-run `pytest --collect-only`, and reconcile shipped items against `git log`.*

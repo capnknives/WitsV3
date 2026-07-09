@@ -98,7 +98,9 @@ file since July 9).
 
 ### Hardening (shipped July 9)
 
-- Atomic `.tmp` + `replace()` for JSON and FAISS ([`core/faiss_memory_backend.py`](../../core/faiss_memory_backend.py))
+- Atomic `.tmp` + `os.replace()` for JSON and FAISS ([`core/faiss_memory_backend.py`](../../core/faiss_memory_backend.py)) — no unlink-before-replace gap
 - `asyncio.Lock` on load/save
 - JSON load failure quarantines stale FAISS and rebuilds index
+- Index/segment mismatch rebuild **persists** the corrected FAISS file
 - `persist=False` + `flush()` for bulk ingest ([`tools/document_tools.py`](../../tools/document_tools.py))
+- Smoke harness always disables `auto_ingest_on_startup` (avoids Downloads embed storms)
