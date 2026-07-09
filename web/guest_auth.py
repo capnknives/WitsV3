@@ -21,6 +21,7 @@ _GUEST_EXACT_PATHS = frozenset(
         "/api/status",
         "/api/export",
         "/api/tools",
+        "/api/commands",
         "/api/search/providers",
     }
 )

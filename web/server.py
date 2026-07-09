@@ -62,6 +62,7 @@ from web.schemas import (
     SessionRenameRequest,
     SettingsUpdate,
 )
+from web.slash_commands import list_slash_commands
 from web.user_errors import format_chat_error
 
 logger = logging.getLogger("WitsV3.WebUI")
@@ -634,6 +635,12 @@ def create_app(system) -> FastAPI:
             "tool_count": len(system.tool_registry.tools),
             "active_sessions": len(system.session_histories),
         }
+
+    @app.get("/api/commands")
+    async def slash_commands(request: Request):
+        """Slash commands available in the chat composer for this caller."""
+        role = getattr(request.state, "auth_role", None) or "owner"
+        return {"commands": list_slash_commands(role)}
 
     @app.get("/api/tools")
     async def tools(request: Request):
