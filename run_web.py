@@ -11,6 +11,9 @@ import logging
 import os
 import socket
 import sys
+import time
+from contextlib import suppress
+from pathlib import Path
 
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 if hasattr(sys.stdout, "reconfigure"):
@@ -48,6 +51,104 @@ def _port_in_use(host: str, port: int) -> bool:
             return True
     except OSError:
         return False
+
+
+_PROJECT_ROOT = Path(__file__).resolve().parent
+
+# Source that, when changed, should trigger a web-UI restart.
+_RELOAD_WATCH_EXTENSIONS = (".py", ".yaml", ".yml", ".html", ".js", ".css")
+
+# Volatile / generated directories whose changes must NOT trigger a restart
+# (logs and memory churn constantly; a restart loop would be the result).
+_RELOAD_IGNORED_DIR_PARTS = (
+    "/.git/",
+    "/__pycache__/",
+    "/.venv/",
+    "/.pytest_cache/",
+    "/logs/",
+    "/data/",
+    "/memory/",
+    "/exports/",
+    "/documents/",
+    "/workspace/",
+    "/node_modules/",
+    "/.mypy_cache/",
+    "/.ruff_cache/",
+)
+
+
+def _reload_watch_filter(_change, path: str) -> bool:
+    """watchfiles predicate: True only for editable project source files."""
+    normalized = path.replace("\\", "/").lower()
+    if any(part in normalized for part in _RELOAD_IGNORED_DIR_PARTS):
+        return False
+    return normalized.endswith(_RELOAD_WATCH_EXTENSIONS)
+
+
+async def _wait_for_source_change() -> bool:
+    """Block until a watched source file changes; return True when one does.
+
+    Returns False if file watching is unavailable (watchfiles missing), so the
+    caller can fall back to serving without auto-reload.
+    """
+    try:
+        from watchfiles import awatch
+    except ImportError:
+        logger.warning(
+            "watchfiles is not installed; auto-reload disabled "
+            "(install uvicorn[standard] to enable it)."
+        )
+        return False
+
+    async for changes in awatch(_PROJECT_ROOT, watch_filter=_reload_watch_filter):
+        names = sorted({Path(p).name for _, p in changes})
+        preview = ", ".join(names[:5]) + (" …" if len(names) > 5 else "")
+        logger.info("Source change detected (%s); restarting web UI.", preview)
+        print(f"\n[auto-reload] change detected: {preview} — restarting web UI...\n")
+        return True
+    return False
+
+
+async def _serve_with_auto_reload(server: "uvicorn.Server") -> bool:
+    """Run the server alongside a file watcher.
+
+    Returns True if a source change requested a restart, False if the server
+    stopped on its own (e.g. Ctrl-C).
+    """
+    serve_task = asyncio.create_task(server.serve())
+    watch_task = asyncio.create_task(_wait_for_source_change())
+
+    done, _pending = await asyncio.wait(
+        {serve_task, watch_task}, return_when=asyncio.FIRST_COMPLETED
+    )
+
+    restart = False
+    if watch_task in done and watch_task.result():
+        # A change fired first — ask uvicorn to shut down gracefully, then wait.
+        restart = True
+        server.should_exit = True
+        await serve_task
+    else:
+        # Server exited on its own; stop watching.
+        watch_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await watch_task
+        if not serve_task.done():
+            await serve_task
+
+    return restart
+
+
+def _restart_process() -> None:
+    """Re-exec this process with the same interpreter and arguments.
+
+    The server socket has already been released (graceful shutdown awaited
+    before this call), so the fresh process can rebind the port cleanly.
+    """
+    print("[auto-reload] restarting now...\n")
+    sys.stdout.flush()
+    time.sleep(0.5)  # small margin for the OS to release the listening socket
+    os.execv(sys.executable, [sys.executable, *sys.argv])
 
 
 def startup_urls(config, port: int, web_token: str) -> tuple[str, str | None]:
@@ -108,7 +209,9 @@ async def main() -> int:
             print("                      (invite code required — never share your owner token)")
         else:
             print(f"    Your phone:       {phone_url}")
-            print("                      (localhost-only owner_token; prefer typing token on phone)")
+            print(
+                "                      (localhost-only owner_token; prefer typing token on phone)"
+            )
         try:
             import qrcode
 
@@ -119,16 +222,26 @@ async def main() -> int:
             qr.print_ascii(invert=True)
         except ImportError:
             pass
+    auto_reload = config.web_ui.auto_reload
+    if auto_reload:
+        print("  Auto-reload:      ON (editing project source restarts the web UI)")
     print("=" * 72)
     print()
 
     server = uvicorn.Server(
         uvicorn.Config(app, host=host, port=port, log_level="info", access_log=False)
     )
+    restart_requested = False
     try:
-        await server.serve()
+        if auto_reload:
+            restart_requested = await _serve_with_auto_reload(server)
+        else:
+            await server.serve()
     finally:
         await system.shutdown()
+
+    if restart_requested:
+        _restart_process()  # replaces this process; does not return
     return 0
 
 

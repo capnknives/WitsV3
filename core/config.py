@@ -266,6 +266,14 @@ class WebUISettings(BaseModel):
         default="Owner",
         description="Name shown in web UI access logs for owner sessions (override with WITSV3_OWNER_NAME)",
     )
+    auto_reload: bool = Field(
+        default=True,
+        description=(
+            "Watch project source files and automatically restart the web UI "
+            "when they change (agents/, core/, tools/, web/, config.yaml). "
+            "Convenient for local development; set false for unattended runs."
+        ),
+    )
     guest_access: GuestAccessSettings = Field(default_factory=GuestAccessSettings)
 
 
