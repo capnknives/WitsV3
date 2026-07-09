@@ -38,7 +38,9 @@ Richard promoted **`fix/revive-2026-07` → `main`** July 8, 2026 (Phase 0 compl
 | Web UI modernization (centered header, sleeker chat/composer) | ✅ Shipped July 8 |
 | Memory browser (search + recent w/ pagination + gated prune) | ✅ Shipped July 8 |
 | Adaptive LLM stack archived; clutter Wave A/B cleanup | ✅ Shipped July 8 |
-| July revival feature backlog | ✅ **Closed** — polish + optional features remain |
+| Guest / family tester access (full Phase 3–4 + fact editor) | ✅ Shipped July 8 |
+| Chat slash-command picker (`/` menu, `GET /api/commands`) | ✅ Shipped July 8 |
+| July revival feature backlog | ✅ **Closed** — Phase 2 operator UX next |
 
 ---
 
@@ -102,6 +104,8 @@ Mapped against [`FEATURE_IDEAS/Top Local AI System Features.docx`](FEATURE_IDEAS
 | 1.6 | ~~**Multi-session chat UI**~~ | #21 | Medium | ✅ Done July 8 — `/api/sessions` + Chats panel |
 
 ### Phase 2 — Operator UX & observability **(current)**
+
+**Pre-2.1 polish (July 8 evening):** Chat slash-command picker — type `/` in the composer for a Cursor-style menu (`web/slash_commands.py`, `GET /api/commands`). Role-filtered: guests see `/help`, `/new`, `/export`, `/chats`, `/tools`; owner adds panels, navigation, `/shutdown`, `/restart`.
 
 | # | Item | Maps to | Effort |
 |---|------|---------|--------|
@@ -245,6 +249,8 @@ The July 8 audit docs are inventories; cleanup waves feed §3. Dual-schedule fix
 2. ~~**Phase 1:** Trust & daily-use quality (all six items)~~ ✅ Done July 8, 2026  
 3. **Phase 2.1:** Ollama model pull/status helper in `/settings` (start here)  
 4. **Phase 2.2–2.6:** MCP health, tool analytics, streaming progress, background-task visibility, offline mode  
+
+**Also shipped (pre-2.1):** Chat slash-command picker — type `/` for help, new chat, export, panels, owner process controls.
 
 Defer Phase 3 (FAISS default / GraphRAG / neural web) until Phase 2 operator UX is in place.
 

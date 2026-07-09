@@ -583,7 +583,7 @@ async function loadSlashCommands() {
 }
 
 inputEl.addEventListener("keydown", (e) => {
-  if (!slashMenuEl.hidden && slashMenuRows.length) {
+  if (slashMenuEl && !slashMenuEl.hidden && slashMenuRows.length) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       slashMenuIndex = (slashMenuIndex + 1) % slashMenuRows.length;
@@ -602,7 +602,7 @@ inputEl.addEventListener("keydown", (e) => {
       return;
     }
   }
-  if (e.key === "Escape" && !slashMenuEl.hidden) {
+  if (e.key === "Escape" && slashMenuEl && !slashMenuEl.hidden) {
     e.preventDefault();
     hideSlashMenu();
     return;

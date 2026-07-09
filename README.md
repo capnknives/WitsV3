@@ -25,9 +25,9 @@ A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it
 | CI | GitHub Actions on Python 3.10 / 3.11 (`.github/workflows/ci.yml`) |
 | Secrets | Gitignored `.env` only — never in `config.yaml` |
 
-**Recently shipped (July 2026):** Web UI + PWA, Document RAG, multi-provider web search, smart model routing, MCP registry discover/install, orchestrator JSON robustness, synthesis guard, one-click chat export, coding + self-repair, daily self-repair schedule, guest / family-tester access (full Phase 3–4), **Phase 1** (follow-up intent, hybrid doc search, memory flush, evidence gate, multi-session Chats panel), guest profile fact editor.
+**Recently shipped (July 2026):** Web UI + PWA, Document RAG, multi-provider web search, smart model routing, MCP registry discover/install, orchestrator JSON robustness, synthesis guard, one-click chat export, coding + self-repair, daily self-repair schedule, guest / family-tester access (full Phase 3–4), **Phase 1** (follow-up intent, hybrid doc search, memory flush, evidence gate, multi-session Chats panel), guest profile fact editor, **chat slash commands** (type `/` in the composer).
 
-**What's next:** **Phase 2** operator UX — see [`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md) (start with Ollama model pull/status in `/settings`).
+**What's next:** **Phase 2.1** — Ollama model pull/status in `/settings`. See [`planning/roadmap/suggested-features-2026-07.md`](planning/roadmap/suggested-features-2026-07.md).
 
 ---
 
