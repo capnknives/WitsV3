@@ -11,5 +11,14 @@ if not exist ".venv\Scripts\python.exe" (
     exit /b 1
 )
 
+rem Docker sandbox (security.sandbox_mode: docker) — start Desktop if needed
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\ensure_docker_desktop.ps1"
+if errorlevel 1 (
+    echo [ERROR] Docker Desktop is required but could not be started.
+    echo Install Docker Desktop or set security.sandbox_mode to "off" in config.yaml
+    pause
+    exit /b 1
+)
+
 ".venv\Scripts\python.exe" run_web.py
 pause

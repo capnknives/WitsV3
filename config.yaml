@@ -151,7 +151,7 @@ security:
     - D:\Downloads
   document_ingest_roots:
     - D:\Downloads
-  sandbox_mode: "off"
+  sandbox_mode: "docker"
   sandbox_image: witsv3-sandbox
   pii_redaction:
     enabled: true

@@ -155,6 +155,29 @@ async def run_operator_check(scenario: dict[str, Any], system, state: SmokeRunSt
         elif check == "offline_mode_config":
             ok = hasattr(system.config.security, "offline_mode")
             _record(state, sid, tier, ok)
+        elif check == "docker_sandbox_ready":
+            from core.sandbox_runner import sandbox_mode
+
+            if sandbox_mode(system.config) != "docker":
+                _skip(state, sid, tier, "sandbox_mode is not docker")
+                return
+            from core.docker_sandbox import ensure_docker_sandbox_ready
+
+            ok, detail = await ensure_docker_sandbox_ready(system.config)
+            _record(state, sid, tier, ok, detail[:120])
+        elif check == "docker_sandbox_exec":
+            from core.sandbox_runner import run_python_sandboxed, sandbox_mode
+
+            if sandbox_mode(system.config) != "docker":
+                _skip(state, sid, tier, "sandbox_mode is not docker")
+                return
+            code = scenario.get("code", "print(sum(range(1, 11)))")
+            expected = str(scenario.get("expect_output", "55")).strip()
+            result = await run_python_sandboxed(code, config=system.config, timeout=60.0)
+            out = (result.output or "").strip()
+            ok = result.success and out == expected
+            detail = out if ok else f"success={result.success} out={out!r} err={result.error!r}"
+            _record(state, sid, tier, ok, detail)
         else:
             _record(state, sid, tier, False, f"unknown operator check: {check}")
 

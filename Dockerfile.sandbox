@@ -2,7 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /workspace
 
-RUN pip install --no-cache-dir pytest
+# Test gate needs project deps (pydantic, PyYAML, etc.), not pytest alone.
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir pytest pytest-asyncio \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Project is mounted at /workspace at runtime
 CMD ["python", "-c", "print('witsv3-sandbox ready')"]

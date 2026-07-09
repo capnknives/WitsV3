@@ -147,7 +147,18 @@ async def run_pytest_sandboxed(
 
     security = getattr(config, "security", None) if config else None
     image = getattr(security, "sandbox_image", "witsv3-sandbox") if security else "witsv3-sandbox"
-    args = ["pytest", "-q", "-o", "addopts=", "--tb=native", *(test_paths or [])]
+  # Project mount is read-only; keep pytest cache/temp off /workspace.
+    args = [
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "-o",
+        "cache_dir=/tmp/pytest_cache",
+        "--basetemp=/tmp/pytest_basetemp",
+        "--tb=native",
+        *(test_paths or []),
+    ]
     cmd = [
         "docker",
         "run",

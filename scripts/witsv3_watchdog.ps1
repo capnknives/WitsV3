@@ -37,6 +37,14 @@ if ($listening) {
 }
 
 Write-Log "Port $Port is not listening - relaunching WitsV3 web UI."
+$dockerScript = Join-Path $ProjectDir "scripts\ensure_docker_desktop.ps1"
+if (Test-Path $dockerScript) {
+    Write-Log "Ensuring Docker Desktop is running (sandbox_mode: docker)."
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $dockerScript
+    if ($LASTEXITCODE -ne 0) {
+        Write-Log "WARNING - Docker Desktop preflight failed; Wits may not start sandbox features."
+    }
+}
 $batPath = Join-Path $ProjectDir "start_web_ui.bat"
 if (-not (Test-Path $batPath)) {
     Write-Log "ERROR - $batPath not found; cannot relaunch."

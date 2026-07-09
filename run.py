@@ -117,6 +117,19 @@ class WitsV3System:
     async def initialize(self):
         """Initialize all system components."""
         try:
+            from core.sandbox_runner import sandbox_mode
+
+            if sandbox_mode(self.config) == "docker":
+                from core.docker_sandbox import ensure_docker_sandbox_ready
+
+                ok, detail = await ensure_docker_sandbox_ready(self.config)
+                if not ok:
+                    raise RuntimeError(
+                        f"Docker sandbox preflight failed: {detail}. "
+                        "Install Docker Desktop or set security.sandbox_mode to 'off'."
+                    )
+                logger.info("Docker sandbox ready: %s", detail[:200])
+
             from core.session_store import load_persisted_sessions_into
 
             root = self.config.runtime_paths.root

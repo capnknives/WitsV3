@@ -31,6 +31,18 @@ scenarios:
     requires_live: false
     check: offline_mode_config
 
+  - id: sandbox-docker-ready
+    tier: operator
+    requires_live: false
+    check: docker_sandbox_ready
+
+  - id: sandbox-docker-exec
+    tier: operator
+    requires_live: false
+    check: docker_sandbox_exec
+    code: "print(sum(range(1, 11)))"
+    expect_output: "55"
+
   # --- routing (deterministic, no LLM) ---
   - id: route-save
     tier: routing
@@ -155,7 +167,15 @@ scenarios:
     tier: routing
     requires_live: false
     message: list my downloads folder
-    role: owner
+    role: family_adult
+    assert:
+      routing_destination: read_file_direct
+
+  - id: family-kid-downloads-denied-at-fs
+    tier: routing
+    requires_live: false
+    message: read secret.pdf in my downloads
+    role: family_kid
     assert:
       routing_destination: read_file_direct
 
