@@ -87,9 +87,7 @@ class WCCAIntentMixin:
         if self._message_references_documents(user_input, doc_inventory):
             documents_context = self._documents_context(doc_inventory)
 
-        prompt = self._build_intent_analysis_prompt(
-            user_input, history_context, documents_context
-        )
+        prompt = self._build_intent_analysis_prompt(user_input, history_context, documents_context)
 
         try:
             response = await self.generate_response(

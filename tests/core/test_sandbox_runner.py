@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from core.config import WitsV3Config
-from core.sandbox_runner import run_python_sandboxed, run_pytest_sandboxed, sandbox_mode
+from core.sandbox_runner import run_pytest_sandboxed, run_python_sandboxed, sandbox_mode
 
 
 def test_sandbox_mode_default_off():

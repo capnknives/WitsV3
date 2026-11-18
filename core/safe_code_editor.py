@@ -218,9 +218,7 @@ async def apply_verified_edit(
 
     config = load_config()
     if sandbox_mode(config) == "docker":
-        passed, test_output = await run_pytest_sandboxed(
-            test_paths, config=config, timeout=timeout
-        )
+        passed, test_output = await run_pytest_sandboxed(test_paths, config=config, timeout=timeout)
     else:
         passed, test_output = await run_pytest(test_paths, timeout=timeout)
 

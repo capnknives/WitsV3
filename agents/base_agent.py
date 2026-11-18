@@ -271,9 +271,7 @@ class BaseAgent(ABC):
             self.logger.error(f"Error searching memory: {e}")
             return []
 
-    def stream_tool_progress(
-        self, tool_name: str, phase: str, detail: str = ""
-    ) -> StreamData:
+    def stream_tool_progress(self, tool_name: str, phase: str, detail: str = "") -> StreamData:
         """SSE-friendly progress event for long-running tools (Phase 2.4)."""
         return StreamData(
             type="tool_call",

@@ -119,6 +119,7 @@ GUEST_PUBLIC_PATHS = frozenset(
     }
 )
 
+
 def default_profiles_path() -> Path:
     return guest_profiles_path()
 

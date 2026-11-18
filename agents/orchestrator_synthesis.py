@@ -230,9 +230,7 @@ class OrchestratorSynthesisMixin:
                     "this WitsV3 codebase. Summarize only what was read."
                 )
             terms = self._extract_codebase_evidence_terms(observations)
-            if terms and not self._answer_references_evidence(
-                final_answer, terms, min_overlap=1
-            ):
+            if terms and not self._answer_references_evidence(final_answer, terms, min_overlap=1):
                 return (
                     "read_file returned project docs but the answer does not reference "
                     "WitsV3/README/agents content. Summarize only what was read."
@@ -393,10 +391,7 @@ class OrchestratorSynthesisMixin:
         summary = " ".join(lines[:6])
         if len(summary) > 900:
             summary = summary[:900].rsplit(" ", 1)[0] + "…"
-        return (
-            "From this project's README and docs (read from disk):\n"
-            f"{summary}"
-        )
+        return "From this project's README and docs (read from disk):\n" f"{summary}"
 
     @staticmethod
     def _extract_codebase_evidence_terms(observations: list[str]) -> set[str]:

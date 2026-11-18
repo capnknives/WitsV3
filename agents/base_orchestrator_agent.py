@@ -11,10 +11,10 @@ from typing import Any
 from agents.base_agent import BaseAgent
 from agents.orchestrator_tool_helpers import OrchestratorToolHelpersMixin
 from core.config import WitsV3Config
-from core.runtime_paths import exports_subpath
 from core.json_llm_parser import build_json_repair_prompt
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
+from core.runtime_paths import exports_subpath
 from core.schemas import ConversationHistory, StreamData
 
 
@@ -451,9 +451,8 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             and self._goal_saves_conversation(state.get("goal", ""))
             and not self._observation_indicates_failure(observation)
         ):
-            file_path = (
-                self._save_file_path_from_goal(state.get("goal", ""))
-                or exports_subpath("conversation_log.txt", self.config.runtime_paths.root)
+            file_path = self._save_file_path_from_goal(state.get("goal", "")) or exports_subpath(
+                "conversation_log.txt", self.config.runtime_paths.root
             )
             if file_path:
                 async for stream_data in self._auto_write_saved_conversation(
@@ -527,7 +526,9 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         preferred = state.get("preferred_tool") or ""
         goal = state.get("goal", "")
         if preferred == "calculator" or (
-            preferred == "" and getattr(self, "_goal_is_pure_math", None) and self._goal_is_pure_math(goal)
+            preferred == ""
+            and getattr(self, "_goal_is_pure_math", None)
+            and self._goal_is_pure_math(goal)
         ):
             expr = self._extract_calculator_expression(goal)
             args = self._normalize_calculator_args({"expression": expr})

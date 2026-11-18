@@ -44,7 +44,9 @@ async def run_python_sandboxed(
         return await _run_subprocess_sandbox(code, config=config, timeout=timeout)
     if mode == "docker":
         return await _run_docker_sandbox(code, config=config, timeout=timeout)
-    return SandboxResult(success=False, output="", error=f"unknown sandbox_mode: {mode}", return_code=-1)
+    return SandboxResult(
+        success=False, output="", error=f"unknown sandbox_mode: {mode}", return_code=-1
+    )
 
 
 async def _run_subprocess_sandbox(
@@ -85,9 +87,7 @@ async def _run_subprocess_sandbox(
         return SandboxResult(success=rc == 0, output=output, return_code=rc)
 
 
-async def _run_docker_sandbox(
-    code: str, *, config: Any | None, timeout: float
-) -> SandboxResult:
+async def _run_docker_sandbox(code: str, *, config: Any | None, timeout: float) -> SandboxResult:
     # Reason: reuse docker_sandbox PATH resolution so PATH-less shells work on Windows.
     from core.docker_sandbox import _docker_env, _docker_exe
 

@@ -118,7 +118,9 @@ async def start_docker_desktop_if_needed() -> bool:
         logger.error("Docker Desktop executable not found")
         return False
     logger.info("Starting Docker Desktop: %s", desktop)
-    subprocess.Popen([str(desktop)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_docker_env())
+    subprocess.Popen(
+        [str(desktop)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_docker_env()
+    )
     elapsed = 0.0
     while elapsed < _WAIT_TIMEOUT_SEC:
         if await docker_daemon_ready():

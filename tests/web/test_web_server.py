@@ -184,9 +184,7 @@ def test_export_verbose_includes_stream_traces(client_noauth, tmp_path, monkeypa
         {"turn": 1, "events": [{"type": "tool_call", "content": "web_search"}]}
     )
 
-    export_res = client.post(
-        "/api/export", json={"session_id": session_id, "verbose": True}
-    )
+    export_res = client.post("/api/export", json={"session_id": session_id, "verbose": True})
     assert export_res.status_code == 200
     data = export_res.json()
     text = (tmp_path / data["file_path"]).read_text(encoding="utf-8")
@@ -745,7 +743,9 @@ def test_ollama_endpoints_require_owner_when_auth_enabled(
 
     assert client.get("/api/ollama/status", headers=owner_headers).status_code == 200
     assert (
-        client.post("/api/ollama/pull", json={"model": "qwen3:8b"}, headers=owner_headers).status_code
+        client.post(
+            "/api/ollama/pull", json={"model": "qwen3:8b"}, headers=owner_headers
+        ).status_code
         == 200
     )
     assert client.get("/api/ollama/status").status_code == 401
@@ -759,7 +759,9 @@ def test_ollama_endpoints_require_owner_when_auth_enabled(
     guest_headers = {"Authorization": f"Bearer {guest_token}"}
     assert client.get("/api/ollama/status", headers=guest_headers).status_code == 403
     assert (
-        client.post("/api/ollama/pull", json={"model": "qwen3:8b"}, headers=guest_headers).status_code
+        client.post(
+            "/api/ollama/pull", json={"model": "qwen3:8b"}, headers=guest_headers
+        ).status_code
         == 403
     )
 

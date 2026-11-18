@@ -20,9 +20,7 @@ def test_pure_greeting_matches_explicit_greetings():
 
 def test_pure_greeting_rejects_length_only_casual():
     assert is_pure_greeting("Run self repair") is False
-    assert (
-        is_pure_greeting("i've updated things, please check the results once more") is False
-    )
+    assert is_pure_greeting("i've updated things, please check the results once more") is False
 
 
 def test_self_repair_signals():

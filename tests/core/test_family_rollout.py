@@ -93,9 +93,7 @@ def test_guest_denied_downloads_outside_project(tmp_path, monkeypatch):
         tmp_path,
         raising=False,
     )
-    outside = (
-        "C:/Windows/win.ini" if sys.platform == "win32" else "/etc/hosts"
-    )
+    outside = "C:/Windows/win.ini" if sys.platform == "win32" else "/etc/hosts"
     with pytest.raises(PermissionError):
         resolve_allowed_read_path(outside, role="guest", config=None)
 

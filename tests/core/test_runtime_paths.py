@@ -1,9 +1,5 @@
 """Tests for var/ runtime path layout and legacy migration."""
 
-from pathlib import Path
-
-import pytest
-
 from core.runtime_paths import (
     ensure_runtime_layout,
     migrate_legacy_runtime_dirs,

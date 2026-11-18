@@ -1,5 +1,7 @@
 """Tests for embedding input truncation."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from core.config import WitsV3Config
@@ -12,7 +14,6 @@ from core.memory_manager import (
     resolve_max_embedding_chars,
     truncate_for_embedding,
 )
-from unittest.mock import AsyncMock, MagicMock
 
 
 def test_truncate_for_embedding_within_limit_unchanged():
