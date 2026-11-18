@@ -90,7 +90,11 @@ class PlaybookExecutor(BaseAgent):
                 file_snippets.append(snippet)
 
         message = await self._synthesize_message(
-            spec, user_input, export_path=export_path, file_snippets=file_snippets, last_result=last_result
+            spec,
+            user_input,
+            export_path=export_path,
+            file_snippets=file_snippets,
+            last_result=last_result,
         )
         yield self.stream_result(message)
 

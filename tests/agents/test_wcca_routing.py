@@ -660,9 +660,7 @@ async def test_transcript_a42ee2e0_debug_save_routes_orchestrator_not_self_repai
 
 @pytest.mark.asyncio
 async def test_codebase_question_routes_codebase_tour_playbook(wcca):
-    intent = await wcca._analyze_user_intent(
-        "What can you tell me about your codebase wits?", None
-    )
+    intent = await wcca._analyze_user_intent("What can you tell me about your codebase wits?", None)
     assert intent["suggested_response"] == "playbook"
     assert intent.get("playbook_id") == "codebase_tour"
 
@@ -786,7 +784,9 @@ async def test_conversation_still_calls_llm_once(wcca):
     }
     await _collect_handler_results(wcca, intent, "hi there!")
     assert len(tracking.calls) == 1
-    assert "greeting" in tracking.calls[0].lower() or "briefly and warmly" in tracking.calls[0].lower()
+    assert (
+        "greeting" in tracking.calls[0].lower() or "briefly and warmly" in tracking.calls[0].lower()
+    )
 
 
 # ------------------------------------------------------- documents context
@@ -816,9 +816,8 @@ def test_named_guest_chat_history_routes_to_guest_audit(tmp_path, monkeypatch):
     guest plus a conversation verb must route to guest_audit_summary."""
     monkeypatch.chdir(tmp_path)
     (tmp_path / "data").mkdir()
-    from core.guest_access import GuestRegistry
-
     from agents.wcca_routing_mixin import OrchestratorRoutingMixin
+    from core.guest_access import GuestRegistry
 
     class _Probe(OrchestratorRoutingMixin):
         pass

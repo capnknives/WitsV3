@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 WitsV3 is a local-first LLM orchestration system: a Web UI (primary, `run_web.py`) and CLI (`run.py`) backed by Ollama, with a ReAct-style orchestrator, an auto-discovered tool registry, persistent memory, and a verified-edit pipeline that lets agents safely modify project code. It is a personal assistant stack, not a hosted product.
 
-Read `README.md` first for how the product actually runs today, and `docs/roadmap/suggested-features-2026-07.md` for current priorities — architecture docs under `docs/architecture/` lag behind (mid-2025) and should not be trusted for current status.
+Read `README.md` first for how the product actually runs today, and `docs/roadmap/modernization-2026-11.md` for current priorities — architecture docs under `docs/architecture/` lag behind (mid-2025) and should not be trusted for current status.
 
 ## Worktree / branch workflow (important — read before committing)
 
@@ -16,7 +16,7 @@ This checkout (`WitsV3-claude`) is the **Claude-only** worktree. Sibling worktre
 - Agent branches merge into the shared integration branch `fix/revive-2026-07`, which is later promoted to `main`.
 - Before starting new work, sync `claude/work` against `origin/fix/revive-2026-07` (it accumulates commits from Cursor and other agents) — don't assume `claude/work` alone is current.
 - Edits made here are **not** live in the user's runtime (`WitsV3` folder) until merged forward — this matters most for `web/` static assets, which have no build step and are served as-is.
-- Root `TASK.md` and `PLANNING.md` are redirects only — do not add task checklists there. Track new work in `docs/roadmap/suggested-features-2026-07.md` and log large shipped chunks in `docs/roadmap/revival-2026-07.md`.
+- Root `TASK.md` and `PLANNING.md` are redirects only — do not add task checklists there. Track new work in `docs/roadmap/modernization-2026-11.md` and log large shipped chunks in `docs/roadmap/revival-2026-07.md`.
 
 ## Commands
 

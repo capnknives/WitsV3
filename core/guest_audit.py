@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("WitsV3.GuestAudit")
 
+
 def default_audit_dir() -> Path:
     return guest_audit_dir()
 

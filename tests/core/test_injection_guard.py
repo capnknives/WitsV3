@@ -13,7 +13,9 @@ def test_injection_guard_blocks_ignore_instructions_in_write_file():
 
 
 def test_injection_guard_allows_benign_write_file():
-    assert check_tool_injection("write_file", {"file_path": "notes.txt", "content": "hello"}) is None
+    assert (
+        check_tool_injection("write_file", {"file_path": "notes.txt", "content": "hello"}) is None
+    )
 
 
 def test_injection_guard_ignores_non_file_tools():

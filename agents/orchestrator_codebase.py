@@ -5,9 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from core.schemas import StreamData
-
 from agents.routing_classifier import needs_codebase_intro
+from core.schemas import StreamData
 
 CODEBASE_BOOTSTRAP_FILES = (
     "README.md",

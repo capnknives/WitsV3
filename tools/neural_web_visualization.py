@@ -8,7 +8,6 @@ including static graphs and interactive HTML visualizations.
 import json
 import logging
 from datetime import datetime
-from core.runtime_paths import data_dir
 from typing import Any
 
 import matplotlib.patches as mpatches
@@ -19,6 +18,7 @@ import numpy as np
 from core.base_tool import BaseTool, ToolResult
 from core.config import WitsV3Config
 from core.neural_web_core import NeuralWeb
+from core.runtime_paths import data_dir
 
 logger = logging.getLogger(__name__)
 

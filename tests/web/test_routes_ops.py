@@ -1,10 +1,15 @@
 """Tests for tool metrics and operator routes."""
 
-from tests.web.test_web_server import client_noauth
+from tests.web.test_web_server import client_noauth  # noqa: F401
 
 
 def test_tool_metrics_recorder():
-    from core.mcp_health import clear_server_health, get_server_health, record_connect_failure, record_connect_success
+    from core.mcp_health import (
+        clear_server_health,
+        get_server_health,
+        record_connect_failure,
+        record_connect_success,
+    )
     from core.tool_metrics import ToolMetricsRecorder
 
     rec = ToolMetricsRecorder()
@@ -27,14 +32,14 @@ def test_tool_metrics_recorder():
     clear_server_health()
 
 
-def test_metrics_tools_endpoint(client_noauth):
+def test_metrics_tools_endpoint(client_noauth):  # noqa: F811
     client, _ = client_noauth
     res = client.get("/api/metrics/tools")
     assert res.status_code == 200
     assert "tools" in res.json()
 
 
-def test_tasks_endpoint(client_noauth):
+def test_tasks_endpoint(client_noauth):  # noqa: F811
     client, _ = client_noauth
     res = client.get("/api/tasks")
     assert res.status_code == 200
@@ -42,7 +47,7 @@ def test_tasks_endpoint(client_noauth):
     assert any(t["id"] == "daily_self_repair" for t in body["tasks"])
 
 
-def test_offline_mode_get(client_noauth):
+def test_offline_mode_get(client_noauth):  # noqa: F811
     client, _ = client_noauth
     res = client.get("/api/security/offline")
     assert res.status_code == 200

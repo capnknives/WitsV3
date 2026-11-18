@@ -11,14 +11,13 @@ import re
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from core.runtime_paths import exports_subpath, upgrade_runtime_path
-from core.schemas import ConversationHistory, StreamData
-
 from agents.orchestrator_codebase import OrchestratorCodebaseMixin
 from agents.orchestrator_observations import OrchestratorObservationsMixin
 from agents.orchestrator_preflight import OrchestratorPreflightMixin
 from agents.orchestrator_synthesis import OrchestratorSynthesisMixin
 from agents.routing_classifier import FILE_SAVE_SIGNALS
+from core.runtime_paths import exports_subpath, upgrade_runtime_path
+from core.schemas import ConversationHistory, StreamData
 
 
 class OrchestratorToolHelpersMixin(
@@ -78,20 +77,17 @@ class OrchestratorToolHelpersMixin(
             return False
         min_bytes = OrchestratorToolHelpersMixin._save_export_min_bytes(state)
         for obs in reversed(state.get("observations", [])):
-            if "write_file" not in obs or OrchestratorToolHelpersMixin._observation_indicates_failure(
-                obs
+            if (
+                "write_file" not in obs
+                or OrchestratorToolHelpersMixin._observation_indicates_failure(obs)
             ):
                 continue
-            if OrchestratorToolHelpersMixin._write_result_verified(
-                path, obs, min_bytes=min_bytes
-            ):
+            if OrchestratorToolHelpersMixin._write_result_verified(path, obs, min_bytes=min_bytes):
                 return True
         return False
 
     @staticmethod
-    def _write_result_verified(
-        file_path: str, write_obs: str, *, min_bytes: int = 1
-    ) -> bool:
+    def _write_result_verified(file_path: str, write_obs: str, *, min_bytes: int = 1) -> bool:
         """True when write_file observation indicates a non-empty file on disk."""
         if not write_obs or "failed" in write_obs.lower() or write_obs.startswith("Blocked "):
             return False
@@ -226,7 +222,9 @@ class OrchestratorToolHelpersMixin(
                     state.get("goal", ""), state.get("observations", [])
                 ):
                     if "/" not in fp and not fp.startswith(f"{root}/"):
-                        basename = fp if fp.endswith((".txt", ".md", ".log", ".json")) else f"{fp}.txt"
+                        basename = (
+                            fp if fp.endswith((".txt", ".md", ".log", ".json")) else f"{fp}.txt"
+                        )
                         fp = exports_subpath(basename, root)
                 args["file_path"] = upgrade_runtime_path(fp, root)
 

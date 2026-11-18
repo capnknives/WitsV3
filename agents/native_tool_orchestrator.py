@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface, LLMMessage
 from core.memory_manager import MemoryManager
-from core.schemas import ConversationHistory, StreamData
+from core.schemas import ConversationHistory
 
 
 class NativeToolOrchestrator(BaseOrchestratorAgent):
@@ -47,7 +46,9 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                     "function": {
                         "name": name,
                         "description": description,
-                        "parameters": schema.get("parameters", {"type": "object", "properties": {}}),
+                        "parameters": schema.get(
+                            "parameters", {"type": "object", "properties": {}}
+                        ),
                     },
                 }
             )
@@ -159,17 +160,13 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                             observation = f"Tool {tool_name} failed: {e}"
                     react_state["observations"].append(observation)
                     yield self.stream_observation(observation)
-                    messages.append(
-                        LLMMessage(role="tool", content=observation, name=tool_name)
-                    )
+                    messages.append(LLMMessage(role="tool", content=observation, name=tool_name))
                 continue
 
             final_answer = (response.content or "").strip() or "Done."
             final_answer, done = self._resolve_final_answer(final_answer, react_state)
             if not done:
-                messages.append(
-                    LLMMessage(role="user", content=react_state["observations"][-1])
-                )
+                messages.append(LLMMessage(role="user", content=react_state["observations"][-1]))
                 continue
             yield self.stream_result(final_answer)
             react_state["completed"] = True
@@ -188,7 +185,9 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         goal = state.get("goal", "")
         if not self._goal_is_pure_math(goal):
             return None
-        args = self._normalize_calculator_args({"expression": self._extract_calculator_expression(goal)})
+        args = self._normalize_calculator_args(
+            {"expression": self._extract_calculator_expression(goal)}
+        )
         try:
             result = await self._call_tool("calculator", args, state)
             obs = self._format_tool_observation("calculator", result)
