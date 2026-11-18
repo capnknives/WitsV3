@@ -4,7 +4,9 @@
 **Working branch tip:** `cursor/work` / `claude/work` (merge into `fix/revive-2026-07` or `main`)  
 **Test suite:** **677 passed, 2 skipped** (July 9, 2026 — re-run `pytest -q` before claiming green)
 
-This is the **canonical forward roadmap**: what to add, improve, or remove next.  
+> **Superseded for forward work (November 17, 2026):** see [`modernization-2026-11.md`](modernization-2026-11.md). This file remains the record of the July 2026 revival backlog.
+
+This was the **canonical forward roadmap** through July 2026: what to add, improve, or remove next.  
 For **what already shipped**, see [`revival-2026-07.md`](revival-2026-07.md) and the root [`README.md`](../../README.md).  
 For **Top 50 Local AI feature mapping** (has vs gap), see [`local-ai-50-gap-analysis-2026-07.md`](local-ai-50-gap-analysis-2026-07.md).  
 For audits (clutter / tools / config), see the July 8 catalog docs in this folder.

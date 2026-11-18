@@ -1,7 +1,7 @@
 ---
 title: "WitsV3 Task Management (redirect)"
 status: "superseded"
-superseded_by: "docs/roadmap/suggested-features-2026-07.md"
+superseded_by: "docs/roadmap/modernization-2026-11.md"
 last_updated: "2026-07-08"
 ---
 
@@ -13,7 +13,8 @@ This file is a **redirect only**. Do not add new tasks here.
 
 | Purpose | Document |
 |---------|----------|
-| Forward roadmap (add / improve / remove) | [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md) |
+| Forward roadmap | [`docs/roadmap/modernization-2026-11.md`](docs/roadmap/modernization-2026-11.md) |
+| July 2026 roadmap (closed) | [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md) |
 | July 2026 shipped work + triage log | [`docs/roadmap/revival-2026-07.md`](docs/roadmap/revival-2026-07.md) |
 | Dead/dormant inventory | [`docs/roadmap/clutter-catalog-2026-07.md`](docs/roadmap/clutter-catalog-2026-07.md) |
 | Product overview / install | [`README.md`](README.md) |

@@ -27,7 +27,7 @@ A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it
 
 **Recently shipped (July 2026):** … **Phase 2** operator UX (MCP health, tool metrics, offline mode), **Phase 3a** FAISS memory, **Next 10 batch** (verbose export, patch self-repair, auto facts, injection guard, orchestrator helper splits).
 
-**What's next:** Phase **3b–3d** research (GraphRAG, neural product surface, SKILL playbooks) or **PII redaction**. See [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md).
+**What's next:** the modernization roadmap — daily-affairs features, an MCP server so outside agents (Claude and others) can use WITS, and a harness runner so WITS can delegate to them. See [`docs/roadmap/modernization-2026-11.md`](docs/roadmap/modernization-2026-11.md).
 
 ---
 

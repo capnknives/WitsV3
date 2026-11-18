@@ -1,7 +1,7 @@
 ---
 title: "WitsV3 Documentation"
 created: "2025-06-09"
-last_updated: "2026-07-09"
+last_updated: "2026-11-17"
 status: "active"
 ---
 
@@ -17,7 +17,8 @@ Design notes, roadmaps, and historical material for WitsV3.
 
 | Need | Document |
 |------|----------|
-| **What's next** | [`roadmap/suggested-features-2026-07.md`](roadmap/suggested-features-2026-07.md) |
+| **What's next** | [`roadmap/modernization-2026-11.md`](roadmap/modernization-2026-11.md) |
+| **July 2026 roadmap (closed)** | [`roadmap/suggested-features-2026-07.md`](roadmap/suggested-features-2026-07.md) |
 | **What shipped (July 2026)** | [`roadmap/revival-2026-07.md`](roadmap/revival-2026-07.md) |
 | **Architecture** | [`architecture/system-architecture.md`](architecture/system-architecture.md) *(component map)* |
 | **Paths & layout** | [`architecture/paths-and-layout.md`](architecture/paths-and-layout.md) |
