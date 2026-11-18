@@ -35,7 +35,9 @@ def register_ops_routes(app: FastAPI, system) -> None:
     @app.post("/api/security/offline")
     async def set_offline_mode(request: Request, body: OfflineModeUpdate):
         if getattr(request.state, "auth_role", None) != "owner":
-            return JSONResponse({"detail": "Only the owner can change offline mode."}, status_code=403)
+            return JSONResponse(
+                {"detail": "Only the owner can change offline mode."}, status_code=403
+            )
         system.config.security.offline_mode = body.offline_mode
         save_local_overrides({"security": {"offline_mode": body.offline_mode}})
         logger.info("Offline mode set to %s via web UI", body.offline_mode)

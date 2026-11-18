@@ -177,9 +177,7 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
 
                 core_block = get_core_memory_store(self.config).as_prompt_block()
                 if core_block:
-                    self._guest_personalization_context = (
-                        f"{self._guest_personalization_context}\n\nCORE MEMORY:\n{core_block}".strip()
-                    )
+                    self._guest_personalization_context = f"{self._guest_personalization_context}\n\nCORE MEMORY:\n{core_block}".strip()
 
             # Store user input in memory
             await self.store_memory(
@@ -282,7 +280,10 @@ User input: {user_input}
         routing_destination = intent_analysis.get("routing_destination")
 
         # Deterministic classifier short-circuits (owner-only direct tools).
-        if getattr(self, "_request_user_role", "owner") == "owner" and routing_destination == "guest_chat_history":
+        if (
+            getattr(self, "_request_user_role", "owner") == "owner"
+            and routing_destination == "guest_chat_history"
+        ):
             yield self.stream_thinking("Reading guest chat audit log...")
             from tools.guest_audit_tool import GuestAuditSummaryTool
 
@@ -292,7 +293,10 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
-        if getattr(self, "_request_user_role", "owner") == "owner" and routing_destination == "guest_profile":
+        if (
+            getattr(self, "_request_user_role", "owner") == "owner"
+            and routing_destination == "guest_profile"
+        ):
             yield self.stream_thinking("Loading saved guest profile (no web search)...")
             from tools.guest_profile_tool import GuestUserProfileSummaryTool
 
@@ -302,7 +306,10 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
-        if getattr(self, "_request_user_role", "owner") == "owner" and routing_destination == "knowledge_log":
+        if (
+            getattr(self, "_request_user_role", "owner") == "owner"
+            and routing_destination == "knowledge_log"
+        ):
             yield self.stream_thinking("Loading accumulated project knowledge...")
             from tools.knowledge_log_tool import KnowledgeLogSummaryTool
 
@@ -324,7 +331,9 @@ User input: {user_input}
                     if file_path == "__downloads_dir__":
                         tool_name = "list_directory"
                         downloads_roots = [
-                            r for r in configured_read_roots(self.config) if r.name.lower() == "downloads"
+                            r
+                            for r in configured_read_roots(self.config)
+                            if r.name.lower() == "downloads"
                         ]
                         if not downloads_roots:
                             downloads_roots = [
@@ -332,7 +341,11 @@ User input: {user_input}
                                 for r in configured_read_roots(self.config)
                                 if str(r).lower().endswith("downloads")
                             ]
-                        tool_args["directory_path"] = str(downloads_roots[0] if downloads_roots else configured_read_roots(self.config)[-1])
+                        tool_args["directory_path"] = str(
+                            downloads_roots[0]
+                            if downloads_roots
+                            else configured_read_roots(self.config)[-1]
+                        )
                     else:
                         candidate = file_path
                         if "/" not in candidate and "\\" not in candidate:
@@ -345,7 +358,9 @@ User input: {user_input}
                     result = await self.orchestrator_agent.tool_registry.execute_tool(
                         tool_name, **tool_args
                     )
-                    content = result.get("content", result) if isinstance(result, dict) else str(result)
+                    content = (
+                        result.get("content", result) if isinstance(result, dict) else str(result)
+                    )
                     yield self.stream_result(str(content)[:8000])
                 except Exception as e:
                     yield self.stream_error(f"Could not read {file_path}: {e}")
@@ -355,7 +370,9 @@ User input: {user_input}
             playbook_id = intent_analysis["playbook_id"]
             executor = getattr(self, "playbook_executor", None)
             if executor:
-                self._record_task_context(session_id, "playbook", user_input, playbook_id=playbook_id)
+                self._record_task_context(
+                    session_id, "playbook", user_input, playbook_id=playbook_id
+                )
                 yield self.stream_thinking(f"Executing playbook: {playbook_id}")
                 async for stream_data in executor.run(
                     user_input=user_input,
@@ -457,12 +474,9 @@ User input: {user_input}
                 specialized_agent = await self._select_specialized_agent(user_input)
 
             if specialized_agent:
-                agent_type = (
-                    intent_analysis.get("specialized_agent")
-                    or next(
-                        (k for k, v in self.specialized_agents.items() if v == specialized_agent),
-                        "specialized",
-                    )
+                agent_type = intent_analysis.get("specialized_agent") or next(
+                    (k for k, v in self.specialized_agents.items() if v == specialized_agent),
+                    "specialized",
                 )
                 from agents.agent_handoff import handoff_stream_note
 
@@ -502,9 +516,7 @@ User input: {user_input}
                 session_id=session_id,
                 user_role=getattr(self, "_request_user_role", "owner"),
                 guest_profile=getattr(self, "_request_guest_profile", None),
-                guest_personalization_context=getattr(
-                    self, "_guest_personalization_context", ""
-                ),
+                guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
                 preferred_tool=intent_analysis.get("preferred_tool", ""),
             ):
                 yield stream_data

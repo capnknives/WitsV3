@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from threading import Lock
 from typing import Any
 
@@ -25,7 +25,9 @@ class ToolMetricsRecorder:
         self._lock = Lock()
         self._stats: dict[str, _ToolStats] = defaultdict(_ToolStats)
 
-    def record(self, tool_name: str, elapsed_ms: float, *, success: bool, error: str | None = None) -> None:
+    def record(
+        self, tool_name: str, elapsed_ms: float, *, success: bool, error: str | None = None
+    ) -> None:
         with self._lock:
             stats = self._stats[tool_name]
             stats.calls += 1

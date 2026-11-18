@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from core.runtime_paths import exports_subpath
-
 from agents.routing_classifier import needs_codebase_intro
+from core.runtime_paths import exports_subpath
 
 
 class OrchestratorPreflightMixin:
@@ -18,7 +17,11 @@ class OrchestratorPreflightMixin:
     ORCHESTRATOR_BLOCKED_TOOLS = frozenset({"intent_analysis", "json_manipulate"})
 
     def _guest_allowed_tools(self, state: dict[str, Any] | None = None) -> frozenset[str]:
-        from core.guest_access import guest_tools_for_age_band, resolve_effective_role, tools_for_role
+        from core.guest_access import (
+            guest_tools_for_age_band,
+            resolve_effective_role,
+            tools_for_role,
+        )
 
         react_state = state or getattr(self, "_react_state_for_tools", None) or {}
         user_role = react_state.get("user_role", "owner")

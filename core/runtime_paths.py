@@ -39,6 +39,7 @@ def project_root() -> Path:
         return Path(override)
     return Path.cwd()
 
+
 RUNTIME_ROOT_NAME = "var"
 
 # Canonical runtime subdirs under var/. ``user_files`` replaced ``documents`` in Phase 4.
@@ -235,9 +236,7 @@ def migrate_legacy_runtime_dirs(root: str = RUNTIME_ROOT_NAME) -> list[str]:
         else:
             merged = _merge_legacy_tree(legacy_documents, target_user_files)
             if merged:
-                moved.append(
-                    f"documents/ merged into {root}/user_files/ ({len(merged)} items)"
-                )
+                moved.append(f"documents/ merged into {root}/user_files/ ({len(merged)} items)")
                 logger.info(
                     "Merged legacy %s into %s (%d items)",
                     legacy_documents,
@@ -259,9 +258,7 @@ def migrate_legacy_runtime_dirs(root: str = RUNTIME_ROOT_NAME) -> list[str]:
             merged = _merge_legacy_tree(legacy, target)
             if merged:
                 moved.append(f"{sub}/ merged into {root}/{sub}/ ({len(merged)} items)")
-                logger.info(
-                    "Merged legacy %s into %s (%d items)", legacy, target, len(merged)
-                )
+                logger.info("Merged legacy %s into %s (%d items)", legacy, target, len(merged))
             if _remove_empty_dir(legacy):
                 moved.append(f"removed empty legacy {sub}/")
                 logger.info("Removed empty legacy directory %s", legacy)
@@ -274,9 +271,7 @@ def migrate_legacy_runtime_dirs(root: str = RUNTIME_ROOT_NAME) -> list[str]:
         target_user_files.mkdir(parents=True, exist_ok=True)
         merged = _merge_legacy_tree(old_var_documents, target_user_files)
         if merged:
-            moved.append(
-                f"{root}/documents/ merged into {root}/user_files/ ({len(merged)} items)"
-            )
+            moved.append(f"{root}/documents/ merged into {root}/user_files/ ({len(merged)} items)")
             logger.info(
                 "Merged %s into %s (%d items)",
                 old_var_documents,

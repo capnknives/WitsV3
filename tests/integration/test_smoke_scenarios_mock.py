@@ -9,7 +9,12 @@ import pytest
 from agents.wits_control_center_agent import WitsControlCenterAgent
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
-from scripts.smoke_harness import filter_scenarios, load_scenarios, run_routing_scenario, SmokeRunState
+from scripts.smoke_harness import (
+    SmokeRunState,
+    filter_scenarios,
+    load_scenarios,
+    run_routing_scenario,
+)
 
 
 class DummyLLM(BaseLLMInterface):
@@ -55,10 +60,7 @@ def wcca():
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "scenario_id",
-    [
-        s["id"]
-        for s in filter_scenarios(load_scenarios(), tiers={"routing", "guest"}, live=False)
-    ],
+    [s["id"] for s in filter_scenarios(load_scenarios(), tiers={"routing", "guest"}, live=False)],
 )
 async def test_routing_smoke_scenario(wcca, scenario_id: str):
     scenarios = {s["id"]: s for s in load_scenarios()}

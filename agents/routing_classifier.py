@@ -610,9 +610,7 @@ def needs_guest_accounts_list(message: str) -> bool:
 def needs_guest_profile_review(message: str) -> bool:
     lowered = message.lower()
     mentions_known_guest = message_mentions_guest_name(message)
-    if mentions_known_guest and any(
-        sig in lowered for sig in GUEST_PROFILE_PERSON_QUERY_SIGNALS
-    ):
+    if mentions_known_guest and any(sig in lowered for sig in GUEST_PROFILE_PERSON_QUERY_SIGNALS):
         return True
     if not any(sig in lowered for sig in GUEST_PROFILE_SIGNALS):
         return False
@@ -918,9 +916,8 @@ def classify_message(ctx: RoutingContext) -> RouteDecision:
             preferred_tool=preferred,
         )
 
-    if (
-        ctx.last_task_route in ("orchestrator", "playbook")
-        and is_agent_continuation_phrase(message)
+    if ctx.last_task_route in ("orchestrator", "playbook") and is_agent_continuation_phrase(
+        message
     ):
         return RouteDecision(
             "continuation",
@@ -936,10 +933,7 @@ def classify_message(ctx: RoutingContext) -> RouteDecision:
                 "Follow-up to a prior task — routing to orchestrator with conversation context.",
             )
 
-    if (
-        ctx.active_specialized_agent
-        and is_agent_continuation_phrase(message)
-    ):
+    if ctx.active_specialized_agent and is_agent_continuation_phrase(message):
         agent = ctx.active_specialized_agent
         if agent == "self_repair":
             return RouteDecision(

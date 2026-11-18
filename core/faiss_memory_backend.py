@@ -145,13 +145,9 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
         """Save memory segments and FAISS index atomically."""
         async with self._io_lock:
             try:
-                segments_data = [
-                    segment.model_dump(mode="json") for segment in self.segments
-                ]
+                segments_data = [segment.model_dump(mode="json") for segment in self.segments]
                 json_tmp = self.memory_file_path.with_suffix(".json.tmp")
-                json_tmp.write_text(
-                    json.dumps(segments_data, indent=2), encoding="utf-8"
-                )
+                json_tmp.write_text(json.dumps(segments_data, indent=2), encoding="utf-8")
                 _atomic_replace(json_tmp, self.memory_file_path)
 
                 if self.index is not None:

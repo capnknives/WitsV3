@@ -9,11 +9,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.json_llm_parser import parse_json_object
 from core.runtime_paths import guest_user_profiles_dir
 
-from core.json_llm_parser import parse_json_object
-
 logger = logging.getLogger("WitsV3.GuestUserProfile")
+
 
 def default_profile_dir() -> Path:
     return guest_user_profiles_dir()

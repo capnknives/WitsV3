@@ -9,8 +9,6 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from web.schemas import MCPRegistryInstall, MCPServerAdd, MCPToolInvoke
-
 from core.mcp_health import (
     all_server_health,
     get_server_health,
@@ -18,6 +16,7 @@ from core.mcp_health import (
     record_connect_success,
     record_disconnect,
 )
+from web.schemas import MCPRegistryInstall, MCPServerAdd, MCPToolInvoke
 
 logger = logging.getLogger("WitsV3.WebUI")
 

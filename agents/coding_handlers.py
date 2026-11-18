@@ -8,7 +8,12 @@ from typing import Any
 
 from agents.coding_models import CodeProject
 from core.runtime_paths import workspace_subpath
-from core.safe_code_editor import PROJECT_ROOT, extract_code_from_response, resolve_within_project, run_py_compile
+from core.safe_code_editor import (
+    PROJECT_ROOT,
+    extract_code_from_response,
+    resolve_within_project,
+    run_py_compile,
+)
 from core.schemas import StreamData
 
 

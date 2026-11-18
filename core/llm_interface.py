@@ -231,7 +231,9 @@ class OllamaInterface(BaseLLMInterface):
             "stream": False,
             "options": {
                 "temperature": (
-                    temperature if temperature is not None else self.config.agents.default_temperature
+                    temperature
+                    if temperature is not None
+                    else self.config.agents.default_temperature
                 )
             },
         }

@@ -4,7 +4,6 @@ This module contains tools for file operations.
 """
 
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import aiofiles
@@ -18,7 +17,9 @@ class FileReadTool(BaseTool):
     def __init__(self):
         super().__init__(name="read_file", description="Read the contents of a text file")
 
-    async def execute(self, file_path: str, encoding: str = "utf-8", user_role: str = "owner") -> str:
+    async def execute(
+        self, file_path: str, encoding: str = "utf-8", user_role: str = "owner"
+    ) -> str:
         """
         Read file contents.
 

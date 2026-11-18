@@ -55,9 +55,7 @@ async def test_read_file_refuses_outside_allowed_roots(monkeypatch, tmp_path):
     result = await tool.execute(file_path=str(inside), user_role="owner")
     assert result == "ok"
 
-    outside = (
-        "C:/Windows/win.ini" if sys.platform == "win32" else "/etc/hosts"
-    )
+    outside = "C:/Windows/win.ini" if sys.platform == "win32" else "/etc/hosts"
     result = await tool.execute(file_path=outside, user_role="guest")
     assert result.startswith("Error:")
     assert "allowed" in result.lower()

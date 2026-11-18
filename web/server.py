@@ -21,8 +21,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from core.runtime_paths import exports_dir, guest_audit_dir, guest_profiles_path
-
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
@@ -36,6 +34,7 @@ from core.guest_access import (
 )
 from core.guest_audit import GuestAuditLog
 from core.guest_user_profile import GuestUserProfileStore
+from core.runtime_paths import exports_dir, guest_audit_dir, guest_profiles_path
 from core.schemas import ConversationHistory, StreamData
 from web.access_log import install_access_log_middleware, owner_display_name, resolve_caller_label
 from web.guest_auth import (
@@ -43,6 +42,7 @@ from web.guest_auth import (
     resolve_auth,
     unauthorized_response,
 )
+from web.ollama_admin import build_ollama_status, pull_ollama_model
 from web.owner_controls import (
     owner_auth_detail,
     owner_auth_failure,
@@ -60,13 +60,12 @@ from web.schemas import (
     EscalationDecision,
     ExportRequest,
     MemoryPruneRequest,
+    OllamaPullRequest,
     OwnerControlRequest,
     SessionCreateResponse,
     SessionRenameRequest,
     SettingsUpdate,
-    OllamaPullRequest,
 )
-from web.ollama_admin import build_ollama_status, pull_ollama_model
 from web.slash_commands import list_slash_commands
 from web.user_errors import format_chat_error
 
@@ -466,9 +465,9 @@ def create_app(system) -> FastAPI:
 
                     for fact in extract_promotable_facts(body.message, final_text):
                         try:
-                            KnowledgeLogStore(
-                                path=system.config.knowledge_log.file_path
-                            ).add_fact(fact, source="auto_extraction", category="owner")
+                            KnowledgeLogStore(path=system.config.knowledge_log.file_path).add_fact(
+                                fact, source="auto_extraction", category="owner"
+                            )
                         except Exception as fact_err:
                             logger.debug("Auto fact promotion skipped: %s", fact_err)
                     mm_cfg = getattr(system.config, "memory_manager", None)
@@ -482,9 +481,7 @@ def create_app(system) -> FastAPI:
                 if guest or auth_role != "owner":
                     from core.pii_redaction import maybe_redact_for_guest
 
-                    final_text = maybe_redact_for_guest(
-                        final_text, system.config, role=auth_role
-                    )
+                    final_text = maybe_redact_for_guest(final_text, system.config, role=auth_role)
                 try:
                     from core.session_store import persist_session
 
@@ -839,7 +836,9 @@ def create_app(system) -> FastAPI:
 
     def _owner_only(request: Request) -> JSONResponse | None:
         if getattr(request.state, "auth_role", None) != "owner":
-            return JSONResponse({"detail": "Only the owner can manage Ollama models."}, status_code=403)
+            return JSONResponse(
+                {"detail": "Only the owner can manage Ollama models."}, status_code=403
+            )
         return None
 
     @app.get("/api/ollama/status")

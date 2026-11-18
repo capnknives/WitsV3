@@ -11,11 +11,12 @@ import logging
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from core.runtime_paths import data_dir, main_log_path
 from typing import Any
 
 import networkx as nx
 import numpy as np
+
+from core.runtime_paths import data_dir
 
 from .config import WitsV3Config
 from .llm_interface import BaseLLMInterface
