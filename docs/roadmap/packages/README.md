@@ -63,8 +63,10 @@ transcripts.
 | 0.1 | Benchmark script | Sonnet | — | Runs against `qwen3:8b` and writes a table |
 | 0.2 | Compute-mode script | Haiku | — | Prints free VRAM and RAM on the host |
 | 0.3 | Benchmark run across installed chat models | Owner, one command | 0.1, 0.2 | Table committed |
-| 0.4 | llama.cpp `--n-cpu-moe` sweep | Sonnet; owner approves the download | 0.1 | Sweep rows in the table |
-| 0.5 | Lineup decision | Lead | 0.3, 0.4 | Written into the unified plan |
+| 0.4 | llama.cpp MoE-cache test | Lead, on the owner's PC; owner approves the download | 0.3 | Rows in the table; pass or fail against Ollama |
+| 0.4b | Benchmark backend for `llama-server` (only if 0.4 passes) | Sonnet | 0.4 | Mocked test passes |
+| 0.6 | Tool-calling test | Sonnet | 0.1 | Pass-rate table for the candidate models |
+| 0.5 | Lineup decision | Lead | 0.4, 0.6 | Written into the unified plan |
 
 ### Stage 1 — Workspace slice
 

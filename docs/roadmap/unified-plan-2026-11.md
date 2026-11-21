@@ -8,7 +8,7 @@ status: "active"
 # WitsV3 Unified Execution Plan
 
 **Created:** November 21, 2026
-**Status:** Stage 0 not started
+**Status:** Stage 0 in progress (0.1 to 0.3 done; 0.4 waits on the owner's download approval; 0.6 building)
 **Reviewed against:** `main` @ `86a0f80` (November 17, 2026)
 
 This plan sets the **order of work**. It folds three plans into one build:
@@ -55,17 +55,54 @@ a heavy class in the model router, and one-GPU-job-at-a-time scheduling.
 
 ## Host facts the plan rests on
 
-Measured November 21, 2026. No benchmark has been run yet.
+Measured on the machine, November 21, 2026. Benchmarks are in
+[`docs/benchmarks/results.md`](../benchmarks/results.md).
 
 - GPU: RTX 3070, 8 GB. About 7 GB is usable with a normal desktop session open.
-- CPU: i5-12400F (no integrated graphics, so the display stays on the GPU).
-- RAM: 32 GB DDR4 in three sticks (8 + 16 + 8) running at 2400 with uneven
-  channels. Matters for MoE models whose experts sit in system RAM.
-- Ollama 0.32.3 with KV-cache quantization (`q8_0`) and flash attention already
-  set. llama.cpp, Tailscale and a Linux WSL distro are not installed.
+- CPU: i5-12400F (six cores, no integrated graphics, so the display stays on the GPU).
+- Board: Gigabyte B660 DS3H AC DDR4. Slot `DDR4_A1` is damaged; A2, B1 and B2 work.
+- RAM: 32 GB DDR4 at 2400, XMP off. One Team 16 GB DDR4-2666 stick in A2, two
+  Kingston 8 GB DDR4-3200 sticks in B1 and B2, so 16 GB per channel. Until the
+  afternoon of November 21 it was 8 GB on channel A and 24 GB on channel B.
+- Ollama **0.40.17** (not 0.32.3, as first written here) with `q8_0` KV cache
+  and flash attention. It runs the large models through `llama-server`.
+  Models are stored on `D:\OllamaModels`. A separate llama.cpp, Tailscale and a
+  Linux WSL distro are not installed.
+- The owner keeps project and scratch files on `D:`, not `C:`.
 - `config.yaml` uses `qwen3:8b` for every role, `model_routing.enabled: false`,
   and names `qwen2.5-coder:7b` and `hermes3:8b`, which are not pulled. Only the
   book agent sets `num_ctx`.
+
+### Stage 0 findings so far
+
+Warm runs, tokens per second, Ollama:
+
+| Model | 8k context | 32k context | Note |
+|-------|------------|-------------|------|
+| `gemma4:e4b` | 208 | 208 | Fully on the GPU |
+| `qwen3:8b` | 71 | 9 | Spills to the CPU at 32k; keep it at 8k |
+| `qwen3.5:9b` | 42 | 17 | |
+| `gemma4:12b` | 27 | 21 | Slower than `gemma4:26b`; a candidate to drop |
+| `gemma4:26b` | 37 to 38 | not re-run | 3.8 GB of weights on the GPU, 13.2 GB in RAM |
+| `qwen3.5:35b-a3b` | 36 | not re-run | About three quarters in RAM |
+
+- **Balancing the RAM channels was worth about a quarter.** The two large models
+  ran at 30 and 28 before the sticks were moved. The gain held on a second run
+  30 minutes after boot.
+- **`ollama ps` misreports the split for `gemma4:26b`** ("82% GPU"). The server
+  log is the reliable source.
+- **Both large models are limited by memory bandwidth**, so they respond to RAM
+  speed and to anything that moves expert reads onto the GPU.
+- **The benchmark measures speed only.** Nothing here says which model calls
+  tools reliably. Package 0.6 measures that.
+
+Two research passes (our own, and a Gemini deep-research report the owner ran)
+agree on most points. The one that changes this plan: llama.cpp gained a GPU
+cache for mixture-of-experts weights in November 2026 (`--moe-cache-mib` with
+`--moe-cache-cpu-share`), Ollama 0.40.17 does not expose it, and a published
+test on an RTX 3070 8 GB took a 35B model of the same family from about 35 to
+about 49 tokens per second. That is one tester with unknown RAM speed, so
+package 0.4 measures it here before anything is built on it.
 
 ## Stages
 
@@ -73,11 +110,12 @@ Each stage ends at a gate the owner tests by hand. Sizes are rough, part-time.
 
 ### Stage 0 — Measure the box (one weekend)
 
-- [ ] 0.1 Benchmark script (tokens/s, time to first token, VRAM, RAM, two context sizes)
-- [ ] 0.2 Compute-mode script (reports free VRAM and RAM, lists what to close)
-- [ ] 0.3 Benchmark run across the installed chat models
-- [ ] 0.4 llama.cpp `--n-cpu-moe` sweep on the two large MoE models
-- [ ] 0.5 Lineup decision: fast, heavy, embedding; whether `llama-server` earns a place
+- [x] 0.1 Benchmark script (tokens/s, time to first token, VRAM, RAM, two context sizes)
+- [x] 0.2 Compute-mode script (reports free VRAM and RAM, lists what to close)
+- [x] 0.3 Benchmark run across the installed chat models
+- [ ] 0.4 llama.cpp MoE-cache test on the heavy model (replaces the `--n-cpu-moe` sweep; needs the owner's download approval)
+- [ ] 0.6 Tool-calling test across the candidate models, on Ollama and on `llama-server`
+- [ ] 0.5 Lineup decision, after 0.4 and 0.6: fast, tool-calling, heavy, embedding; and which server runs the heavy model
 
 **Gate:** a results table in `docs/`, and one named model per role.
 
@@ -107,7 +145,7 @@ The rest of Phase 1, plus the model lineup from Stage 0.
 - [ ] 2.2 Move research code into `research/` (1.2)
 - [ ] 2.3 Single `wits` command (1.3)
 - [ ] 2.4 Provider interface with OpenAI-compatible and Anthropic providers (1.5)
-- [ ] 2.5 Model router heavy class, lineup, explicit `num_ctx` per role (**new**)
+- [ ] 2.5 Model router heavy class, lineup, explicit `num_ctx` per role, one model on the GPU at a time with the heavy model swapped in deliberately (**new**)
 - [ ] 2.6 Native tool calling as default, `json_react` as fallback (1.6)
 - [ ] 2.7 Official MCP SDK client (1.7)
 - [ ] 2.8 Sessions and memory records into SQLite (rest of 1.4)
@@ -136,7 +174,7 @@ Phase 3 as written, minus 3.3 (shipped in Stage 1).
 Phase 4, plus:
 
 - [ ] GPU lease in the job runner: one GPU job at a time across the LLM, Whisper and benchmark sweeps (**new**)
-- [ ] Batch worker: transcribe and score audio dropped into a watched folder (**new**)
+- [ ] Batch worker: transcribe and score audio dropped into a watched folder (**new**). Speech-to-text and embeddings run on the CPU so they never evict the loaded model; both research passes recommend this
 
 **Gate:** an audio clip dropped from the phone comes back as a scored
 transcript, and a delegated coding job ends in a tested diff approved from the
@@ -149,9 +187,17 @@ workspace.
 
 ## Still open (owner)
 
-- Model backend: stay on Ollama unless Stage 0 shows hand-tuned `llama-server`
-  clearly faster on the large models.
-- RAM: decide after Stage 0.
+- **Model backend.** Likely end state: Ollama for the small models and
+  `llama-server` for the heavy one, reached through the OpenAI-compatible
+  provider in 2.4. Decided by the result of 0.4. If the cache does not deliver
+  here, stay on Ollama alone.
+- **Provisional lineup, not final:** `gemma4:26b` heavy; `qwen3:8b` at 8k for
+  tool calls until 0.6 reports; `nomic-embed-text` for embeddings.
+- **RAM, parked by the owner on November 21.** No BIOS change and no purchase
+  for now. Options on file: a manual DDR4-2666 setting (estimated 6 to 10% on
+  the large models; needs a backup and MemTest86 first) and a matched 2x16 GB
+  DDR4-3200 kit (estimated 12 to 33%, about $200). A single extra stick is not
+  recommended. The owner is asked again about 2666 on November 22.
 - The four open decisions in [`modernization-2026-11.md`](modernization-2026-11.md) still stand.
 
 ## Left out on purpose
