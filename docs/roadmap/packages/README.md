@@ -68,13 +68,15 @@ transcripts.
 
 ### Stage 1 — Workspace slice
 
-Brief for 1.0: [wp-1.0-contracts.md](wp-1.0-contracts.md). Briefs for 1.1 to
-1.8 are written after 1.0 merges, because they cite it.
+Brief for 1.0: [wp-1.0-contracts.md](wp-1.0-contracts.md). The contract split 1.1 into 1.1a and
+1.1b; their briefs are drafted in [stage-1-store.md](stage-1-store.md). Where the index says 1.1,
+read both. Briefs for 1.2 to 1.8 are written after 1.0 merges, because they cite it.
 
 | ID | Package | Builder | Needs | Done when |
 |----|---------|---------|-------|-----------|
 | 1.0 | Contracts: schema, tool signatures, token scopes | Lead. Review: **high** | — | Merged before any build starts |
-| 1.1 | SQLite store with migrations and async access | Sonnet | 1.0 | Tests for every table, plus a two-writer test |
+| 1.1a | SQLite store with migrations and async access ([brief](stage-1-store.md)) | Sonnet | 1.0 | Tests for every table, plus a two-writer test |
+| 1.1b | Gateway shell: config block, route registry, owner check ([brief](stage-1-store.md)) | Sonnet | 1.1a | Disabled by default; owner-only tests pass |
 | 1.2 | Client tokens: create, scope, revoke, hashed at rest | Opus. Review: **high** | 1.1 | A revoked token is refused; scope tests pass |
 | 1.3 | Approval queue, reusing the `core/escalation.py` pattern | Opus | 1.1 | Request, approve, deny, expire tests |
 | 1.4 | MCP server over HTTP at `/mcp` with five tools; inbound text through `core/injection_guard.py` | Opus. Review: **high** | 1.2, 1.3 | Tool-call tests; unauthenticated call refused |
