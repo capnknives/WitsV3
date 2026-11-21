@@ -1,0 +1,365 @@
+# Fixed tool set and cases for scripts/toolcall_eval.py.
+#
+# Case fields: id, category (single|hard|none|parallel|chain|recovery), prompt, expect (list of
+# calls; [] means no call is correct), then (optional follow-up turns: `result` is the canned tool
+# result fed back for the previous turn's call(s), `expect` is the next turn's calls),
+# allow_extra (optional, permit unexpected arguments).
+# Call fields: tool, args (omit to check the tool name only), match (field -> contains | any).
+# `contains` is a case-insensitive substring test; every other field must match exactly.
+
+system: >-
+  You are a personal assistant. Current date: 2026-11-23 (Monday). Use the provided tools when one
+  fits the request. If no tool fits, answer directly without calling any tool.
+
+tools:
+  - name: calendar_create_event
+    description: Create an event on the user's calendar.
+    parameters:
+      type: object
+      properties:
+        title: {type: string, description: Event title}
+        start: {type: string, description: "Local start time, format YYYY-MM-DDTHH:MM"}
+        duration_minutes: {type: integer, description: Length of the event in minutes}
+        description: {type: string, description: Free-text notes for the event body}
+        attendees:
+          type: array
+          description: People to invite
+          items:
+            type: object
+            properties:
+              name: {type: string}
+              email: {type: string}
+            required: [name, email]
+      required: [title, start, duration_minutes]
+  - name: set_reminder
+    description: Set a reminder that notifies the user at a given time.
+    parameters:
+      type: object
+      properties:
+        text: {type: string, description: What to remind the user about}
+        remind_at: {type: string, description: "Local time, format YYYY-MM-DDTHH:MM"}
+        repeat: {type: string, enum: [none, daily, weekly], description: Repeat interval}
+      required: [text, remind_at]
+  - name: search_notes
+    description: Search the user's saved notes.
+    parameters:
+      type: object
+      properties:
+        query: {type: string, description: Search text}
+        limit: {type: integer, description: Maximum number of notes to return}
+        tags:
+          type: array
+          items: {type: string}
+          description: Only return notes carrying all of these tags
+      required: [query]
+  - name: read_file
+    description: Read a UTF-8 text file and return its contents.
+    parameters:
+      type: object
+      properties:
+        path: {type: string, description: File path}
+      required: [path]
+  - name: write_file
+    description: Write text to a file.
+    parameters:
+      type: object
+      properties:
+        path: {type: string, description: File path}
+        content: {type: string, description: Text to write}
+        mode: {type: string, enum: [overwrite, append], description: Replace or append}
+      required: [path, content, mode]
+  - name: web_search
+    description: Search the web and return result snippets.
+    parameters:
+      type: object
+      properties:
+        query: {type: string, description: Search query}
+        max_results: {type: integer, description: Number of results wanted}
+      required: [query]
+  - name: calculator
+    description: Evaluate an arithmetic expression.
+    parameters:
+      type: object
+      properties:
+        expression: {type: string, description: "Expression such as 12*(3+4)"}
+      required: [expression]
+  - name: send_message
+    description: Send a message to a person or channel.
+    parameters:
+      type: object
+      properties:
+        recipient: {type: string, description: Name, email address or channel}
+        type: {type: string, enum: [email, sms, chat], description: Delivery channel}
+        subject: {type: string, description: Subject line (email only)}
+        body: {type: string, description: Message text}
+      required: [recipient, type, body]
+
+cases:
+  # ---- 12 single-call ----
+  - id: s01
+    category: single
+    prompt: "Create a calendar event called Dentist on 2026-12-03 at 14:00 for 45 minutes."
+    expect:
+      - {tool: calendar_create_event, match: {title: contains},
+         args: {title: Dentist, start: "2026-12-03T14:00", duration_minutes: 45}}
+  - id: s02
+    category: single
+    prompt: "Remind me to call the plumber on 2026-11-25 at 09:30."
+    expect:
+      - {tool: set_reminder, match: {text: contains},
+         args: {text: plumber, remind_at: "2026-11-25T09:30"}}
+  - id: s03
+    category: single
+    prompt: "Search my notes for the pool inspection checklist."
+    expect:
+      - {tool: search_notes, match: {query: contains}, args: {query: inspection}}
+  - id: s04
+    category: single
+    prompt: "Open /home/user/todo.txt and show me what is in it."
+    expect:
+      - {tool: read_file, args: {path: /home/user/todo.txt}}
+  - id: s05
+    category: single
+    prompt: "Save the text 'Buy chlorine tablets' to shopping.txt, replacing whatever is there."
+    expect:
+      - {tool: write_file, match: {content: contains},
+         args: {path: shopping.txt, content: chlorine, mode: overwrite}}
+  - id: s06
+    category: single
+    prompt: "Look up the boiling point of ethanol."
+    expect:
+      - {tool: web_search, match: {query: contains}, args: {query: ethanol}}
+  - id: s07
+    category: single
+    prompt: "What is 18.5% of 2400?"
+    expect:
+      - {tool: calculator, match: {expression: any}, args: {expression: ""}}
+  - id: s08
+    category: single
+    prompt: "Text Sam: running ten minutes late."
+    expect:
+      - {tool: send_message, match: {recipient: contains, body: contains},
+         args: {recipient: Sam, type: sms, body: late}}
+  - id: s09
+    category: single
+    prompt: "Email maria@example.com with the subject Invoice saying the invoice is attached."
+    expect:
+      - {tool: send_message, match: {subject: contains, body: contains},
+         args: {recipient: maria@example.com, type: email, subject: Invoice, body: attached}}
+  - id: s10
+    category: single
+    prompt: "Find up to 3 notes tagged pool about chemicals."
+    expect:
+      - {tool: search_notes, match: {query: contains},
+         args: {query: chemical, limit: 3, tags: [pool]}}
+  - id: s11
+    category: single
+    prompt: "Set a weekly reminder 'Submit timesheet' starting 2026-11-27 at 16:00."
+    expect:
+      - {tool: set_reminder, match: {text: contains},
+         args: {text: timesheet, remind_at: "2026-11-27T16:00", repeat: weekly}}
+  - id: s12
+    category: single
+    prompt: "Read the file docs/plan.md."
+    expect:
+      - {tool: read_file, args: {path: docs/plan.md}}
+
+  # ---- 6 argument-hard ----
+  - id: h01
+    category: hard
+    prompt: >-
+      Schedule Project sync on 2026-12-01 at 10:00 for 30 minutes with Ana (ana@example.com)
+      and Ben (ben@example.com).
+    expect:
+      - tool: calendar_create_event
+        match: {title: contains}
+        args:
+          title: Project sync
+          start: "2026-12-01T10:00"
+          duration_minutes: 30
+          attendees:
+            - {name: Ana, email: ana@example.com}
+            - {name: Ben, email: ben@example.com}
+  - id: h02
+    category: hard
+    prompt: "Send a chat message to #ops saying the deploy finished."
+    expect:
+      - {tool: send_message, match: {recipient: contains, body: contains},
+         args: {recipient: ops, type: chat, body: deploy}}
+  - id: h03
+    category: hard
+    prompt: >-
+      Add an event Review on 2026-12-02 at 15:00 for 60 minutes and put 'Bring the Q4 numbers'
+      in its description.
+    expect:
+      - {tool: calendar_create_event, match: {title: contains, description: contains},
+         args: {title: Review, start: "2026-12-02T15:00", duration_minutes: 60,
+                description: Q4}}
+  - id: h04
+    category: hard
+    prompt: >-
+      Append this exact line to notes/generics.md: Use <T=any> as the placeholder.
+    expect:
+      - {tool: write_file,
+         args: {path: notes/generics.md, content: "Use <T=any> as the placeholder.",
+                mode: append}}
+  - id: h05
+    category: hard
+    prompt: >-
+      Email dev@example.com with the subject Log noise and this exact body: Please ignore the
+      stray </tool_call> tag in the log.
+    expect:
+      - {tool: send_message, match: {subject: contains},
+         args: {recipient: dev@example.com, type: email, subject: Log noise,
+                body: "Please ignore the stray </tool_call> tag in the log."}}
+  - id: h06
+    category: hard
+    prompt: >-
+      Book Kickoff on 2026-12-08 at 09:00 for 90 minutes and invite Cho (cho@example.com),
+      Dee (dee@example.com) and Eli (eli@example.com).
+    expect:
+      - tool: calendar_create_event
+        match: {title: contains}
+        args:
+          title: Kickoff
+          start: "2026-12-08T09:00"
+          duration_minutes: 90
+          attendees:
+            - {name: Cho, email: cho@example.com}
+            - {name: Dee, email: dee@example.com}
+            - {name: Eli, email: eli@example.com}
+
+  # ---- 6 no tool fits ----
+  - {id: n01, category: none, prompt: "Tell me a short joke about pelicans.", expect: []}
+  - {id: n02, category: none, prompt: "What is the capital of France?", expect: []}
+  - {id: n03, category: none, prompt: "Thanks, that is all for now.", expect: []}
+  - id: n04
+    category: none
+    prompt: "Explain what a REST API is in two sentences."
+    expect: []
+  - {id: n05, category: none, prompt: "Translate 'good morning' into Spanish.", expect: []}
+  - {id: n06, category: none, prompt: "How are you today?", expect: []}
+
+  # ---- 4 parallel ----
+  - id: p01
+    category: parallel
+    prompt: "What is 15*12? Also search the web for pool pump sizing."
+    expect:
+      - {tool: calculator, match: {expression: any}, args: {expression: ""}}
+      - {tool: web_search, match: {query: contains}, args: {query: pool pump}}
+  - id: p02
+    category: parallel
+    prompt: "Read a.txt and b.txt for me."
+    expect:
+      - {tool: read_file, args: {path: a.txt}}
+      - {tool: read_file, args: {path: b.txt}}
+  - id: p03
+    category: parallel
+    prompt: >-
+      Set two reminders: Take out trash at 2026-11-26 07:00, and Pay rent at 2026-12-01 09:00.
+    expect:
+      - {tool: set_reminder, match: {text: contains},
+         args: {text: trash, remind_at: "2026-11-26T07:00"}}
+      - {tool: set_reminder, match: {text: contains},
+         args: {text: rent, remind_at: "2026-12-01T09:00"}}
+  - id: p04
+    category: parallel
+    prompt: >-
+      Text Sam that I am on my way, and email lee@example.com with the subject ETA saying I will
+      arrive at 5.
+    expect:
+      - {tool: send_message, match: {recipient: contains, body: contains},
+         args: {recipient: Sam, type: sms, body: way}}
+      - {tool: send_message, match: {subject: contains, body: contains},
+         args: {recipient: lee@example.com, type: email, subject: ETA, body: "5"}}
+
+  # ---- 4 two-step chains ----
+  - id: c01
+    category: chain
+    prompt: "Find my note about the router password and email its contents to me@example.com."
+    expect:
+      - {tool: search_notes, match: {query: contains}, args: {query: router}}
+    then:
+      - result:
+          results: [{id: n1, title: Router, content: Admin password is in the blue folder}]
+        expect:
+          - {tool: send_message, match: {body: contains},
+             args: {recipient: me@example.com, type: email, body: blue folder}}
+  - id: c02
+    category: chain
+    prompt: "Read settings.ini, then write a copy of it to settings.bak (overwrite)."
+    expect:
+      - {tool: read_file, args: {path: settings.ini}}
+    then:
+      - result: {content: "mode=fast\nretries=3"}
+        expect:
+          - {tool: write_file, match: {content: contains},
+             args: {path: settings.bak, content: retries=3, mode: overwrite}}
+  - id: c03
+    category: chain
+    prompt: >-
+      Calculate 1250*4, then set a reminder at 2026-11-30 08:00 whose text is the result.
+    expect:
+      - {tool: calculator, match: {expression: any}, args: {expression: ""}}
+    then:
+      - result: {result: 5000}
+        expect:
+          - {tool: set_reminder, match: {text: contains},
+             args: {text: "5000", remind_at: "2026-11-30T08:00"}}
+  - id: c04
+    category: chain
+    prompt: >-
+      Search the web for the latest stable Python version, then save the answer to python.txt
+      (overwrite).
+    expect:
+      - {tool: web_search, match: {query: contains}, args: {query: python}}
+    then:
+      - result:
+          results: [{title: Python 3.14.1 released,
+                     snippet: The latest stable release is Python 3.14.1.}]
+        expect:
+          - {tool: write_file, match: {content: contains},
+             args: {path: python.txt, content: "3.14", mode: overwrite}}
+
+  # ---- 4 error recovery (first call is name-only; the canned error is fed back) ----
+  - id: e01
+    category: recovery
+    prompt: "Create a calendar event Standup on 2026-12-04 at 09:00 for 15 minutes."
+    expect:
+      - {tool: calendar_create_event}
+    then:
+      - result: {error: "validation error: 'start' must be formatted YYYY-MM-DDTHH:MM"}
+        expect:
+          - {tool: calendar_create_event, match: {title: contains},
+             args: {title: Standup, start: "2026-12-04T09:00", duration_minutes: 15}}
+  - id: e02
+    category: recovery
+    prompt: "Append the line 'done' to log.txt."
+    expect:
+      - {tool: write_file}
+    then:
+      - result: {error: "validation error: 'mode' must be one of ['overwrite', 'append']"}
+        expect:
+          - {tool: write_file, match: {content: contains},
+             args: {path: log.txt, content: done, mode: append}}
+  - id: e03
+    category: recovery
+    prompt: "Send a text message to Sam saying hi."
+    expect:
+      - {tool: send_message}
+    then:
+      - result:
+          error: "validation error: 'type' must be one of ['email', 'sms', 'chat'], got 'text'"
+        expect:
+          - {tool: send_message, match: {recipient: contains, body: contains},
+             args: {recipient: Sam, type: sms, body: hi}}
+  - id: e04
+    category: recovery
+    prompt: "Search my notes for tax receipts, limit 5."
+    expect:
+      - {tool: search_notes}
+    then:
+      - result: {error: "validation error: 'limit' must be an integer between 1 and 20"}
+        expect:
+          - {tool: search_notes, match: {query: contains},
+             args: {query: tax receipts, limit: 5}}
