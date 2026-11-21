@@ -8,7 +8,7 @@ status: "active"
 # WitsV3 Unified Execution Plan
 
 **Created:** November 21, 2026
-**Status:** Stage 0 not started
+**Status:** Stage 0 in progress (0.1 to 0.3 done)
 **Reviewed against:** `main` @ `86a0f80` (November 17, 2026)
 
 This plan sets the **order of work**. It folds three plans into one build:
@@ -73,9 +73,9 @@ Each stage ends at a gate the owner tests by hand. Sizes are rough, part-time.
 
 ### Stage 0 — Measure the box (one weekend)
 
-- [ ] 0.1 Benchmark script (tokens/s, time to first token, VRAM, RAM, two context sizes)
-- [ ] 0.2 Compute-mode script (reports free VRAM and RAM, lists what to close)
-- [ ] 0.3 Benchmark run across the installed chat models
+- [x] 0.1 Benchmark script (tokens/s, time to first token, VRAM, RAM, two context sizes)
+- [x] 0.2 Compute-mode script (reports free VRAM and RAM, lists what to close)
+- [x] 0.3 Benchmark run across the installed chat models
 - [ ] 0.4 llama.cpp `--n-cpu-moe` sweep on the two large MoE models
 - [ ] 0.5 Lineup decision: fast, heavy, embedding; whether `llama-server` earns a place
 
