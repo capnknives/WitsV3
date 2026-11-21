@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 WitsV3 is a local-first LLM orchestration system: a Web UI (primary, `run_web.py`) and CLI (`run.py`) backed by Ollama, with a ReAct-style orchestrator, an auto-discovered tool registry, persistent memory, and a verified-edit pipeline that lets agents safely modify project code. It is a personal assistant stack, not a hosted product.
 
-Read `README.md` first for how the product actually runs today, and `docs/roadmap/modernization-2026-11.md` for current priorities — architecture docs under `docs/architecture/` lag behind (mid-2025) and should not be trusted for current status.
+Read `README.md` first for how the product actually runs today, `docs/roadmap/unified-plan-2026-11.md` for the order of work, `docs/roadmap/packages/README.md` for how packages are briefed and reviewed, and `docs/roadmap/modernization-2026-11.md` for current priorities — architecture docs under `docs/architecture/` lag behind (mid-2025) and should not be trusted for current status.
 
 ## Worktree / branch workflow (important — read before committing)
 
