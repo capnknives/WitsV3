@@ -47,3 +47,18 @@ Host: DESKTOP-BOQHPAH (Windows 11) | Ollama: http://localhost:11434 | 3 run(s) p
 | qwen3.5:35b-a3b | 32768 | 2 | 0.14 | 27.4 | 2922.2 | 0.00 | 75%/25% | 7046 | 25336 |
 | qwen3.5:35b-a3b | 32768 | 3 | 0.13 | 27.6 | 3161.2 | 0.00 | 75%/25% | 7046 | 25335 |
 
+## Benchmark 2026-11-21 13:41:20
+
+Host: DESKTOP-BOQHPAH (Windows 11) | Ollama: http://localhost:11434 | 3 run(s) per model/ctx, one row per run (run 1 includes cold model load)
+
+Note: run after moving the RAM sticks so each channel holds 16 GB (A2: 16 GB; B1 + B2: 8 GB each). The earlier run had 8 GB on channel A and 24 GB on channel B. The machine was also rebooted in between.
+
+| Model | Ctx | Run | TTFT (s) | Gen tok/s | Prompt tok/s | Load (s) | CPU/GPU | VRAM used (MiB) | RAM used (MiB) |
+|---|---|---|---|---|---|---|---|---|---|
+| qwen3.5:35b-a3b | 8192 | 1 | 22.99 | 35.1 | 329.5 | 21.83 | 74%/26% | 7167 | 26869 |
+| qwen3.5:35b-a3b | 8192 | 2 | 0.13 | 36.2 | 3134.4 | 0.00 | 74%/26% | 7163 | 26861 |
+| qwen3.5:35b-a3b | 8192 | 3 | 0.12 | 36.5 | 3231.6 | 0.00 | 74%/26% | 7163 | 26837 |
+| gemma4:26b | 8192 | 1 | 23.03 | 36.0 | 416.2 | 21.95 | 18%/82% | 7523 | 24872 |
+| gemma4:26b | 8192 | 2 | 0.28 | 38.3 | 2114.2 | 0.00 | 18%/82% | 7523 | 24921 |
+| gemma4:26b | 8192 | 3 | 0.29 | 38.3 | 2031.4 | 0.00 | 18%/82% | 7531 | 24920 |
+
