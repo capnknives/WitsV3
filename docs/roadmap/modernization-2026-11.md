@@ -1,7 +1,7 @@
 ---
 title: "WitsV3 Modernization Roadmap"
 created: "2026-11-17"
-last_updated: "2026-11-17"
+last_updated: "2026-11-21"
 status: "active"
 ---
 
@@ -11,6 +11,10 @@ status: "active"
 **Status:** Planned — no phase started
 **Reviewed against:** `main` @ `e321f7b` (July 9, 2026)
 **Supersedes for forward work:** [`suggested-features-2026-07.md`](suggested-features-2026-07.md) (kept as the record of the July revival)
+
+> **Order of work:** [`unified-plan-2026-11.md`](unified-plan-2026-11.md) sets
+> the stages and gates (a workspace slice ships before the rest of Phase 1).
+> Item numbers and checkboxes below remain the tracker.
 
 This is the **canonical forward roadmap**. It takes WitsV3 from a local
 chat-and-tools assistant to a personal assistant that can run daily affairs,
