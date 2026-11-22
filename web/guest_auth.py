@@ -69,13 +69,24 @@ def resolve_auth(request: Request, config: Any) -> dict[str, Any]:
                 "allow": guest_may_call(path),
             }
 
-    require_auth = bool(
+    # Whenever guests are enabled, owner needs the owner token (RT-5): with no
+    # token configured, non-guests are refused rather than treated as owner.
+    require_auth = guests_on or bool(
         getattr(getattr(config, "web_ui", None), "require_auth", True) and web_token
     )
     if not require_auth:
         return {"role": "owner", "guest": None, "token": token, "allow": True}
 
     return {"role": None, "guest": None, "token": token, "allow": False}
+
+
+def owner_locked_warning() -> str:
+    """Start-up warning text: guests enabled but no owner token configured."""
+    return (
+        "Guest access is enabled but WITSV3_WEB_TOKEN is not set - the owner UI "
+        "is LOCKED (all non-guest /api calls get 401) until you add "
+        "WITSV3_WEB_TOKEN to .env."
+    )
 
 
 def guest_forbidden_response() -> JSONResponse:

@@ -32,7 +32,6 @@ def _calls(client, headers):
     }
 
 
-@pytest.mark.xfail(strict=True, reason="RT-5: no web token => middleware treats anon as owner, 200")
 @pytest.mark.parametrize("name", ["settings", "chat", "documents"])
 def test_no_token_no_header_refused(tmp_path, monkeypatch, name):
     client, system = _build(tmp_path, monkeypatch, None)
@@ -41,9 +40,6 @@ def test_no_token_no_header_refused(tmp_path, monkeypatch, name):
     assert not system.control_center.calls
 
 
-@pytest.mark.xfail(
-    strict=True, reason="RT-5: no web token => garbage bearer still treated as owner"
-)
 @pytest.mark.parametrize("name", ["settings", "chat", "documents"])
 def test_no_token_garbage_bearer_refused(tmp_path, monkeypatch, name):
     client, system = _build(tmp_path, monkeypatch, None)
@@ -58,3 +54,42 @@ def test_control_token_set_unauth_refused(tmp_path, monkeypatch, name):
     res = _calls(client, {})[name]
     assert res.status_code in (401, 403)
     assert not system.control_center.calls
+
+
+def test_no_guests_no_token_still_owner(tmp_path, monkeypatch):
+    client, system = _build(tmp_path, monkeypatch, None)
+    system.config.web_ui.guest_access.enabled = False
+    client = TestClient(create_app(system))
+    assert client.get("/api/settings").status_code == 200
+
+
+def test_no_token_valid_guest_still_works(tmp_path, monkeypatch):
+    client, _ = _build(tmp_path, monkeypatch, None)
+    reg = client.post(
+        "/api/guest/register",
+        json={
+            "invite_code": "family-code",
+            "display_name": "Mom",
+            "device_id": "device-abc-12345",
+            "age_band": "teen",
+        },
+    )
+    assert reg.status_code == 200, reg.text
+    headers = {"Authorization": f"Bearer {reg.json()['guest_token']}"}
+    assert client.get("/api/status", headers=headers).status_code == 200
+    assert client.get("/api/settings", headers=headers).status_code == 403
+
+
+def test_no_token_guests_on_logs_startup_warning(tmp_path, monkeypatch, caplog):
+    with caplog.at_level("WARNING", logger="WitsV3.WebUI"):
+        _build(tmp_path, monkeypatch, None)
+    assert any("owner UI is LOCKED" in r.getMessage() for r in caplog.records)
+
+
+def test_guests_on_require_auth_off_still_needs_owner_token(tmp_path, monkeypatch):
+    _, system = _build(tmp_path, monkeypatch, "owner-sekrit")
+    system.config.web_ui.require_auth = False
+    client = TestClient(create_app(system))
+    assert client.get("/api/settings").status_code == 401
+    owner = {"Authorization": "Bearer owner-sekrit"}
+    assert client.get("/api/settings", headers=owner).status_code == 200
