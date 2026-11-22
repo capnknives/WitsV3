@@ -104,36 +104,20 @@ def read_roots_for_role(
     return configured_read_roots(config)
 
 
-def _path_within_root(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except ValueError:
-        return False
-
-
 def resolve_allowed_read_path(
     file_path: str,
     *,
     role: str = "owner",
     config: Any | None = None,
 ) -> Path:
-    """Resolve *file_path* if it lies under an allowed read root for *role*.
+    """Resolve *file_path* for reading, or raise PermissionError.
 
-    Raises PermissionError when the path escapes all allowed roots.
+    Thin wrapper over :func:`core.path_access.enforce` kept for older callers. It is
+    synchronous, so it sees no grants; tools use the async ``path_access.check``.
     """
-    candidate = Path(file_path)
-    resolved = (
-        candidate.resolve() if candidate.is_absolute() else (PROJECT_ROOT / candidate).resolve()
-    )
-    allowed_roots = read_roots_for_role(role, config)
-    if any(_path_within_root(resolved, root) for root in allowed_roots):
-        return resolved
-    roots_display = ", ".join(str(r) for r in allowed_roots)
-    raise PermissionError(
-        f"Refusing to read outside allowed directories for role '{role}': {resolved}. "
-        f"Allowed roots: {roots_display}"
-    )
+    from core.path_access import enforce
+
+    return enforce(file_path, "read", role=role, config=config)
 
 
 def document_ingest_roots(config: Any | None = None) -> list[Path]:

@@ -1,4 +1,4 @@
-"""Tests for FileWriteTool's project-directory guard.
+"""Tests for the file tools' path guard (core.path_access).
 
 Regression coverage for a real bug found during the self-repair audit: the
 tool had two full try/except blocks back to back, where the first always
@@ -7,38 +7,44 @@ returned before the second (which held the only path guard) could ever run
 """
 
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 from tools.file_tools import FileWriteTool
 
 
+@pytest.fixture
+def temp_base(tmp_path, monkeypatch):
+    """Point folders.base at a temp folder so write_file never lands in the repo."""
+    config = SimpleNamespace(folders=SimpleNamespace(base=str(tmp_path / "base")), security=None)
+    monkeypatch.setattr("core.config.load_config", lambda *a, **k: config)
+    return tmp_path / "base"
+
+
 @pytest.mark.asyncio
-async def test_write_file_succeeds_inside_project(tmp_path, monkeypatch):
+async def test_write_file_relative_path_lands_in_projects(temp_base):
+    tool = FileWriteTool()
+    result = await tool.execute(file_path="scratch/target.txt", content="hello")
+    assert "Successfully" in result
+    assert (temp_base / "projects" / "scratch" / "target.txt").read_text() == "hello"
+
+
+@pytest.mark.asyncio
+async def test_write_file_refuses_outside_base_and_repo(temp_base):
     import core.safe_code_editor as sce
 
-    scratch_rel = "tests/tools/_scratch_write_file_target.txt"
-    scratch_abs = sce.PROJECT_ROOT / scratch_rel
-    tool = FileWriteTool()
-    try:
-        result = await tool.execute(file_path=scratch_rel, content="hello")
-        assert "Successfully" in result
-        assert scratch_abs.read_text(encoding="utf-8") == "hello"
-    finally:
-        scratch_abs.unlink(missing_ok=True)
-
-
-@pytest.mark.asyncio
-async def test_write_file_refuses_outside_project():
     outside = (
         "C:/Windows/Temp/wits_should_not_write_here.txt"
         if sys.platform == "win32"
         else "/tmp/wits_should_not_write_here.txt"
     )
     tool = FileWriteTool()
-    result = await tool.execute(file_path=outside, content="should not land")
-    assert result.startswith("Error:")
-    assert "project directory" in result
+    for target in (outside, str(sce.PROJECT_ROOT / "_wits_should_not_write_here.txt")):
+        result = await tool.execute(file_path=target, content="should not land")
+        assert result.startswith("Error:")
+        assert "Refusing to write" in result
+    assert not (sce.PROJECT_ROOT / "_wits_should_not_write_here.txt").exists()
 
 
 @pytest.mark.asyncio

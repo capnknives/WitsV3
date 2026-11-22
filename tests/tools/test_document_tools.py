@@ -43,8 +43,10 @@ class DummyLLM(BaseLLMInterface):
 @pytest.fixture
 def rag_env(tmp_path, monkeypatch):
     """Config + memory manager + wired tools operating in temp directories."""
-    docs_dir = tmp_path / "documents"
-    docs_dir.mkdir()
+    # Reason: path_access only exempts an upload corpus under the project's var/ folder.
+    monkeypatch.setenv("WITSV3_PROJECT_ROOT", str(tmp_path))
+    docs_dir = tmp_path / "var" / "documents"
+    docs_dir.mkdir(parents=True)
 
     config = WitsV3Config()
     config.memory_manager.backend = "basic"
