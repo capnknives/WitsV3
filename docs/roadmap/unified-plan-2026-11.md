@@ -8,7 +8,7 @@ status: "active"
 # WitsV3 Unified Execution Plan
 
 **Created:** November 21, 2026
-**Status:** Stage 0 in progress (0.1 to 0.3 done; 0.4 waits on the owner's download approval; 0.6 building)
+**Status:** Stage 0 in progress (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
 **Reviewed against:** `main` @ `86a0f80` (November 17, 2026)
 
 This plan sets the **order of work**. It folds three plans into one build:
@@ -113,7 +113,8 @@ Each stage ends at a gate the owner tests by hand. Sizes are rough, part-time.
 - [x] 0.1 Benchmark script (tokens/s, time to first token, VRAM, RAM, two context sizes)
 - [x] 0.2 Compute-mode script (reports free VRAM and RAM, lists what to close)
 - [x] 0.3 Benchmark run across the installed chat models
-- [ ] 0.4 llama.cpp MoE-cache test on the heavy model (replaces the `--n-cpu-moe` sweep; needs the owner's download approval)
+- [x] 0.4 llama.cpp MoE-cache test on the heavy model: **passed**, 45 to 47 tok/s against Ollama's 36 (about 25 to 30% faster) with a 2.5 to 3 GB cache
+- [ ] 0.4b Benchmark backend for `llama-server` and a cache sweep script
 - [ ] 0.6 Tool-calling test across the candidate models, on Ollama and on `llama-server`
 - [ ] 0.5 Lineup decision, after 0.4 and 0.6: fast, tool-calling, heavy, embedding; and which server runs the heavy model
 
@@ -187,7 +188,8 @@ workspace.
 
 ## Still open (owner)
 
-- **Model backend.** Likely end state: Ollama for the small models and
+- **Thermals.** The PC shut itself off once on November 21 (hard power loss, no crash dump) during a long GPU run with the case closed and the coolers clogged with dust. The same load ran for 32 minutes afterwards with the side panel off and temperatures logged, peaking at 153 F on the CPU and 156 F on the GPU. Cause not established. Until the case is cleaned: no long unattended runs, and heavy runs use the temperature guard in `D:\DevData\wits-scratch`.
+- **Model backend.** 0.4 passed, so the working assumption is now `llama-server` for the heavy model. Likely end state: Ollama for the small models and
   `llama-server` for the heavy one, reached through the OpenAI-compatible
   provider in 2.4. Decided by the result of 0.4. If the cache does not deliver
   here, stay on Ollama alone.

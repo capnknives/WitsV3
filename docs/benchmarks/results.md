@@ -62,3 +62,20 @@ Note: run after moving the RAM sticks so each channel holds 16 GB (A2: 16 GB; B1
 | gemma4:26b | 8192 | 2 | 0.28 | 38.3 | 2114.2 | 0.00 | 18%/82% | 7523 | 24921 |
 | gemma4:26b | 8192 | 3 | 0.29 | 38.3 | 2031.4 | 0.00 | 18%/82% | 7531 | 24920 |
 
+## llama.cpp MoE-cache test 2026-11-21 18:48 (package 0.4)
+
+Host: DESKTOP-BOQHPAH (Windows 11) | llama.cpp build b12359 (v1.0.0), CUDA 12.4, run directly, not through Ollama | model: the `qwen3.5:35b-a3b` file Ollama already had (19.7 GB) | 8k context | 400 generated tokens per run, 1,530-token prompt | 45 s cool-down between configurations
+
+Command base: `llama-server -m <model file> -ngl 99 --cpu-moe --fit off -fa on -c 8192 -np 1 -t 6 --host 127.0.0.1 --port 8080`
+
+| Configuration | Run 1 gen tok/s | Run 2 gen tok/s | Prompt tok/s (cold) | VRAM used (MiB) | Shared GPU memory (GB) |
+|---|---|---|---|---|---|
+| No cache (all experts in RAM) | 31.0 | 31.9 | 206 | 2932 | 0.14 |
+| `--moe-cache-mib 1728 --moe-cache-cpu-share 0.90` | 38.9 | 43.6 | 234 | 4691 | 0.15 |
+| `--moe-cache-mib 2560 --moe-cache-cpu-share 0.90` | 46.8 | 43.4 | 226 | 5523 | 0.14 |
+| `--moe-cache-mib 3072 --moe-cache-cpu-share 0.90` | 49.3 | 44.8 | 228 | 6030 | 0.14 |
+
+Reference: the same model on Ollama 0.40.17 ran at 36.2 to 36.5 tok/s earlier the same day.
+
+Reading: with a 2,560 to 3,072 MiB cache, generation averaged 45 to 47 tok/s, about 25 to 30% above Ollama. That clears the 15% rule set for this package. Limits: two runs per configuration with a visible spread; one prompt on one topic, which favours the cache; no long-context or tool-calling run; no spill into shared GPU memory was seen. CPU core temperature peaked at 127 F (53 C) during these short bursts.
+
