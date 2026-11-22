@@ -41,13 +41,22 @@ def _as_message(item: LLMMessage | Mapping[str, str]) -> LLMMessage:
     )
 
 
+def context_block(turn_context: Mapping[str, str] | None) -> str:
+    """The exact text appended after the user's words, or "" when there is no context.
+
+    Reason: the loop stores this block on the message so later turns can resend the
+    message byte-identical to what the model saw.
+    """
+    if not turn_context:
+        return ""
+    lines = [f"{key}: {value}" for key, value in turn_context.items()]
+    return f"\n\n{CONTEXT_HEADING}\n" + "\n".join(lines)
+
+
 def _user_text(user_message: str, turn_context: Mapping[str, str] | None) -> str:
     """Append per-turn context to the user text, or return the text unchanged."""
-    if not turn_context:
-        return user_message
     # Reason: changing text goes last so it never disturbs the cached prefix.
-    lines = [f"{key}: {value}" for key, value in turn_context.items()]
-    return f"{user_message}\n\n{CONTEXT_HEADING}\n" + "\n".join(lines)
+    return user_message + context_block(turn_context)
 
 
 def build_messages(

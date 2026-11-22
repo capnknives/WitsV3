@@ -167,7 +167,73 @@ def _role(item: Any) -> str:
     return item.get("role", "") if isinstance(item, dict) else getattr(item, "role", "")
 
 
-def history_window(history: list[Any], history_turns: int) -> list[Any]:
+def _chars(item: Any) -> int:
+    """Characters of one history entry: content plus any tool calls."""
+    if isinstance(item, dict):
+        content, calls = item.get("content") or "", item.get("tool_calls")
+    else:
+        content, calls = getattr(item, "content", "") or "", getattr(item, "tool_calls", None)
+    return len(content) + (len(json.dumps(calls, default=str)) if calls else 0)
+
+
+def estimate_tokens(text_or_payload: Any) -> float:
+    """Rough token count: characters divided by 4 (JSON for non-strings)."""
+    text = text_or_payload if isinstance(text_or_payload, str) else json.dumps(text_or_payload)
+    return len(text) / 4
+
+
+def as_sent_history(conversation: Any, user_input: str) -> tuple[list[dict[str, str]], Any | None]:
+    """Earlier messages rebuilt as sent, and the current user message if found.
+
+    The caller adds the current user message before the run, so it is the last message;
+    it is found only when that message has role "user" and its content equals
+    ``user_input`` (after strip), and is then left out of the history because the loop
+    sends it itself.
+    Earlier user messages get their stored ``sent_context`` back, so they are
+    byte-identical to what the model saw; messages without it pass through unchanged.
+
+    Args:
+        conversation: ConversationHistory or None.
+        user_input: This turn's user text.
+
+    Returns:
+        (history as role/content dicts, the current ConversationMessage or None).
+    """
+    if conversation is None:
+        return [], None
+    messages = list(conversation.messages)
+    current = None
+    # Reason: a matching user message with a reply after it is an older turn that used
+    # the same words; writing onto it would change what was already sent.
+    if (
+        messages
+        and messages[-1].role == "user"
+        and messages[-1].content.strip() == user_input.strip()
+    ):
+        current = messages.pop()
+    history = []
+    for msg in messages:
+        block = (msg.metadata or {}).get("sent_context") if msg.role == "user" else None
+        content = msg.content + block if isinstance(block, str) else msg.content
+        history.append({"role": msg.role, "content": content})
+    return history, current
+
+
+def store_sent_context(message: Any | None, block: str) -> None:
+    """Record the context block sent with ``message``; no message or block, no write."""
+    if message is None or not block:
+        return
+    if message.metadata is None:
+        message.metadata = {}
+    message.metadata["sent_context"] = block
+
+
+def history_window(
+    history: list[Any],
+    history_turns: int,
+    token_budget: float | None = None,
+    base_tokens: float = 0.0,
+) -> list[Any]:
     """Trim history in blocks so the kept start stays put between cuts.
 
     All history is kept until it exceeds ``2 * h`` messages, where ``h`` is
@@ -177,19 +243,32 @@ def history_window(history: list[Any], history_turns: int) -> list[Any]:
     so consecutive turns between cuts send the same first message and Ollama keeps its
     cached prefix.
 
+    A second trigger cuts back to ``h`` in the same way when the estimated tokens of the
+    kept part plus ``base_tokens`` exceed ``token_budget``.
+
     Args:
         history: Earlier messages, oldest first (dicts or LLMMessage).
         history_turns: Messages to keep right after a cut.
+        token_budget: Token limit for kept history plus ``base_tokens``; None disables it.
+        base_tokens: Tokens always sent (system prompt, tool payload).
 
     Returns:
         The slice of ``history`` to send; after a cut it starts on a user message.
     """
     h = max(2, history_turns)
-    excess = len(history) - 2 * h
-    if excess <= 0:
+    # Reason: replay the history one message at a time so a cut made on an earlier turn
+    # is made again at the same place; the start moves only when a trigger fires anew.
+    # With no token budget this gives cuts at multiples of h + 1, as before.
+    cut, kept_chars = 0, 0
+    sizes = [_chars(item) for item in history]
+    for n, size in enumerate(sizes, start=1):
+        kept_chars += size
+        over_budget = token_budget is not None and base_tokens + kept_chars / 4 > token_budget
+        if n - cut > 2 * h or (over_budget and n - h > cut):
+            kept_chars -= sum(sizes[cut : n - h])
+            cut = n - h
+    if cut == 0:
         return list(history)
-    # Reason: each cut advances the start by h + 1 (from 2h + 1 kept down to h).
-    cut = -(-excess // (h + 1)) * (h + 1)
     # Reason: start on a user message; moving forward to one never lands inside a tool
     # group (assistant tool_calls plus its replies), since groups hold no user message.
     users = [i for i, item in enumerate(history) if _role(item) == "user"]
