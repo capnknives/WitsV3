@@ -101,13 +101,14 @@ Briefs are written after the Stage 1 gate. Conversation core briefs are in
 |----|---------|---------|-------|-----------|
 | C1a | Turn metrics ([brief](stage-2-core.md)) | Sonnet | — | One line per turn; no text stored; suite still green |
 | C1b | Golden test set ([brief](stage-2-core.md)) | Sonnet | — | 30 cases load; checks pass and fail correctly without a model |
+| C1c | Golden runs in a sandbox ([brief](stage-2-core.md)) | Sonnet | C1a, C1b | No path outside the sandbox; per-case timeout |
 | C2a | Chat serving settings ([brief](stage-2-core.md)) | Sonnet | C1a | `num_ctx`, `keep_alive`, `think` and CPU embeddings in the payloads |
 | C2b | Stable prompt prefix ([brief](stage-2-core.md)) | Sonnet | — | Prefix fingerprint equal across turns |
 | C2c | Remove stored intent rows ([brief](stage-2-core.md)) | Sonnet | — | Dry run and apply tested on a temp file |
 | C2m | Resident model by measurement | Lead, on the owner's PC | C1, 0.6 | One model named in the unified plan |
 | C3a | Tool-call guard ([brief](stage-2-core.md)) | Opus. Review: **high** | — | One test per rule |
-| C3b | Finish the native loop ([brief](stage-2-core.md)) | Opus. Review: **high** | C2a, C2b, C3a | Scripted-model tests pass |
-| C3c | The front door setting ([brief](stage-2-core.md)) | Opus. Review: **high** | C3b | The "software" sentence gets a direct reply on `native` |
+| C3b | Finish the native loop ([brief](stage-2-core.md)) | Opus. Independent review, medium | C2a, C2b, C3a | Scripted-model tests pass |
+| C3c | The front door setting ([brief](stage-2-core.md)) | Opus. Independent review, medium | C3b | The "software" sentence gets a direct reply on `native` |
 
 Foundations, independent of the conversation core:
 
