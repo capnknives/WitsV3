@@ -28,6 +28,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from core import golden_failures  # noqa: E402
 from core.golden import GoldenCase, evaluate, load_cases, tools_seen  # noqa: E402
 
 try:  # C1a may not be merged yet
@@ -257,15 +258,19 @@ def enter_sandbox(config, sandbox: Path) -> Iterator[Path]:
 
 
 async def run_once(
-    control_center, case: GoldenCase
+    control_center, case: GoldenCase, capture: dict | None = None
 ) -> tuple[bool, float | None, list[str], list[str]]:
-    """Run one case; return (passed, first_result_ms, tools seen, unobserved)."""
+    """Run one case; return (passed, first_result_ms, tools seen, unobserved).
+
+    ``capture``, when given, is filled with the run's events (live, so a timeout keeps what
+    arrived) and, at the end, failures, eval_tokens. The caller owns it; nothing is printed.
+    """
     turn = None
     if turn_metrics is not None:
         turn = turn_metrics.start_turn("golden", None, len(case.message))
     start = time.perf_counter()
     first_result: float | None = None
-    events = []
+    events = capture["events"] if capture is not None else []
     try:
         history = None
         if case.history:
@@ -287,6 +292,11 @@ async def run_once(
             await turn_metrics.finish_turn(turn, "error" if errored else "ok")
     names = [c["name"] for c in turn.tool_calls] if turn is not None else None
     res = evaluate(case, events, names)
+    if capture is not None:
+        capture["failures"] = res.failures
+        capture["eval_tokens"] = golden_failures.eval_tokens_of(turn)
+        capture["first_result_ms"] = first_result
+        capture["tools"] = names if names is not None else tools_seen(events)
     return (
         res.passed,
         first_result,
@@ -301,17 +311,45 @@ async def run_cases(control_center, cases, args) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     prefix = out.read_text(encoding="utf-8") if out.exists() else ""
     stamp = time.strftime("%Y-%m-%d %H:%M")
-    header = "| case | pass | median first_result_ms | tools seen | unobserved |\n|---|---|---|---|---|\n"
+    header = "| case | pass | median first_result_ms | tools seen | unobserved | why failed |\n|---|---|---|---|---|---|\n"
     rows, failed_all = [], False
+    # Reason: failure files hold reply text, so they exist in sandbox mode only.
+    folder = None
+    if getattr(args, "sandbox", "") and not getattr(args, "live", False):
+        folder = golden_failures.clear_failures(Path(args.sandbox))
+    wrote = False
     for case in cases:
         results = []
-        for _ in range(args.runs):
+        why = ""
+        for n in range(1, args.runs + 1):
+            cap: dict = {"events": []}
             try:
-                results.append(
-                    await asyncio.wait_for(run_once(control_center, case), args.timeout_seconds)
+                result = await asyncio.wait_for(
+                    run_once(control_center, case, cap), args.timeout_seconds
                 )
+                results.append(result)
+                failures = cap.get("failures") or ([] if result[0] else ["failed"])
             except asyncio.TimeoutError:
                 results.append((False, None, [], ["timeout"]))
+                failures = [f"timeout after {args.timeout_seconds:g}s"]
+                cap.setdefault("tools", [])
+            if failures and not why:
+                why = golden_failures.shorten_reason(failures[0])
+            if folder is not None and not results[-1][0]:
+                golden_failures.write_record(
+                    folder,
+                    golden_failures.build_record(
+                        case.id,
+                        n,
+                        case.message,
+                        failures,
+                        cap["events"],
+                        cap.get("tools", []),
+                        cap.get("first_result_ms"),
+                        cap.get("eval_tokens"),
+                    ),
+                )
+                wrote = True
         passes = sum(r[0] for r in results)
         times = [r[1] for r in results if r[1] is not None]
         med = f"{statistics.median(times):.0f}" if times else "-"
@@ -325,12 +363,14 @@ async def run_cases(control_center, cases, args) -> int:
             unobs.append("slow")
         rows.append(
             f"| {case.id} | {passes}/{args.runs} | {med} | {', '.join(tools) or '-'} "
-            f"| {', '.join(unobs) or '-'} |"
+            f"| {', '.join(unobs) or '-'} | {why or '-'} |"
         )
         failed_all = failed_all or passes == 0
         # Reason: a crash or Ctrl-C mid-run still leaves every finished row on disk.
         section = f"\n## Golden run {stamp}\n\n{header}" + "\n".join(rows) + "\n"
         out.write_text(prefix + section, encoding="utf-8")
+    if wrote:
+        print(f"Failure details: {folder}")
     return 1 if failed_all else 0
 
 
