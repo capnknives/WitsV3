@@ -58,11 +58,20 @@ def test_owner_export_lands_in_outbox(env):
     assert not (tmp / "var" / "exports").exists()
 
 
-@pytest.mark.parametrize("who", ["owner", "guest"])
-@pytest.mark.parametrize("name", [".env", "secrets.txt"])
+NEVER = [".env", "secrets.txt", "client_secret_x.json", "id_rsa"]
+ALIASES = [".env.", ".env ", "notes.txt:secret"]
+WHO = ["owner", "guest"]
+
+
+def _headers(client, who):
+    return OWNER if who == "owner" else _guest_headers(client)
+
+
+@pytest.mark.parametrize("who", WHO)
+@pytest.mark.parametrize("name", NEVER)
 def test_never_listed_export_name_refused(env, who, name):
     client, tmp = env
-    headers = OWNER if who == "owner" else _guest_headers(client)
+    headers = _headers(client, who)
     sid = _session(client, headers)
     before = _all_files(tmp)
     res = client.post("/api/export", json={"session_id": sid, "file_path": name}, headers=headers)
@@ -81,23 +90,47 @@ def test_guest_export_works_without_absolute_path(env):
     assert (tmp / "var" / "exports" / body["file_path"]).is_file()
 
 
-def test_export_traversal_still_refused(env):
-    client, _ = env
-    sid = _session(client, OWNER)
+@pytest.mark.parametrize("who", WHO)
+def test_export_traversal_still_refused(env, who):
+    client, tmp = env
+    headers = _headers(client, who)
+    sid = _session(client, headers)
+    before = _all_files(tmp)
     res = client.post(
-        "/api/export", json={"session_id": sid, "file_path": "../../evil.txt"}, headers=OWNER
+        "/api/export", json={"session_id": sid, "file_path": "../../evil.txt"}, headers=headers
     )
     assert res.status_code == 400
+    assert _all_files(tmp) == before
 
 
-@pytest.mark.parametrize("name", ["client_secret_x.json", ".env", "id_rsa"])
+def test_guest_export_symlink_cannot_redirect_write(env):
+    client, tmp = env
+    headers = _guest_headers(client)
+    sid = _session(client, headers)
+    exports = tmp / "var" / "exports"
+    exports.mkdir(parents=True, exist_ok=True)
+    outside = tmp / "outside.txt"
+    try:
+        (exports / "link.txt").symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable on this platform")
+    res = client.post(
+        "/api/export", json={"session_id": sid, "file_path": "link.txt"}, headers=headers
+    )
+    assert res.status_code == 403
+    assert not outside.exists()
+
+
+@pytest.mark.parametrize("name", NEVER + ALIASES)
 def test_upload_of_secret_names_refused(env, name):
     client, tmp = env
+    before = _all_files(tmp)
     res = client.post(
         "/api/documents/upload", files={"file": (name, b"x", "text/plain")}, headers=OWNER
     )
-    assert res.status_code == 403
-    assert not (tmp / "documents" / name).exists()
+    assert res.status_code in (400, 403)
+    assert res.status_code == 403 or name in ALIASES
+    assert _all_files(tmp) == before
 
 
 def test_upload_of_plain_file_works(env):
@@ -109,14 +142,16 @@ def test_upload_of_plain_file_works(env):
     assert (tmp / "documents" / "notes.txt").read_bytes() == b"hi"
 
 
-def test_delete_of_never_listed_name_refused(env):
+@pytest.mark.parametrize("name", NEVER + ALIASES)
+def test_delete_of_never_listed_name_refused(env, name):
     client, tmp = env
     docs = tmp / "documents"
     docs.mkdir()
-    (docs / ".env").write_text("KEY=1")
-    res = client.post("/api/documents/delete", json={"name": ".env"}, headers=OWNER)
-    assert res.status_code == 403
-    assert (docs / ".env").read_text() == "KEY=1"
+    (docs / name).write_text("KEY=1")
+    res = client.post("/api/documents/delete", json={"name": name}, headers=OWNER)
+    assert res.status_code in (400, 403)
+    assert res.status_code == 403 or name in ALIASES
+    assert (docs / name).read_text() == "KEY=1"
 
 
 def test_delete_outside_folder_still_refused(env):

@@ -28,17 +28,25 @@ def export_name(file_path: str | None) -> str | None:
 
 
 async def export_target(name: str, *, guest: bool, config: Any) -> Path:
-    """Where an export named *name* is written; raises PermissionError when refused."""
-    folder = (
-        runtime_paths.exports_dir()
-        if guest
-        else runtime_paths.outbox_dir(getattr(getattr(config, "folders", None), "base", None))
-    )
-    target = folder / name
-    if path_access.is_never(target, "write"):
+    """Where an export named *name* is written; raises PermissionError when refused.
+
+    The returned path is the resolved one that was checked, so callers write exactly
+    there and a symlink planted in the folder cannot redirect the write.
+    """
+    if guest:
+        folder = runtime_paths.exports_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        root = folder.resolve()
+        target = (root / name).resolve()
+        if not target.is_relative_to(root) or target == root:
+            raise PermissionError("refused: export must stay inside the exports folder")
+        if path_access.is_never(root / name, "write") or path_access.is_never(target, "write"):
+            raise PermissionError(NEVER_DETAIL)
+        return target
+    folder = runtime_paths.outbox_dir(getattr(getattr(config, "folders", None), "base", None))
+    if path_access.is_never(folder / name, "write"):
         raise PermissionError(NEVER_DETAIL)
-    if not guest:
-        target = await path_access.check(target, "write", role="owner", config=config)
+    target = await path_access.check(folder / name, "write", role="owner", config=config)
     folder.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -47,12 +55,18 @@ def document_target(docs_dir: Path, name: str) -> Path:
     """Resolve *name* inside *docs_dir*.
 
     Raises ValueError when it falls outside (or is the folder itself) and
-    PermissionError when the never-list refuses it for indexing.
+    PermissionError when the never-list refuses the requested name or the resolved path.
     """
     root = docs_dir.resolve()
     target = (root / name).resolve()
     if not target.is_relative_to(root) or target == root:
         raise ValueError("invalid document name")
-    if path_access.is_never(target, "index"):
+    # Reason: Windows drops trailing dots and spaces and treats "name:stream" as name, so
+    # those spellings are refused on every platform before the name rules see them.
+    if (
+        path_access.alias_reason(name, windows=True)
+        or path_access.is_never(root / name, "index")
+        or path_access.is_never(target, "index")
+    ):
         raise PermissionError(NEVER_DETAIL)
     return target
