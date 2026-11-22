@@ -75,6 +75,36 @@ def exports_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
     return runtime_subdir("exports", root)
 
 
+DEFAULT_BASE = "var/wits_files"
+BASE_SUBFOLDERS = ("inbox", "outbox", "projects")
+
+
+def base_dir(base: str | None = None) -> Path:
+    """The folder WITS works in (``folders.base``); relative values sit under the runtime root."""
+    path = Path(base or DEFAULT_BASE).expanduser()
+    return path if path.is_absolute() else project_root() / path
+
+
+def inbox_dir(base: str | None = None) -> Path:
+    return base_dir(base) / "inbox"
+
+
+def outbox_dir(base: str | None = None) -> Path:
+    return base_dir(base) / "outbox"
+
+
+def projects_dir(base: str | None = None) -> Path:
+    return base_dir(base) / "projects"
+
+
+def ensure_base_folders(base: str | None = None) -> list[Path]:
+    """Create inbox, outbox and projects. Called at start-up, never at import time."""
+    folders = [base_dir(base) / name for name in BASE_SUBFOLDERS]
+    for folder in folders:
+        folder.mkdir(parents=True, exist_ok=True)
+    return folders
+
+
 def logs_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
     return runtime_subdir("logs", root)
 
@@ -285,6 +315,8 @@ def migrate_legacy_runtime_dirs(root: str = RUNTIME_ROOT_NAME) -> list[str]:
     return moved
 
 
-def ensure_runtime_layout(root: str = RUNTIME_ROOT_NAME) -> list[str]:
-    """Create var/ subdirs and migrate legacy top-level folders if needed."""
-    return migrate_legacy_runtime_dirs(root)
+def ensure_runtime_layout(root: str = RUNTIME_ROOT_NAME, base: str | None = None) -> list[str]:
+    """Create var/ subdirs, the base folders, and migrate legacy folders if needed."""
+    moved = migrate_legacy_runtime_dirs(root)
+    ensure_base_folders(base)
+    return moved
