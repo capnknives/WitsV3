@@ -305,15 +305,9 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
 
                 segment = self.segments[idx]
 
-                if filter_dict:
-                    match = True
-                    for key, value in filter_dict.items():
-                        segment_value = segment.metadata.get(key)
-                        if segment_value != value:
-                            match = False
-                            break
-                    if not match:
-                        continue
+                # Reason: same attr-or-metadata rule as get_recent_segments, so "type" matches.
+                if filter_dict and not self._segment_matches(segment, filter_dict):
+                    continue
 
                 similarity = max(0.0, 1.0 - distances[0][i] / 2.0)
 
