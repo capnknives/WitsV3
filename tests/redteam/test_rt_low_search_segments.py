@@ -61,11 +61,21 @@ async def test_get_recent_segments_type_filter_control(tmp_path):
     assert [s.type for s in found] == ["USER_FACT"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RT-low: search_segments filters on metadata only, so a type filter returns nothing",
-)
 async def test_search_segments_type_filter_returns_matching_segment(tmp_path):
     backend = await _backend(tmp_path)
     found = await backend.search_segments("truck", limit=5, filter_dict={"type": "USER_FACT"})
     assert [s.type for s in found] == ["USER_FACT"]
+
+
+async def test_search_segments_metadata_filter_still_works(tmp_path):
+    backend = await _backend(tmp_path)
+    await backend.add_segment(
+        MemorySegment(
+            type="USER_FACT",
+            source="t",
+            content=MemorySegmentContent(text="my truck is green"),
+            metadata={"session_id": "s1"},
+        )
+    )
+    found = await backend.search_segments("truck", limit=5, filter_dict={"session_id": "s1"})
+    assert [s.content.text for s in found] == ["my truck is green"]
