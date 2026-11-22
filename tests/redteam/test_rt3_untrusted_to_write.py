@@ -148,7 +148,7 @@ async def test_gate_switch_off_lets_the_write_through_but_keeps_marking():
         [_tools(_call("web_search", {"query": "trip"})), _tools(_WRITE), LLMResponse("ok")]
     )
     # Reason: SecuritySettings has no such field, so plain assignment is refused.
-    object.__setattr__(orch.config.security, "untrusted_write_gate", False)
+    orch.config.security.untrusted_write_gate = False
     _ = [e async for e in orch.run(GOAL, user_role="owner")]
     assert registry.writes() == ["write_file"]
     assert _tool_messages(llm)[0].startswith("[UNTRUSTED EXTERNAL CONTENT from web_search")

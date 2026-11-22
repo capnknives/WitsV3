@@ -249,6 +249,13 @@ class SecuritySettings(BaseModel):
         default=False,
         description="Air-gap mode: block web_search and MCP registry/connect egress",
     )
+    untrusted_write_gate: bool = Field(
+        default=True,
+        description=(
+            "After a turn reads web or document content, write-capable tools are refused "
+            "for the rest of that turn (core/untrusted_content.py). False turns the gate off."
+        ),
+    )
     filesystem_read_roots: list[str] = Field(
         default_factory=list,
         description=(
