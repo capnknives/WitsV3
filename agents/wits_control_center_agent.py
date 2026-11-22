@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.base_agent import BaseAgent
+from agents.remember_rule import extract_remember_fact
 from agents.turn_context import TurnContext, run_in_turn, turn_for
 from agents.wcca_intent_mixin import WCCAIntentMixin
 from agents.wcca_routing_mixin import OrchestratorRoutingMixin
@@ -178,13 +179,16 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
 
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
 
-        if any(kw in user_input.lower() for kw in ["remember", "don't forget", "recall"]):
+        # Reason: guests never reach memory and must not be told otherwise, so the rule
+        # fires only for non-guests; their message takes the normal guest path.
+        remember_fact = None if user_role == "guest" else extract_remember_fact(user_input)
+        if remember_fact is not None:
             # An explicit "remember X" is a deterministic command unrelated to
             # any pending clarification — drop the pending state rather than
             # risk merging stale context into an unrelated later reply.
             self._pending_clarifications.pop(session_id, None)
             await self.store_memory(
-                content=user_input,
+                content=remember_fact,
                 segment_type="USER_FACT",
                 importance=1.0,
                 metadata={"source": "user", "session_id": session_id, "remember": True},

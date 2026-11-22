@@ -535,7 +535,7 @@ async def test_remember_command_clears_pending_clarification_without_merging(wcc
     session_id = "sess-remember"
     agent._pending_clarifications[session_id] = "find and fix any bugs in your code."
 
-    async for _ in agent.run("remember my favorite color is blue", session_id=session_id):
+    async for _ in agent.run("remember that my favorite color is blue", session_id=session_id):
         pass
 
     assert session_id not in agent._pending_clarifications
