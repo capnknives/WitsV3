@@ -12,7 +12,6 @@ from typing import Any
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.native_loop_support import (
     MEMORY_FETCH_LIMIT,
-    NATIVE_SYSTEM_PROMPT,
     NEVER_RECALLED_TYPES,
     STEP_LIMIT_ERROR,
     as_sent_history,
@@ -22,6 +21,7 @@ from agents.native_loop_support import (
     estimate_tokens,
     history_window,
     model_call_error,
+    native_system_prompt,
     recalled_facts,
     resident_model,
     store_sent_context,
@@ -149,22 +149,21 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
 
         react_state["context"] = await self._memory_context(goal)
         hist_turns = self.config.orchestrator.history_turns
-        turn_context = build_turn_context(
-            goal, user_input, react_state["documents_context"], react_state["context"]
-        )
+        # Reason: with nothing ingested the documents line is left out entirely.
+        documents = react_state["documents_context"] if doc_inventory else ""
+        turn_context = build_turn_context(goal, user_input, documents, react_state["context"])
         # Reason: store the block now so the next turn resends this message exactly as sent.
         store_sent_context(current_message, context_block(turn_context))
         # Reason: the tool list is fixed for the turn, so its size is estimated once.
-        base_tokens = estimate_tokens(self._ollama_tools_payload()) + estimate_tokens(
-            NATIVE_SYSTEM_PROMPT
-        )
+        system_prompt = native_system_prompt(self._session_model)
+        base_tokens = estimate_tokens(self._ollama_tools_payload()) + estimate_tokens(system_prompt)
         window = history_window(
             react_state["history"],
             hist_turns,
             token_budget=0.6 * self.config.ollama_settings.num_ctx,
             base_tokens=base_tokens,
         )
-        messages = build_messages(NATIVE_SYSTEM_PROMPT, "", window, user_input, turn_context)
+        messages = build_messages(system_prompt, "", window, user_input, turn_context)
         conv = self.config.conversation
         guard = TurnGuard(conv.max_steps, conv.max_identical_calls, conv.max_schema_retries)
         approvals = ApprovalGate()

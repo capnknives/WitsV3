@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from agents.native_loop_support import MEMORY_FACT_CHARS, MEMORY_HEADING, NATIVE_SYSTEM_PROMPT
+from agents.native_loop_support import (
+    MEMORY_FACT_CHARS,
+    MEMORY_HEADING,
+    native_system_prompt,
+    resident_model,
+)
 from agents.native_tool_orchestrator import NativeToolOrchestrator
 from core.config import WitsV3Config
 from core.llm_interface import LLMResponse
@@ -49,7 +54,7 @@ class _LLM:
         return LLMResponse(content="ok")
 
 
-def _orch(segments, **conversation):
+def _orch(segments, inventory=None, **conversation):
     config = WitsV3Config()
     for key, value in conversation.items():
         setattr(config.conversation, key, value)
@@ -57,7 +62,7 @@ def _orch(segments, **conversation):
     orch = NativeToolOrchestrator("native", config, llm, _FakeMemory(segments), None)
 
     async def _no_docs():
-        return {}
+        return inventory or {}
 
     orch._get_document_inventory = _no_docs
     return orch, llm
@@ -126,5 +131,17 @@ async def test_system_message_identical_across_turns():
     orch, llm = _orch(_edge_store())
     await _turn(orch, "first")
     await _turn(orch, "second, different")
-    assert llm.sent[0][0].content == llm.sent[1][0].content == NATIVE_SYSTEM_PROMPT
-    assert "newest user message" in NATIVE_SYSTEM_PROMPT
+    prompt = native_system_prompt(resident_model(orch.config))
+    assert llm.sent[0][0].content == llm.sent[1][0].content == prompt
+    assert "newest user message" in prompt
+
+
+async def test_documents_line_only_when_something_is_ingested():
+    orch, llm = _orch([_seg("USER_FACT", BISCUIT)])
+    await _turn(orch, "first")
+    assert "documents:" not in _user_text(llm) and "No user documents" not in _user_text(llm)
+    orch, llm = _orch([_seg("USER_FACT", BISCUIT)], inventory={"notes.md": 2})
+    await _turn(orch, "second")
+    text = _user_text(llm)
+    assert "\ndocuments: " in text and "notes.md (2 chunks)" in text
+    assert f"memory: {MEMORY_HEADING}" in text and "goal:" not in text

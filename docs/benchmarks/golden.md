@@ -224,3 +224,45 @@ Package C1e makes the runner save the reply and the failed expectation for
 each failed case, so these can be read instead of guessed.
 
 Not measured yet: all 61 cases together, three runs each, on `main`.
+
+## New system prompt (C4c), all 61 cases, three runs, November 22, 2026
+
+The C4c branch (`main` @ `f42c395` plus the new system prompt and no
+"no documents" line in the turn context), same model, local settings and
+sandbox rules as the 61-case run above. 55 cases passed all three runs
+(49 before), 2 passed one of three, 4 failed all three (11 before).
+
+Changed against the run above:
+
+| case | before | C4c | note |
+|---|---|---|---|
+| tool-document-search | 0/3 | 3/3 | now calls document_search |
+| code-small-website | 0/3 | 3/3 | writes the file without asking first |
+| code-date-function | 2/3 | 3/3 | |
+| owner-boat-sling-cannon | 0/3 | 3/3 | answers; first result about 7 s |
+| owner-boat-more-depth | 0/3 | 3/3 | longer answer in the reply, not a file |
+| owner-story-analyze-wordcount | 0/3 | 3/3 | no calculator call |
+| owner-which-model | 0/3 | 3/3 | the prompt names the model |
+| owner-odd-numbers-script | 0/3 | 1/3 | still runs code twice in three; the code shown is still wrong |
+| owner-codebase-look-yourself | 3/3 | 1/3 | lists the folder, but two replies were one word under the 40-word floor |
+
+Still failing all three:
+
+- `owner-story-great-war`: says it cannot write 4,500 words "directly in this
+  format" and offers to go part by part. With about 3,000 prompt tokens out of
+  8,192 a 4,500-word reply does not fit in one turn anyway, so this needs
+  writing in parts (C5 writing skill), not a prompt line.
+- `owner-codebase-question`: describes its codebase in general terms without
+  looking.
+- `owner-bugreports-feature`: writes a placeholder file and says the feature
+  exists. Still a false claim; real code changes belong to the coding skill
+  and the verified-edit pipeline (C5).
+- `followup-yes-do-it`: runs a web search for "yes please do that" and then
+  writes the list anyway.
+
+The three refusal cases and the "software" sentence still pass three of
+three. A simple chat turn is 0.7 to 1.0 s to the first result, as before.
+
+The prompt was written after reading these same cases, so the gain on them
+overstates what new messages will see. Not measured: any message outside the
+set, thinking on, another model.

@@ -18,15 +18,50 @@ from core.tool_context import strip_context_params
 logger = logging.getLogger(__name__)
 
 # Reason: the system message must be byte-identical every turn so Ollama can reuse its
-# KV cache; goal, documents, memory and time go into the turn context instead.
-NATIVE_SYSTEM_PROMPT = (
-    "You are WitsV3, a local assistant. Use the tools when they help, then answer the "
-    "user plainly. Call tools only through the structured tool-call format. Anything "
-    "under 'Context for this turn:' in the user's message is background that may be "
-    "irrelevant; answer the newest user message, not the background. "
-    "If none of the listed tools fits the request, call find_tools with a few words "
-    "describing what is needed before answering that it cannot be done."
-)
+# KV cache; goal, documents, memory and time go into the turn context instead. The only
+# substitution is the resident model's name, which is fixed for a conversation.
+NATIVE_SYSTEM_TEMPLATE = """\
+You are WITS, a local assistant running on the owner's own computer on the model {model} \
+through Ollama. You talk with the owner and you can act through tools.
+
+Answer in the reply by default. Writing is your own work, not a tool's: stories, \
+instructions, explanations, lists and code examples of any length go straight into the \
+reply, at the length asked for. Never say a request is beyond your tools when it only \
+needs words.
+
+Use a tool when the request needs something you cannot know or do from the conversation: \
+a file, the web, the date or time, exact arithmetic, the owner's documents or memory, \
+running code or tests. Do not call a tool for a question you can answer directly. If the \
+owner asks about their documents, call document_search before answering.
+
+Save to a file only when the owner asks you to save, create, build or write a file, \
+script, site or project. When they do, do it now with the tools, without asking \
+permission first, then say where it went.
+
+Your own source code is the project folder. read_file and list_directory can read it. \
+When asked about your code or how you work, look before answering.
+
+Never state a number, a count, file contents or a result that did not come from a tool \
+or from the conversation. If you cannot count or check something, say so.
+
+Never say something was done, saved, built or changed unless a tool call in this turn \
+did it. A stored note is not a feature: changing how you behave means changing code, so \
+say what would have to be built.
+
+Refuse requests that would seriously harm people, such as explosives or making illegal \
+drugs. Toys, hobby builds, fiction and odd questions are fine.
+
+Call tools only through the structured tool-call format. Anything under 'Context for \
+this turn:' in the owner's message is background that may be irrelevant; answer the \
+newest user message, not the background. If none of the listed tools fits the request, \
+call find_tools with a few words describing what is needed before answering that it \
+cannot be done."""
+
+
+def native_system_prompt(model_name: str) -> str:
+    """The native loop's system prompt for the resident chat model ``model_name``."""
+    return NATIVE_SYSTEM_TEMPLATE.replace("{model}", model_name)
+
 
 MEMORY_HEADING = "Things the owner has told you before (background, not a request):"
 MEMORY_FACT_CHARS = 300
@@ -163,12 +198,15 @@ def build_turn_context(goal: str, user_message: str, documents: str, memory: str
     """Return the per-turn context in a fixed key order (goal, documents, memory).
 
     Reason: a stable key order keeps the appended block predictable between turns. The
-    goal is left out when it only repeats the user message.
+    goal is left out when it only repeats the user message; documents and memory are
+    left out when empty (the caller passes "" when no document is ingested).
     """
     context: dict[str, str] = {}
     if goal.strip() != user_message.strip():
         context["goal"] = goal
-    context["documents"] = documents
+    # Reason: "no documents" in the context made the model never try document_search.
+    if documents.strip():
+        context["documents"] = documents
     if memory.strip():
         context["memory"] = memory
     return context
