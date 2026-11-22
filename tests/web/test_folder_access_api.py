@@ -119,7 +119,7 @@ def test_provider_is_live_while_running_and_reset_after(monkeypatch, tmp_path):
 def test_disabled_workspace_keeps_no_grants(monkeypatch, tmp_path):
     with TestClient(_make_app(monkeypatch, tmp_path, enabled=False)) as c:
         assert path_access.grants_provider is path_access._no_grants
-        assert c.get(LIST, headers=_owner()).status_code in (401, 404)
+        assert c.get(LIST, headers=_owner()).status_code == 404
 
 
 def test_internal_client_hidden_from_list_and_not_revocable(client):

@@ -1,6 +1,8 @@
 """Tests for folder access requests and grants (WP F3, folder access contract section 5)."""
 
 import re
+import shutil
+import sqlite3
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +12,7 @@ import pytest
 from core import path_access
 from core.tool_context import ToolContext, use_tool_context
 from core.workspace import approvals, clients, folder_access
+from core.workspace import db as dbmod
 from core.workspace.db import open_db
 from tools.folder_access_tool import FolderAccessRequestTool
 
@@ -21,6 +24,8 @@ REPO = Path(__file__).resolve().parents[2]
 def _isolate(monkeypatch):
     monkeypatch.setattr(approvals, "_listeners", [])
     monkeypatch.setattr(path_access, "grants_provider", path_access._no_grants)
+    monkeypatch.setattr(folder_access, "_calls", folder_access.deque())
+    monkeypatch.setattr(folder_access, "_provider_warned", False)
     yield
     folder_access.deactivate()
 
@@ -55,6 +60,13 @@ async def _audits(db, action):
         "SELECT COUNT(*) FROM audit_log WHERE action = ?", (action,)
     ) as cur:
         return (await cur.fetchone())[0]
+
+
+async def _outcomes(db):
+    async with db.read().execute(
+        "SELECT outcome FROM audit_log WHERE action = 'folder.request' ORDER BY id"
+    ) as cur:
+        return [r[0] for r in await cur.fetchall()]
 
 
 async def _request(db, cfg, path, mode="read", now=None):
@@ -102,15 +114,15 @@ async def test_request_creates_one_approval_and_row_and_repeat_returns_it(db, cf
     assert await _count(db, "approvals") == 1
     assert await _count(db, "folder_requests") == 1
     pending = await approvals.list_pending(db)
-    assert pending[0]["title"] == f"Folder access: read {outside.resolve()}"
+    assert pending[0]["title"] == f"Folder access: read {outside}"
     assert pending[0]["options"] == ["approve", "one day", "deny"]
     assert pending[0]["client"] == "WITS" and pending[0]["body"] == "need the notes"
-    assert await _audits(db, "folder.request") == 1
+    assert await _outcomes(db) == ["ok", "duplicate"]
 
 
 async def test_file_request_is_recorded_against_parent(db, cfg, outside):
     result = await _request(db, cfg, outside / "notes.txt")
-    assert result["path"] == str(outside.resolve())
+    assert result["path"] == str(outside)
 
 
 async def test_at_most_three_pending(db, cfg, tmp_path):
@@ -138,7 +150,7 @@ async def test_approve_and_one_day_give_grants(db, cfg, outside, choice, days):
     grants = await folder_access.list_grants(db, now=2000)
     assert len(grants) == 1
     g = grants[0]
-    assert (g["path"], g["mode"], g["created_at"]) == (str(outside.resolve()), "read_write", 2000)
+    assert (g["path"], g["mode"], g["created_at"]) == (str(outside), "read_write", 2000)
     assert g["expires_at"] == 2000 + days * DAY and re.fullmatch(r"grt_[0-9a-f]{16}", g["id"])
     assert await _audits(db, "folder.grant") == 1
     # Reason: resolving twice is a 409 (None) and cannot create a second grant.
@@ -223,23 +235,161 @@ async def test_internal_client_is_not_a_credential(db):
     assert await clients.revoke_client(db, "cli_internal_wits") is False
 
 
-async def test_tool_is_owner_only_and_does_not_wait(db, cfg, outside, monkeypatch):
+def _ctx(role):
+    return ToolContext(session_id=None, user_role=role, conversation_history=None, turn_id=None)
+
+
+async def test_tool_is_owner_only_fails_closed_and_does_not_wait(db, cfg, outside, monkeypatch):
     monkeypatch.setattr("core.config.load_config", lambda *a, **k: _tool_config(cfg))
     tool = FolderAccessRequestTool()
-    assert "workspace" in await tool.execute(str(outside), "read", "why")
+    with use_tool_context(_ctx("owner")):
+        assert "workspace" in await tool.execute(str(outside), "read", "why")
     folder_access.activate(db)
-    guest = ToolContext(session_id=None, user_role="guest", conversation_history=None, turn_id=None)
-    with use_tool_context(guest):
-        assert "only the owner" in await tool.execute(str(outside), "read", "why")
-    assert "only the owner" in await tool.execute(str(outside), "read", "why", user_role="guest")
+    # Reason: no context means no trusted role, even when the argument claims owner.
+    assert "only the owner" in await tool.execute(str(outside), "read", "why", user_role="owner")
+    for role in ("guest", "", "Owner"):
+        with use_tool_context(_ctx(role)):
+            assert "only the owner" in await tool.execute(str(outside), "read", "why")
     assert await _count(db, "approvals") == 0
-    text = await tool.execute(str(outside), "read", "why")
-    assert "Inbox" in text and re.search(r"apr_[0-9a-f]{16}", text)
-    assert "Error" in await tool.execute(str(outside / ".ssh"), "read", "why")
-    assert "Error" in await tool.execute(str(outside), "read", "   ")
+    with use_tool_context(_ctx("owner")):
+        text = await tool.execute(str(outside), "read", "why")
+        assert "Inbox" in text and re.search(r"apr_[0-9a-f]{16}", text)
+        assert "Error" in await tool.execute(str(outside / ".ssh"), "read", "why")
+        assert "Error" in await tool.execute(str(outside), "read", "   ")
 
 
 def _tool_config(cfg):
     return SimpleNamespace(
         folders=cfg.folders, security=None, workspace=SimpleNamespace(approval_ttl_minutes=60)
     )
+
+
+async def test_unc_and_never_paths_touch_no_filesystem(db, cfg, monkeypatch):
+    seen = []
+    for name in ("resolve", "is_file", "exists", "expanduser", "stat", "is_dir"):
+        real = getattr(Path, name)
+
+        def spy(self, *a, _real=real, **k):
+            seen.append(str(self))
+            return _real(self, *a, **k)
+
+        monkeypatch.setattr(Path, name, spy)
+    for path in ("\\\\host\\share\\x", "//host/share/x", "/srv/data/.env", "/srv/.ssh/k"):
+        result = await _request(db, cfg, path)
+        assert result["code"] == "never", path
+    assert seen, "spy is not live"
+    assert not [p for p in seen if "host" in p or "/srv" in p]
+
+
+async def test_answers_do_not_reveal_whether_paths_exist(db, cfg, outside, tmp_path):
+    real = await _request(db, cfg, outside / "notes.txt")
+    ghost = await _request(db, cfg, tmp_path / "ghost" / "nothing.txt")
+    assert real.keys() == ghost.keys() and real["status"] == ghost["status"] == "pending"
+    assert ghost["path"] == str(tmp_path / "ghost")
+    # Reason: no suffix means a folder, existing or not; nothing is resolved or expanded.
+    assert (await _request(db, cfg, f"{tmp_path}/a/../noext"))["path"] == f"{tmp_path}/noext"
+    # Reason: with the queue full, a repeat and a new path get the same answer.
+    assert (await _request(db, cfg, outside / "notes.txt"))["code"] == "too_many_pending"
+    assert (await _request(db, cfg, tmp_path / "other"))["code"] == "too_many_pending"
+
+
+async def test_every_call_is_audited_and_rate_limited(db, cfg, outside, tmp_path):
+    await _request(db, cfg, "/srv/.ssh", now=100)
+    await _request(db, cfg, tmp_path / "base" / "inbox", now=100)
+    await folder_access.request(db, "rel", "read", "why", config=cfg, now=100)
+    for _ in range(7):
+        await _request(db, cfg, outside, now=100)
+    over = await _request(db, cfg, outside, now=200)
+    assert over["code"] == "rate_limited" and "ask the owner" in over["message"]
+    outcomes = await _outcomes(db)
+    assert outcomes[:4] == ["refused", "already_allowed", "refused", "ok"]
+    assert outcomes[4:] == ["duplicate"] * 6 + ["refused"]
+    assert (await _request(db, cfg, outside, now=100 + 3601))["status"] == "pending"
+
+
+async def test_spelling_variants_share_one_request(db, cfg, outside):
+    first = await _request(db, cfg, outside)
+    for variant in (f"{outside}/", f"{outside}/./", str(outside).upper()):
+        assert (await _request(db, cfg, variant))["approval_id"] == first["approval_id"]
+    assert await _count(db, "folder_requests") == 1
+
+
+async def test_deny_starts_a_one_day_cooldown(db, cfg, outside):
+    req = await _request(db, cfg, outside, now=1000)
+    await approvals.resolve(db, req["approval_id"], "deny", None, now=1100)
+    assert (await _request(db, cfg, f"{outside}/", now=1200))["code"] == "cooldown"
+    assert (await _request(db, cfg, outside, "index", now=1200))["status"] == "pending"
+    assert (await _request(db, cfg, outside, now=1100 + DAY + 1))["status"] == "pending"
+
+
+async def test_expired_request_cannot_be_granted(db, cfg, outside):
+    req = await _request(db, cfg, outside, now=1000)
+    assert await approvals.resolve(db, req["approval_id"], "approve", None, now=1000 + DAY) is None
+    assert await _count(db, "folder_grants") == 0
+
+
+async def test_never_children_stay_refused_under_a_grant(db, cfg, outside):
+    folder_access.activate(db)
+    req = await _request(db, cfg, outside, "read_write")
+    await approvals.resolve(db, req["approval_id"], "approve", None)
+    (outside / ".git").mkdir()
+    assert await path_access.check(outside / "notes.txt", "write", config=cfg)
+    for target, mode in ((outside / ".env", "read"), (outside / ".git" / "config", "write")):
+        with pytest.raises(PermissionError):
+            await path_access.check(target, mode, config=cfg)
+
+
+async def test_grant_rows_only_change_by_revoking_once(db, cfg, outside):
+    req = await _request(db, cfg, outside)
+    await approvals.resolve(db, req["approval_id"], "approve", None)
+    for sql in (
+        "UPDATE folder_grants SET path = '/'",
+        "UPDATE folder_grants SET expires_at = expires_at + 1",
+        "UPDATE folder_grants SET revoked_at = 1, mode = 'read_write'",
+        "DELETE FROM folder_grants",
+        "INSERT OR REPLACE INTO folder_grants SELECT * FROM folder_grants",
+    ):
+        with pytest.raises(sqlite3.IntegrityError):
+            async with db.write() as conn:
+                await conn.execute(sql)
+    grant_id = (await folder_access.list_grants(db))[0]["id"]
+    assert await folder_access.revoke(db, grant_id) is True
+    with pytest.raises(sqlite3.IntegrityError):
+        async with db.write() as conn:
+            await conn.execute("UPDATE folder_grants SET revoked_at = NULL")
+
+
+async def test_provider_fails_closed_and_logs_once(tmp_path, cfg, outside, caplog):
+    database = await open_db(tmp_path / "closed.db")
+    req = await _request(database, cfg, outside)
+    await approvals.resolve(database, req["approval_id"], "approve", None)
+    folder_access.activate(database)
+    assert len(await path_access.grants_provider()) == 1
+    await database.close()
+    with caplog.at_level("WARNING", logger=folder_access.logger.name):
+        assert await path_access.grants_provider() == ()
+        assert await path_access.grants_provider() == ()
+    assert sum("unreadable" in r.message for r in caplog.records) == 1
+
+
+async def test_migration_survives_an_existing_wits_client(tmp_path, monkeypatch):
+    mig = tmp_path / "mig"
+    mig.mkdir()
+    shutil.copy(dbmod.MIGRATIONS_DIR / "0001_init.sql", mig)
+    real_dir = dbmod.MIGRATIONS_DIR
+    monkeypatch.setattr(dbmod, "MIGRATIONS_DIR", mig)
+    path = tmp_path / "old.db"
+    old = await open_db(path)
+    async with old.write() as conn:
+        await conn.execute(
+            "INSERT INTO clients (id, name, token_prefix, token_hash, scopes, created_at)"
+            " VALUES ('cli_x', 'WITS', 'abcd1234', 'h', 'read', 0)"
+        )
+    await old.close()
+    monkeypatch.setattr(dbmod, "MIGRATIONS_DIR", real_dir)
+    upgraded = await open_db(path)
+    async with upgraded.read().execute(
+        "SELECT name, token_prefix FROM clients WHERE id = 'cli_internal_wits'"
+    ) as cur:
+        assert tuple(await cur.fetchone()) == ("WITS (internal_wits)", "internal")
+    await upgraded.close()

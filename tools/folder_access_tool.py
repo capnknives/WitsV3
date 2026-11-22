@@ -7,7 +7,7 @@ Inbox; the grant, if any, is created there. The tool never waits or polls.
 from typing import Any
 
 from core.base_tool import BaseTool
-from core.tool_context import tool_user_role
+from core.tool_context import current_tool_context
 
 
 class FolderAccessRequestTool(BaseTool):
@@ -23,22 +23,24 @@ class FolderAccessRequestTool(BaseTool):
             ),
         )
 
-    async def execute(self, path: str, mode: str, reason: str, user_role: str = "owner") -> str:
+    async def execute(self, path: str, mode: str, reason: str, user_role: str = "guest") -> str:
         """Queue a folder access request for the owner.
 
         Args:
-            path: Absolute folder or file path (a file is requested as its folder).
+            path: Absolute folder path; a last part with a suffix is requested as its folder.
             mode: ``read``, ``read_write`` or ``index``.
             reason: Why access is needed; shown to the owner.
-            user_role: Role on the old path; the tool context's role wins when set.
+            user_role: Ignored; accepted only so the old path's injected argument does not fail.
+                The role comes from the tool context alone.
 
         Returns:
             A plain sentence for the model: the approval id and what to tell the owner, or why
             the request was not made.
         """
-        # Reason: only the owner may widen what WITS can reach; a guest turn must not queue
-        # requests in the owner's Inbox.
-        if tool_user_role(user_role) != "owner":
+        # Reason: only the owner may widen what WITS can reach. Fail closed: with no tool
+        # context (an argument could be supplied by anyone) the call is refused.
+        ctx = current_tool_context()
+        if ctx is None or ctx.user_role != "owner":
             return "Error: only the owner can request folder access."
         # Reason: imported here so tool discovery works without aiosqlite when the workspace
         # is off.

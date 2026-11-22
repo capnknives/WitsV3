@@ -5,15 +5,21 @@ A grant is created in exactly one place, ``grant_from_resolution``, which ``appr
 calls inside the owner's resolve transaction. ``path_access.check`` reads live grants through the
 provider that ``activate`` installs at workspace start-up; nothing is cached, so an expired or
 revoked grant stops allowing access on the very next check.
+
+``request`` never touches the filesystem for the supplied path: it works on the string alone,
+so its answers cannot tell a model whether a file or folder exists.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import ntpath
+import os
+import posixpath
 import secrets
 import time
-from pathlib import Path
+from collections import deque
+from pathlib import PurePath, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 
 from core import path_access
@@ -35,6 +41,9 @@ OPTIONS = ("approve", "one day")
 _DAY = 24 * 60 * 60
 DURATIONS = {"approve": 30 * _DAY, "one day": _DAY}
 MAX_PENDING_REQUESTS = 3
+DENY_COOLDOWN = _DAY
+RATE_LIMIT = 10
+RATE_WINDOW = 60 * 60
 REASON_MAX = 8_000  # Reason: the reason is the approval body, so it gets the body limit.
 PATH_MAX = 1_000
 _IMPLIED: dict[str, tuple[path_access.Mode, ...]] = {
@@ -44,20 +53,44 @@ _IMPLIED: dict[str, tuple[path_access.Mode, ...]] = {
 }
 
 _db: Database | None = None
+# Reason: per process, in memory; bounds how fast a model can probe even refused requests.
+_calls: deque[int] = deque()
+_provider_warned = False
 
 
 def _refused(code: str, message: str) -> dict:
     return {"status": "refused", "code": code, "message": message}
 
 
-def _target(path: Any, mode: str, config: Any | None) -> tuple[str | None, dict | None]:
-    """Resolve *path* to the folder a grant would cover, or say why it cannot be requested.
+def _key(path: str) -> str:
+    """Duplicate key: spelling variants of one folder (case, separators) map to one request."""
+    return path.replace("\\", "/").rstrip("/").casefold()
 
-    Runs section 3 with no grants, for every action the mode implies, on both the path as named
-    and the folder it lies in, so a secrets file or a protected parent is refused outright.
+
+def _rate_ok(ts: int) -> bool:
+    while _calls and _calls[0] <= ts - RATE_WINDOW:
+        _calls.popleft()
+    if len(_calls) >= RATE_LIMIT:
+        return False
+    _calls.append(ts)
+    return True
+
+
+def _pure(path: str, windows: bool) -> PurePath:
+    if windows:
+        return PureWindowsPath(ntpath.normpath(path))
+    return PurePosixPath(posixpath.normpath(path))
+
+
+def _target(path: Any, mode: str, config: Any | None) -> tuple[str | None, dict]:
+    """Name the folder a grant would cover, or say why it cannot be requested.
+
+    Works on the supplied string only (no resolve, stat or ``~`` expansion). A final component
+    with a suffix is taken as a file and its parent is requested. Section 3 runs with no grants
+    for every action the mode implies, on the path as named and on the folder.
 
     Returns:
-        ``(folder, None)`` to request, or ``(None, result)`` with a refusal or
+        ``(folder, {})`` to request, or ``(None, result)`` with a refusal or
         ``already_allowed``.
     """
     if not isinstance(path, str) or not path.strip() or len(path) > PATH_MAX:
@@ -67,28 +100,33 @@ def _target(path: Any, mode: str, config: Any | None) -> tuple[str | None, dict 
         # from the one granted, so it is refused, never cleaned.
         if clean_text(path, PATH_MAX) != path:
             return None, _refused("invalid_argument", "path contains invisible characters")
-        raw = Path(path).expanduser()
-        if not raw.is_absolute():
-            return None, _refused("invalid_argument", "path must be absolute")
+    except WorkspaceError:
+        return None, _refused("invalid_argument", "path contains invisible characters")
+    windows = os.name == "nt"
+    alias = path_access.alias_reason(path, windows)
+    if alias:
+        return None, _refused("never", f"never allowed: {alias}")
+    if path.startswith("~"):
+        return None, _refused("invalid_argument", "give the full path; '~' is not expanded")
+    pure = _pure(path, windows)
+    if not pure.is_absolute():
+        return None, _refused("invalid_argument", "path must be absolute")
+    folder = pure.parent if pure.suffix else pure
+    try:
         roots = path_access.roots_for(config)
-        alias = path_access.alias_reason(path, roots.windows)
-        if alias:
-            return None, _refused("never", f"never allowed: {alias}")
-        resolved = raw.resolve()
-        folder = resolved.parent if resolved.is_file() else resolved
         decisions = [
             path_access.decide(target, action, "owner", (), roots)
-            for target in (resolved, folder)
+            for target in (pure, folder)
             for action in _IMPLIED[mode]
         ]
-    except (WorkspaceError, PermissionError, ValueError, RuntimeError, OSError, TypeError):
+    except (PermissionError, ValueError, RuntimeError, OSError, TypeError):
         return None, _refused("invalid_argument", "unusable path")
     for decision in decisions:
         if not decision.allowed and not decision.requestable:
             return None, _refused("never", decision.reason)
     if all(d.allowed for d in decisions):
         return None, {"status": "already_allowed", "path": str(folder)}
-    return str(folder), None
+    return str(folder), {}
 
 
 async def _audit(conn, actor: str, action: str, target: str, outcome: str, detail: str, ts: int):
@@ -98,6 +136,12 @@ async def _audit(conn, actor: str, action: str, target: str, outcome: str, detai
         " VALUES (:ts, :actor, :action, :target, :outcome, :detail)",
         dict(ts=ts, actor=actor, action=action, target=target, outcome=outcome, detail=detail),
     )
+
+
+async def _log_request(db: Database, target: Any, outcome: str, detail: str, ts: int) -> None:
+    text = target if isinstance(target, str) else repr(target)
+    async with db.write() as conn:
+        await _audit(conn, INTERNAL_CLIENT, "folder.request", text[:PATH_MAX], outcome, detail, ts)
 
 
 async def request(
@@ -112,9 +156,13 @@ async def request(
 ) -> dict:
     """Queue a folder access request for the owner; never waits for the answer.
 
+    Every call writes one ``folder.request`` audit row and counts against a per-process limit
+    of ``RATE_LIMIT`` calls an hour.
+
     Args:
         db: Open workspace database.
-        path: Absolute folder or file path; a file is recorded against its parent folder.
+        path: Absolute folder path; a path whose last part has a suffix is taken as a file and
+            recorded against its parent folder.
         mode: ``read``, ``read_write`` or ``index``.
         reason: Why access is needed, shown to the owner as the approval body.
         ttl_seconds: How long the request stays answerable.
@@ -124,41 +172,54 @@ async def request(
     Returns:
         ``{status: "pending", approval_id, path, mode, expires_at, existing}``,
         ``{status: "already_allowed", path}`` or ``{status: "refused", code, message}``.
-        Only the pending result creates rows.
+        Only a new pending request creates approval rows.
     """
-    if mode not in _IMPLIED:
-        return _refused("invalid_argument", "mode must be read, read_write or index")
-    try:
-        clean_reason = clean_text(reason, REASON_MAX)
-    except WorkspaceError as exc:
-        return _refused(exc.code, f"reason: {exc.message}")
-    folder, result = await asyncio.to_thread(_target, path, mode, config)
+    ts = int(time.time()) if now is None else now
+    if not _rate_ok(ts):
+        await _log_request(db, path, "refused", "rate limited", ts)
+        return _refused("rate_limited", "Too many folder requests; ask the owner directly.")
+    folder, result = None, _refused("invalid_argument", "mode must be read, read_write or index")
+    if mode in _IMPLIED:
+        try:
+            clean_reason = clean_text(reason, REASON_MAX)
+            folder, result = _target(path, mode, config)
+        except WorkspaceError as exc:
+            result = _refused(exc.code, f"reason: {exc.message}")
     if folder is None:
+        outcome = "already_allowed" if result["status"] == "already_allowed" else "refused"
+        await _log_request(db, path, outcome, result.get("message", ""), ts)
         return result
+    key = _key(folder)
 
-    async def add_request(conn, approval_id: str, ts: int) -> None:
-        # Reason: runs inside the approval's own BEGIN IMMEDIATE, so the duplicate check, the
-        # limit and both inserts are one atomic step even with racing requests.
+    async def add_request(conn, approval_id: str, now_ts: int) -> None:
+        # Reason: runs inside the approval's own BEGIN IMMEDIATE, so the checks and both
+        # inserts are one atomic step even with racing requests.
         async with conn.execute(
-            "SELECT r.approval_id, r.path, r.mode, a.expires_at FROM folder_requests r"
-            " JOIN approvals a ON a.id = r.approval_id"
-            " WHERE a.status = 'pending' AND a.expires_at > :ts AND a.id != :id",
-            {"ts": ts, "id": approval_id},
+            "SELECT r.approval_id, r.path, r.mode, a.status, a.expires_at FROM folder_requests r"
+            " JOIN approvals a ON a.id = r.approval_id WHERE a.id != :id AND"
+            " ((a.status = 'pending' AND a.expires_at > :ts)"
+            " OR (a.status = 'denied' AND a.resolved_at > :since))",
+            {"id": approval_id, "ts": now_ts, "since": now_ts - DENY_COOLDOWN},
         ) as cur:
-            live = await cur.fetchall()
-        for row in live:
-            if row["path"] == folder and row["mode"] == mode:
-                raise WorkspaceError("duplicate", "already requested", dict(row))
+            rows = await cur.fetchall()
+        live = [r for r in rows if r["status"] == "pending"]
+        same = [r for r in rows if _key(r["path"]) == key and r["mode"] == mode]
+        # Reason: the cap is checked first so a full queue answers the same for every path.
         if len(live) >= MAX_PENDING_REQUESTS:
             raise WorkspaceError(
                 "too_many_pending", f"at most {MAX_PENDING_REQUESTS} folder requests may wait"
             )
+        for row in same:
+            if row["status"] == "pending":
+                raise WorkspaceError("duplicate", "already requested", dict(row))
+        if same:
+            raise WorkspaceError("cooldown", "the owner denied this within the last 24 hours")
         await conn.execute(
             "INSERT INTO folder_requests (approval_id, path, mode, reason, created_at)"
             " VALUES (:id, :path, :mode, :reason, :ts)",
-            {"id": approval_id, "path": folder, "mode": mode, "reason": clean_reason, "ts": ts},
+            {"id": approval_id, "path": folder, "mode": mode, "reason": clean_reason, "ts": now_ts},
         )
-        await _audit(conn, INTERNAL_CLIENT, "folder.request", approval_id, "ok", folder, ts)
+        await _audit(conn, INTERNAL_CLIENT, "folder.request", folder, "ok", approval_id, now_ts)
 
     try:
         created = await approvals.create(
@@ -171,21 +232,22 @@ async def request(
             list(OPTIONS),
             ttl_seconds,
             1 if scan_text(clean_reason) else 0,
-            now=now,
+            now=ts,
             on_insert=add_request,
         )
     except WorkspaceError as exc:
-        if exc.code == "duplicate":
-            row = exc.extra
-            return {
-                "status": "pending",
-                "approval_id": row["approval_id"],
-                "path": folder,
-                "mode": mode,
-                "expires_at": row["expires_at"],
-                "existing": True,
-            }
-        return _refused(exc.code, exc.message)
+        outcome = exc.code if exc.code in ("duplicate", "too_many_pending") else "refused"
+        await _log_request(db, folder, outcome, exc.message, ts)
+        if exc.code != "duplicate":
+            return _refused(exc.code, exc.message)
+        return {
+            "status": "pending",
+            "approval_id": exc.extra["approval_id"],
+            "path": folder,
+            "mode": mode,
+            "expires_at": exc.extra["expires_at"],
+            "existing": True,
+        }
     return {**created, "path": folder, "mode": mode, "existing": False}
 
 
@@ -287,7 +349,14 @@ def activate(db: Database) -> None:
     _db = db
 
     async def provider() -> tuple[path_access.Grant, ...]:
-        return await live_grants(db)
+        global _provider_warned
+        try:
+            return await live_grants(db)
+        except Exception as err:  # Reason: a failed read must narrow access, never widen it.
+            if not _provider_warned:
+                _provider_warned = True
+                logger.warning("folder grants unreadable, using no grants: %s", err)
+            return ()
 
     path_access.grants_provider = provider
 
