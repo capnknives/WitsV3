@@ -25,7 +25,8 @@ class CreateClientBody(BaseModel):
 
     name: str = Field(min_length=1, max_length=clients.NAME_MAX)
     scopes: list[str] = Field(min_length=1, max_length=3)
-    projects: list[str] = Field(default_factory=lambda: ["*"], min_length=1, max_length=100)
+    # Reason: required, so reaching every project takes an explicit ["*"], never an omission.
+    projects: list[str] = Field(min_length=1, max_length=100)
     rate_per_min: int = Field(default=60, ge=1, le=10_000)
     expires_at: int | None = Field(default=None, ge=0)
 

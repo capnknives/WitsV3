@@ -121,6 +121,9 @@ async def create_client(
         WorkspaceError: ``invalid_argument`` for bad input, ``name_taken`` for a duplicate name.
     """
     clean_name = clean_text(name, NAME_MAX)
+    # Reason: the name is written to logs and audit detail; a line break could forge an entry.
+    if "\n" in clean_name or "\t" in clean_name:
+        raise WorkspaceError("invalid_argument", "name must be a single line without tabs")
     scope_set = _normalize_scopes(scopes)
     project_set = _normalize_projects(projects)
     if isinstance(rate_per_min, bool) or not isinstance(rate_per_min, int) or rate_per_min < 1:

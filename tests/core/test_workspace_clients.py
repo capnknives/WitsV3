@@ -30,7 +30,10 @@ def _no_token_in_logs(caplog):
     caplog.set_level(logging.DEBUG)
     _TOKENS.clear()
     yield
-    text = "\n".join(r.getMessage() for r in caplog.records) + caplog.text
+    # Reason: after the yield, caplog.records holds only the teardown phase, so the test body's
+    # records must be read per phase or a leak in the call phase would go unseen.
+    records = [r for phase in ("setup", "call", "teardown") for r in caplog.get_records(phase)]
+    text = "\n".join(r.getMessage() for r in records)
     for token in _TOKENS:
         assert token not in text
 
@@ -76,6 +79,8 @@ class TestCreate:
             {"projects": ["Bad_Slug"]},
             {"rate_per_min": 0},
             {"name": "   "},
+            {"name": "bot\nINFO forged line"},
+            {"name": "bot\tx"},
         ],
     )
     async def test_invalid_input(self, db, kw):
@@ -384,3 +389,9 @@ class TestRoutes:
         assert dup.status_code == 409 and dup.json()["detail"]["code"] == "name_taken"
         assert _create(api, name="b", scopes=["admin"]).status_code == 400
         assert _create(api, name="c", token="x").status_code == 422
+
+
+def test_create_requires_explicit_projects(api):
+    body = {"name": "no-projects", "scopes": ["read"]}
+    resp = api.post("/api/workspace/clients", json=body, headers=_owner())
+    assert resp.status_code == 422
