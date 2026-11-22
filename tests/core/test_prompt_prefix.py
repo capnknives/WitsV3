@@ -65,3 +65,19 @@ def test_order_tools_stable_under_shuffle():
         assert prefix_fingerprint(
             [LLMMessage("system", "s"), LLMMessage("user", "u")], shuffled
         ) == prefix_fingerprint([LLMMessage("system", "s"), LLMMessage("user", "u")], TOOLS)
+
+
+def test_fingerprint_hashes_tool_calls_only_when_set():
+    calls = [{"function": {"name": "a", "arguments": {}}}]
+    plain = [LLMMessage("system", "s"), LLMMessage("assistant", "x"), LLMMessage("user", "u")]
+    same = [LLMMessage("system", "s"), LLMMessage("assistant", "x", None, None), plain[-1]]
+    with_calls = [plain[0], LLMMessage("assistant", "x", tool_calls=calls), plain[-1]]
+    assert prefix_fingerprint(plain, TOOLS) == prefix_fingerprint(same, TOOLS)
+    assert prefix_fingerprint(plain, TOOLS) != prefix_fingerprint(with_calls, TOOLS)
+
+
+def test_history_tool_calls_pass_through_build_messages():
+    calls = [{"function": {"name": "a", "arguments": {}}}]
+    history = [{"role": "assistant", "content": "", "tool_calls": calls}]
+    messages = build_messages(SYSTEM, CATALOG, history, "next", None)
+    assert messages[1].tool_calls == calls

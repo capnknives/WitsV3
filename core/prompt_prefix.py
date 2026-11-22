@@ -33,7 +33,12 @@ def _as_message(item: LLMMessage | Mapping[str, str]) -> LLMMessage:
     """Return a history entry as an LLMMessage without altering its text."""
     if isinstance(item, LLMMessage):
         return item
-    return LLMMessage(role=item["role"], content=item["content"], name=item.get("name"))
+    return LLMMessage(
+        role=item["role"],
+        content=item["content"],
+        name=item.get("name"),
+        tool_calls=item.get("tool_calls"),
+    )
 
 
 def _user_text(user_message: str, turn_context: Mapping[str, str] | None) -> str:
@@ -94,7 +99,11 @@ def prefix_fingerprint(messages: Sequence[LLMMessage], tools: list[dict]) -> str
         Hex sha256 of the prefix.
     """
     payload = {
-        "messages": [[m.role, m.content, m.name] for m in messages[:-1]],
+        # Reason: tool_calls are hashed only when set, so older fingerprints are unchanged.
+        "messages": [
+            [m.role, m.content, m.name] + ([m.tool_calls] if m.tool_calls else [])
+            for m in messages[:-1]
+        ],
         "tools": order_tools(tools),
     }
     blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))

@@ -230,3 +230,26 @@ async def test_prefix_fingerprint_equal_across_two_turns():
     assert [t["function"]["name"] for t in first["tools"]] == ["clock", "lookup"]
     assert first["tools"][1]["function"]["parameters"]["additionalProperties"] is False
     assert json.dumps(first["tools"]) == json.dumps(second["tools"])
+
+
+async def test_assistant_tool_calls_precede_replies_including_rejected():
+    orch, llm, _ = _make(
+        [_tools(_call("lookup", '{"term": "sun"}'), _call("nope", {"x": 1})), LLMResponse("Ok.")]
+    )
+    await _run(orch)
+    sent = llm.calls[1]["messages"]
+    assistant = sent[-3]
+    assert assistant.role == "assistant"
+    assert assistant.tool_calls == [
+        {"function": {"name": "lookup", "arguments": {"term": "sun"}}},
+        {"function": {"name": "nope", "arguments": {"x": 1}}},
+    ]
+    assert [m.role for m in sent[-2:]] == ["tool", "tool"]
+    assert "Unknown tool" in sent[-1].content
+
+
+async def test_goal_left_out_when_it_equals_the_message():
+    orch, llm, _ = _make([LLMResponse("Hi.")])
+    await _run(orch, "  hello there ")
+    last = llm.calls[0]["messages"][-1].content
+    assert "goal:" not in last and "documents:" in last

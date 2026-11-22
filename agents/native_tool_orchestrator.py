@@ -12,9 +12,11 @@ from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.native_loop_support import (
     NATIVE_SYSTEM_PROMPT,
     STEP_LIMIT_ERROR,
+    assistant_tool_message,
     build_tool_specs,
     build_turn_context,
     decode_arguments,
+    history_window,
     tool_call_event,
 )
 from core.config import WitsV3Config
@@ -116,9 +118,11 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         messages = build_messages(
             NATIVE_SYSTEM_PROMPT,
             "",
-            react_state["history"][-hist_turns:],
+            history_window(react_state["history"], hist_turns),
             user_input,
-            build_turn_context(goal, react_state["documents_context"], react_state["context"]),
+            build_turn_context(
+                goal, user_input, react_state["documents_context"], react_state["context"]
+            ),
         )
         conv = self.config.conversation
         guard = TurnGuard(conv.max_steps, conv.max_identical_calls, conv.max_schema_retries)
@@ -137,6 +141,9 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             calls = response.tool_calls or []
             stop_message = None
             if calls:
+                # Reason: the model must see what it asked for before each reply, refused
+                # calls included, so it can tell which reply answers which call.
+                messages.append(assistant_tool_message(response.content or "", calls))
                 for tc in calls:
                     verdict = guard.check(tc.get("name"), tc.get("arguments"), self._tool_schemas)
                     if verdict.action == "stop":

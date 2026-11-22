@@ -9,6 +9,7 @@ import json
 import logging
 from typing import Any
 
+from core.llm_interface import LLMMessage
 from core.prompt_prefix import order_tools
 from core.schemas import StreamData
 from core.tool_call_guard import SchemaError, normalise_schema
@@ -85,12 +86,65 @@ def tool_call_event(source: str, tool_name: str, ok: bool) -> StreamData:
     )
 
 
-def build_turn_context(goal: str, documents: str, memory: str) -> dict[str, str]:
+def build_turn_context(goal: str, user_message: str, documents: str, memory: str) -> dict[str, str]:
     """Return the per-turn context in a fixed key order (goal, documents, memory).
 
-    Reason: a stable key order keeps the appended block predictable between turns.
+    Reason: a stable key order keeps the appended block predictable between turns. The
+    goal is left out when it only repeats the user message.
     """
-    context = {"goal": goal, "documents": documents}
+    context: dict[str, str] = {}
+    if goal.strip() != user_message.strip():
+        context["goal"] = goal
+    context["documents"] = documents
     if memory.strip():
         context["memory"] = memory
     return context
+
+
+def assistant_tool_message(content: str, calls: list[dict[str, Any]]) -> LLMMessage:
+    """The assistant turn that made ``calls``, in Ollama's shape, to precede the replies.
+
+    Arguments that are not a JSON object (the guard rejects those) are sent as ``{}``,
+    because Ollama only accepts an object there; the tool reply explains the refusal.
+    """
+    shaped = []
+    for call in calls:
+        try:
+            arguments = decode_arguments(call.get("arguments"))
+        except (ValueError, TypeError, RecursionError):
+            arguments = {}
+        if not isinstance(arguments, dict):
+            arguments = {}
+        shaped.append({"function": {"name": str(call.get("name", "")), "arguments": arguments}})
+    return LLMMessage(role="assistant", content=content or "", tool_calls=shaped)
+
+
+def _role(item: Any) -> str:
+    return item.get("role", "") if isinstance(item, dict) else getattr(item, "role", "")
+
+
+def history_window(history: list[Any], history_turns: int) -> list[Any]:
+    """Trim history in blocks so the kept start stays put between cuts.
+
+    All history is kept until it exceeds ``2 * history_turns`` messages; then the oldest
+    are dropped so ``history_turns`` remain, and that cut point holds until the kept part
+    exceeds the limit again. The start is a pure function of the length, so consecutive
+    turns between cuts send the same first message and Ollama keeps its cached prefix.
+
+    Args:
+        history: Earlier messages, oldest first (dicts or LLMMessage).
+        history_turns: Messages kept right after a cut.
+
+    Returns:
+        The slice of ``history`` to send.
+    """
+    h = max(1, history_turns)
+    excess = len(history) - 2 * h
+    if excess <= 0:
+        return list(history)
+    # Reason: each cut advances the start by h + 1 (from 2h + 1 kept down to h).
+    start = -(-excess // (h + 1)) * (h + 1)
+    # Reason: never keep tool replies without the assistant message that made the calls.
+    while start > 0 and _role(history[start]) == "tool":
+        start -= 1
+    return list(history[start:])
