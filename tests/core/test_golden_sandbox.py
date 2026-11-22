@@ -107,3 +107,81 @@ def test_timeout_cancels_case_and_continues(tmp_path):
     assert "| hangs | 0/1 |" in text and "timeout" in text
     assert "| fine |" in text
     assert code in (0, 1)
+
+
+def _outside_base_config(base: str) -> WitsV3Config:
+    cfg = WitsV3Config()
+    cfg.folders.base = base
+    return cfg
+
+
+def _assert_bases_inside(cfg, sandbox: Path) -> None:
+    for fn in (
+        runtime_paths.base_dir,
+        runtime_paths.inbox_dir,
+        runtime_paths.outbox_dir,
+        runtime_paths.projects_dir,
+    ):
+        assert fn(cfg.folders.base).resolve().is_relative_to(sandbox.resolve())
+
+
+@pytest.mark.parametrize("base", ["/home/owner/WITS", "D:\\WITS", "D:/WITS", "\\\\srv\\share\\w"])
+def test_outside_folders_base_is_moved_into_sandbox(tmp_path, monkeypatch, base):
+    from core.config import load_config
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
+    sandbox = tmp_path / "box"
+    cfg = _outside_base_config(base)
+    assert golden_run.find_escapes(cfg, sandbox)
+    with golden_run.enter_sandbox(cfg, sandbox):
+        assert cfg.folders.base == str(sandbox.resolve() / "var" / "wits_files")
+        _assert_bases_inside(cfg, sandbox)
+        for name in ("inbox", "outbox", "projects"):
+            assert (sandbox / "var" / "wits_files" / name).is_dir()
+        assert not (sandbox / "config.local.yaml").exists()
+        _assert_bases_inside(load_config(), sandbox)
+
+
+def test_unrebased_folders_base_is_refused(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(golden_run, "_rebase_base", lambda config, sandbox: None)
+    with pytest.raises(golden_run.SandboxError, match=r"folders\.base"):
+        with golden_run.enter_sandbox(_outside_base_config("/home/owner/WITS"), tmp_path / "box"):
+            pass
+
+
+def test_unknown_absolute_string_setting_is_an_escape(tmp_path):
+    cfg = WitsV3Config()
+    cfg.llm_interface.default_provider = "/home/owner/secret"  # any free-form string field
+    bad = golden_run.find_escapes(cfg, tmp_path / "box")
+    assert any("default_provider" in b for b in bad)
+    cfg.llm_interface.default_provider = "E:\\elsewhere"
+    assert any("default_provider" in b for b in golden_run.find_escapes(cfg, tmp_path / "box"))
+
+
+def test_urls_and_default_config_are_not_flagged(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
+    assert not golden_run._is_absolute_path("http://localhost:11434")
+    assert golden_run._is_absolute_path("D:\\x") and golden_run._is_absolute_path("/x")
+    sandbox = tmp_path / "box"
+    cfg = WitsV3Config()
+    assert not any("11434" in b or "http" in b for b in golden_run.find_escapes(cfg, sandbox))
+    with golden_run.enter_sandbox(cfg, sandbox):
+        assert golden_run.find_escapes(cfg, sandbox) == []
+
+
+def test_write_file_lands_in_sandbox_not_outside_base(tmp_path, monkeypatch):
+    from tools.file_tools import FileWriteTool
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    sandbox = tmp_path / "box"
+    with golden_run.enter_sandbox(_outside_base_config(str(outside)), sandbox):
+        result = asyncio.run(FileWriteTool().execute("hello.txt", "hi"))
+        assert "rror" not in result, result
+    assert (sandbox / "var" / "wits_files" / "projects" / "hello.txt").read_text() == "hi"
+    assert list(outside.iterdir()) == []
