@@ -167,3 +167,62 @@ def test_new_key_validation(tmp_path):
     f.write_text(ok % "tools_any_of: [x], max_first_result_ms: 5", encoding="utf-8")
     assert load_cases(f)[0].max_first_result_ms == 5
     assert load_cases(f)[0].tools == "any"
+
+
+def _loaded(cid: str) -> GoldenCase:
+    return next(c for c in load_cases(TURNS) if c.id == cid)
+
+
+def _turn(reply: str, *tools: str):
+    return [ev("tool_call", tool_name=t) for t in tools] + [ev("result", content=reply)]
+
+
+def test_tools_default_rules(tmp_path):
+    f = tmp_path / "g.yaml"
+    f.write_text(
+        "- {id: a, message: m, tags: [chat], expect: {forbid_tools: [write_file]}}\n"
+        "- {id: b, message: m, tags: [chat]}\n"
+        "- {id: c, message: m, tags: [chat], expect: {tools: none, forbid_tools: [x]}}\n"
+    )
+    forbid_only, plain, explicit = load_cases(f)
+    assert evaluate(forbid_only, _turn("ok", "python_execute")).passed
+    assert not evaluate(forbid_only, _turn("ok", "write_file")).passed
+    assert not evaluate(plain, _turn("ok", "python_execute")).passed
+    assert not evaluate(explicit, _turn("ok", "python_execute")).passed
+
+
+def test_tools_optional_and_loader_default(tmp_path):
+    opt = case(tools="optional", reply_contains_any=["yes"])
+    assert evaluate(opt, _turn("yes")).passed
+    assert evaluate(opt, _turn("yes", "datetime")).passed
+    assert not evaluate(opt, _turn("no", "datetime")).passed
+    f = tmp_path / "g.yaml"
+    f.write_text(
+        "- {id: a, message: m, tags: [chat], expect: {forbid_tools: [x]}}\n"
+        "- {id: b, message: m, tags: [chat], expect: {tools: none, forbid_tools: [x]}}\n"
+        "- {id: c, message: m, tags: [chat], expect: {tools: sometimes}}\n"
+    )
+    with pytest.raises(ValueError, match="case c"):
+        load_cases(f)
+    f.write_text(
+        "- {id: a, message: m, tags: [chat], expect: {forbid_tools: [x]}}\n"
+        "- {id: b, message: m, tags: [chat], expect: {tools: none, forbid_tools: [x]}}\n"
+    )
+    a, b = load_cases(f)
+    assert (a.tools, b.tools) == ("optional", "none")
+
+
+def test_owner_odd_numbers_script_case():
+    c = _loaded("owner-odd-numbers-script")
+    assert evaluate(c, _turn("for i in range(1, 21, 2): n += 1", "python_execute")).passed
+    assert not evaluate(c, _turn("for i in range(0, 21, 2): n += 1")).passed
+    assert not evaluate(c, _turn("range(1, 21, 2)", "write_file")).passed
+
+
+def test_owner_codebase_look_yourself_case():
+    c = _loaded("owner-codebase-look-yourself")
+    reply = " ".join(["agents"] + ["word"] * 29)
+    assert len(reply.split()) == 30
+    assert evaluate(c, _turn(reply, "list_directory")).passed
+    assert not evaluate(c, _turn(reply)).passed
+    assert not evaluate(c, _turn("I am a helpful assistant with many parts", "read_file")).passed

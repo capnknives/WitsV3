@@ -119,9 +119,16 @@ def _check_case(raw: Any, seen: set[str]) -> GoldenCase:
     unknown = set(expect) - EXPECT_KEYS
     if unknown:
         raise ValueError(f"case {cid}: unknown expect key {sorted(unknown)}")
-    # Reason: tools_any_of alone must not inherit the "none" default, which would contradict it.
-    tools = expect.get("tools", "any" if expect.get("tools_any_of") else "none")
-    if tools not in ("none", "any") and not (
+    # Reason: tools_any_of alone must not inherit the "none" default, which would contradict it;
+    # forbid_tools alone means "anything but these", so other tools are allowed.
+    if expect.get("tools_any_of"):
+        default_tools = "any"
+    elif expect.get("forbid_tools"):
+        default_tools = "optional"
+    else:
+        default_tools = "none"
+    tools = expect.get("tools", default_tools)
+    if tools not in ("none", "any", "optional") and not (
         isinstance(tools, list) and tools and all(isinstance(t, str) for t in tools)
     ):
         raise ValueError(f"case {cid}: bad expect.tools {tools!r}")
@@ -218,6 +225,8 @@ def evaluate(
     if case.tools == "none":
         if seen:
             failures.append(f"tools: expected none, saw {seen}")
+    elif case.tools == "optional":
+        pass
     elif case.tools == "any":
         if not seen:
             failures.append("tools: expected any tool call; not observable or none made")

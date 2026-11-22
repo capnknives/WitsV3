@@ -190,7 +190,7 @@
   history:
     - {role: user, content: "What can you tell me about your codebase wits?"}
     - {role: assistant, content: "WitsV3 is a local-first assistant. The main entry file is run_web.py, which starts a web server and hands each message to the control center agent."}
-  expect: {tools_any_of: [list_directory, read_file], reply_min_words: 40}
+  expect: {tools_any_of: [list_directory, read_file], reply: required, reply_contains_any: ["agents", "core", "tools", "web"]}
 - id: owner-water-wet
   message: "Is water wet?"
   tags: [owner-regression, chat, must-not-route]
@@ -210,7 +210,7 @@
 - id: owner-odd-numbers-script
   message: "What is the proper way to write a small script in python that iterates every odd number into a counter from 0 to 20?"
   tags: [owner-regression, coding]
-  expect: {forbid_tools: [write_file, apply_code_fix], reply: required, reply_contains_any: ["range("]}
+  expect: {forbid_tools: [write_file, apply_code_fix], reply: required, reply_contains_any: ["range(1"]}
 - id: owner-run-self-repair
   message: "Run self repair."
   tags: [owner-regression, repair]
