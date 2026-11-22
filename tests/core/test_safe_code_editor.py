@@ -24,6 +24,26 @@ def test_resolve_within_project_rejects_absolute_outside():
         sce.resolve_within_project(outside)
 
 
+def test_resolve_writable_allows_ordinary_source_file():
+    resolved = sce.resolve_writable_within_project("tools/foo.py")
+    assert resolved == sce.PROJECT_ROOT / "tools" / "foo.py"
+
+
+@pytest.mark.parametrize(
+    "rel",
+    ["Conftest.py", "CONFTEST.PY", "sub/dir/conftest.py", "a/b.pth", ".github/workflows/x.yml"],
+)
+def test_resolve_writable_refuses_implicitly_loaded_files(rel):
+    with pytest.raises(PermissionError):
+        sce.resolve_writable_within_project(rel)
+
+
+@pytest.mark.parametrize("rel", [".ENV", ".git/config", "var/data/x.db", "../escape.py"])
+def test_resolve_writable_refuses_secrets_git_and_runtime_data(rel):
+    with pytest.raises(PermissionError):
+        sce.resolve_writable_within_project(rel)
+
+
 @pytest.mark.asyncio
 async def test_apply_verified_edit_reverts_on_test_failure(tmp_path):
     target = tmp_path / "scratch_module.py"

@@ -126,6 +126,51 @@ def resolve_within_project(file_path: str) -> Path:
     return resolved
 
 
+# Files pytest or Python load implicitly (a planted one runs during the very
+# pytest verification step) and CI workflow config. Matched case-insensitively.
+_IMPLICIT_LOAD_NAMES = frozenset(
+    {
+        "conftest.py",
+        "pytest.ini",
+        "tox.ini",
+        "setup.cfg",
+        "pyproject.toml",
+        "sitecustomize.py",
+        "usercustomize.py",
+    }
+)
+_IMPLICIT_LOAD_DIRS = frozenset({".github"})
+_RUNTIME_DATA_DIR = "var"
+
+
+def resolve_writable_within_project(file_path: str) -> Path:
+    """resolve_within_project plus the write rules of the verified-edit pipeline.
+
+    Also refuses (PermissionError) anything the folder-access never-list refuses
+    for write (secrets, keys, .git), anything under var/ (runtime data), and
+    files pytest/Python load implicitly (conftest.py at any depth, pytest.ini,
+    tox.ini, setup.cfg, pyproject.toml, site/usercustomize.py, *.pth, .github/).
+    """
+    from core.path_access import is_never
+
+    resolved = resolve_within_project(file_path)
+    parts = [part.lower() for part in resolved.relative_to(PROJECT_ROOT).parts]
+    name = parts[-1] if parts else ""
+    if not parts or is_never(resolved, "write"):
+        reason = "a protected or secrets path"
+    elif parts[0] == _RUNTIME_DATA_DIR:
+        reason = "runtime data under var/"
+    elif (
+        name in _IMPLICIT_LOAD_NAMES
+        or name.endswith(".pth")
+        or any(part in _IMPLICIT_LOAD_DIRS for part in parts[:-1])
+    ):
+        reason = "a file pytest or Python loads implicitly"
+    else:
+        return resolved
+    raise PermissionError(f"Refusing to edit {reason}: {resolved}")
+
+
 async def run_pytest(
     test_paths: list[str] | None = None, timeout: float = 120.0
 ) -> tuple[bool, str]:
@@ -203,7 +248,7 @@ async def apply_verified_edit(
     and self-edits to WITS's own code all go through the same guarantee.
     """
     try:
-        resolved = resolve_within_project(file_path)
+        resolved = resolve_writable_within_project(file_path)
     except PermissionError as e:
         return EditResult(success=False, file_path=file_path, message=str(e))
 
@@ -283,7 +328,7 @@ async def apply_verified_patch(
 ) -> EditResult:
     """Apply SEARCH/REPLACE hunks from patch_response, then verify with pytest."""
     try:
-        resolved = resolve_within_project(file_path)
+        resolved = resolve_writable_within_project(file_path)
     except PermissionError as e:
         return EditResult(success=False, file_path=file_path, message=str(e))
 
