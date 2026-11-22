@@ -275,8 +275,12 @@ class TestAudit:
 
 class TestCleanText:
     def test_drops_invisible_keeps_whitespace(self):
-        raw = "a​b‮c\U000e0041d️e\U000e0100f g\x00h\x07i\nj\tk"
-        assert clean_text(raw, 100) == "abcdefghi\nj\tk"
+        raw = "a\u200bb\u202ec\U000e0041d\U000e0100e\u2028f\x00g\x07h\ni\tj"
+        assert clean_text(raw, 100) == "abcdefgh\ni\tj"
+
+    def test_keeps_emoji_presentation_selector(self):
+        # Reason: the contract lists only U+E0100 to U+E01EF; emoji need U+FE0F.
+        assert clean_text("\u2764\ufe0f", 10) == "\u2764\ufe0f"
 
     def test_rejects_over_limit_without_truncating(self):
         assert clean_text("x" * 10, 10) == "x" * 10

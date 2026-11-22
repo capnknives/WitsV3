@@ -5,12 +5,12 @@ import unicodedata
 from .store import WorkspaceError
 
 # Reason: Cc, Cf, Co, Cs and Cn cover zero-width, bidirectional and tag characters, but U+2028 and
-# U+2029 are Zl/Zp, and the variation selectors are Mn, so they are listed explicitly.
+# U+2029 are Zl/Zp, and the supplement variation selectors are Mn, so they are listed explicitly.
+# U+FE00 to U+FE0F stay: the contract does not list them and emoji need them.
 _DROP_CATEGORIES = frozenset({"Cc", "Cf", "Co", "Cs", "Cn"})
 _KEEP = frozenset({"\n", "\t"})
 _EXTRA_DROP_RANGES = (
     (0x2028, 0x2029),
-    (0xFE00, 0xFE0F),  # variation selectors
     (0xE0100, 0xE01EF),  # variation selectors supplement
 )
 
