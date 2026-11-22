@@ -375,6 +375,18 @@ class TurnMetricsSettings(BaseModel):
     retention_days: int = Field(default=30, gt=0, description="Delete older day files")
 
 
+class ConversationSettings(BaseModel):
+    """Per-turn limits for the native tool loop (core/tool_call_guard.py)."""
+
+    max_steps: int = Field(default=8, gt=0, description="Model rounds per turn")
+    max_identical_calls: int = Field(
+        default=2, gt=0, description="Runs allowed for one identical tool call per turn"
+    )
+    max_schema_retries: int = Field(
+        default=1, ge=0, description="Retries per tool after a schema failure"
+    )
+
+
 class WebUISettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the web UI server")
     host: str = Field(
@@ -601,6 +613,7 @@ class WitsV3Config(BaseModel):
     web_ui: WebUISettings = Field(default_factory=WebUISettings)
     workspace: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
     turn_metrics: TurnMetricsSettings = Field(default_factory=TurnMetricsSettings)
+    conversation: ConversationSettings = Field(default_factory=ConversationSettings)
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)

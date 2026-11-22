@@ -32,6 +32,10 @@ web_ui:
 turn_metrics:
   enabled: true
   retention_days: 30
+conversation:
+  max_steps: 8
+  max_identical_calls: 2
+  max_schema_retries: 1
 workspace:
   enabled: false  # needs WITSV3_WEB_TOKEN in .env; the ntfy topic is WITSV3_NTFY_TOPIC in .env
   db_path: var/data/workspace.db
