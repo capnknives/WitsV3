@@ -43,15 +43,15 @@ class DummyLLM(BaseLLMInterface):
 @pytest.fixture
 def rag_env(tmp_path, monkeypatch):
     """Config + memory manager + wired tools operating in temp directories."""
-    # Reason: path_access only exempts an upload corpus under the project's var/ folder.
     monkeypatch.setenv("WITSV3_PROJECT_ROOT", str(tmp_path))
-    docs_dir = tmp_path / "var" / "documents"
+    # Reason: uploads live in <folders.base>/documents (WP F5).
+    docs_dir = tmp_path / "wits" / "documents"
     docs_dir.mkdir(parents=True)
 
     config = WitsV3Config()
+    config.folders.base = str(tmp_path / "wits")
     config.memory_manager.backend = "basic"
     config.memory_manager.memory_file_path = str(tmp_path / "memory.json")
-    config.document_rag.documents_path = str(docs_dir)
     config.document_rag.chunk_size = 200
     config.document_rag.chunk_overlap = 40
     # Reason: SecuritySettings defaults include D:\Downloads; unit tests must stay isolated.

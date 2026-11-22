@@ -114,7 +114,7 @@ def _walk_values(obj, prefix: str = ""):
 
 
 def _base_folder_values(config) -> list[tuple[str, str]]:
-    """The base/inbox/outbox/projects folders as runtime_paths resolves them from config."""
+    """The base folder and its four subfolders as runtime_paths resolves them from config."""
     from core import runtime_paths
 
     base = config.folders.base
@@ -123,6 +123,7 @@ def _base_folder_values(config) -> list[tuple[str, str]]:
         for fn in (
             runtime_paths.base_dir,
             runtime_paths.inbox_dir,
+            runtime_paths.documents_dir,
             runtime_paths.outbox_dir,
             runtime_paths.projects_dir,
         )
@@ -197,6 +198,11 @@ def _rebase_base(config, sandbox: Path) -> None:
     config.folders.base = str(base)
     for name in runtime_paths.BASE_SUBFOLDERS:
         (base / name).mkdir(parents=True, exist_ok=True)
+    # Reason: the document tools read <base>/documents (WP F5), so the seeds go there too.
+    for rel, text in _SEEDS.items():
+        target = base / "documents" / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
 
 
 def _seed_sandbox(sandbox: Path) -> Path:
@@ -265,7 +271,10 @@ def enter_sandbox(config, sandbox: Path) -> Iterator[Path]:
         _rebase(config, sandbox)
         _rebase_base(config, sandbox)
         files = str(sandbox / "files")
-        config.document_rag.documents_path = files
+        # Reason: the same folder as uploads, so start-up logs no old-folder warning.
+        from core import runtime_paths
+
+        config.document_rag.documents_path = str(runtime_paths.documents_dir(config.folders.base))
         config.document_rag.auto_ingest_on_startup = False
         config.security.filesystem_read_roots = [files]
         config.security.document_ingest_roots = [files]

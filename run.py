@@ -22,7 +22,6 @@ import sys
 import time
 import uuid
 import subprocess
-from pathlib import Path
 from typing import Optional, List
 
 from core.config import load_config, WitsV3Config
@@ -187,11 +186,12 @@ class WitsV3System:
 
             # Document RAG: ensure the documents folder exists and optionally
             # ingest new/changed files at startup
+            from core.filesystem_policy import warn_old_documents_path
             from core.runtime_paths import ensure_base_folders
 
             ensure_base_folders(self.config.folders.base)
+            warn_old_documents_path(self.config)
             if self.config.document_rag.enabled:
-                Path(self.config.document_rag.documents_path).mkdir(parents=True, exist_ok=True)
                 if self.config.document_rag.auto_ingest_on_startup:
                     ingest_tool = self.tool_registry.get_tool("ingest_documents")
                     if ingest_tool:

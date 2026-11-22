@@ -238,8 +238,8 @@ class FolderSettings(BaseModel):
         default="var/wits_files",
         description=(
             "The one folder WITS works in. Relative paths resolve under the runtime root; "
-            "absolute paths (for example D:\\WITS) are used as given. inbox, outbox and "
-            "projects are created inside it at start-up."
+            "absolute paths (for example D:\\WITS) are used as given. inbox, documents, "
+            "outbox and projects are created inside it at start-up."
         ),
     )
 
@@ -258,7 +258,7 @@ class SecuritySettings(BaseModel):
     )
     document_ingest_roots: list[str] = Field(
         default_factory=list,
-        description="Additional folders ingest_documents scans besides documents_path and inbox",
+        description="Additional folders ingest_documents scans besides inbox and documents",
     )
     sandbox_mode: str = Field(
         default="off",
@@ -491,7 +491,10 @@ class DocumentRAGSettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the document RAG system")
     documents_path: str = Field(
         default="var/user_files",
-        description="Folder for user RAG files (uploads, PDFs). Not repo docs/.",
+        description=(
+            "Old upload folder, kept so old config files load. Uploads now always go to "
+            "<folders.base>/documents; files left here are not moved or indexed."
+        ),
     )
     chunk_size: int = Field(default=1200, gt=0, description="Target chunk size in characters")
     chunk_overlap: int = Field(

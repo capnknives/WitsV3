@@ -1,0 +1,77 @@
+"""WP F5: uploads live in <folders.base>/documents; the old documents_path is left alone."""
+
+from __future__ import annotations
+
+import logging
+
+import pytest
+from fastapi.testclient import TestClient
+
+from core.filesystem_policy import warn_old_documents_path
+from tests.web.test_web_server import FakeSystem
+from web.server import create_app
+
+
+@pytest.fixture
+def env(tmp_path, monkeypatch):
+    monkeypatch.delenv("WITSV3_WEB_TOKEN", raising=False)
+    monkeypatch.setenv("WITSV3_PROJECT_ROOT", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    old = tmp_path / "old_docs"
+    old.mkdir()
+    (old / "a.md").write_text("old a")
+    (old / "b.md").write_text("old b")
+    system = FakeSystem(tmp_path)
+    system.config.document_rag.documents_path = str(old)
+    return TestClient(create_app(system)), system, tmp_path
+
+
+def test_upload_list_delete_use_base_documents(env):
+    client, _system, tmp = env
+    res = client.post("/api/documents/upload", files={"file": ("notes.txt", b"hi", "text/plain")})
+    assert res.status_code == 200
+    assert (tmp / "wits" / "documents" / "notes.txt").read_bytes() == b"hi"
+    assert [f["name"] for f in client.get("/api/documents").json()["files"]] == ["notes.txt"]
+    assert client.post("/api/documents/delete", json={"name": "notes.txt"}).status_code == 200
+    assert not (tmp / "wits" / "documents" / "notes.txt").exists()
+    assert sorted(p.name for p in (tmp / "old_docs").iterdir()) == ["a.md", "b.md"]
+
+
+def test_old_documents_path_logs_one_warning_with_count(env, caplog):
+    _client, system, tmp = env
+    caplog.set_level(logging.WARNING, logger="WitsV3.FilesystemPolicy")
+    assert warn_old_documents_path(system.config) == 2
+    warnings = [r.getMessage() for r in caplog.records]
+    assert len(warnings) == 1 and "2 file(s)" in warnings[0] and "a.md" not in warnings[0]
+    assert sorted(p.name for p in (tmp / "old_docs").iterdir()) == ["a.md", "b.md"]
+
+
+def test_no_warning_when_old_path_is_empty_or_unset(env, caplog):
+    _client, system, tmp = env
+    caplog.set_level(logging.WARNING, logger="WitsV3.FilesystemPolicy")
+    system.config.document_rag.documents_path = ""
+    assert warn_old_documents_path(system.config) == 0
+    (tmp / "empty").mkdir()
+    system.config.document_rag.documents_path = str(tmp / "empty")
+    assert warn_old_documents_path(system.config) == 0
+    assert caplog.records == []
+
+
+async def test_indexer_reads_documents_and_inbox_not_old_path(env):
+    from core.memory_manager import MemoryManager
+    from tests.core.test_path_access import _EmbedLLM
+    from tools.document_tools import DocumentIngestTool
+
+    _client, system, tmp = env
+    config = system.config
+    for name in ("documents", "inbox"):
+        (tmp / "wits" / name).mkdir(parents=True)
+        (tmp / "wits" / name / f"{name}.md").write_text(f"text in {name}")
+    config.memory_manager.backend = "basic"
+    config.memory_manager.memory_file_path = str(tmp / "memory.json")
+    tool = DocumentIngestTool()
+    tool.set_dependencies(
+        config, _EmbedLLM(), MemoryManager(config=config, llm_interface=_EmbedLLM())
+    )
+    summary = await tool.execute()
+    assert set(summary["searchable_files"]) == {"documents.md", "inbox/inbox.md"}

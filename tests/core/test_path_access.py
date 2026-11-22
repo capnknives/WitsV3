@@ -13,6 +13,7 @@ from core.path_access import Grant, Roots, check, decide
 FAR = 4_000_000_000  # an expiry far in the future
 WIN = Roots(
     inbox=r"D:\WITS\inbox",
+    documents=r"D:\WITS\documents",
     outbox=r"D:\WITS\outbox",
     projects=r"D:\WITS\projects",
     repo=r"C:\Code\WitsV3",
@@ -21,6 +22,7 @@ WIN = Roots(
 )
 POSIX = Roots(
     inbox="/srv/wits/inbox",
+    documents="/srv/wits/documents",
     outbox="/srv/wits/outbox",
     projects="/srv/wits/projects",
     repo="/opt/witsv3",
@@ -58,6 +60,7 @@ def test_rule2_guest_keeps_role_roots_and_cannot_request():
     "folder,allowed",
     [
         ("inbox", {"read", "index"}),
+        ("documents", {"read", "index"}),
         ("outbox", {"read", "write"}),
         ("projects", {"read", "write"}),
     ],
@@ -289,8 +292,8 @@ async def test_indexer_skips_and_counts_protected_files(env, tmp_path):
     from core.memory_manager import MemoryManager
     from tools.document_tools import DocumentIngestTool
 
-    corpus = env.repo / "var" / "user_files"
-    corpus.mkdir(parents=True)
+    corpus = env.base / "documents"
+    corpus.mkdir(parents=True, exist_ok=True)
     (corpus / ".env").write_text("KEY=1")
     (corpus / "notes.md").write_text("hello notes")
     (env.base / "inbox" / "client_secret_x.json").write_text("{}")
@@ -300,7 +303,6 @@ async def test_indexer_skips_and_counts_protected_files(env, tmp_path):
     config.folders.base = str(env.base)
     config.memory_manager.backend = "basic"
     config.memory_manager.memory_file_path = str(tmp_path / "memory.json")
-    config.document_rag.documents_path = str(corpus)
     config.document_rag.file_extensions = [".md", ".json", ".env", ""]
     config.security.document_ingest_roots = [str(env.outside)]
     tool = DocumentIngestTool()
@@ -417,7 +419,7 @@ async def test_relative_base_and_target_anchor_to_project_root_not_cwd(env, tmp_
         await check(elsewhere / "var/wits_files/outbox/b.txt", "write", config=config)
 
 
-async def test_corpus_exception_only_inside_repo_var(env, tmp_path):
+async def test_old_documents_path_is_not_indexed(env, tmp_path):
     from core.config import WitsV3Config
     from core.memory_manager import MemoryManager
     from tools.document_tools import DocumentIngestTool
@@ -436,7 +438,7 @@ async def test_corpus_exception_only_inside_repo_var(env, tmp_path):
         config, _EmbedLLM(), MemoryManager(config=config, llm_interface=_EmbedLLM())
     )
     summary = await tool.execute()
-    assert summary["searchable_files"] == {} and summary["files_skipped_protected"] == 1
+    assert summary["searchable_files"] == {} and summary["files_skipped_protected"] == 0
 
 
 def test_write_verification_uses_the_path_write_file_returned(tmp_path):
@@ -472,3 +474,34 @@ def test_is_never_answers_section_4_alone(tmp_path, name):
     assert pa.is_never(tmp_path / name, "index")
     assert pa.is_never(tmp_path / ".ssh" / "notes.txt", "read")
     assert not pa.is_never(tmp_path / "notes.txt", "write")
+
+
+# ------------------------------------------------------------ WP F5: documents folder
+
+
+@pytest.mark.parametrize("mode,allowed", [("read", True), ("index", True), ("write", False)])
+async def test_documents_folder_reads_and_indexes_never_writes(env, mode, allowed):
+    target = env.base / "documents" / "a.txt"
+    target.parent.mkdir(exist_ok=True)
+    if allowed:
+        assert await check(target, mode, config=env.config) == target.resolve()
+    else:
+        with pytest.raises(PermissionError):
+            await check(target, mode, config=env.config)
+
+
+async def test_write_file_tool_refused_in_documents(env):
+    from tools.file_tools import FileWriteTool
+
+    (env.base / "documents").mkdir(exist_ok=True)
+    result = await FileWriteTool().execute(file_path=str(env.base / "documents/a.txt"), content="x")
+    assert result.startswith("Error:") and not (env.base / "documents" / "a.txt").exists()
+
+
+@pytest.mark.parametrize("name", [".env", "client_secret_x.json"])
+@pytest.mark.parametrize("mode", ["read", "write", "index"])
+def test_never_list_holds_inside_documents(name, mode):
+    d = _win(rf"D:\WITS\documents\{name}", mode, grants=ALL_WIN)
+    assert not d.allowed and not d.requestable
+    d = decide(f"/srv/wits/documents/{name}", mode, "owner", ALL_POSIX, POSIX, now=1000)
+    assert not d.allowed and not d.requestable

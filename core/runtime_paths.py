@@ -66,17 +66,12 @@ def user_files_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
     return runtime_subdir("user_files", root)
 
 
-def documents_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
-    """Deprecated alias for :func:`user_files_dir`."""
-    return user_files_dir(root)
-
-
 def exports_dir(root: str = RUNTIME_ROOT_NAME) -> Path:
     return runtime_subdir("exports", root)
 
 
 DEFAULT_BASE = "var/wits_files"
-BASE_SUBFOLDERS = ("inbox", "outbox", "projects")
+BASE_SUBFOLDERS = ("inbox", "documents", "outbox", "projects")
 
 
 def base_anchor() -> Path:
@@ -100,6 +95,11 @@ def inbox_dir(base: str | None = None) -> Path:
     return base_dir(base) / "inbox"
 
 
+def documents_dir(base: str | None = None) -> Path:
+    """Where uploaded documents live: always ``<folders.base>/documents`` (WP F5)."""
+    return base_dir(base) / "documents"
+
+
 def outbox_dir(base: str | None = None) -> Path:
     return base_dir(base) / "outbox"
 
@@ -109,7 +109,7 @@ def projects_dir(base: str | None = None) -> Path:
 
 
 def ensure_base_folders(base: str | None = None) -> list[Path]:
-    """Create inbox, outbox and projects. Called at start-up, never at import time."""
+    """Create inbox, documents, outbox and projects. Called at start-up, never at import time."""
     folders = [base_dir(base) / name for name in BASE_SUBFOLDERS]
     for folder in folders:
         folder.mkdir(parents=True, exist_ok=True)

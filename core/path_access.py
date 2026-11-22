@@ -101,6 +101,7 @@ class Roots:
     home: str = ""
     windows: bool = False
     role_roots: tuple[str, ...] = ()
+    documents: str = ""
 
 
 async def _no_grants() -> Sequence[Grant]:
@@ -237,6 +238,8 @@ def decide(
 
     for root, modes, name in (
         (roots.inbox, ("read", "index"), "inbox"),
+        # Reason: only the owner's upload and delete routes change documents, never a tool.
+        (roots.documents, ("read", "index"), "documents"),
         (roots.outbox, ("read", "write"), "outbox"),
         (roots.projects, ("read", "write"), "projects"),
     ):
@@ -315,6 +318,7 @@ def roots_for(config: Any | None, role: str = "owner") -> Roots:
     role_roots = _role_roots(role, config)
     return Roots(
         inbox=str((base / "inbox").resolve()),
+        documents=str((base / "documents").resolve()),
         outbox=str((base / "outbox").resolve()),
         projects=str((base / "projects").resolve()),
         repo=str(fp.project_read_root()),
@@ -399,8 +403,8 @@ def enforce(
     raise PermissionError(f"Refusing to {mode} {resolved}: {decision.reason}")
 
 
-def _base_roots(roots: Roots) -> tuple[str, str, str]:
-    return roots.inbox, roots.outbox, roots.projects
+def _base_roots(roots: Roots) -> tuple[str, ...]:
+    return roots.inbox, roots.documents, roots.outbox, roots.projects
 
 
 async def check(
@@ -422,37 +426,20 @@ async def _load_grants() -> Sequence[Grant]:
 class IndexGate:
     """Per-root and per-file index decisions for the document indexer."""
 
-    def __init__(
-        self,
-        roots: Roots,
-        grants: Sequence[Grant],
-        corpus: Path | None,
-        runtime_var: Path | None = None,
-    ) -> None:
+    def __init__(self, roots: Roots, grants: Sequence[Grant]) -> None:
         self.roots = roots
         self.grants = grants
-        resolved = corpus.resolve() if corpus else None
-        var = runtime_var.resolve() if runtime_var else None
-        # Reason: the never-list-only exception is for the upload corpus under the repo's
-        # var/; a documents_path anywhere else is just another root with the full check.
-        inside_var = resolved is not None and var is not None and resolved.is_relative_to(var)
-        self.corpus = resolved if inside_var else None
         self.skipped = 0
 
     @classmethod
-    async def load(cls, config: Any | None, corpus: Path | None = None) -> IndexGate:
-        return cls(roots_for(config), await _load_grants(), corpus, _anchor() / "var")
-
-    def _in_corpus(self, path: Path) -> bool:
-        return self.corpus is not None and path.is_relative_to(self.corpus)
+    async def load(cls, config: Any | None) -> IndexGate:
+        return cls(roots_for(config), await _load_grants())
 
     def allows_root(self, root: Path) -> bool:
         try:
             resolved = root.resolve()
         except (OSError, RuntimeError, ValueError):
             return False
-        if self._in_corpus(resolved):
-            return never_reason(resolved, "index", self.roots) is None
         return decide(resolved, "index", "owner", self.grants, self.roots).allowed
 
     def allows_file(self, path: Path) -> bool:
@@ -462,12 +449,7 @@ class IndexGate:
         except (OSError, RuntimeError, ValueError):
             self.skipped += 1
             return False
-        # Reason: the upload corpus (document_rag.documents_path) is filled by the owner's
-        # own upload route, so only the never-list applies there; symlinks out of it do not.
-        if self._in_corpus(resolved):
-            ok = never_reason(resolved, "index", self.roots) is None
-        else:
-            ok = decide(resolved, "index", "owner", self.grants, self.roots).allowed
+        ok = decide(resolved, "index", "owner", self.grants, self.roots).allowed
         if not ok:
             self.skipped += 1
         return ok

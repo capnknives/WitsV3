@@ -149,8 +149,10 @@ def test_list_has_live_grant_and_base_folders_then_revoke_removes_it(client, tmp
     grant_id = _grant(client, tmp_path)
     data = client.get(LIST, headers=_owner()).json()
     assert [g["id"] for g in data["grants"] if g["live"]] == [grant_id]
-    assert [b["name"] for b in data["base_folders"]] == ["inbox", "outbox", "projects"]
-    assert [b["mode"] for b in data["base_folders"]] == ["index", "read_write", "read_write"]
+    names = ["inbox", "documents", "outbox", "projects"]
+    assert [b["name"] for b in data["base_folders"]] == names
+    modes = ["index", "index", "read_write", "read_write"]
+    assert [b["mode"] for b in data["base_folders"]] == modes
     client.post(f"{LIST}/{grant_id}/revoke", headers=_owner())
     after = client.get(LIST, headers=_owner()).json()
     assert [g for g in after["grants"] if g["live"]] == []
