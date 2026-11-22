@@ -138,6 +138,7 @@ $("#token-form").addEventListener("submit", async (e) => {
       $("#token-modal").hidden = true;
       addAssistantMsg("✅ Token accepted — you're connected.");
       checkStatus();
+      loadSlashCommands(true);
     } else if (res.status === 401) {
       errEl.textContent = "Token rejected — it doesn't match WITSV3_WEB_TOKEN on the server.";
       errEl.hidden = false;
@@ -464,7 +465,10 @@ function renderSlashMenu(rows) {
   slashMenuIndex = 0;
   slashMenuEl.innerHTML = "";
   if (!rows.length) {
-    slashMenuEl.appendChild(el("div", "slash-empty", "No matching commands"));
+    const msg = slashCommands.length
+      ? "No matching commands"
+      : "Commands could not be loaded. Check your sign-in.";
+    slashMenuEl.appendChild(el("div", "slash-empty", msg));
     slashMenuEl.hidden = false;
     return;
   }
@@ -576,16 +580,27 @@ function openPanelTab(tab) {
   }
 }
 
-async function loadSlashCommands() {
-  try {
-    const res = await api("/api/commands");
-    if (res.ok) {
-      const body = await res.json();
-      slashCommands = body.commands || [];
+let slashLoading = null;
+let slashLastTry = 0;
+
+function loadSlashCommands(force = false) {
+  // Reason: one request at a time; a forced reload (new token) waits for any stale one.
+  if (slashLoading) return force ? slashLoading.then(() => loadSlashCommands()) : slashLoading;
+  slashLastTry = Date.now();
+  slashLoading = (async () => {
+    try {
+      const res = await api("/api/commands");
+      if (res.ok) {
+        const body = await res.json();
+        slashCommands = body.commands || [];
+      }
+    } catch (e) {
+      /* handled by api() */
+    } finally {
+      slashLoading = null;
     }
-  } catch (e) {
-    /* handled by api() */
-  }
+  })();
+  return slashLoading;
 }
 
 inputEl.addEventListener("keydown", (e) => {
@@ -629,6 +644,12 @@ inputEl.addEventListener("input", () => {
   }
   slashReplaceStart = ctx.start;
   renderSlashMenu(filterSlashRows(ctx.query));
+  if (!slashCommands.length && !slashLoading && Date.now() - slashLastTry > 3000) {
+    loadSlashCommands().then(() => {
+      const c = slashQueryAtCursor();
+      if (c && slashCommands.length) renderSlashMenu(filterSlashRows(c.query));
+    });
+  }
 });
 
 inputEl.addEventListener("blur", () => {
