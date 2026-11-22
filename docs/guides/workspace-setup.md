@@ -43,7 +43,8 @@ Tailscale links your PC, phone and laptop into one private network. Tailscale ha
 & 'C:\Program Files\Tailscale\tailscale.exe' status
 (& 'C:\Program Files\Tailscale\tailscale.exe' status --json | ConvertFrom-Json).Self.DNSName
 ```
-6. Write down all three: the full tailnet name (it looks like `<your-pc>.<tailnet>.ts.net`, without the dot at the end), the short machine name and the 100.x address.
+6. Tailscale shows up as a VPN on the phone and the PC. It only carries traffic between your own devices, unless you turn on an exit node. Leave exit nodes off, and switch Tailscale off on a device whenever you do not want a VPN active there. The Inbox is only reachable from outside the house while it is on.
+7. Write down all three: the full tailnet name (it looks like `<your-pc>.<tailnet>.ts.net`, without the dot at the end), the short machine name and the 100.x address.
 
 ## 4. Turn the workspace on
 
@@ -160,7 +161,8 @@ claude mcp add --transport http wits-workspace http://<your-pc>.<tailnet>.ts.net
 ## 8. The Inbox on your phone
 
 1. Turn Tailscale on in the phone app.
-2. Open `http://<your-pc>.<tailnet>.ts.net:8000/` in your phone browser. Sign in with the owner token once. Use the tailnet address, not the home Wi-Fi address, because the browser remembers the token for each address.
+2. Open `http://<your-pc>.<tailnet>.ts.net:8000/?owner=1` in your phone browser. A token box appears. Enter the owner token once. Use the tailnet address, not the home Wi-Fi address, because the browser remembers the token for each address. A sign-in link with the token in it does not work here: WITS only accepts those on the PC itself.
+   To avoid typing the token, double-click `show_owner_token_qr.bat` in the project folder on the PC, scan the QR code with the phone camera, copy the text and paste it into the box. Press Enter on the PC afterwards to clear the window.
 3. Open `http://<your-pc>.<tailnet>.ts.net:8000/inbox`.
 4. Add the Inbox to your home screen. On iPhone, use Share, then Add to Home Screen. On Android, use the browser menu, then Add to home screen.
 5. Read each card. It shows who asked, the project, the title and text. If the text looked like an injection attempt, the card shows a warning.
