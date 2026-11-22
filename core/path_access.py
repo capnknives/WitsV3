@@ -17,6 +17,7 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
+from functools import lru_cache
 from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 from typing import Any, Literal
 
@@ -61,12 +62,38 @@ _NEVER_FILES = (
     "*.kdbx",
     "id_rsa*",
     "id_ed25519*",
+    "id_ecdsa*",
+    "id_dsa*",
+    "credentials",
     "client_secret*.json",
     "*credentials*.json",
     "token*.json",
     "*.keystore",
     "secrets.*",
+    ".netrc",
+    "_netrc",
+    ".pgpass",
+    ".npmrc",
+    ".pypirc",
+    ".git-credentials",
+    "*.ppk",
+    "*.jks",
+    "*.ovpn",
+    "*service-account*.json",
+    "*service_account*.json",
+    "*.kdb",
+    "wallet.dat",
+    ".htpasswd",
 )
+# Reason: password lists, not source or policy docs (password_reset.py, password-policy.md).
+_PASSWORD_NAME = re.compile(
+    r"^passwords?([^.]*)?(\.(txt|csv|tsv|xls|xlsx|json|doc|docx|pdf|xml|yaml|yml))?$"
+)
+# Reason: WITS opens its own databases directly; no tool may read, write or index them.
+_RUNTIME_PRIVATE = (("var", "data"), ("var", "secrets"))
+_SNIFF_BYTES = 4096
+_KEY_HEADER = re.compile(rb"-----BEGIN[^\r\n]*PRIVATE KEY|PuTTY-User-Key-File-")
+_UTF16_BOMS = (b"\xff\xfe", b"\xfe\xff")
 _WINDOWS_TREES = frozenset({"windows", "program files", "program files (x86)"})
 _RESERVED_DEVICE = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.IGNORECASE)
 _warned_grants: set[str] = set()
@@ -102,6 +129,10 @@ class Roots:
     windows: bool = False
     role_roots: tuple[str, ...] = ()
     documents: str = ""
+    # Reason: <repo>/var is refused except the base folders and these (section 4).
+    var_allow: tuple[str, ...] = ()
+    # Reason: the configured data folder and workspace store, wherever they live.
+    private: tuple[str, ...] = ()
 
 
 async def _no_grants() -> Sequence[Grant]:
@@ -197,6 +228,9 @@ def never_reason(path: str | PurePath, mode: Mode, roots: Roots) -> str | None:
     system = _system_reason(p, roots)
     if system:
         return system
+    runtime = _runtime_reason(p, roots)
+    if runtime:
+        return runtime
     names = [part.lower() for part in p.parts[1:]]
     for i, name in enumerate(names):
         if name in _NEVER_DIRS:
@@ -207,8 +241,29 @@ def never_reason(path: str | PurePath, mode: Mode, roots: Roots) -> str | None:
             return "a browser profile folder"
         if name == ".git" and mode != "read":
             return "the .git folder (read only)"
-    if names and any(fnmatchcase(names[-1], pattern) for pattern in _NEVER_FILES):
+    if names and (
+        any(fnmatchcase(names[-1], pattern) for pattern in _NEVER_FILES)
+        or _PASSWORD_NAME.match(names[-1])
+    ):
         return "a secrets file"
+    return None
+
+
+def _runtime_reason(p: PurePath, roots: Roots) -> str | None:
+    """WITS's own runtime files: all of ``<repo>/var`` but the allowed folders, and
+    the configured data folder (``roots.private``)."""
+    w = roots.windows
+    if any(_within(p, d, w) for d in roots.private):
+        return "WITS runtime data (configured data folder)"
+    if not roots.repo:
+        return None
+    var = _pure(roots.repo, w) / "var"
+    for sub in _RUNTIME_PRIVATE:
+        if _within(p, str(var.parent.joinpath(*sub)), w):
+            return f"WITS runtime data ({'/'.join(sub)})"
+    allowed = (*_base_roots(roots), *roots.var_allow)
+    if _within(p, str(var), w) and not any(_within(p, a, w) for a in allowed):
+        return "WITS runtime data (var)"
     return None
 
 
@@ -314,18 +369,61 @@ def _role_roots(role: Any, config: Any | None) -> tuple[str, ...]:
 
 def roots_for(config: Any | None, role: str = "owner") -> Roots:
     """Build Roots from config (``folders.base``) and the live repo location."""
-    base = _base_dir(config)
     role_roots = _role_roots(role, config)
+    config = config or _load_config_quietly()
+    base = _base_dir(config)
+    repo = _repo_root()
     return Roots(
         inbox=str((base / "inbox").resolve()),
         documents=str((base / "documents").resolve()),
         outbox=str((base / "outbox").resolve()),
         projects=str((base / "projects").resolve()),
-        repo=str(fp.project_read_root()),
+        repo=repo,
         home=_home(),
         windows=os.name == "nt",
         role_roots=role_roots,
+        # Reason: the guest export route writes to the runtime exports folder, and the
+        # coding agent writes generated projects under the runtime workspace folder.
+        var_allow=(
+            str(base.resolve()),
+            str(runtime_paths.exports_dir().resolve()),
+            str(runtime_paths.workspace_dir().resolve()),
+        ),
+        private=_private_dirs(config, repo, base.resolve()),
     )
+
+
+@lru_cache(maxsize=8)
+def _resolved(path: Path) -> str:
+    return str(_resolve(path))
+
+
+def _repo_root() -> str:
+    """The repo root, resolved like the paths it is compared with (symlink, 8.3 name)."""
+    return _resolved(fp.PROJECT_ROOT)
+
+
+def _private_dirs(config: Any | None, repo: str, base: Path) -> tuple[str, ...]:
+    """The configured data folder and workspace store, which may live outside the repo."""
+    runtime = getattr(getattr(config, "runtime_paths", None), "root", None)
+    found = [runtime_paths.data_dir(runtime if isinstance(runtime, str) else "var")]
+    db = getattr(getattr(config, "workspace", None), "db_path", None)
+    if isinstance(db, str) and db.strip():
+        store = Path(db).expanduser()
+        store = store if store.is_absolute() else runtime_paths.project_root() / store
+        found.append(store.parent)
+    out: list[str] = []
+    for folder in found:
+        try:
+            resolved = folder.resolve()
+        except (OSError, RuntimeError, ValueError):
+            continue
+        # Reason: a store sitting directly in the repo, base or home must not refuse all of it.
+        wide = (Path(repo), base, Path(_home() or "/"))
+        if any(w == resolved or w.is_relative_to(resolved) for w in wide):
+            continue
+        out.append(str(resolved))
+    return tuple(out)
 
 
 def _home() -> str:
@@ -346,12 +444,10 @@ def is_never(path: str | Path, mode: Mode) -> bool:
         return True
     try:
         resolved = _resolve(path)
+        roots = roots_for(None)
     except (ValueError, RuntimeError, OSError, TypeError):
         return True
-    return (
-        never_reason(resolved, mode, Roots("", "", "", "", home=_home(), windows=windows))
-        is not None
-    )
+    return never_reason(resolved, mode, roots) is not None
 
 
 def _resolve(path: str | Path) -> Path:
@@ -450,6 +546,28 @@ class IndexGate:
             self.skipped += 1
             return False
         ok = decide(resolved, "index", "owner", self.grants, self.roots).allowed
+        if ok and has_private_key(resolved):
+            ok = False
         if not ok:
             self.skipped += 1
         return ok
+
+
+def has_private_key(path: Path) -> bool:
+    """True when the first 4 KiB hold a private-key header.
+
+    Unreadable or non-regular files count as True. UTF-16 text (PowerShell ``>``) is
+    searched again with its NUL bytes removed.
+    """
+    try:
+        if not path.is_file():
+            return True
+        with open(path, "rb") as handle:
+            head = handle.read(_SNIFF_BYTES)
+    except (OSError, ValueError):
+        return True
+    if _KEY_HEADER.search(head):
+        return True
+    if head.startswith(_UTF16_BOMS) or b"\x00" in head:
+        return _KEY_HEADER.search(head.replace(b"\x00", b"")) is not None
+    return False

@@ -25,7 +25,6 @@ POSIX = Roots(
 NAMES = ["passwords.txt", ".netrc", "key.ppk", "service-account.json"]
 
 
-@pytest.mark.xfail(strict=True, reason="RT-6: secret-bearing names are not in the never-list")
 @pytest.mark.parametrize("mode", ["index", "read"])
 @pytest.mark.parametrize("name", NAMES)
 def test_secret_names_in_inbox_refused(name, mode):
@@ -33,15 +32,11 @@ def test_secret_names_in_inbox_refused(name, mode):
     assert not d.allowed
 
 
-@pytest.mark.xfail(strict=True, reason="RT-6: var/data/workspace.db in repo is readable by owner")
 def test_workspace_db_read_refused():
     d = decide("/opt/witsv3/var/data/workspace.db", "read", "owner", [], POSIX, now=1000)
     assert not d.allowed
 
 
-@pytest.mark.xfail(
-    strict=True, reason="RT-6: private-key content under an innocent name is indexed"
-)
 def test_private_key_content_not_indexed(tmp_path):
     inbox = tmp_path / "inbox"
     inbox.mkdir()
