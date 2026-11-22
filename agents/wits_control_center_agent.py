@@ -4,7 +4,6 @@ WITS Control Center Agent for WitsV3.
 The main entry point that handles user input and determines response strategy.
 """
 
-import json
 import re
 import uuid
 from collections.abc import AsyncGenerator
@@ -233,12 +232,12 @@ User input: {user_input}
 
             yield self.stream_thinking(f"Intent analysis: {intent_analysis.get('type', 'unknown')}")
 
-            # Store intent analysis
-            await self.store_memory(
-                content=f"Intent analysis: {json.dumps(intent_analysis)}",
-                segment_type="INTENT_ANALYSIS",
-                importance=0.7,
-                metadata={"session_id": session_id},
+            # Reason: per-turn routing JSON is noise in long-term memory; log it only.
+            self.logger.debug(
+                "Intent: type=%s complexity=%s response=%s",
+                intent_analysis.get("type"),
+                intent_analysis.get("complexity"),
+                intent_analysis.get("suggested_response"),
             )
 
             # Handle the response based on intent
@@ -742,35 +741,19 @@ ASSISTANT:"""
             else:
                 self.logger.warning("Book writing agent requested but not available")
 
-        # Check for coding related tasks
-        from agents.routing_classifier import is_code_introspection_not_authoring
+        # Coding agent only for real authoring requests, never a passing code noun.
+        from agents.routing_classifier import (
+            is_code_authoring_request,
+            is_code_introspection_not_authoring,
+        )
 
         if is_code_introspection_not_authoring(goal_statement):
             self.logger.info("Code introspection request — skip coding agent")
             return None
 
-        coding_keywords = [
-            "code",
-            "program",
-            "develop",
-            "script",
-            "function",
-            "class",
-            "module",
-            "api",
-            "software",
-            "application",
-            "app",
-            "website",
-        ]
-
-        if _matches(coding_keywords):
-            self.logger.info("Coding task detected with keyword match")
-            if "coding" in self.specialized_agents and self.specialized_agents["coding"]:
-                self.logger.info("Selected coding agent for task")
-                return self.specialized_agents["coding"]
-            else:
-                self.logger.warning("Coding agent requested but not available")
+        if is_code_authoring_request(goal_statement) and self.specialized_agents.get("coding"):
+            self.logger.info("Code authoring request — selected coding agent")
+            return self.specialized_agents["coding"]
 
         # No specialized agent matched
         self.logger.info("No specialized agent matched for this task")
