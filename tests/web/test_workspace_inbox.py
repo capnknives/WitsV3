@@ -3,13 +3,14 @@
 import re
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from core.config import WitsV3Config, WorkspaceSettings
-from core.workspace import approvals, clients
+from core.workspace import approvals, clients, folder_access
 from core.workspace.store import WorkspaceError
 from web import workspace_routes
 from web.workspace_routes import get_db, register_workspace
@@ -178,3 +179,42 @@ def test_inbox_js_has_no_html_sinks():
     for sink in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"):
         assert sink not in source, sink
     assert re.search(r"\bsetAttribute\b|\.style\b|\.href\b|\.src\b", source) is None
+
+
+def test_page_has_folders_section_and_button_labels():
+    source = (STATIC / "inbox.html").read_text(encoding="utf-8") + (STATIC / "inbox.js").read_text(
+        encoding="utf-8"
+    )
+    for text in ("Folders WITS can use", "Approve 30 days", "One day", "Deny", "Revoke"):
+        assert text in source, text
+    for text in ("Read files in this folder", "Read and save files in this folder"):
+        assert text in source
+
+
+def test_no_html_sinks_in_any_inbox_script():
+    for path in STATIC.glob("inbox*.js"):
+        source = path.read_text(encoding="utf-8")
+        for sink in ("innerHTML", "outerHTML", "insertAdjacentHTML"):
+            assert sink not in source, (path.name, sink)
+
+
+def test_folder_request_carries_path_mode_reason(client, tmp_path):
+    folder = tmp_path / "docs"
+    folder.mkdir()
+    cfg = SimpleNamespace(folders=SimpleNamespace(base=str(tmp_path / "base")), security=None)
+    _seed(client, title="Plain", body="other")
+
+    async def ask():
+        return await folder_access.request(
+            get_db(), str(folder), "read_write", "to file", config=cfg
+        )
+
+    res = _run(client, ask)
+    assert res["status"] == "pending"
+    items = client.get(LIST, headers=_owner()).json()["approvals"]
+    by_id = {i["id"]: i for i in items}
+    folder_item = by_id[res["approval_id"]]
+    assert folder_item["folder"] == {"path": str(folder), "mode": "read_write", "reason": "to file"}
+    assert folder_item["options"] == ["approve", "one day", "deny"]
+    plain = next(i for i in items if i["id"] != res["approval_id"])
+    assert "folder" not in plain

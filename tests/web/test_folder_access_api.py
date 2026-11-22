@@ -143,3 +143,14 @@ async def test_internal_client_cannot_authenticate_at_mcp(monkeypatch, tmp_path)
             )
         for presented in (token, "internal", "x", "wits_internal_" + "A" * 43):
             assert (await post(app, token=presented)).status_code == 401
+
+
+def test_list_has_live_grant_and_base_folders_then_revoke_removes_it(client, tmp_path):
+    grant_id = _grant(client, tmp_path)
+    data = client.get(LIST, headers=_owner()).json()
+    assert [g["id"] for g in data["grants"] if g["live"]] == [grant_id]
+    assert [b["name"] for b in data["base_folders"]] == ["inbox", "outbox", "projects"]
+    assert [b["mode"] for b in data["base_folders"]] == ["index", "read_write", "read_write"]
+    client.post(f"{LIST}/{grant_id}/revoke", headers=_owner())
+    after = client.get(LIST, headers=_owner()).json()
+    assert [g for g in after["grants"] if g["live"]] == []
