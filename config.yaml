@@ -33,6 +33,7 @@ turn_metrics:
   enabled: true
   retention_days: 30
 conversation:
+  front_door: legacy  # legacy (intent router) or native (owner turns go to the native tool loop)
   max_steps: 8
   max_identical_calls: 2
   max_schema_retries: 1
