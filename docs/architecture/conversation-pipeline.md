@@ -120,6 +120,9 @@ Code: `core/untrusted_content.py`, used by `agents/native_tool_orchestrator.py`.
   text stays in history (and an answer that quotes it is replayed as assistant text).
   The legacy json_react path is neither marked nor gated. Auto-injected context
   (memory recall, the documents line) is not marked.
+  Reading is still allowed after a taint, so a turn can read a file and then put
+  its contents in a `web_search` query; blocking that is a separate decision.
+  `list_directory` and `find_tools` output is not marked.
 
 ## Smoke testing
 
