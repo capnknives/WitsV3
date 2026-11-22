@@ -95,10 +95,25 @@ Refused for every mode, even with a grant, and never requestable:
 - Any file whose name matches, case-insensitively: `.env`, `.env.*`, `*.pem`,
   `*.key`, `*.pfx`, `*.p12`, `*.kdbx`, `id_rsa*`, `id_ed25519*`,
   `client_secret*.json`, `*credentials*.json`, `token*.json`, `*.keystore`,
-  `secrets.*`.
+  `secrets.*`, `.netrc`, `_netrc`, `.pgpass`, `.npmrc`, `.pypirc`,
+  `.git-credentials`, `*.ppk`, `*.jks`, `*.ovpn`, `password*.*`, `passwords*`,
+  `*service-account*.json`, `*service_account*.json`, `*.kdb`, `wallet.dat`,
+  `.htpasswd`. `password*.*` is deliberate, so a document such as
+  `password-policy.md` is refused too; rename it to index it.
+- Anything under the repo's `var/data` or `var/secrets`: WITS's own databases
+  and runtime state. WITS opens these directly, never through `check`, so no
+  tool can read, write or index them. `var/wits_files` (the default
+  `folders.base`) is not affected.
 
 The file-name rule applies inside the base folders and the repo too. The
 indexer skips such files and counts them in its summary.
+
+The indexer also reads the first 4096 bytes of each file it would index and
+skips it, counted the same way, when they hold a private-key header
+(`-----BEGIN` followed by `PRIVATE KEY` on the same line, which covers RSA,
+EC, OPENSSH, ENCRYPTED and PGP keys) or `PuTTY-User-Key-File-`. A file it
+cannot read is skipped. Certificates (`-----BEGIN CERTIFICATE-----`) stay
+indexable. This content check applies to indexing only; `decide()` stays pure.
 
 ## 5. Requests and grants
 

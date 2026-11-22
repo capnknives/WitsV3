@@ -518,3 +518,128 @@ def test_guests_do_not_gain_the_documents_folder(env):
             pa.enforce(doc, "read", role=role, config=env.config)
     inbox = env.base / "inbox" / "a.txt"
     assert pa.enforce(inbox, "read", role="family_adult", config=env.config) == inbox.resolve()
+
+
+# ------------------------------------------------------------ RT-6 widened never-list
+
+NEW_NEVER = [
+    ".netrc",
+    "_NETRC",
+    ".pgpass",
+    ".npmrc",
+    ".pypirc",
+    ".git-credentials",
+    "key.ppk",
+    "store.jks",
+    "home.ovpn",
+    "passwords.txt",
+    "Passwords",
+    "password.csv",
+    "my-service-account.json",
+    "gcp_service_account_prod.json",
+    "old.kdb",
+    "wallet.dat",
+    ".htpasswd",
+]
+
+
+@pytest.mark.parametrize("name", NEW_NEVER)
+@pytest.mark.parametrize("mode", ["read", "write", "index"])
+def test_widened_secret_names_are_never(name, mode):
+    for path in (f"/srv/wits/inbox/{name}", f"/opt/witsv3/{name}", f"/data/{name}"):
+        d = _posix(path, mode, grants=ALL_POSIX)
+        assert not d.allowed and not d.requestable, path
+
+
+# Reason: "password*.*" is in the list by design, so a policy document named
+# password-policy.md is refused too; renaming it is the owner's way out.
+def test_password_policy_document_is_refused_by_design():
+    assert not _posix("/srv/wits/inbox/password-policy.md", "index").allowed
+
+
+@pytest.mark.parametrize(
+    "name", ["keynote.txt", "monkey.txt", "report.json", "secretary-notes.md", "keys.md"]
+)
+def test_ordinary_names_stay_allowed(name):
+    assert _posix(f"/srv/wits/inbox/{name}", "index").allowed
+    assert _win(rf"D:\WITS\inbox\{name}", "index").allowed
+
+
+@pytest.mark.parametrize("sub", ["data", "secrets", "DATA"])
+@pytest.mark.parametrize("mode", ["read", "write", "index"])
+def test_repo_runtime_data_is_never(sub, mode):
+    d = _win(rf"C:\Code\WitsV3\var\{sub}\workspace.db", mode, grants=ALL_WIN)
+    assert not d.allowed and not d.requestable
+    if sub != "DATA":  # POSIX names are case-sensitive
+        d = _posix(f"/opt/witsv3/var/{sub}/workspace.db", mode, grants=ALL_POSIX)
+        assert not d.allowed and not d.requestable
+
+
+def test_default_base_under_var_wits_files_stays_allowed():
+    base = "/opt/witsv3/var/wits_files"
+    roots = Roots(
+        inbox=f"{base}/inbox",
+        documents=f"{base}/documents",
+        outbox=f"{base}/outbox",
+        projects=f"{base}/projects",
+        repo="/opt/witsv3",
+        home="/home/andy",
+    )
+    assert decide(f"{base}/inbox/a.txt", "index", "owner", (), roots, now=1000).allowed
+    assert decide(f"{base}/projects/a.txt", "write", "owner", (), roots, now=1000).allowed
+    assert decide("/opt/witsv3/var/database.md", "read", "owner", (), roots, now=1000).allowed
+
+
+def _gate(tmp_path):
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    roots = Roots(
+        inbox=str(inbox.resolve()),
+        documents=str(tmp_path / "d"),
+        outbox=str(tmp_path / "o"),
+        projects=str(tmp_path / "p"),
+        repo=str(tmp_path / "r"),
+        home=str(tmp_path / "h"),
+    )
+    return inbox, pa.IndexGate(roots, [])
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        "-----BEGIN RSA PRIVATE KEY-----",
+        "-----BEGIN EC PRIVATE KEY-----",
+        "-----BEGIN ENCRYPTED PRIVATE KEY-----",
+        "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+        "PuTTY-User-Key-File-3: ssh-ed25519",
+    ],
+)
+def test_index_gate_sniffs_private_key_headers(tmp_path, head):
+    inbox, gate = _gate(tmp_path)
+    f = inbox / "notes.txt"
+    f.write_text(f"intro line\n{head}\nabc\n")
+    assert not gate.allows_file(f) and gate.skipped == 1
+    assert decide(f.resolve(), "index", "owner", (), gate.roots).allowed  # decide stays pure
+
+
+def test_index_gate_allows_certificates_and_late_or_split_headers(tmp_path):
+    inbox, gate = _gate(tmp_path)
+    cert = inbox / "chain.txt"
+    cert.write_text("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n")
+    split = inbox / "split.txt"
+    split.write_text("-----BEGIN\nPRIVATE KEY is a phrase on another line\n")
+    late = inbox / "late.txt"
+    late.write_bytes(b"x" * 5000 + b"-----BEGIN RSA PRIVATE KEY-----\n")
+    assert all(gate.allows_file(f) for f in (cert, split, late)) and gate.skipped == 0
+
+
+def test_index_gate_refuses_unreadable_file(tmp_path, monkeypatch):
+    inbox, gate = _gate(tmp_path)
+    f = inbox / "a.txt"
+    f.write_text("hello")
+
+    def boom(*_a, **_k):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("builtins.open", boom)
+    assert not gate.allows_file(f) and gate.skipped == 1

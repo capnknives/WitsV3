@@ -66,7 +66,27 @@ _NEVER_FILES = (
     "token*.json",
     "*.keystore",
     "secrets.*",
+    ".netrc",
+    "_netrc",
+    ".pgpass",
+    ".npmrc",
+    ".pypirc",
+    ".git-credentials",
+    "*.ppk",
+    "*.jks",
+    "*.ovpn",
+    "password*.*",
+    "passwords*",
+    "*service-account*.json",
+    "*service_account*.json",
+    "*.kdb",
+    "wallet.dat",
+    ".htpasswd",
 )
+# Reason: WITS opens its own databases directly; no tool may read, write or index them.
+_RUNTIME_PRIVATE = (("var", "data"), ("var", "secrets"))
+_SNIFF_BYTES = 4096
+_KEY_HEADER = re.compile(rb"-----BEGIN[^\r\n]*PRIVATE KEY|PuTTY-User-Key-File-")
 _WINDOWS_TREES = frozenset({"windows", "program files", "program files (x86)"})
 _RESERVED_DEVICE = re.compile(r"^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$", re.IGNORECASE)
 _warned_grants: set[str] = set()
@@ -197,6 +217,11 @@ def never_reason(path: str | PurePath, mode: Mode, roots: Roots) -> str | None:
     system = _system_reason(p, roots)
     if system:
         return system
+    if roots.repo:
+        repo = _pure(roots.repo, roots.windows)
+        for sub in _RUNTIME_PRIVATE:
+            if _within(p, str(repo.joinpath(*sub)), roots.windows):
+                return f"WITS runtime data ({'/'.join(sub)})"
     names = [part.lower() for part in p.parts[1:]]
     for i, name in enumerate(names):
         if name in _NEVER_DIRS:
@@ -346,12 +371,11 @@ def is_never(path: str | Path, mode: Mode) -> bool:
         return True
     try:
         resolved = _resolve(path)
+        repo = str(fp.project_read_root())
     except (ValueError, RuntimeError, OSError, TypeError):
         return True
-    return (
-        never_reason(resolved, mode, Roots("", "", "", "", home=_home(), windows=windows))
-        is not None
-    )
+    roots = Roots("", "", "", repo, home=_home(), windows=windows)
+    return never_reason(resolved, mode, roots) is not None
 
 
 def _resolve(path: str | Path) -> Path:
@@ -450,6 +474,18 @@ class IndexGate:
             self.skipped += 1
             return False
         ok = decide(resolved, "index", "owner", self.grants, self.roots).allowed
+        if ok and has_private_key(resolved):
+            ok = False
         if not ok:
             self.skipped += 1
         return ok
+
+
+def has_private_key(path: Path) -> bool:
+    """True when the first 4 KiB hold a private-key header; unreadable counts as True."""
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(_SNIFF_BYTES)
+    except (OSError, ValueError):
+        return True
+    return _KEY_HEADER.search(head) is not None
