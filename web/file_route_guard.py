@@ -2,8 +2,8 @@
 
 Contract: docs/architecture/folder-access.md sections 2-4. The owner's exports land in
 the outbox through ``path_access.check``; guests keep the fixed runtime exports folder
-but still meet the never-list. Document routes keep ``documents_path`` and add the
-never-list for mode "index", so secrets files are never written or removed there.
+but still meet the never-list. Document routes use ``<folders.base>/documents`` (WP F5)
+and add the never-list for mode "index", so secrets files are never written or removed there.
 """
 
 from __future__ import annotations

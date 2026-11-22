@@ -43,15 +43,15 @@ class DummyLLM(BaseLLMInterface):
 @pytest.fixture
 def rag_env(tmp_path, monkeypatch):
     """Config + memory manager + wired tools operating in temp directories."""
-    # Reason: path_access only exempts an upload corpus under the project's var/ folder.
     monkeypatch.setenv("WITSV3_PROJECT_ROOT", str(tmp_path))
-    docs_dir = tmp_path / "var" / "documents"
+    # Reason: uploads live in <folders.base>/documents (WP F5).
+    docs_dir = tmp_path / "wits" / "documents"
     docs_dir.mkdir(parents=True)
 
     config = WitsV3Config()
+    config.folders.base = str(tmp_path / "wits")
     config.memory_manager.backend = "basic"
     config.memory_manager.memory_file_path = str(tmp_path / "memory.json")
-    config.document_rag.documents_path = str(docs_dir)
     config.document_rag.chunk_size = 200
     config.document_rag.chunk_overlap = 40
     # Reason: SecuritySettings defaults include D:\Downloads; unit tests must stay isolated.
@@ -343,3 +343,65 @@ async def test_memory_delete_segments(rag_env):
 
     # Empty filter must refuse to delete everything
     assert await memory.delete_segments({}) == 0
+
+
+# ------------------------------------------------- reindex replaces chunks (both backends)
+
+
+@pytest.fixture(params=["basic", "faiss_cpu"])
+def any_backend_env(request, rag_env, tmp_path):
+    config, _memory, ingest, search, docs_dir = rag_env
+    config.memory_manager.backend = request.param
+    config.memory_manager.faiss_index_path = str(tmp_path / "faiss.bin")
+    config.memory_manager.vector_dim = 384
+    llm = DummyLLM()
+    memory = MemoryManager(config=config, llm_interface=llm)
+    ingest.set_dependencies(config, llm, memory)
+    return memory, ingest, docs_dir
+
+
+async def _hashes(memory, name):
+    segs = await memory.get_recent_memory(limit=1000, filter_dict={"type": DOCUMENT_SEGMENT_TYPE})
+    return [s.metadata["file_hash"] for s in segs if s.metadata.get("file_path") == name]
+
+
+async def test_changed_file_replaces_its_chunks(any_backend_env):
+    memory, ingest, docs_dir = any_backend_env
+    f = docs_dir / "facts.md"
+    f.write_text("Old facts about the garden.")
+    await ingest.execute()
+    f.write_text("New facts about the garden.")
+    await ingest.execute()
+    new = hashlib.sha256(f.read_bytes()).hexdigest()
+    assert await _hashes(memory, "facts.md") == [new]
+
+
+async def test_unchanged_file_does_not_grow(any_backend_env):
+    memory, ingest, docs_dir = any_backend_env
+    (docs_dir / "facts.md").write_text("Stable facts.")
+    for _ in range(3):
+        await ingest.execute()
+    assert len(await _hashes(memory, "facts.md")) == 1
+
+
+async def test_seeded_duplicates_collapse_to_current_chunks(any_backend_env):
+    memory, ingest, docs_dir = any_backend_env
+    for i in range(4):
+        await memory.add_memory(
+            type=DOCUMENT_SEGMENT_TYPE,
+            source="facts.md",
+            content_text=f"old copy {i}",
+            metadata={"file_path": "facts.md", "file_hash": "old", "chunk_index": 0},
+        )
+    f = docs_dir / "facts.md"
+    f.write_text("Current facts.")
+    await ingest.execute()
+    assert await _hashes(memory, "facts.md") == [hashlib.sha256(f.read_bytes()).hexdigest()]
+
+
+async def test_faiss_recent_filter_matches_type_attribute(any_backend_env):
+    memory, _ingest, _docs = any_backend_env
+    await memory.add_memory(type="DOCUMENT_CHUNK", source="x", content_text="x")
+    await memory.add_memory(type="OTHER", source="y", content_text="y")
+    segs = await memory.get_recent_memory(limit=10, filter_dict={"type": "DOCUMENT_CHUNK"})
+    assert [s.source for s in segs] == ["x"]

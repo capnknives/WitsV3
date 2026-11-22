@@ -2,8 +2,8 @@
 """
 Document RAG tools for WitsV3.
 
-Drop files into the configured user-files folder (default: ``var/user_files``) and
-they are chunked, embedded, and stored as DOCUMENT_CHUNK memory segments.
+Upload files through the Documents page (they land in ``<folders.base>/documents``) or
+drop them in the inbox, and they are chunked, embedded, and stored as DOCUMENT_CHUNK memory segments.
 Agents can then answer questions from them via the document_search tool.
 
 Both tools receive their dependencies (config, LLM interface, memory manager)
@@ -138,8 +138,15 @@ class DocumentIngestTool(_DocumentToolBase):
         if not_ready:
             return not_ready
 
+        from core.filesystem_policy import (
+            document_ingest_roots,
+            documents_folder,
+            old_documents_folder,
+        )
+
         settings = self.config.document_rag
-        docs_dir = Path(settings.documents_path)
+        uploads = documents_folder(self.config)
+        docs_dir = uploads
         if not docs_dir.exists():
             docs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -155,7 +162,7 @@ class DocumentIngestTool(_DocumentToolBase):
         }
         from core.path_access import IndexGate
 
-        gate = await IndexGate.load(self.config, corpus=docs_dir)
+        gate = await IndexGate.load(self.config)
 
         # Map of file_path -> file_hash for chunks currently in memory
         existing = await self.memory_manager.get_recent_memory(
@@ -172,15 +179,15 @@ class DocumentIngestTool(_DocumentToolBase):
         seen_paths = set()
         searchable: dict[str, int] = {}
 
-        ingest_dirs = [docs_dir]
-        from core.filesystem_policy import document_ingest_roots
-
+        ingest_dirs = [uploads.resolve()] if gate.allows_root(uploads) else []
         for extra in document_ingest_roots(self.config):
             if extra.is_dir() and extra not in ingest_dirs and gate.allows_root(extra):
                 ingest_dirs.append(extra)
 
         for docs_dir in ingest_dirs:
-            prefix = "" if docs_dir == Path(settings.documents_path) else f"{docs_dir.name}/"
+            # Reason: uploads keep bare relative names so the Documents page can match chunks.
+            is_uploads = docs_dir == uploads.resolve()
+            prefix = "" if is_uploads else f"{docs_dir.name}/"
 
             for path in sorted(docs_dir.rglob("*")):
                 if not path.is_file() or not gate.allows_file(path):
@@ -188,7 +195,7 @@ class DocumentIngestTool(_DocumentToolBase):
                 if path.suffix.lower() not in extensions:
                     continue
 
-                if docs_dir == Path(settings.documents_path):
+                if is_uploads:
                     rel_path = path.relative_to(docs_dir).as_posix()
                 else:
                     rel_path = f"{prefix}{path.name}"
@@ -247,7 +254,12 @@ class DocumentIngestTool(_DocumentToolBase):
                     summary["errors"].append(f"{rel_path}: {e}")
 
         # Remove chunks for files that no longer exist on disk
+        # Reason: nothing is removed automatically from the pre-F5 upload folder, so chunks
+        # stay while the file is still there; they go once it is gone from both places.
+        old_dir = old_documents_folder(self.config)
         for stale_path in set(stored_hashes) - seen_paths:
+            if old_dir is not None and (old_dir / stale_path).is_file():
+                continue
             removed = await self.memory_manager.delete_segments(
                 {"type": DOCUMENT_SEGMENT_TYPE, "file_path": stale_path}
             )

@@ -34,13 +34,23 @@ file. What the code does today:
 ## 2. Folders
 
 `folders.base` (repo default `var/wits_files`; the owner's PC sets `D:\WITS` in
-`config.local.yaml`) with three fixed subfolders, created at start-up:
+`config.local.yaml`) with four fixed subfolders, all created at start-up:
 
 | Folder | WITS may | Purpose |
 |--------|----------|---------|
-| `inbox` | read, index | Files the owner drops in for WITS |
+| `inbox` | read, index | Files the owner drops in by hand |
+| `documents` | read, index | Files the owner uploads through the Documents page |
 | `outbox` | read, write | Everything WITS saves or exports for the owner |
 | `projects` | read, write | Code and documents WITS creates |
+
+WITS tools can never write into `documents`: `write_file` there is refused, as in
+`inbox`. Only the owner's upload route writes there and only the owner's delete
+route removes from there, both still subject to section 4 and the inside-folder
+rule. `document_rag.documents_path` is no longer where uploads go (owner decision,
+22 November 2026, WP F5): the effective documents folder is always
+`<folders.base>/documents`. The setting stays so old config files load; if it
+names another folder that holds files, start-up logs one warning with the count
+and nothing there is moved or indexed.
 
 Code defaults for `security.filesystem_read_roots` and
 `security.document_ingest_roots` become empty lists, and
@@ -130,7 +140,7 @@ CREATE INDEX idx_folder_grants_live ON folder_grants(expires_at, revoked_at);
 - **Expiry and revoke.** A grant is live while `expires_at > now` and
   `revoked_at` is null. The owner can revoke from the Inbox page. Nothing
   renews by itself.
-- **Indexing** runs only on the `inbox`, on a folder with a live `index` grant
+- **Indexing** runs only on `inbox` and `documents`, on a folder with a live `index` grant
   that the owner names, or from the owner's reindex route. No chat message
   starts indexing of anything else.
 - **Audit.** `folder.request`, `folder.grant`, `folder.revoke`, and every

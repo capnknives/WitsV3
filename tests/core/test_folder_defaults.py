@@ -42,11 +42,11 @@ def test_base_folders_created_and_in_effective_lists(tmp_path, monkeypatch):
     assert not (tmp_path / "WITS").exists()  # nothing at config time
     ensure_runtime_layout("var", cfg.folders.base)
     base = (tmp_path / "WITS").resolve()
-    for name in ("inbox", "outbox", "projects"):
-        assert (base / name).is_dir()
+    folders = ("inbox", "documents", "outbox", "projects")
+    assert sorted(p.name for p in base.iterdir()) == sorted(folders)
     reads = configured_read_roots(cfg)
-    assert {base / "inbox", base / "outbox", base / "projects"} <= set(reads)
-    assert document_ingest_roots(cfg) == [base / "inbox"]
+    assert {base / name for name in folders} <= set(reads)
+    assert document_ingest_roots(cfg) == [base / "inbox", base / "documents"]
     assert base / "outbox" not in document_ingest_roots(cfg)
 
 
@@ -63,7 +63,7 @@ def test_local_root_list_replaces_base_list_and_inbox_stays(tmp_path, monkeypatc
     _isolate(monkeypatch, tmp_path)
     extra = tmp_path / "extra"
     cfg = WitsV3Config(security={"document_ingest_roots": [str(extra)]})
-    inbox = (tmp_path / "var/wits_files/inbox").resolve()
-    assert document_ingest_roots(cfg) == [inbox, extra.resolve()]
-    cfg.security.document_ingest_roots = []  # explicit empty = no extras, inbox still there
-    assert document_ingest_roots(cfg) == [inbox]
+    fixed = [(tmp_path / "var/wits_files" / n).resolve() for n in ("inbox", "documents")]
+    assert document_ingest_roots(cfg) == [*fixed, extra.resolve()]
+    cfg.security.document_ingest_roots = []  # explicit empty = no extras, both still there
+    assert document_ingest_roots(cfg) == fixed

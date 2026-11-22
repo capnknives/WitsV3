@@ -139,14 +139,14 @@ def test_upload_of_plain_file_works(env):
         "/api/documents/upload", files={"file": ("notes.txt", b"hi", "text/plain")}, headers=OWNER
     )
     assert res.status_code == 200 and res.json()["saved"] == "notes.txt"
-    assert (tmp / "documents" / "notes.txt").read_bytes() == b"hi"
+    assert (tmp / "wits" / "documents" / "notes.txt").read_bytes() == b"hi"
 
 
 @pytest.mark.parametrize("name", NEVER + ALIASES)
 def test_delete_of_never_listed_name_refused(env, name):
     client, tmp = env
-    docs = tmp / "documents"
-    docs.mkdir()
+    docs = tmp / "wits" / "documents"
+    docs.mkdir(parents=True)
     (docs / name).write_text("KEY=1")
     res = client.post("/api/documents/delete", json={"name": name}, headers=OWNER)
     assert res.status_code in (400, 403)
@@ -156,7 +156,7 @@ def test_delete_of_never_listed_name_refused(env, name):
 
 def test_delete_outside_folder_still_refused(env):
     client, tmp = env
-    (tmp / "documents").mkdir()
+    (tmp / "wits" / "documents").mkdir(parents=True)
     (tmp / "keep.txt").write_text("x")
     res = client.post("/api/documents/delete", json={"name": "../keep.txt"}, headers=OWNER)
     assert res.status_code == 400

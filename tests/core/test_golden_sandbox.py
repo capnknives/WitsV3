@@ -185,3 +185,17 @@ def test_write_file_lands_in_sandbox_not_outside_base(tmp_path, monkeypatch):
         assert "rror" not in result, result
     assert (sandbox / "var" / "wits_files" / "projects" / "hello.txt").read_text() == "hi"
     assert list(outside.iterdir()) == []
+
+
+def test_sandbox_seeds_documents_where_the_document_tools_look(tmp_path, monkeypatch):
+    from core.filesystem_policy import document_ingest_roots, documents_folder
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
+    sandbox = (tmp_path / "box").resolve()
+    cfg = owner_config()
+    with golden_run.enter_sandbox(cfg, sandbox):
+        assert golden_run.find_escapes(cfg, sandbox) == []
+        docs = documents_folder(cfg).resolve()
+        assert docs.is_relative_to(sandbox) and docs in document_ingest_roots(cfg)
+        assert (docs / "docs" / "guide.txt").is_file()

@@ -24,6 +24,7 @@ async def _list_grants() -> dict:
     base = workspace_routes.load_config().folders.base
     base_folders = [
         {"name": "inbox", "path": str(runtime_paths.inbox_dir(base)), "mode": "index"},
+        {"name": "documents", "path": str(runtime_paths.documents_dir(base)), "mode": "index"},
         {"name": "outbox", "path": str(runtime_paths.outbox_dir(base)), "mode": "read_write"},
         {"name": "projects", "path": str(runtime_paths.projects_dir(base)), "mode": "read_write"},
     ]

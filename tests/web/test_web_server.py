@@ -394,8 +394,8 @@ def test_memory_prune_deletes(client_noauth):
 
 def test_documents_list_and_upload(client_noauth, tmp_path):
     client, system = client_noauth
-    docs = tmp_path / "documents"
-    docs.mkdir()
+    docs = tmp_path / "wits" / "documents"
+    docs.mkdir(parents=True)
     (docs / "notes.md").write_text("hello")
 
     body = client.get("/api/documents").json()
@@ -426,8 +426,8 @@ def test_upload_strips_path_traversal(client_noauth, tmp_path):
 
 def test_documents_list_includes_metadata(client_noauth, tmp_path):
     client, _ = client_noauth
-    docs = tmp_path / "documents"
-    docs.mkdir()
+    docs = tmp_path / "wits" / "documents"
+    docs.mkdir(parents=True)
     (docs / "notes.md").write_text("hello")
 
     body = client.get("/api/documents").json()
@@ -440,8 +440,8 @@ def test_documents_list_includes_metadata(client_noauth, tmp_path):
 
 def test_document_delete_removes_file_and_chunks(client_noauth, tmp_path):
     client, _ = client_noauth
-    docs = tmp_path / "documents"
-    docs.mkdir()
+    docs = tmp_path / "wits" / "documents"
+    docs.mkdir(parents=True)
     (docs / "notes.md").write_text("hello")
 
     res = client.post("/api/documents/delete", json={"name": "notes.md"})

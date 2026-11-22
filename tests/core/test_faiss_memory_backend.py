@@ -466,3 +466,23 @@ async def test_faiss_concurrent_save_and_load_under_lock(mock_config):
     assert memory_path.exists()
     loaded = json.loads(memory_path.read_text(encoding="utf-8"))
     assert len(loaded) == 5
+
+
+async def test_faiss_delete_and_recent_filter_on_type_and_metadata_key(mock_config):
+    backend = FaissCPUMemoryBackend(mock_config, DummyLLM())
+    await backend.initialize()
+    for name in ("a.md", "a.md", "b.md"):
+        await backend.add_segment(
+            MemorySegment(
+                type="DOCUMENT_CHUNK",
+                source=name,
+                content=MemorySegmentContent(text=name),
+                metadata={"file_path": name},
+            )
+        )
+    found = await backend.get_recent_segments(10, {"type": "DOCUMENT_CHUNK", "file_path": "a.md"})
+    assert len(found) == 2
+    assert await backend.delete_segments({"type": "DOCUMENT_CHUNK", "file_path": "a.md"}) == 2
+    assert [
+        s.source for s in await backend.get_recent_segments(10, {"type": "DOCUMENT_CHUNK"})
+    ] == ["b.md"]

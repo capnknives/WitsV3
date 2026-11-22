@@ -992,9 +992,11 @@ def create_app(system) -> FastAPI:
         return {"denied": True}
 
     # -------------------------------------------------------- documents
+    from core.filesystem_policy import documents_folder
+
     @app.get("/api/documents")
     async def documents():
-        docs_dir = Path(system.config.document_rag.documents_path)
+        docs_dir = documents_folder(system.config)
         chunks_by_file: dict[str, int] = {}
         segments = await system.memory_manager.get_recent_memory(
             limit=1_000_000, filter_dict={"type": "DOCUMENT_CHUNK"}
@@ -1026,7 +1028,7 @@ def create_app(system) -> FastAPI:
 
     @app.post("/api/documents/upload")
     async def upload_document(file: UploadFile = File(...)):
-        docs_dir = Path(system.config.document_rag.documents_path)
+        docs_dir = documents_folder(system.config)
         docs_dir.mkdir(parents=True, exist_ok=True)
 
         # Keep only the file name — normalize slashes so Windows-style traversal
@@ -1051,7 +1053,7 @@ def create_app(system) -> FastAPI:
 
     @app.post("/api/documents/delete")
     async def delete_document(body: DocumentDeleteRequest):
-        docs_dir = Path(system.config.document_rag.documents_path).resolve()
+        docs_dir = documents_folder(system.config).resolve()
         # Resolve within docs_dir; reject traversal, the dir itself and never-listed names.
         try:
             target = file_route_guard.document_target(docs_dir, body.name)
