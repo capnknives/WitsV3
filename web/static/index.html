@@ -19,6 +19,10 @@
       <span id="status-dot" class="dot" title="checking…"></span>
     </div>
     <div class="header-actions">
+      <a id="inbox-link" class="icon-btn inbox-link" href="/inbox" title="Inbox" aria-label="Inbox" hidden>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l3-8h12l3 8"/><path d="M3 13v6a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-6"/><path d="M3 13h5l1 3h6l1-3h5"/></svg>
+        <span id="inbox-count" class="inbox-count" hidden></span>
+      </a>
       <a id="header-settings-link" class="icon-btn" href="/settings" title="System settings">🎛</a>
       <button id="export-btn" class="icon-btn" title="Export chat to file">⬇</button>
       <button id="new-chat-btn" class="icon-btn" title="New chat">＋</button>
@@ -141,5 +145,6 @@
   </div>
 
   <script src="/app.js"></script>
+  <script src="/inbox-link.js"></script>
 </body>
 </html>
