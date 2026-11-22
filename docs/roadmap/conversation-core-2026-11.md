@@ -158,3 +158,26 @@ package C2, not taken from the report.
 
 No published tool-calling scores exist for the exact installed models. Stage 0
 item 0.6 remains the source of truth.
+
+## Second outside report (November 22, 2026)
+
+A further research report ("WitsV3 Architecture Modernization Audit") was read
+against this plan. Its author could not see the code. It agrees with the
+direction above. Taken from it, each to be checked against a primary source
+before a brief relies on it:
+
+- C4: one or two worked examples per tool, and looked-up tools kept out of the
+  cached prefix (adopted in the C4 contract through `use_tool`).
+- 2.8: keyword plus vector search in the same SQLite file; a new memory
+  supersedes the old one; deletes remove a record everywhere in one
+  transaction; memory extraction at session end, not after every turn.
+- C7: once a turn has read untrusted content, writes wait for the owner, and
+  the approval card shows the raw arguments.
+- 2.7: pin the hash of an outside MCP server's tool list.
+- Near the context limit: compaction at about three quarters full. C3d adds a
+  token-estimate trim; a summarising step is a later decision.
+
+Not taken: replacing the resident model or sizing for 32 to 64K context (the
+model is chosen by measurement on this PC at 8,192), retiring the verified-edit
+pipeline, and a four-to-six tool list. Several issue numbers, versions and
+scores in the report differ from our own check above and are unverified.
