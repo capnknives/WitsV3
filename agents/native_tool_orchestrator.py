@@ -11,7 +11,9 @@ from typing import Any
 
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.native_loop_support import (
+    MEMORY_FETCH_LIMIT,
     NATIVE_SYSTEM_PROMPT,
+    NEVER_RECALLED_TYPES,
     STEP_LIMIT_ERROR,
     as_sent_history,
     assistant_tool_message,
@@ -20,6 +22,7 @@ from agents.native_loop_support import (
     estimate_tokens,
     history_window,
     model_call_error,
+    recalled_facts,
     resident_model,
     store_sent_context,
     tool_call_event,
@@ -71,9 +74,18 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         return self.available_tools
 
     async def _memory_context(self, goal: str) -> str:
-        """Retrieved memory for this turn, or "" when none is found."""
-        memories = await self.search_memory(goal, limit=5)
-        return self._build_context_from_memories(memories) if memories else ""
+        """Durable owner-stated facts for this turn, or "" when none qualify."""
+        conv = self.config.conversation
+        # Reason: the store is mostly old-path transcript rows that would crowd facts out
+        # of a plain top-N, so each allowed type is queried on its own (equality filter);
+        # recalled_facts re-checks the type for backends that ignore the filter.
+        found: list[Any] = []
+        for seg_type in sorted({t.upper() for t in conv.memory_types} - NEVER_RECALLED_TYPES):
+            found += await self.search_memory(
+                goal, limit=MEMORY_FETCH_LIMIT, filter_dict={"type": seg_type}
+            )
+        found.sort(key=lambda seg: -(getattr(seg, "relevance_score", None) or 0.0))
+        return recalled_facts(found, conv.memory_types, conv.memory_min_score)
 
     async def run(
         self,
