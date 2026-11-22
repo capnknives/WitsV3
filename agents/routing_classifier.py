@@ -564,6 +564,57 @@ def is_code_introspection_not_authoring(message: str) -> bool:
     return not any(v in lowered for v in CODEBASE_AUTHORING_VERBS)
 
 
+# Reason: a bare code noun ("software", "app", "class") is not a request to write
+# code — "I created the software you are wearing" was sent to the coding agent.
+# A message counts as an authoring request only when it *opens* with an
+# authoring verb, optionally behind a polite/request lead-in. Statements
+# ("I built ..."), questions ("what is ...") and passing mentions never do.
+_CODE_REQUEST_RE = re.compile(
+    # Optional greeting/filler: "hey wits, ok so ..."
+    r"^(?:(?:hey|hi|ok|okay|so|alright|now|wits)[,!.]?\s+)*"
+    r"(?:please\s+)?"
+    # Optional request lead-in: "can you", "I need you to", "help me", "let's" ...
+    r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?"
+    r"|i\s*(?:need|want|would\s+like|'d\s+like)\s+(?:you\s+to\s+|to\s+)?"
+    r"|help\s+me\s+(?:to\s+)?"
+    r"|let'?s\s+)?"
+    r"(?:please\s+)?"
+    r"(?:write|create|build|make|generate|implement|code|develop|scaffold|add|fix|"
+    r"refactor|update|change|modify|rewrite|port|convert|debug)\b"
+)
+# What the verb must act on: a code artifact, a language, or a code file name.
+# "go" only counts as "in go"/"golang", since bare "go" is an everyday verb.
+_CODE_OBJECT_RE = re.compile(
+    r"\b(?:scripts?|functions?|class(?:es)?|modules?|programs?|apps?|applications?|apis?|"
+    r"websites?|endpoints?|tests?|bots?|tools?|cli|pages?|components?|projects?|"
+    r"python|javascript|typescript|html|css|sql|bash|powershell|rust|golang)\b"
+    r"|\bin\s+go\b"
+    r"|\b[\w./\\-]+\.(?:py|js|jsx|ts|tsx|html|css|sql|sh|ps1|rs|go|java|cpp|c|h|rb|php|"
+    r"json|ya?ml|toml)\b"
+)
+
+
+def is_code_authoring_request(text: str) -> bool:
+    """Return True only when the message asks for code to be written or changed.
+
+    Conservative by design: anything that does not clearly open with an
+    authoring request aimed at a code object returns False and takes the
+    normal routing path.
+
+    Args:
+        text: The raw user message.
+
+    Returns:
+        True for requests like "write a python script ..." or "can you fix
+        parser.py"; False for statements, questions and passing mentions.
+    """
+    lowered = text.strip().lower().replace("’", "'")
+    match = _CODE_REQUEST_RE.match(lowered)
+    if not match:
+        return False
+    return bool(_CODE_OBJECT_RE.search(lowered, match.end()))
+
+
 def needs_self_repair(message: str) -> bool:
     lowered = message.lower()
     return any(sig in lowered for sig in SELF_REPAIR_SIGNALS)
