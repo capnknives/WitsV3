@@ -46,15 +46,19 @@ OWNER_APPROVAL_STOP = (
 
 _LOOP_SPECS: dict[str, tuple[str, dict[str, Any]]] = {
     FIND_TOOLS: (
-        "Find extra tools not in this list (guest accounts, knowledge log, tests, Python, "
-        "MCP and more) when no listed tool fits; run a result with use_tool.",
+        "Find extra tools that are not in this list (guest accounts, knowledge log "
+        "summary, running tests, code fixes, Python, MCP tools and more). Use it when no "
+        "listed tool fits the request; do not use it for a tool you can already see. "
+        "Returns up to five tools with their parameters; run one with use_tool. "
+        'Example: {"query": "knowledge log summary"}.',
         {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "a few plain words, e.g. 'guest accounts list'",
+                    "description": "A few plain words for what the tool should do, "
+                    "such as 'guest accounts list' or 'run tests'",
                 }
             },
             "required": ["query"],
@@ -62,13 +66,22 @@ _LOOP_SPECS: dict[str, tuple[str, dict[str, Any]]] = {
         },
     ),
     USE_TOOL: (
-        "Run a tool that find_tools returned; call listed tools directly. "
-        'Example: {"name": "knowledge_log_summary", "arguments": {}}.',
+        "Run a tool that find_tools returned. Use it only for tools found with "
+        "find_tools; call the tools in this list directly instead. Example: "
+        '{"name": "knowledge_log_summary", "arguments": {}}.',
         {
             "type": "object",
             "properties": {
-                "name": {"type": "string", "description": "exact name from find_tools"},
-                "arguments": {"type": "object", "description": "the tool's arguments; {} if none"},
+                "name": {
+                    "type": "string",
+                    "description": "Exact tool name as find_tools returned it, "
+                    "such as 'knowledge_log_summary'",
+                },
+                "arguments": {
+                    "type": "object",
+                    "description": "The tool's arguments as one JSON object matching "
+                    "the parameters find_tools showed; {} when it takes none",
+                },
             },
             "required": ["name"],
             "additionalProperties": False,
