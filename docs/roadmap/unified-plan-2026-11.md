@@ -268,22 +268,24 @@ provider by rule and the log shows it.
   `tool-document-search` and `followup-yes-do-it`.
 - The 29 owner cases (the owner's July messages) were run once on the new
   loop: 28 ran and 19 passed. One run is a first reading, not a pass rate.
-- Not measured yet: all 61 cases three times on `main`; first-token time
+- All 61 cases, three runs, sandboxed, on `main` plus the runner packages C1e
+  and C1f: 49 passed all three, 1 passed two, 11 failed all three. Table and a
+  reading of each failed reply are in `docs/benchmarks/golden.md`.
+- Not measured yet: first-token time
   (nothing streams until C7); any model other than `qwen3:8b`; guests on the
   new loop; the heavy provider.
 
 **Open follow-ups (November 22, 2026), in the order they will be taken.**
 
-1. C1e: the golden runner saves the reply and the failed expectation for each
-   failed case in the sandbox folder and prints the reason in the table. Then
-   the unexplained owner-case failures are read: two requests for long text
-   (`owner-story-great-war`, `owner-boat-sling-cannon`) get replies of only
-   about 50 to 60 tokens, and five failures have not been examined
-   (`owner-codebase-question`, `owner-odd-numbers-script`,
-   `owner-story-analyze-wordcount`, `owner-boat-more-depth`,
-   `owner-bugreports-feature`). `owner-which-model` fails in the sandbox
-   because the sandbox has no facts file.
-2. All 61 cases, three runs, sandboxed, on `main`; table recorded here.
+1. C1e (PR #72) and C1f (PR #74): the golden runner saves the reply and the
+   failed expectation for each failed case, and the sandbox now covers
+   `folders.base`.
+2. The loop's system prompt. The saved replies show the model misjudging what
+   it can do: it says it cannot write a long story, refuses a harmless
+   request, says its own code is out of reach, claims a feature was built
+   after saving a note, and states a word count it cannot know. One package,
+   measured against the 61-case table. `owner-which-model` also needs a facts
+   file in the sandbox.
 3. F4, then F2b: the conversation export route, the document upload and
    delete routes, and direct memory export and import go behind the path
    check; a relative `folders.base` is anchored to the project root, not the
