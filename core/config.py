@@ -397,6 +397,11 @@ class ConversationSettings(BaseModel):
         description="Owner turns go to the native tool loop ('native') or the intent router",
     )
 
+    model: str | None = Field(
+        default=None,
+        description="The one model the native loop uses; unset falls back to "
+        "ollama_settings.orchestrator_model, then default_model. Routing is never used.",
+    )
     max_steps: int = Field(default=8, gt=0, description="Model rounds per turn")
     max_identical_calls: int = Field(
         default=2, gt=0, description="Runs allowed for one identical tool call per turn"

@@ -10,7 +10,6 @@ from typing import Any
 
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.native_loop_support import (
-    MODEL_CALL_FAILED,
     NATIVE_SYSTEM_PROMPT,
     STEP_LIMIT_ERROR,
     assistant_tool_message,
@@ -18,6 +17,8 @@ from agents.native_loop_support import (
     build_turn_context,
     decode_arguments,
     history_window,
+    model_call_error,
+    resident_model,
     tool_call_event,
     tool_reply,
 )
@@ -67,9 +68,9 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         self.available_tools, self._tool_schemas = self._get_tool_specs()
         goal = user_input
         self.current_iteration = 0
-        self._session_model = self.model_router.route(
-            goal, default=self.get_model_name(), allow_trivial=False
-        )
+        # Reason: one resident model, never the router, so no turn can ask for a model the
+        # owner has not installed and the model stays loaded between rounds.
+        self._session_model = resident_model(self.config)
         self._skip_global_memory_store = kwargs.get("user_role") == "guest"
         turn = current_turn()
         if turn is not None:
@@ -132,7 +133,7 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             try:
                 response = await self._chat(chat_fn, messages, self._ollama_tools_payload())
             except Exception as exc:
-                yield self.stream_error(f"{MODEL_CALL_FAILED}: {exc}")
+                yield self.stream_error(model_call_error(exc, self._session_model))
                 return
             calls = response.tool_calls or []
             stop_message = None
@@ -190,7 +191,7 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         return await chat_fn(
             messages=messages,
             tools=tools,
-            model=getattr(self, "_session_model", None),
+            model=self._session_model,
             temperature=self.REASONING_TEMPERATURE,
         )
 
@@ -206,7 +207,9 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             observation = block_reason
         else:
             try:
-                result = await self._call_tool(tool_name, tool_args, state)
+                # Reason: state=None keeps _prepare_tool_args from merging loop state (such
+                # as user_role) into the arguments the guard validated.
+                result = await self._call_tool(tool_name, tool_args, None)
                 observation = self._format_tool_observation(tool_name, result)
                 ok = not self._tool_result_is_failure(result)
             except Exception as e:
@@ -229,7 +232,7 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             try:
                 response = await self._chat(chat_fn, messages, None)
             except Exception as exc:
-                yield self.stream_error(f"{MODEL_CALL_FAILED}: {exc}")
+                yield self.stream_error(model_call_error(exc, self._session_model))
                 return
             text = (response.content or "").strip()
             if text and not response.tool_calls and "<tool_call>" not in text:

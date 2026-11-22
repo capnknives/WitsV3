@@ -34,6 +34,8 @@ turn_metrics:
   retention_days: 30
 conversation:
   front_door: legacy  # legacy (intent router) or native (owner turns go to the native tool loop)
+  # model: qwen3:8b  # the one resident model for the native loop (no routing); unset uses
+  #                  ollama_settings.orchestrator_model, then default_model
   max_steps: 8
   max_identical_calls: 2
   max_schema_retries: 1

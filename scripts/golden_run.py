@@ -183,6 +183,25 @@ def _seed_sandbox(sandbox: Path) -> Path:
     return project
 
 
+def _write_sandbox_config(config, sandbox: Path):
+    """Write the rebased in-memory config to sandbox/config.yaml and reload it from there.
+
+    Reason: later load_config() calls (e.g. turn metrics) run from the sandbox cwd; without
+    a file there they print "not found" and silently fall back to defaults. Dumping the
+    rebased config, not copying the repo file, keeps every path inside the sandbox.
+
+    Returns:
+        The config as a fresh load_config() from the sandbox cwd sees it.
+    """
+    import yaml
+
+    from core.config import load_config
+
+    text = yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False, allow_unicode=True)
+    (sandbox / "config.yaml").write_text(text, encoding="utf-8")
+    return load_config()
+
+
 @contextlib.contextmanager
 def enter_sandbox(config, sandbox: Path) -> Iterator[Path]:
     """Confine config, environment, cwd and the verified-edit root to sandbox, then restore.
@@ -221,6 +240,11 @@ def enter_sandbox(config, sandbox: Path) -> Iterator[Path]:
         escapes = find_escapes(config, sandbox)
         if escapes:
             raise SandboxError("paths outside the sandbox: " + "; ".join(escapes))
+        escapes = find_escapes(_write_sandbox_config(config, sandbox), sandbox)
+        if escapes:
+            raise SandboxError(
+                "reloaded config has paths outside the sandbox: " + "; ".join(escapes)
+            )
         yield project
     finally:
         for mod, old in patched:

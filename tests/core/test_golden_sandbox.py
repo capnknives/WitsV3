@@ -54,6 +54,19 @@ def test_sandbox_confines_every_path(tmp_path, monkeypatch):
     assert "WITSV3_PROJECT_ROOT" not in os.environ
 
 
+def test_load_config_inside_sandbox_finds_confined_config(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
+    sandbox = tmp_path / "box"
+    with golden_run.enter_sandbox(owner_config(), sandbox):
+        capsys.readouterr()
+        from core.config import load_config
+
+        fresh = load_config()
+        assert golden_run.find_escapes(fresh, sandbox) == []
+        assert "not found" not in capsys.readouterr().out
+
+
 def test_sandbox_refuses_unredirectable_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     # An unredirectable source: the env root is forced outside by a fake runtime function.

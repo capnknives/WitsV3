@@ -120,7 +120,7 @@
 - id: command-exact-math
   message: "calculate 12 * 7 + 5"
   tags: [command, tool]
-  expect: {tools: [math_operations], forbid_routes: [coding], reply: required}
+  expect: {tools: [calculator], forbid_routes: [coding], reply: required}
 
 # --- follow-ups that need history (3) ---
 - id: followup-shorter
