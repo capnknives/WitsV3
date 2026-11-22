@@ -48,7 +48,7 @@ make format                                      # black + isort, writes changes
 
 Markers available: `slow`, `integration`, `unit`, `requires_ollama`, `requires_supabase`. Many features genuinely need a running Ollama instance to exercise end-to-end — unit tests should mock it (`requires_ollama` marks the exception).
 
-CI (`.github/workflows/ci.yml`) runs pytest on 3.10/3.11 plus a separate ruff+black lint job against `agents core tools web tests`; match that scope before pushing.
+CI (`.github/workflows/ci.yml`) runs pytest on 3.10/3.13 plus a separate ruff+black lint job against `agents core tools web tests`; match that scope before pushing.
 
 ## Architecture
 
