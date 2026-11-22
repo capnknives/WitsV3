@@ -74,10 +74,35 @@ def test_cases_load_and_validate(ev, data):
     props = {p for t in data["tools"] for p in t["parameters"]["properties"]}
     assert {"type", "description"} <= props
     bad = {
+        "version": 2,
         "tools": data["tools"],
         "cases": [dict(data["cases"][0], expect=[{"tool": "read_file", "args": {"path": 3}}])],
     }
     assert ev.validate_cases(bad)
+    assert data["version"] == 2 and ev.validate_cases(data) == []
+    send = next(t for t in data["tools"] if t["name"] == "send_message")
+    assert send["parameters"]["properties"]["recipient"]["description"].startswith("Name, email")
+
+
+def test_validate_rejects_stray_schema_keys_and_incomplete_tools(ev, data):
+    def check(tools=None, version=2):
+        return ev.validate_cases({"version": version, "tools": tools or data["tools"], "cases": []})
+
+    # The YAML slip that motivated this check: an unquoted comma in a flow mapping.
+    stray = {"type": "object", "properties": {"r": {"type": "string", "email address": None}}}
+    assert any("email address" in e for e in check([dict(data["tools"][0], parameters=stray)]))
+    nested = {
+        "type": "object",
+        "properties": {"a": {"type": "array", "items": {"type": "x", "k": 1}}},
+    }
+    assert any(
+        "a[]" in e and "'k'" in e for e in check([dict(data["tools"][0], parameters=nested)])
+    )
+    assert any("missing description" in e for e in check([{"name": "t", "parameters": stray}]))
+    assert any("missing parameters" in e for e in check([{"name": "t", "description": "d"}]))
+    assert any("missing name" in e for e in check([{"description": "d", "parameters": {}}]))
+    for version in (None, "2", True, 2.0):
+        assert any("version" in e for e in check(version=version))
 
 
 @pytest.mark.parametrize(
@@ -192,6 +217,31 @@ def test_think_field_only_sent_when_set(ev, data):
     assert payload["stream"] is False and payload["options"] == {"temperature": 0, "num_ctx": 8192}
 
 
+def test_exact_match_ignores_edge_whitespace_only(ev, data):
+    padded = _ollama([("read_file", {"path": "\n  /home/user/todo.txt \n"})])
+    assert run(ev, data, "ollama", "s04", [padded])[0]["passed"]
+    inner = _ollama([("read_file", {"path": "/home/user/to do.txt"})])
+    assert run(ev, data, "ollama", "s04", [inner])[0]["reason"] == "wrong arguments"
+    # The expected side is stripped too, and `contains` / `any` behave as before.
+    assert ev.args_match({"a": "x"}, {"args": {"a": " x\n"}}, False) is None
+    assert (
+        ev.args_match({"a": "xyz"}, {"args": {"a": "Y"}, "match": {"a": "contains"}}, False) is None
+    )
+    assert ev.args_match({"a": "q"}, {"args": {"a": ""}, "match": {"a": "any"}}, False) is None
+    assert ev.args_match({"a": "x"}, {"args": {"a": ""}}, False) == "wrong arguments"
+
+
+def test_recovery_and_none_cases_are_fair(data):
+    for case in (c for c in data["cases"] if c["category"] == "recovery"):
+        (first,), (second,) = case["expect"], case["then"][0]["expect"]
+        assert "args" not in first and first["tool"] == second["tool"] and second["args"]
+        err = case["then"][0]["result"]["error"]
+        assert err.startswith("temporary failure") and "validation" not in err
+    banned = ("capital", "translate", "calculate", "what is", "note", "file", "remind", "message")
+    for case in (c for c in data["cases"] if c["category"] == "none"):
+        assert not any(w in case["prompt"].lower() for w in banned), case["id"]
+
+
 def _row(cid, passed, lenient=False, reason=None, error=None):
     return {
         "id": cid,
@@ -225,18 +275,22 @@ def test_report_errors_count_as_failures_and_two_overall_columns(ev, tmp_path):
     assert "Overall (strict) | Overall (lenient)" in text
     assert "| m | ollama | on | 25% | - | - | - | - | - | 25% | 50% | 1.00 | 1 |" in text
     assert "s02 (wrong tool) x1" in text and "FAILED: HTTP 404" in text
+    assert "Errored cases" in text and "- m [ollama, think=on]: s04 (HTTP 500) x1" in text
+    assert "cases v" not in text and "cases v2" in ev.format_report(groups, "http://t", 1, 2)
+    header = ev.format_report(groups, "http://t", 1, 2).splitlines()[0]
+    assert header.startswith("## Tool-calling eval ") and header.endswith("| cases v2")
     out = tmp_path / "r.md"
     ev.append_results(out, "a\n")
     ev.append_results(out, "b\n")
     assert out.read_text() == "a\nb\n"
 
 
-def _evaluate(ev, data, handler, runs=1):
+def _evaluate(ev, data, handler, runs=1, log_path=None):
     async def go():
         async with httpx.AsyncClient(
             base_url="http://t", transport=httpx.MockTransport(handler)
         ) as c:
-            return await ev.evaluate(c, "ollama", ["m"], [None], runs, data, 5)
+            return await ev.evaluate(c, "ollama", ["m"], [None], runs, data, 5, log_path)
 
     return asyncio.run(go())
 
@@ -253,7 +307,9 @@ def test_group_aborts_after_five_consecutive_errors(ev, data):
     (group,) = _evaluate(ev, data, handler)
     assert group["note"].startswith("ABORTED after 6 attempts: RuntimeError: HTTP 500")
     assert len(group["rows"]) == 6
-    assert "ABORTED after 6 attempts" in ev.format_report([group], "http://t", 1)
+    text = ev.format_report([group], "http://t", 1)
+    assert "ABORTED after 6 attempts" in text and "Errored cases" in text
+    assert "s02 (RuntimeError: HTTP 500: boom) x1" in text
 
 
 def test_first_request_failure_is_fast_and_success_resets_streak(ev, data):
@@ -269,6 +325,70 @@ def test_first_request_failure_is_fast_and_success_resets_streak(ev, data):
 
     (group,) = _evaluate(ev, data, flaky)
     assert "note" not in group and len(group["rows"]) == len(data["cases"])
+
+
+def test_failure_log_gets_one_line_per_failed_or_errored_attempt(ev, data, tmp_path):
+    two = dict(data, cases=data["cases"][:2])  # s01, s02
+    replies = [
+        _ollama([("set_reminder", S01)], content="x" * 600),  # wrong tool
+        httpx.Response(500, text="boom"),
+    ]
+    log = tmp_path / "out-failures.jsonl"
+    log.write_text('{"keep": 1}\n')
+
+    def handler(request):
+        item = replies.pop(0)
+        return item if isinstance(item, httpx.Response) else httpx.Response(200, json=item)
+
+    _evaluate(ev, two, handler, log_path=log)
+    keep, bad, err = [json.loads(x) for x in log.read_text().splitlines()]
+    assert keep == {"keep": 1}
+    assert (bad["model"], bad["backend"], bad["think"], bad["run"]) == ("m", "ollama", "n/a", 1)
+    assert bad["case"] == "s01" and bad["step"] == 1 and bad["reason"] == "wrong tool"
+    assert bad["expected"][0]["tool"] == "calendar_create_event" and bad["timestamp"]
+    assert bad["actual"] == [{"name": "set_reminder", "args": S01}] and len(bad["content"]) == 500
+    assert err["case"] == "s02" and "HTTP 500" in err["reason"] and err["actual"] == []
+    assert err["expected"][0]["tool"] == "set_reminder" and err["content"] == ""
+
+
+def test_failure_log_keeps_raw_arguments_and_step(ev, data, tmp_path):
+    chain = dict(data, cases=[next(c for c in data["cases"] if c["id"] == "c01")])
+    first = _openai([("search_notes", json.dumps({"query": "router"}))])
+    replies = [first, _openai([("send_message", "{oops")])]
+    log = tmp_path / "f.jsonl"
+
+    async def go():
+        async with httpx.AsyncClient(
+            base_url="http://t",
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json=replies.pop(0))),
+        ) as c:
+            return await ev.evaluate(c, "openai", ["m"], [None], 1, chain, 5, log)
+
+    asyncio.run(go())
+    (rec,) = [json.loads(x) for x in log.read_text().splitlines()]
+    assert rec["step"] == 2 and rec["reason"] == "step 2: invalid arguments JSON"
+    assert rec["actual"] == [{"name": "send_message", "args": "{oops"}]
+
+
+def test_default_failure_log_path_and_runs_default(ev, tmp_path, monkeypatch):
+    args = ev.build_parser().parse_args(["--models", "m"])
+    assert args.runs == 1 and args.log_failures is None
+    assert "temperature 0" in ev.build_parser().format_help()
+    seen = {}
+
+    async def fake(client, backend, models, modes, runs, data, timeout, log_path=None):
+        seen["log"] = log_path
+        return []
+
+    monkeypatch.setattr(ev, "evaluate", fake)
+    out = tmp_path / "res.md"
+    args = ev.build_parser().parse_args(["--models", "m", "--out", str(out)])
+    asyncio.run(ev.main_async(args))
+    assert seen["log"] == tmp_path / "res-failures.jsonl"
+    assert "cases v2" in out.read_text()
+    args = ev.build_parser().parse_args(["--models", "m", "--out", str(out), "--log-failures", "x"])
+    asyncio.run(ev.main_async(args))
+    assert seen["log"] == Path("x")
 
 
 def test_help_exits_zero_without_server():

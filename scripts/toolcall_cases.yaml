@@ -1,11 +1,16 @@
-# Fixed tool set and cases for scripts/toolcall_eval.py.
+# Fixed tool set and cases for scripts/toolcall_eval.py. Bump `version` whenever a case or tool
+# changes, so results from different case sets are not compared by accident.
 #
 # Case fields: id, category (single|hard|none|parallel|chain|recovery), prompt, expect (list of
 # calls; [] means no call is correct), then (optional follow-up turns: `result` is the canned tool
 # result fed back for the previous turn's call(s), `expect` is the next turn's calls),
 # allow_extra (optional, permit unexpected arguments).
 # Call fields: tool, args (omit to check the tool name only), match (field -> contains | any).
-# `contains` is a case-insensitive substring test; every other field must match exactly.
+# `contains` is a case-insensitive substring test; every other field must match exactly (leading
+# and trailing whitespace is ignored). Quote any description containing a comma or colon: inside
+# a {flow: mapping} an unquoted comma starts a new key.
+
+version: 2
 
 system: >-
   You are a personal assistant. Current date: 2026-11-23 (Monday). Use the provided tools when one
@@ -88,7 +93,7 @@ tools:
     parameters:
       type: object
       properties:
-        recipient: {type: string, description: Name, email address or channel}
+        recipient: {type: string, description: "Name, email address or channel"}
         type: {type: string, enum: [email, sms, chat], description: Delivery channel}
         subject: {type: string, description: Subject line (email only)}
         body: {type: string, description: Message text}
@@ -230,14 +235,25 @@ cases:
             - {name: Eli, email: eli@example.com}
 
   # ---- 6 no tool fits ----
-  - {id: n01, category: none, prompt: "Tell me a short joke about pelicans.", expect: []}
-  - {id: n02, category: none, prompt: "What is the capital of France?", expect: []}
-  - {id: n03, category: none, prompt: "Thanks, that is all for now.", expect: []}
-  - id: n04
+  # Each needs nothing a tool offers: text fully inside the prompt, small talk, or capabilities.
+  - id: n01
     category: none
-    prompt: "Explain what a REST API is in two sentences."
+    prompt: "Rewrite this sentence to sound more formal: 'we gotta fix the pump before the weekend'."
     expect: []
-  - {id: n05, category: none, prompt: "Translate 'good morning' into Spanish.", expect: []}
+  - id: n02
+    category: none
+    prompt: >-
+      Summarise this in one sentence: 'The pool pump was replaced on Monday because the old motor
+      was noisy. The new pump is quieter and uses less power, and its warranty lasts three years.'
+    expect: []
+  - {id: n03, category: none, prompt: "Thanks, that is all for now.", expect: []}
+  - {id: n04, category: none, prompt: "What can you help me with?", expect: []}
+  - id: n05
+    category: none
+    prompt: >-
+      Here is my draft: 'Thanks for coming to the meeting. I think the plan is good, but the
+      schedule is tight.' Does the tone sound too negative? Answer briefly.
+    expect: []
   - {id: n06, category: none, prompt: "How are you today?", expect: []}
 
   # ---- 4 parallel ----
@@ -321,14 +337,15 @@ cases:
           - {tool: write_file, match: {content: contains},
              args: {path: python.txt, content: "3.14", mode: overwrite}}
 
-  # ---- 4 error recovery (first call is name-only; the canned error is fed back) ----
+  # ---- 4 error recovery (first call is name-only; a transient failure is fed back and the
+  # same call must be repeated unchanged) ----
   - id: e01
     category: recovery
     prompt: "Create a calendar event Standup on 2026-12-04 at 09:00 for 15 minutes."
     expect:
       - {tool: calendar_create_event}
     then:
-      - result: {error: "validation error: 'start' must be formatted YYYY-MM-DDTHH:MM"}
+      - result: {error: "temporary failure: the service timed out, please retry the same call"}
         expect:
           - {tool: calendar_create_event, match: {title: contains},
              args: {title: Standup, start: "2026-12-04T09:00", duration_minutes: 15}}
@@ -338,7 +355,7 @@ cases:
     expect:
       - {tool: write_file}
     then:
-      - result: {error: "validation error: 'mode' must be one of ['overwrite', 'append']"}
+      - result: {error: "temporary failure: the service timed out, please retry the same call"}
         expect:
           - {tool: write_file, match: {content: contains},
              args: {path: log.txt, content: done, mode: append}}
@@ -348,8 +365,7 @@ cases:
     expect:
       - {tool: send_message}
     then:
-      - result:
-          error: "validation error: 'type' must be one of ['email', 'sms', 'chat'], got 'text'"
+      - result: {error: "temporary failure: the service timed out, please retry the same call"}
         expect:
           - {tool: send_message, match: {recipient: contains, body: contains},
              args: {recipient: Sam, type: sms, body: hi}}
@@ -359,7 +375,7 @@ cases:
     expect:
       - {tool: search_notes}
     then:
-      - result: {error: "validation error: 'limit' must be an integer between 1 and 20"}
+      - result: {error: "temporary failure: the service timed out, please retry the same call"}
         expect:
           - {tool: search_notes, match: {query: contains},
              args: {query: tax receipts, limit: 5}}
