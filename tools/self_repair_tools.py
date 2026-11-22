@@ -177,11 +177,9 @@ class DiagnoseLogErrorsTool(BaseTool):
         super().__init__(
             name="diagnose_log_errors",
             description=(
-                "Scan the end of WITS's own log (var/logs/witsv3.log) for tracebacks and "
-                "errors, with the file and line of each when known. Use it when the owner "
-                "reports a crash or error without naming a file, before fixing anything. "
-                "Not for the owner's own scripts (read them with read_file). Changes "
-                'nothing. Examples: {}, {"lines": 500, "max_issues": 3}.'
+                "Find tracebacks and errors, with file and line, at the end of WITS's own log "
+                "(var/logs/witsv3.log), when the owner reports a crash without naming a file. "
+                "Changes nothing."
             ),
         )
         self.log_path = main_log_path()
@@ -219,14 +217,12 @@ class DiagnoseLogErrorsTool(BaseTool):
             "properties": {
                 "lines": {
                     "type": "integer",
-                    "description": "How many lines from the end of the log to scan; "
-                    "leave it out for 2000",
+                    "description": "lines from the end to scan; default 2000",
                     "default": 2000,
                 },
                 "max_issues": {
                     "type": "integer",
-                    "description": "Most distinct issues to return; leave it out for "
-                    "the usual 5",
+                    "description": "most issues returned; default 5",
                     "default": 5,
                 },
             },
@@ -240,11 +236,8 @@ class RunTestSuiteTool(BaseTool):
         super().__init__(
             name="run_test_suite",
             description=(
-                "Run the project's pytest tests, the whole suite or one file, and report "
-                "pass or fail with the end of the output. Use it when the owner names a "
-                "failing test, or to confirm a bug before fixing it. Not needed after "
-                "apply_code_fix, which runs tests itself. Examples: {}, "
-                '{"test_path": "tests/test_dates.py"}.'
+                "Run the project's pytest tests, all or one path, and report pass or fail with "
+                "the output tail. Not needed after apply_code_fix, which tests itself."
             ),
         )
 
@@ -264,14 +257,12 @@ class RunTestSuiteTool(BaseTool):
             "properties": {
                 "test_path": {
                     "type": "string",
-                    "description": "Test file or folder to run, such as "
-                    "'tests/test_dates.py'; leave it out for all",
+                    "description": "file or folder, e.g. 'tests/test_dates.py'; default all",
                     "default": "",
                 },
                 "timeout": {
                     "type": "number",
-                    "description": "Seconds to wait before stopping the run; leave it "
-                    "out for 120",
+                    "description": "seconds; default 120",
                     "default": 120.0,
                 },
             },
@@ -285,12 +276,8 @@ class ApplyCodeFixTool(BaseTool):
         super().__init__(
             name="apply_code_fix",
             description=(
-                "Fix code in an existing project file: give the full corrected file; it "
-                "is kept only if the tests pass, otherwise the original is restored. Use "
-                "it when the owner asks to fix, repair or change a named code file (read "
-                "it first with read_file). Not for new scripts, pages or notes (use "
-                'write_file). Example: {"file_path": "parser.py", "new_content": "<whole '
-                'corrected file>", "reason": "skip empty lines"}.'
+                "Replace an existing project code file with a corrected one, kept only if tests "
+                "pass and restored otherwise; read it first. Not for new files (write_file)."
             ),
         )
 
@@ -329,29 +316,24 @@ class ApplyCodeFixTool(BaseTool):
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "Path of the code file to fix, relative to the project, "
-                    "such as 'parser.py'",
+                    "description": "relative to the project, e.g. 'parser.py'",
                 },
                 "new_content": {
                     "type": "string",
-                    "description": "The whole corrected file, not a diff or only the "
-                    "changed lines",
+                    "description": "the whole corrected file, not a diff",
                 },
                 "reason": {
                     "type": "string",
-                    "description": "One short line on what was wrong and the fix; used "
-                    "as the commit message",
+                    "description": "one line; becomes the commit message",
                 },
                 "test_path": {
                     "type": "string",
-                    "description": "Test file or folder to check the fix with; leave it "
-                    "out to let the tool choose",
+                    "description": "tests to run; default picked by the tool",
                     "default": "",
                 },
                 "commit": {
                     "type": "boolean",
-                    "description": "true (the default) commits the fix to git when the "
-                    "tests pass",
+                    "description": "git commit when tests pass; default true",
                     "default": True,
                 },
             },

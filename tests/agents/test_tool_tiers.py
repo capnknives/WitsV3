@@ -190,9 +190,10 @@ def test_real_registry_tiers():
     assert specs.tiers.owner_approval == set(ToolTierSettings().owner_approval)
     assert not specs.tiers.owner_approval & set(specs.schemas)
     assert not specs.tiers.owner_approval & {e["name"] for e in specs.lookup}
+    # Reason: C4d withdrew the 40-character floor; each parameter still says something.
     for tool in specs.payload:
         for name, prop in tool["function"]["parameters"]["properties"].items():
-            assert len(prop.get("description", "")) >= 40, (tool["function"]["name"], name)
+            assert prop.get("description", "").strip(), (tool["function"]["name"], name)
 
 
 # --- the loop ---------------------------------------------------------------

@@ -266,3 +266,34 @@ three. A simple chat turn is 0.7 to 1.0 s to the first result, as before.
 The prompt was written after reading these same cases, so the gain on them
 overstates what new messages will see. Not measured: any message outside the
 set, thinking on, another model.
+
+## Trimmed tool payload (C4d), all 61 cases, three runs, November 22, 2026
+
+C4c plus shorter tool descriptions and a slimmer schema sent to the model
+(the guard still checks the full schema). The always-on tool payload went from
+13,068 to 8,422 characters. Same model, local settings and sandbox rules.
+
+| | C4c | C4d first build | C4d as merged |
+|---|---|---|---|
+| pass all three runs | 55 | 55 | 55 |
+| pass some runs | 2 | 2 | 1 |
+| fail all three | 4 | 4 | 5 |
+| prompt tokens, first model call of a turn (median) | 3,284 | 2,172 | not read |
+
+- The first build also shortened `find_tools` and `use_tool`. The lookup case
+  `tier-lookup-knowledge-summary` then failed three of three (the model
+  replied "Done." and called nothing). Their original wording was restored
+  and the case passes three of three again. The prompt-token figure for the
+  merged build was not read; it is about 110 tokens above the first build by
+  character count.
+- Cases that differ from C4c in the merged build: `owner-odd-numbers-script`
+  1/3 to 3/3; `owner-story-great-war` still fails but now writes about 310
+  words where it wrote 60; `owner-codebase-look-yourself` 1/3 to 0/3 (lists
+  the folder, replies in 36 words against a 40-word floor);
+  `owner-cinnamon-rolls` 3/3 to 2/3, the miss being one run that hit the
+  180-second timeout after a connection error to Ollama.
+- Still failing as before: `followup-yes-do-it` (now writes a file),
+  `owner-codebase-question`, `owner-bugreports-feature`.
+
+Same pass count for about a third fewer prompt tokens. Three runs per case is
+too few to call single-case moves of one run real.

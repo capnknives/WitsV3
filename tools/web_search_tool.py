@@ -54,12 +54,9 @@ class WebSearchTool(BaseTool):
         super().__init__(
             name="web_search",
             description=(
-                "Search the live web and return results (title, link, snippet). Use it "
-                "for current events, recent releases, prices and facts you are unsure "
-                "of. Not for the owner's own documents (use document_search) or past "
-                'conversations (use search_archival_memory). Examples: {"query": '
-                '"latest stable Python release"}, {"query": "rain tomorrow Austin", '
-                '"max_results": 3}.'
+                "Search the live web for current events, prices and facts you are unsure of; "
+                "returns title, link and snippet. Not for the owner's documents (document_search) "
+                "or past chats (search_archival_memory)."
             ),
         )
         # Populated by set_dependencies(); safe defaults until then.
@@ -467,13 +464,11 @@ class WebSearchTool(BaseTool):
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "What to search for, in a few plain words, such "
-                        "as 'python 3.13 release date'",
+                        "description": "a few plain words",
                     },
                     "max_results": {
                         "type": "integer",
-                        "description": "How many results to return; leave it out for "
-                        "the usual 5",
+                        "description": "default 5",
                         "default": 5,
                     },
                 },

@@ -267,7 +267,9 @@ async def test_prefix_fingerprint_equal_across_two_turns():
     assert "b.md" in last.content and "b.md" not in second["messages"][0].content
     names = [t["function"]["name"] for t in first["tools"]]
     assert names == sorted(names) == ["boom", "clock", "lookup", "sad"]
-    assert first["tools"][2]["function"]["parameters"]["additionalProperties"] is False
+    # Reason: the sent view drops the closure flag (C4d); the guard schema keeps it.
+    assert "additionalProperties" not in first["tools"][2]["function"]["parameters"]
+    assert orch._tool_schemas["lookup"]["additionalProperties"] is False
     assert json.dumps(first["tools"]) == json.dumps(second["tools"])
 
 

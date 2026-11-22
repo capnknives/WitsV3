@@ -19,10 +19,8 @@ class FileReadTool(BaseTool):
         super().__init__(
             name="read_file",
             description=(
-                "Read a text file and return its contents. Use it when the owner names a "
-                "file to read, quote or explain. Not for searching the owner's indexed "
-                "documents (use document_search) or listing a folder (use list_directory). "
-                'Examples: {"file_path": "README.md"}, {"file_path": "docs/notes.txt"}.'
+                "Read a text file the owner names. Not for searching indexed documents "
+                "(document_search)."
             ),
         )
 
@@ -74,13 +72,11 @@ class FileReadTool(BaseTool):
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "Path of the file to read, relative to the project "
-                    "folder or absolute, such as 'README.md'",
+                    "description": "relative to the project folder, or absolute",
                 },
                 "encoding": {
                     "type": "string",
-                    "description": "Text encoding of the file; leave it out for the "
-                    "usual 'utf-8'",
+                    "description": "default 'utf-8'",
                     "default": "utf-8",
                 },
             },
@@ -95,12 +91,9 @@ class FileWriteTool(BaseTool):
         super().__init__(
             name="write_file",
             description=(
-                "Create or overwrite a text file with the given content. Call it whenever "
-                "the owner asks to create, save or write a script, file, page or website: "
-                "write the file, do not just print the code in your reply. Relative paths "
-                "are fine and missing folders are created. Not for reading files. "
-                'Examples: {"file_path": "scripts/rename.py", "content": "print(1)"}, '
-                '{"file_path": "site/index.html", "content": "<h1>Hi</h1>"}.'
+                "Create or overwrite a text file whenever the owner asks to create or save a "
+                "script, file or page: write it, do not just print the code. Missing folders are "
+                "created. Not for fixing existing project code (apply_code_fix)."
             ),
         )
 
@@ -159,23 +152,20 @@ class FileWriteTool(BaseTool):
             "properties": {
                 "file_path": {
                     "type": "string",
-                    "description": "Path of the file to write; relative paths such as "
-                    "'scripts/backup.sh' are fine",
+                    "description": "relative paths land in the projects folder, e.g. 'site/index.html'",
                 },
                 "content": {
                     "type": "string",
-                    "description": "The full text to put in the file, such as the "
-                    "complete script or page",
+                    "description": "the complete file text",
                 },
                 "encoding": {
                     "type": "string",
-                    "description": "Text encoding to write with; leave it out for the "
-                    "usual 'utf-8'",
+                    "description": "default 'utf-8'",
                     "default": "utf-8",
                 },
                 "mode": {
                     "type": "string",
-                    "description": "'w' replaces the file (the default), 'a' appends " "to its end",
+                    "description": "'w' replaces (default), 'a' appends",
                     "default": "w",
                 },
             },
@@ -189,12 +179,7 @@ class ListDirectoryTool(BaseTool):
     def __init__(self):
         super().__init__(
             name="list_directory",
-            description=(
-                "List the files and folders in a directory with their sizes. Use it when "
-                "the owner asks what is in a folder or you need a file's exact name. Not "
-                "for reading a file's contents (use read_file). "
-                'Examples: {"directory_path": "docs"}, {"directory_path": "."}.'
-            ),
+            description=("List a folder's files and subfolders with their sizes."),
         )
 
     async def execute(
@@ -257,13 +242,11 @@ class ListDirectoryTool(BaseTool):
             "properties": {
                 "directory_path": {
                     "type": "string",
-                    "description": "Path of the folder to list, relative to the project "
-                    "folder, such as 'docs' or '.'",
+                    "description": "relative to the project folder, e.g. 'docs' or '.'",
                 },
                 "include_hidden": {
                     "type": "boolean",
-                    "description": "true to also list hidden entries whose names start "
-                    "with a dot",
+                    "description": "include dot-entries; default false",
                     "default": False,
                 },
             },
@@ -278,9 +261,7 @@ class DateTimeTool(BaseTool):
         super().__init__(
             name="datetime",
             description=(
-                "Get the current local date and time. Use it whenever the answer depends "
-                "on today's date, the day of the week or the time now. Not for date maths "
-                'on dates the owner gives. Examples: {}, {"format_string": "%A %d %B %Y"}.'
+                "Current local date and time; use it whenever the answer depends on today or now."
             ),
         )
 
@@ -312,8 +293,7 @@ class DateTimeTool(BaseTool):
             "properties": {
                 "format_string": {
                     "type": "string",
-                    "description": "Python strftime format; leave it out for "
-                    "'%Y-%m-%d %H:%M:%S'",
+                    "description": "strftime format; default '%Y-%m-%d %H:%M:%S'",
                     "default": "%Y-%m-%d %H:%M:%S",
                 }
             },

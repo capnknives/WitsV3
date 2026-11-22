@@ -16,7 +16,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from agents.native_loop_support import build_tool_specs
+from agents.native_loop_support import build_tool_specs, sent_schema
 from core.prompt_prefix import order_tools
 from core.tool_call_guard import Verdict
 
@@ -123,7 +123,8 @@ class TierSpecs:
 
     Attributes:
         tiers: Resolved tiers.
-        payload: Tool list sent to the model: the ``always`` tier, sorted by name.
+        payload: Tool list sent to the model: the ``always`` tier, sorted by name, each
+            with the slim ``sent_schema`` view of its guard schema.
         schemas: Name to schema the guard checks: ``always`` and ``lookup`` tools, never
             ``owner_approval`` ones.
         lookup: ``{"name", "description", "parameters"}`` for each ``lookup`` tool.
@@ -232,12 +233,17 @@ def build_tier_specs(registry: Any, exclude: frozenset[str], settings: Any) -> T
                     "function": {
                         "name": name,
                         "description": description,
-                        "parameters": parameters,
+                        "parameters": sent_schema(parameters),
                     },
                 }
             )
             guard[name] = parameters
-    lookup = [dict(t["function"]) for t in payload if t["function"]["name"] in tiers.lookup]
+    # Reason: find_tools shows the full schema the guard checks, not the slim sent view.
+    lookup = [
+        {**t["function"], "parameters": schemas[t["function"]["name"]]}
+        for t in payload
+        if t["function"]["name"] in tiers.lookup
+    ]
     return TierSpecs(tiers, order_tools(sent), guard, lookup)
 
 

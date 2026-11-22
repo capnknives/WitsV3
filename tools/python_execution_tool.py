@@ -24,11 +24,9 @@ class PythonExecutionTool(BaseTool):
         super().__init__(
             name="python_execute",
             description=(
-                "Run a short Python snippet in a sandbox and return what it prints or the "
-                "error. Use it to test an idea or compute something too complex for "
-                "calculator. Not for saving code (use write_file) or fixing project files "
-                '(use apply_code_fix). Examples: {"code": "print(sorted([3, 1, 2]))"}, '
-                '{"code": "import math; print(math.pi)", "timeout": 10}.'
+                "Run a short Python snippet in a sandbox and return its output or error, for "
+                "maths too complex for calculator. Not for saving code (write_file) or fixing "
+                "project files (apply_code_fix)."
             ),
         )
         self.timeout = 30  # seconds
@@ -284,8 +282,8 @@ subprocess.check_output = restricted_subprocess
             f"subprocess: {subprocess_status}."
         )
         code_description = (
-            "The Python code to run; print() what you need back "
-            f"(network: {network_status}, subprocess: {subprocess_status})"
+            f"print() what you need back (network: {network_status}, "
+            f"subprocess: {subprocess_status})"
         )
 
         return {
@@ -297,8 +295,7 @@ subprocess.check_output = restricted_subprocess
                     "code": {"type": "string", "description": code_description},
                     "timeout": {
                         "type": "integer",
-                        "description": "Seconds before the run is stopped; leave it out "
-                        "for the usual 30",
+                        "description": "seconds; default 30",
                         "default": 30,
                     },
                 },

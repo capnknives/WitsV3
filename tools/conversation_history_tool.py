@@ -19,11 +19,9 @@ class ReadConversationHistoryTool(BaseTool):
         super().__init__(
             name="read_conversation_history",
             description=(
-                "Return this conversation's messages, oldest first: the 10 most recent "
-                "by default, or all of them with max_messages 0. Use it when the owner "
-                "asks to save, export, summarise or review this conversation (to save, "
-                "pass the text to write_file). Not for earlier conversations (use "
-                'search_archival_memory). Examples: {}, {"max_messages": 0}.'
+                "Return this conversation's messages, oldest first, to save, export, summarise or "
+                "review it (to save, pass the text to write_file). Not for earlier chats "
+                "(search_archival_memory)."
             ),
         )
 
@@ -88,14 +86,12 @@ class ReadConversationHistoryTool(BaseTool):
                 },
                 "max_messages": {
                     "type": "integer",
-                    "description": "How many recent messages to include; 0 for the "
-                    "whole conversation",
+                    "description": "most recent N; default 10, 0 for all",
                     "default": 10,
                 },
                 "include_metadata": {
                     "type": "boolean",
-                    "description": "true to add each message's timestamp and other "
-                    "stored details",
+                    "description": "add timestamps; default false",
                     "default": False,
                 },
             },

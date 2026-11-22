@@ -549,10 +549,8 @@ class CalculatorTool(BaseTool):
         super().__init__(
             name="calculator",
             description=(
-                "Evaluate an arithmetic expression exactly (+ - * / and brackets, or "
-                "sqrt(n)). Use it for any calculation the owner asks for instead of "
-                "working it out yourself. Not for unit conversion or symbolic algebra. "
-                'Examples: {"expression": "12 * 7 + 5"}, {"expression": "sqrt(144)"}.'
+                "Evaluate arithmetic exactly (+ - * /, brackets, sqrt(n)); use it for every "
+                "calculation. Not for anything needing code (python_execute)."
             ),
         )
 

@@ -118,6 +118,36 @@ def model_call_error(exc: Exception, model: str | None) -> str:
     return f"{MODEL_CALL_FAILED}: {exc}"
 
 
+# Reason: annotations and closure flags cost context every round and do not change how a
+# model calls the tool; the guard still validates against the full schema.
+_SENT_DROP = frozenset({"title", "default", "examples", "additionalProperties"})
+
+
+def sent_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """The view of a normalised schema that is sent to the model.
+
+    Drops ``title``, ``default``, ``examples``, ``additionalProperties`` and an empty
+    ``required`` at every level; names, types, enums, limits and ``required`` are kept
+    unchanged. Descriptions state defaults where they matter.
+
+    Args:
+        schema: A schema accepted by ``normalise_schema`` (or one of its subschemas).
+
+    Returns:
+        A new, slimmer schema; ``schema`` is not changed.
+    """
+    out: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in _SENT_DROP or (key == "required" and not value):
+            continue
+        if key == "properties" and isinstance(value, dict):
+            value = {name: sent_schema(sub) for name, sub in value.items()}
+        elif key == "items" and isinstance(value, dict):
+            value = sent_schema(value)
+        out[key] = value
+    return out
+
+
 def build_tool_specs(
     registry: Any, exclude: frozenset[str]
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
@@ -128,10 +158,11 @@ def build_tool_specs(
         exclude: Tool names the loop never offers.
 
     Returns:
-        (tools payload sorted by name, tool name -> schema the guard checks). Both use
-        the normalised schema without ``CONTEXT_PARAMS``, so a call that supplies one fails
-        as an unknown parameter. A tool whose schema cannot be normalised is left out of
-        both, so calling it counts as unknown.
+        (tools payload sorted by name, tool name -> schema the guard checks). Both come
+        from the normalised schema without ``CONTEXT_PARAMS``, so a call that supplies one
+        fails as an unknown parameter; the payload carries its ``sent_schema`` view. A
+        tool whose schema cannot be normalised is left out of both, so calling it counts
+        as unknown.
     """
     if not registry:
         return [], {}
@@ -156,7 +187,7 @@ def build_tool_specs(
                 "function": {
                     "name": name,
                     "description": str(description),
-                    "parameters": parameters,
+                    "parameters": sent_schema(parameters),
                 },
             }
         )

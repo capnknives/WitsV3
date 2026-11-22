@@ -102,7 +102,7 @@ async def test_model_cannot_pass_user_role_to_read_file():
     for tool in llm.sent[0]["tools"]:
         params = tool["function"]["parameters"]
         assert not CONTEXT_PARAMS & set(params["properties"])
-        assert not CONTEXT_PARAMS & set(params["required"])
+        assert not CONTEXT_PARAMS & set(params.get("required", []))
 
 
 async def test_two_concurrent_turns_keep_their_contexts_apart():
