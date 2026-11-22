@@ -224,6 +224,22 @@ sentence gets a direct reply with no tool call; a simple turn shows its first
 token in under 2 seconds on the PC; a multi-step request reaches the heavy
 provider by rule and the log shows it.
 
+**Measured on November 22, 2026 (old path, `qwen3:8b`, turn records).**
+
+- Until PR #51, WITS sent a context size only for the book agent. Ollama then
+  loaded `qwen3:8b` at the model's own default of 40,960 tokens, and 29% of it
+  ran on the CPU. Every chat turn paid for that. With `num_ctx` fixed at 8,192
+  the model is fully on the GPU and embeddings run on the CPU.
+- The owner "software" sentence: 42.8 s (cold) and 25.6 s (warm) before; 7.8 s
+  (cold, 5.7 s of it model load) and 1.2 s (warm) after. A greeting: 11.1 s
+  before, 0.5 to 1.1 s after. PR #51 also turned thinking off on this path, so
+  the two changes are not separated in these numbers.
+- Nine plain chat cases from the golden set passed on the old path after the
+  fix, 0.5 to 4.3 s each. The other cases have not been run: golden runs wait
+  for the sandbox in package C1c.
+- A high-effort independent review is used for C3a and the stage gate only.
+  C3b and C3c get an independent review at medium.
+
 ### Stage 3 — Harness in, completed (1 week)
 
 The rest of Phase 2: memory and document tools, resources and prompts,

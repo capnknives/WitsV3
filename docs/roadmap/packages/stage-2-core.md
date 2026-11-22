@@ -373,7 +373,7 @@ Report: files changed, test tail, open questions. 20 lines at most.
 ## WP C3b: Finish the native loop
 
 ```
-Tier: Opus, medium. Review: high
+Tier: Opus, medium. Review: independent, medium
 Branch: claude/wp-c3b-native-loop, from origin/main (after C2a, C2b and C3a are merged)
 Read: this file, "C2 and C3 contract"
       agents/native_tool_orchestrator.py (whole file, 205 lines)
@@ -408,7 +408,7 @@ Report: files changed, test tail, open questions. 20 lines at most.
 ## WP C3c: The front door setting
 
 ```
-Tier: Opus, medium. Review: high
+Tier: Opus, medium. Review: independent, medium
 Branch: claude/wp-c3c-front-door, from origin/main (after C3b is merged)
 Read: this file, "C2 and C3 contract"
       agents/wits_control_center_agent.py lines 105-250
@@ -434,5 +434,48 @@ Acceptance (tests/agents/test_front_door.py, fake LLM that fails the test if
 Run: pytest tests/agents/test_front_door.py tests/ -q --no-cov; ruff and black on the CI scope
 Out of scope: deleting the old path, changing the default, slash commands (they
       are handled in the browser today), the UI
+Report: files changed, test tail, open questions. 20 lines at most.
+```
+
+## WP C1c: Golden runs in a sandbox
+
+Found on November 22: the golden set was run against the live runtime, and the
+case "list the files in the docs folder" made the old path ingest the owner's
+configured ingest root. Golden runs must not touch real data.
+
+```
+Tier: Sonnet, medium
+Branch: claude/wp-c1c-golden-sandbox, from origin/main
+Read: scripts/golden_run.py (whole file) ; core/runtime_paths.py lines 30-110
+      core/config.py: the settings classes for document_rag, filesystem roots
+        and memory_manager (find them by name; read only those)
+      core/turn_metrics.py (signatures)
+Do not read: docs/implementation/, docs/archive/, docs/roadmap/revival-2026-07.md, agents/
+Build:
+  - scripts/golden_run.py gains --sandbox DIR (required unless --live is given
+    with --i-understand-this-touches-real-data). In sandbox mode, before the
+    system is built: every runtime data, log, session, memory and workspace
+    path points inside DIR; filesystem read roots and document ingest roots
+    are set to DIR/files only (seeded with three small text files and a docs/
+    folder); auto-ingest is off; self-repair restart is off; the project root
+    for verified edits is a throwaway copy of tests/golden/sandbox_project/
+    placed in DIR (a tiny package with parser.py, config_loader.py and
+    tests/test_dates.py so the repair cases have something to act on)
+  - the runner refuses to start if any resolved path is outside DIR
+  - the runner calls turn_metrics.note_event for each event, so the turn record
+    carries first_event_ms and first_result_ms
+  - a `--timeout-seconds` per case (default 180); a case that exceeds it is
+    cancelled, counted as failed, and the run continues
+  - the results table is rewritten after every case, not only at the end
+Acceptance (tests/core/test_golden_sandbox.py, no Ollama):
+  - with --sandbox, the built config has no path outside DIR (walk every path
+    and root setting) and the owner's configured roots are gone
+  - without --sandbox or the two live flags, the script exits 2 before building
+    anything
+  - a fake control center that never finishes is cancelled at the timeout and
+    the next case still runs; the table on disk has both rows
+Run: pytest tests/core/test_golden_sandbox.py tests/core/test_golden.py -q --no-cov;
+     ruff and black on the CI scope plus scripts/golden_run.py
+Out of scope: changing any agent or tool; the cases themselves
 Report: files changed, test tail, open questions. 20 lines at most.
 ```
