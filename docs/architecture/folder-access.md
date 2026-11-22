@@ -93,17 +93,31 @@ Refused for every mode, even with a grant, and never requestable:
   or a browser profile folder (`User Data`, `.mozilla`, `Profiles` under a
   browser vendor folder).
 - Any file whose name matches, case-insensitively: `.env`, `.env.*`, `*.pem`,
-  `*.key`, `*.pfx`, `*.p12`, `*.kdbx`, `id_rsa*`, `id_ed25519*`,
-  `client_secret*.json`, `*credentials*.json`, `token*.json`, `*.keystore`,
-  `secrets.*`, `.netrc`, `_netrc`, `.pgpass`, `.npmrc`, `.pypirc`,
-  `.git-credentials`, `*.ppk`, `*.jks`, `*.ovpn`, `password*.*`, `passwords*`,
-  `*service-account*.json`, `*service_account*.json`, `*.kdb`, `wallet.dat`,
-  `.htpasswd`. `password*.*` is deliberate, so a document such as
-  `password-policy.md` is refused too; rename it to index it.
-- Anything under the repo's `var/data` or `var/secrets`: WITS's own databases
-  and runtime state. WITS opens these directly, never through `check`, so no
-  tool can read, write or index them. `var/wits_files` (the default
-  `folders.base`) is not affected.
+  `*.key`, `*.pfx`, `*.p12`, `*.kdbx`, `id_rsa*`, `id_ed25519*`, `id_ecdsa*`,
+  `id_dsa*`, `credentials` (exact, no extension), `client_secret*.json`,
+  `*credentials*.json`, `token*.json`, `*.keystore`, `secrets.*`, `.netrc`,
+  `_netrc`, `.pgpass`, `.npmrc`, `.pypirc`, `.git-credentials`, `*.ppk`,
+  `*.jks`, `*.ovpn`, `*service-account*.json`, `*service_account*.json`,
+  `*.kdb`, `wallet.dat`, `.htpasswd`.
+- A name starting `password` or `passwords` with no extension or a data-like
+  one (`txt`, `csv`, `tsv`, `xls`, `xlsx`, `json`, `doc`, `docx`, `pdf`, `xml`,
+  `yaml`, `yml`): `passwords.txt`, `password.csv`, `passwords`. Source and
+  policy documents such as `password_reset.py` and `password-policy.md` stay
+  allowed.
+- Anything under the repo's `var/` except the `folders.base` subtree (default
+  `var/wits_files`) and `var/exports` (the guest export route). That covers
+  `var/data`, `var/secrets`, `var/logs`, `var/backups`, `var/workspace`,
+  `var/cache`, `var/sessions` and `var/` itself. `var/data` and `var/secrets`
+  stay refused even if `folders.base` points into them. Coding handlers and
+  the book writer reach `var/workspace` through
+  `safe_code_editor.resolve_within_project`, not through `check`. The repo root
+  is resolved the same way as the path, so a symlinked, junction or 8.3 repo
+  path cannot dodge the rule.
+- The configured data folder (`<runtime_paths.root>/data`) and the folder that
+  holds `workspace.db_path`, wherever config puts them. `enforce`, `check`,
+  `is_never` and the indexer derive these from config and pass them to the
+  pure `decide()` in `Roots.private`. A store placed directly in the repo, the
+  base folder or the home folder does not refuse that whole folder.
 
 The file-name rule applies inside the base folders and the repo too. The
 indexer skips such files and counts them in its summary.
@@ -111,9 +125,13 @@ indexer skips such files and counts them in its summary.
 The indexer also reads the first 4096 bytes of each file it would index and
 skips it, counted the same way, when they hold a private-key header
 (`-----BEGIN` followed by `PRIVATE KEY` on the same line, which covers RSA,
-EC, OPENSSH, ENCRYPTED and PGP keys) or `PuTTY-User-Key-File-`. A file it
-cannot read is skipped. Certificates (`-----BEGIN CERTIFICATE-----`) stay
-indexable. This content check applies to indexing only; `decide()` stays pure.
+EC, OPENSSH, ENCRYPTED and PGP keys) or `PuTTY-User-Key-File-`. When those
+bytes start with a UTF-16 byte-order mark or contain NUL bytes (PowerShell `>`
+output), they are searched again with the NULs removed. A file it cannot read,
+or that is not a regular file, is skipped. Certificates
+(`-----BEGIN CERTIFICATE-----`) stay indexable. Known limit: a header after the
+first 4096 bytes, or split across lines, is not seen. This content check
+applies to indexing only; `decide()` stays pure.
 
 ## 5. Requests and grants
 

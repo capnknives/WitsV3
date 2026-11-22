@@ -540,6 +540,9 @@ NEW_NEVER = [
     "old.kdb",
     "wallet.dat",
     ".htpasswd",
+    "id_ecdsa",
+    "id_dsa.pub",
+    "credentials",
 ]
 
 
@@ -551,14 +554,14 @@ def test_widened_secret_names_are_never(name, mode):
         assert not d.allowed and not d.requestable, path
 
 
-# Reason: "password*.*" is in the list by design, so a policy document named
-# password-policy.md is refused too; renaming it is the owner's way out.
-def test_password_policy_document_is_refused_by_design():
-    assert not _posix("/srv/wits/inbox/password-policy.md", "index").allowed
+@pytest.mark.parametrize("name", ["password-policy.md", "password_reset.py", "creds.md"])
+def test_password_source_and_policy_documents_stay_allowed(name):
+    assert _posix(f"/srv/wits/inbox/{name}", "index").allowed
 
 
 @pytest.mark.parametrize(
-    "name", ["keynote.txt", "monkey.txt", "report.json", "secretary-notes.md", "keys.md"]
+    "name",
+    ["keynote.txt", "monkey.txt", "report.json", "secretary-notes.md", "keys.md", "credentials.md"],
 )
 def test_ordinary_names_stay_allowed(name):
     assert _posix(f"/srv/wits/inbox/{name}", "index").allowed
@@ -587,7 +590,57 @@ def test_default_base_under_var_wits_files_stays_allowed():
     )
     assert decide(f"{base}/inbox/a.txt", "index", "owner", (), roots, now=1000).allowed
     assert decide(f"{base}/projects/a.txt", "write", "owner", (), roots, now=1000).allowed
-    assert decide("/opt/witsv3/var/database.md", "read", "owner", (), roots, now=1000).allowed
+    assert decide(f"{base}/notes.md", "read", "owner", (), roots, now=1000).allowed is False
+    roots = Roots(**{**roots.__dict__, "var_allow": (base, "/opt/witsv3/var/exports")})
+    assert decide(f"{base}/notes.md", "read", "owner", (), roots, now=1000).allowed
+    assert decide("/opt/witsv3/var/exports/a.txt", "read", "owner", (), roots, now=1000).allowed
+    for path in ("var/logs/witsv3.log", "var/backups/x", "var/data2/x", "var/data", "var"):
+        d = decide(f"/opt/witsv3/{path}", "read", "owner", (), roots, now=1000)
+        assert not d.allowed and not d.requestable, path
+    assert decide("/opt/witsv3/core/x.py", "read", "owner", (), roots, now=1000).allowed
+
+
+def test_guest_role_cannot_read_repo_var():
+    guest = Roots(**{**POSIX.__dict__, "role_roots": ("/opt/witsv3",)})
+    assert decide("/opt/witsv3/core/x.py", "read", "guest", (), guest, now=1000).allowed
+    for path in ("var/data/workspace.db", "var/logs/a.log"):
+        assert not decide(f"/opt/witsv3/{path}", "read", "guest", (), guest, now=1000).allowed
+
+
+def test_configured_private_folder_is_never():
+    roots = Roots(**{**POSIX.__dict__, "private": ("/mnt/store",)})
+    d = decide("/mnt/store/workspace.db", "read", "owner", ALL_POSIX, roots, now=1000)
+    assert not d.allowed and not d.requestable
+
+
+def test_is_never_refuses_repo_store_and_configured_store(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    (repo / "var" / "data").mkdir(parents=True)
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(repo)
+    except (OSError, NotImplementedError):
+        link = repo
+    monkeypatch.setattr(fp, "PROJECT_ROOT", link)
+    store = tmp_path / "elsewhere" / "workspace.db"
+    cfg = SimpleNamespace(workspace=SimpleNamespace(db_path=str(store)))
+    monkeypatch.setattr(pa, "_load_config_quietly", lambda: cfg)
+    assert pa.is_never(repo / "var" / "data" / "workspace.db", "read")
+    assert pa.is_never(store, "read")
+    assert not pa.is_never(repo / "core" / "x.py", "read")
+
+
+def test_symlink_into_repo_var_data_is_refused(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    (repo / "var" / "data").mkdir(parents=True)
+    (repo / "var" / "data" / "workspace.db").write_text("x")
+    link = tmp_path / "innocent.txt"
+    try:
+        link.symlink_to(repo / "var" / "data" / "workspace.db")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+    monkeypatch.setattr(fp, "PROJECT_ROOT", repo)
+    assert pa.is_never(link, "read")
 
 
 def _gate(tmp_path):
@@ -612,6 +665,7 @@ def _gate(tmp_path):
         "-----BEGIN ENCRYPTED PRIVATE KEY-----",
         "-----BEGIN PGP PRIVATE KEY BLOCK-----",
         "PuTTY-User-Key-File-3: ssh-ed25519",
+        "-----BEGIN OPENSSH PRIVATE KEY-----",
     ],
 )
 def test_index_gate_sniffs_private_key_headers(tmp_path, head):
@@ -622,7 +676,21 @@ def test_index_gate_sniffs_private_key_headers(tmp_path, head):
     assert decide(f.resolve(), "index", "owner", (), gate.roots).allowed  # decide stays pure
 
 
-def test_index_gate_allows_certificates_and_late_or_split_headers(tmp_path):
+def test_index_gate_sniffs_utf16_keys(tmp_path):
+    inbox, gate = _gate(tmp_path)
+    le = inbox / "le.txt"
+    le.write_text("-----BEGIN OPENSSH PRIVATE KEY-----\n", encoding="utf-16")
+    bare = inbox / "bare.txt"
+    bare.write_bytes("-----BEGIN RSA PRIVATE KEY-----\n".encode("utf-16-le"))
+    assert not gate.allows_file(le) and not gate.allows_file(bare) and gate.skipped == 2
+
+
+def test_has_private_key_refuses_non_regular_files(tmp_path):
+    assert pa.has_private_key(tmp_path)
+
+
+# Known limit: only the first 4 KiB are read, so a late or split header is not seen.
+def test_index_gate_known_limit_late_or_split_headers_pass(tmp_path):
     inbox, gate = _gate(tmp_path)
     cert = inbox / "chain.txt"
     cert.write_text("-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n")
