@@ -68,6 +68,7 @@ from web.schemas import (
 )
 from web.slash_commands import list_slash_commands
 from web.user_errors import format_chat_error
+from web.workspace_routes import register_workspace
 
 logger = logging.getLogger("WitsV3.WebUI")
 
@@ -1069,5 +1070,6 @@ def create_app(system) -> FastAPI:
     register_mcp_routes(app, system)
     register_ops_routes(app, system)
     register_personality_routes(app, system)
+    register_workspace(app)
 
     return app

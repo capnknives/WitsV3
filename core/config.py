@@ -3,7 +3,7 @@ Configuration management for WitsV3 system
 """
 
 import os
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -321,6 +321,36 @@ class GuestAccessSettings(BaseModel):
     )
 
 
+class WorkspacePushSettings(BaseModel):
+    """Owner push notifications for workspace approvals (the ntfy topic lives in .env)."""
+
+    provider: Literal["none", "ntfy"] = Field(default="none", description="none or ntfy")
+    ntfy_url: str = Field(
+        default="https://ntfy.sh",
+        description="ntfy server URL; the topic is a secret: WITSV3_NTFY_TOPIC in .env",
+    )
+
+
+class WorkspaceSettings(BaseModel):
+    """Shared agent workspace (contract: docs/architecture/workspace-contracts.md section 9)."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Mount the workspace gateway; requires WITSV3_WEB_TOKEN to be set",
+    )
+    db_path: str = Field(
+        default="var/data/workspace.db",
+        description="SQLite file; relative paths resolve from the project root",
+    )
+    lease_minutes: int = Field(default=30, gt=0, description="Task claim lease length")
+    approval_ttl_minutes: int = Field(default=1440, gt=0, description="Approval expiry")
+    allowed_hosts: list[str] = Field(
+        default_factory=lambda: ["localhost", "127.0.0.1"],
+        description="Hostnames the /mcp endpoint answers to (add the tailnet name)",
+    )
+    push: WorkspacePushSettings = Field(default_factory=WorkspacePushSettings)
+
+
 class WebUISettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the web UI server")
     host: str = Field(
@@ -545,6 +575,7 @@ class WitsV3Config(BaseModel):
     cli: CLISettings = CLISettings()
     document_rag: DocumentRAGSettings = Field(default_factory=DocumentRAGSettings)
     web_ui: WebUISettings = Field(default_factory=WebUISettings)
+    workspace: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
