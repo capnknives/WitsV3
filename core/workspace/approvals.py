@@ -284,7 +284,8 @@ async def list_for_project(db: Database, project: str, *, now: int | None = None
         now: Unix seconds override for tests.
 
     Returns:
-        Newest first, ``{id, client, title, status, choice, note, expires_at}`` with ``client``
+        Newest first, ``{id, client, title, status, choice, note, flagged, expires_at}`` with
+        ``client``
         a name and ``status`` reported as ``expired`` for pending past expiry.
     """
     ts = _now(now)

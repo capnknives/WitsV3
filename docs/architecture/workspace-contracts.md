@@ -106,8 +106,8 @@ half a failed file). Before migrating an existing database, `VACUUM INTO` an abs
 
 Results are structured content plus the same JSON as text. Failures are tool execution errors
 (`isError: true`) with `{"code", "message"}`; shared codes are `invalid_argument`,
-`forbidden_scope`, `forbidden_project`, `not_found`, `rate_limited`, `revoked`, `internal_error`. **None of the five needs owner
-approval** ("allowed, logged"). Each call past auth and the rate limit writes one `audit_log` row.
+`forbidden_scope`, `forbidden_project`, `not_found`, `rate_limited`, `revoked`, `internal_error`.
+**None of the five needs owner approval** ("allowed, logged"). Each call past auth and the rate limit writes one `audit_log` row.
 
 | Tool | Scope | Arguments (`additionalProperties: false`) |
 |------|-------|-------------------------------------------|
