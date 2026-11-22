@@ -479,3 +479,178 @@ Run: pytest tests/core/test_golden_sandbox.py tests/core/test_golden.py -q --no-
 Out of scope: changing any agent or tool; the cases themselves
 Report: files changed, test tail, open questions. 20 lines at most.
 ```
+
+## C3d and C4 contract
+
+Reviewed against `main` @ `56fb2be`, after the first live runs of the native
+loop (25 of 30 golden cases). Facts the briefs rest on:
+
+- The loop reads history through `to_llm_format`, which returns role and
+  content only (`core/schemas.py`, about line 447). The context block a user
+  message was sent with is not stored, so on the next turn that message differs
+  from what the model saw and everything after the system message is re-read.
+- The user message is added to the conversation before the run, with no
+  metadata (`web/server.py:277`); sessions persist message metadata
+  (`core/session_store.py:32-48`).
+- Tools have no per-call context. The old path injected `conversation_history`
+  and `user_role` as arguments (`agents/orchestrator_tool_helpers.py:180-247`);
+  the native loop injects nothing, so `read_conversation_history` and
+  `analyze_conversation` get no conversation, and tools that read `user_role`
+  fall back to their default.
+- `read_file` and `list_directory` declare `user_role` as a schema property, so
+  a model could set its own role.
+- All 30 registered tools are offered to the model on every round. That
+  includes `restart_app`, `network_control`, `guest_set_age_band` and
+  `ask_claude`.
+
+**As-sent history (C3d).** When the loop sends a user message with a context
+block, it stores that block on the message: `metadata["sent_context"]` (the
+exact text appended after the user's words). When building history it rebuilds
+each earlier user message as content plus its stored block, so earlier turns
+are byte-identical to what was sent. Messages without the key are used as they
+are.
+
+**History budget (C3d).** The block trim from C3b stays, with a second
+trigger: an estimated token count (characters divided by 4, plus the tool
+payload) above 60% of `ollama_settings.num_ctx` cuts back to
+`history_turns` in the same block-wise way. No summarising call in this
+package.
+
+**Tool context (C4a).** `core/tool_context.py`:
+
+```python
+@dataclass(frozen=True)
+class ToolContext:
+    session_id: str | None
+    user_role: str
+    conversation_history: Any | None      # ConversationHistory
+    turn_id: str | None
+def current_tool_context() -> ToolContext | None      # ContextVar, default None
+def use_tool_context(ctx: ToolContext) -> ContextManager[None]
+CONTEXT_PARAMS = frozenset({"user_role", "conversation_history", "session_id"})
+```
+
+The native loop sets it for the turn. Tools read the context first and fall
+back to their argument only when no context is set (the old path keeps
+working). On the native path the names in `CONTEXT_PARAMS` are removed from
+every schema shown to the model, and a call that supplies one is a schema
+failure. The model never chooses its own role.
+
+**Tool tiers (C4b).** `conversation.tools`:
+
+| Tier | Meaning | Default members |
+|------|---------|-----------------|
+| `always` | Sent with full schema every round | `read_file`, `list_directory`, `write_file`, `datetime`, `calculator`, `web_search`, `document_search`, `search_archival_memory`, `read_conversation_history`, `knowledge_log_add_fact`, `find_tools`, `use_tool` |
+| `lookup` | Found with `find_tools`, run with `use_tool` | every other registered tool not listed below |
+| `owner_approval` | Refused on the native path until the write-gate cards exist (C7) | `restart_app`, `network_control`, `guest_set_age_band`, `ask_claude` |
+
+- `find_tools(query)` returns up to five matches from the `lookup` tier: name,
+  description and the normalised schema. Matching is plain word overlap on
+  name and description; no embedding call.
+- `use_tool(name, arguments)` runs a `lookup` tool. The guard validates
+  `arguments` against that tool's real schema and applies every rule in the
+  tool-call rules above under the real tool name. The tool list sent to the
+  model never changes during a conversation, so the cache is kept.
+- An `owner_approval` tool called by either route gets a `reject` verdict that
+  says owner approval is needed and is not available yet.
+- A `tool_call` event always carries the real tool name.
+- Descriptions for the `always` tier are rewritten to say when to use the tool
+  and when not to, each with one or two short argument examples. No parameter
+  description under 40 characters is left in that tier.
+
+## WP C3d: As-sent history
+
+```
+Tier: Opus, medium
+Branch: claude/wp-c3d-as-sent-history, from origin/main
+Read: this file, "C3d and C4 contract"
+      agents/native_tool_orchestrator.py (whole) ; agents/native_loop_support.py (whole)
+      core/prompt_prefix.py (whole) ; core/schemas.py lines 400-460
+Do not read: docs/implementation/, docs/archive/, docs/roadmap/revival-2026-07.md
+Build:
+  - store sent_context on the current user message when a context block is sent
+    (the current message is the last user message in conversation_history; if
+    there is none, skip silently)
+  - build history from conversation_history.messages, not to_llm_format, and
+    rebuild earlier user messages with their stored block
+  - the token-estimate trigger in history_window
+  - turn the strict xfail in tests/agents/test_native_tool_orchestrator.py into
+    a passing test: the fingerprint over the shared span is equal across three
+    consecutive turns with different context each turn
+Acceptance: that test; a session saved and loaded through core/session_store
+      keeps sent_context and gives the same fingerprint; a history over the
+      budget is cut on a user message and the cut holds for the next turn;
+      messages without sent_context pass through unchanged;
+      pytest tests/ -q --no-cov passes
+Run: pytest tests/agents/test_native_tool_orchestrator.py tests/agents/test_native_loop_support.py tests/ -q --no-cov; ruff and black on the CI scope
+Out of scope: summarising old turns, storing tool messages in history, the old path
+Report: files changed, test tail, open questions. 20 lines at most.
+```
+
+## WP C4a: Tool context
+
+```
+Tier: Opus, medium. Review: independent, medium
+Branch: claude/wp-c4a-tool-context, from the C3d branch (stacked; merge C3d first)
+Read: this file, "C3d and C4 contract"
+      agents/orchestrator_tool_helpers.py lines 180-247 (what the old path injects; do not edit)
+      tools/conversation_history_tool.py (whole) ; tools/file_tools.py lines 15-45, 150-180
+      tools/web_search_tool.py lines 70-90 ; tools/guest_audit_tool.py lines 20-30, 75-80, 150-155
+      tools/guest_profile_tool.py lines 28-38 ; tools/knowledge_log_tool.py lines 28-36, 58-66
+      agents/native_tool_orchestrator.py, agents/native_loop_support.py (build_tool_specs)
+      core/tool_call_guard.py (normalise_schema, TurnGuard.check signatures)
+Do not read: docs/implementation/, docs/archive/, docs/roadmap/revival-2026-07.md
+Build:
+  - core/tool_context.py as in the contract
+  - the native loop sets the context for the whole turn (session, role from the
+    turn's kwargs with "owner" only when the caller said so, history, turn id)
+  - each tool listed above reads the context first, its argument second
+  - build_tool_specs strips CONTEXT_PARAMS from the schemas it shows and gives
+    the guard; a call that supplies one is rejected
+Acceptance (tests/core/test_tool_context.py, tests/agents/test_native_tool_orchestrator.py):
+  - on the native path read_conversation_history returns the turn's conversation
+    with no argument from the model
+  - a model call passing user_role="owner" to read_file is rejected by the guard
+  - with no context set, every tool behaves exactly as before (old-path tests unchanged)
+  - two concurrent turns keep their contexts apart
+  - pytest tests/ -q --no-cov passes
+Run: pytest tests/core/test_tool_context.py tests/agents/ tests/tools/ -q --no-cov; ruff and black on the CI scope
+Out of scope: tiers and find_tools (C4b), guests on the native path, the old path's injection code
+Report: files changed, test tail, open questions. 20 lines at most.
+```
+
+## WP C4b: Tool tiers and lookup
+
+```
+Tier: Opus, medium. Review: independent, medium
+Branch: claude/wp-c4b-tool-tiers, from the C4a branch (stacked; merge C4a first)
+Read: this file, "C3d and C4 contract" and "Tool-call rules"
+      agents/native_tool_orchestrator.py, agents/native_loop_support.py
+      core/tool_call_guard.py (whole) ; core/config.py ConversationSettings
+      the get_schema and description of each tool in the `always` tier
+      tests/golden/turns.yaml
+Do not read: docs/implementation/, docs/archive/, docs/roadmap/revival-2026-07.md
+Build:
+  - conversation.tools settings with the three tiers and the defaults above; a
+    registered tool named in no tier is `lookup`; a name in a tier that is not
+    registered is logged once and ignored
+  - tools/tool_lookup.py: find_tools and use_tool as in the contract
+  - the loop sends only the `always` tier; use_tool is unwrapped before the
+    guard so every rule and every event uses the real tool name
+  - owner_approval tools are rejected by both routes
+  - rewritten descriptions and examples for the `always` tier
+  - golden cases: add two (a lookup-tier tool reached through find_tools then
+    use_tool; an owner_approval tool asked for and refused)
+Acceptance (tests/agents/test_tool_tiers.py):
+  - the payload sent to the model is identical across rounds and turns, and
+    holds exactly the `always` tier
+  - use_tool with bad arguments counts a schema failure against the real tool;
+    use_tool naming an `always` or unknown tool is rejected
+  - restart_app is rejected through a direct call and through use_tool, with no execution
+  - find_tools never returns an owner_approval tool's schema
+  - events carry the real tool name
+  - pytest tests/ -q --no-cov passes
+Run: pytest tests/agents/test_tool_tiers.py tests/ -q --no-cov; ruff and black on the CI scope
+Out of scope: approval cards (C7), skills (C5), guests
+Report: files changed, test tail, open questions. 20 lines at most.
+```

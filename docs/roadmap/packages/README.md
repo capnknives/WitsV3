@@ -109,6 +109,10 @@ Briefs are written after the Stage 1 gate. Conversation core briefs are in
 | C3a | Tool-call guard ([brief](stage-2-core.md)) | Opus. Review: **high** | — | One test per rule |
 | C3b | Finish the native loop ([brief](stage-2-core.md)) | Opus. Independent review, medium | C2a, C2b, C3a | Scripted-model tests pass |
 | C3c | The front door setting ([brief](stage-2-core.md)) | Opus. Independent review, medium | C3b | The "software" sentence gets a direct reply on `native` |
+| C3d | As-sent history ([brief](stage-2-core.md)) | Opus | C3b | Prefix equal across turns with history |
+| C3e | One resident model, clean tool arguments (shipped, PR #60) | Sonnet | C3b | — |
+| C4a | Tool context ([brief](stage-2-core.md)) | Opus. Independent review, medium | C3d | Tools get the session; the model cannot set its role |
+| C4b | Tool tiers and lookup ([brief](stage-2-core.md)) | Opus. Independent review, medium | C4a | Fixed tool list; risky tools refused until C7 |
 
 Folder access ([contract](../../architecture/folder-access.md), [briefs](folder-access.md)):
 
