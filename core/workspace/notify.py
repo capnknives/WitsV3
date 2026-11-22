@@ -25,6 +25,17 @@ _transport: httpx.AsyncBaseTransport | None = None
 _registered_listener = None
 
 
+class _TopicFilter(logging.Filter):
+    """Drop any log record whose message contains the secret topic."""
+
+    def __init__(self, topic: str) -> None:
+        super().__init__()
+        self._topic = topic
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return self._topic not in record.getMessage()
+
+
 def _build_listener(url: str):
     """Return a created-listener that POSTs to ``url`` (which embeds the secret topic)."""
 
@@ -71,6 +82,7 @@ def register(app: FastAPI) -> None:
     if _registered_listener is not None and _registered_listener in approvals._listeners:
         return
     # Reason: httpx logs "HTTP Request: POST <url>" at INFO, and the URL holds the secret topic.
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    # Dropping only the records that contain it leaves the rest of WITS's httpx logging alone.
+    logging.getLogger("httpx").addFilter(_TopicFilter(topic))
     _registered_listener = _build_listener(f"{push.ntfy_url.rstrip('/')}/{topic}")
     approvals.add_created_listener(_registered_listener)

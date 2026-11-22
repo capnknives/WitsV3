@@ -134,3 +134,13 @@ async def test_register_twice_sends_one_push(db, monkeypatch):
     assert len(approvals._listeners) == 1
     await _create(db)
     assert len(requests) == 1
+
+
+def test_topic_filter_drops_only_records_with_the_topic():
+    flt = notify._TopicFilter("s3cret-topic")
+
+    def make(msg):
+        return logging.LogRecord("httpx", logging.INFO, __file__, 1, msg, None, None)
+
+    assert flt.filter(make("HTTP Request: POST https://ntfy.sh/s3cret-topic")) is False
+    assert flt.filter(make("HTTP Request: POST http://localhost:11434/api/chat")) is True
