@@ -182,6 +182,9 @@ security:
   filesystem_read_roots: []
   document_ingest_roots: []
   sandbox_mode: "docker"
+  # false: python_execute refuses to run when sandbox_mode is off or subprocess.
+  # true runs code directly on this computer, with your files (owner opt-in only).
+  python_execution_allow_unsandboxed: false
   sandbox_image: witsv3-sandbox
   pii_redaction:
     enabled: true

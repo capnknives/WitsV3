@@ -5,7 +5,6 @@ Provides safe execution of Python code in a sandboxed environment.
 
 import asyncio
 import logging
-import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -121,10 +120,18 @@ subprocess.check_output = restricted_subprocess
             Dictionary containing output, error, and execution status
         """
         from core.config import load_config
-        from core.sandbox_runner import run_python_sandboxed, sandbox_mode
+        from core.sandbox_runner import (
+            UNSANDBOXED_REFUSAL,
+            minimal_child_env,
+            run_python_sandboxed,
+            sandbox_mode,
+            unsandboxed_allowed,
+        )
 
         config = load_config()
         mode = sandbox_mode(config)
+        if mode != "docker" and not unsandboxed_allowed(config):
+            return {"success": False, "output": "", "error": UNSANDBOXED_REFUSAL, "return_code": -1}
         if mode in ("subprocess", "docker"):
             result = await run_python_sandboxed(
                 code, config=config, timeout=float(timeout or self.timeout)
@@ -134,6 +141,14 @@ subprocess.check_output = restricted_subprocess
                 "output": result.output,
                 "error": result.error,
                 "return_code": result.return_code,
+            }
+        if mode != "off":
+            # Reason: only an explicit "off" may run on the host; typos are refused.
+            return {
+                "success": False,
+                "output": "",
+                "error": f"unknown sandbox_mode: {mode}; {UNSANDBOXED_REFUSAL}",
+                "return_code": -1,
             }
 
         try:
@@ -147,25 +162,11 @@ subprocess.check_output = restricted_subprocess
                 with open(script_path, "w", encoding="utf-8") as f:
                     f.write(restricted_code)
 
-                # Set up environment variables for sandbox
-                env = os.environ.copy()
-                env["PYTHONPATH"] = ""  # Prevent importing from system
-                env["PYTHONUNBUFFERED"] = "1"  # Ensure output is not buffered
-                env["PYTHONIOENCODING"] = "utf-8"  # Force UTF-8 encoding
-
-                # Remove network-related environment variables
-                network_vars = [
-                    "http_proxy",
-                    "https_proxy",
-                    "HTTP_PROXY",
-                    "HTTPS_PROXY",
-                    "ftp_proxy",
-                    "FTP_PROXY",
-                    "no_proxy",
-                    "NO_PROXY",
-                ]
-                for var in network_vars:
-                    env.pop(var, None)
+                # Minimal environment: never inherit the host's (tokens, keys).
+                env = minimal_child_env(
+                    temp_dir,
+                    {"PYTHONPATH": "", "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+                )
 
                 # Additional security: Use isolated Python execution
                 python_args = [

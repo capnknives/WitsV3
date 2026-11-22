@@ -105,6 +105,9 @@ async def main() -> int:
         # Reason: fast path must not require Docker Desktop; sandbox scenarios skip.
         if hasattr(config.security, "sandbox_mode"):
             config.security.sandbox_mode = "off"
+            # Reason: isolated developer smoke run on the dev's own machine; opt in so
+            # python_execute scenarios run on the host instead of being refused.
+            config.security.python_execution_allow_unsandboxed = True
     if args.tool_mode:
         config.orchestrator.tool_calling_mode = args.tool_mode
         print(f"Tool mode override: {args.tool_mode}")
