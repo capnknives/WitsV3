@@ -32,18 +32,18 @@ git pull
 
 ## 3. Tailscale
 
-Tailscale links your PC, phone and laptop into one private network. The free personal plan is enough.
+Tailscale links your PC, phone and laptop into one private network. Tailscale has a free personal plan; check https://tailscale.com/pricing for its current limits.
 
 1. Install Tailscale on the PC from https://tailscale.com/download.
 2. Install Tailscale on your laptop from the same page.
 3. Install the Tailscale app on your phone from the app store.
 4. Sign in to the same account on all three.
-5. On the PC, run this command.
+5. On the PC, run these two commands. The first shows the short machine name and the 100.x address. The second shows the full tailnet name.
 ```powershell
-tailscale status
+& 'C:\Program Files\Tailscale\tailscale.exe' status
+(& 'C:\Program Files\Tailscale\tailscale.exe' status --json | ConvertFrom-Json).Self.DNSName
 ```
-6. Write down your PC's full tailnet name. It looks like `<your-pc>.<tailnet>.ts.net`. Also write down the 100.x address and the short machine name.
-7. If `tailscale status` does not show the full name, open the Machines page in the Tailscale admin console.
+6. Write down all three: the full tailnet name (it looks like `<your-pc>.<tailnet>.ts.net`, without the dot at the end), the short machine name and the 100.x address.
 
 ## 4. Turn the workspace on
 
