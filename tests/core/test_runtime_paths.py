@@ -1,10 +1,19 @@
 """Tests for var/ runtime path layout and legacy migration."""
 
+import pytest
+
 from core.runtime_paths import (
     ensure_runtime_layout,
     migrate_legacy_runtime_dirs,
     upgrade_runtime_path,
 )
+
+
+@pytest.fixture(autouse=True)
+def _base_folders_in_tmp(tmp_path, monkeypatch):
+    # Reason: a relative folders.base anchors at the repo, not the cwd (WP F2b); keep
+    # ensure_runtime_layout from creating base folders in the real checkout.
+    monkeypatch.setenv("WITSV3_PROJECT_ROOT", str(tmp_path))
 
 
 def test_upgrade_runtime_path_maps_legacy_roots():

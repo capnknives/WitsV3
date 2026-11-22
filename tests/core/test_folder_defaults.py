@@ -11,7 +11,8 @@ from core.runtime_paths import ensure_base_folders, ensure_runtime_layout
 
 def _isolate(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
+    # Reason: a relative folders.base anchors here, never at the cwd (WP F2b).
+    monkeypatch.setenv("WITSV3_PROJECT_ROOT", str(tmp_path))
     monkeypatch.delenv("WITSV3_READ_ROOTS", raising=False)
 
 
@@ -49,10 +50,13 @@ def test_base_folders_created_and_in_effective_lists(tmp_path, monkeypatch):
     assert base / "outbox" not in document_ingest_roots(cfg)
 
 
-def test_relative_base_resolves_under_runtime_root(tmp_path, monkeypatch):
-    _isolate(monkeypatch, tmp_path)
+def test_relative_base_resolves_under_the_anchor_not_cwd(tmp_path, monkeypatch):
+    (tmp_path / "cwd").mkdir()
+    _isolate(monkeypatch, tmp_path / "cwd")
+    monkeypatch.setenv("WITSV3_PROJECT_ROOT", str(tmp_path / "anchor"))
     ensure_base_folders("var/wits_files")
-    assert (tmp_path / "var/wits_files/inbox").is_dir()
+    assert (tmp_path / "anchor/var/wits_files/inbox").is_dir()
+    assert not (tmp_path / "cwd/var").exists()
 
 
 def test_local_root_list_replaces_base_list_and_inbox_stays(tmp_path, monkeypatch):

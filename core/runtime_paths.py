@@ -79,10 +79,20 @@ DEFAULT_BASE = "var/wits_files"
 BASE_SUBFOLDERS = ("inbox", "outbox", "projects")
 
 
+def base_anchor() -> Path:
+    """Where a relative ``folders.base`` resolves: never the working directory.
+
+    WITSV3_PROJECT_ROOT when set, else the repository root. ``core.path_access`` uses the
+    same anchor, so the folders created at start-up are the folders the check allows.
+    """
+    override = os.getenv("WITSV3_PROJECT_ROOT")
+    return Path(override) if override else PROJECT_ROOT.resolve()
+
+
 def base_dir(base: str | None = None) -> Path:
-    """The folder WITS works in (``folders.base``); relative values sit under the runtime root."""
+    """The folder WITS works in (``folders.base``); relative values sit under base_anchor()."""
     path = Path(base or DEFAULT_BASE).expanduser()
-    return path if path.is_absolute() else project_root() / path
+    return path if path.is_absolute() else base_anchor() / path
 
 
 def inbox_dir(base: str | None = None) -> Path:
