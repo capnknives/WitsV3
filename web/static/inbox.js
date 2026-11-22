@@ -57,7 +57,9 @@ async function resolveApproval(id, choice, note, buttons) {
   } catch (err) {
     setStatus(err.message, true);
   }
-  await refresh();
+  // Reason: Safari does not move focus to a tapped button, so the note box can still be
+  // focused here; force the redraw or the resolved card would stay on screen.
+  await refresh(true);
 }
 
 function renderCard(item) {
@@ -92,7 +94,7 @@ function renderCard(item) {
   return card;
 }
 
-async function refresh() {
+async function refresh(force) {
   if (loading) return;
   loading = true;
   try {
@@ -101,7 +103,7 @@ async function refresh() {
     const data = await res.json();
     const typing = document.activeElement && document.activeElement.tagName === "TEXTAREA";
     // Reason: a background refresh must not wipe a note the owner is in the middle of typing.
-    if (!typing || data.approvals.length === 0) {
+    if (force || !typing || data.approvals.length === 0) {
       listEl.replaceChildren(...data.approvals.map(renderCard));
       if (data.approvals.length === 0) listEl.appendChild(el("div", "empty", "Nothing waiting."));
     }
@@ -112,5 +114,5 @@ async function refresh() {
   }
 }
 
-refresh();
-setInterval(refresh, REFRESH_MS);
+refresh(false);
+setInterval(() => refresh(false), REFRESH_MS);
