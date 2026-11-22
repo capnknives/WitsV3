@@ -25,8 +25,8 @@ def case(**kw) -> GoldenCase:
 
 def test_turns_yaml_loads():
     cases = load_cases(TURNS)
-    assert len(cases) == 61
-    assert len({c.id for c in cases}) == 61
+    assert len(cases) == 62
+    assert len({c.id for c in cases}) == 62
     assert sum("follow-up" in c.tags for c in cases) == 7
     assert all(c.history for c in cases if "follow-up" in c.tags)
 
@@ -226,3 +226,35 @@ def test_owner_codebase_look_yourself_case():
     assert evaluate(c, _turn(reply, "list_directory")).passed
     assert not evaluate(c, _turn(reply)).passed
     assert not evaluate(c, _turn("I am a helpful assistant with many parts", "read_file")).passed
+
+
+def test_timeout_and_written_keys_validate(tmp_path):
+    f = tmp_path / "t.yaml"
+    ok = "- id: a\n  message: hi\n  tags: [writing]\n  expect: {%s}\n"
+    for bad in ("timeout_seconds: -5", "written_min_words: many", "written_min_words: true"):
+        f.write_text(ok % bad, encoding="utf-8")
+        with pytest.raises(ValueError, match="a: bad"):
+            load_cases(f)
+    f.write_text(ok % "timeout_seconds: 400, written_min_words: 1000", encoding="utf-8")
+    loaded = load_cases(f)[0]
+    assert (loaded.timeout_seconds, loaded.written_min_words) == (400, 1000)
+
+
+def test_written_min_words():
+    c = case(written_min_words=1000)
+    assert evaluate(c, [ev("result", content="ok")], written_words=1200).passed
+    res = evaluate(c, [ev("result", content="ok")], written_words=900)
+    assert res.failures == ["written_min_words: 900 < 1000"]
+    res = evaluate(c, [ev("result", content="ok")])
+    assert not res.passed and "not observable" in res.failures[0]
+    assert evaluate(case(), [ev("result", content="ok")]).passed
+    assert evaluate(case(timeout_seconds=1), [ev("result", content="ok")]).passed
+
+
+def test_long_writing_cases():
+    story, guide = _loaded("owner-story-great-war"), _loaded("write-long-guide")
+    assert story.tools == ["write_long_text"] and story.written_min_words == 3000
+    assert story.timeout_seconds == 600 and guide.timeout_seconds == 400
+    assert guide.tools == ["write_long_text"] and guide.written_min_words == 1000
+    for cid in ("write-short-poem", "write-email-draft", "write-story-opening"):
+        assert _loaded(cid).tools == "none", cid

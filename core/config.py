@@ -412,6 +412,7 @@ class ToolTierSettings(BaseModel):
             "diagnose_log_errors",
             "run_test_suite",
             "python_execute",
+            "write_long_text",
             "find_tools",
             "use_tool",
         ],
@@ -427,6 +428,13 @@ class ToolTierSettings(BaseModel):
         description="Tools refused on the native path until approval cards exist; "
         "restart_app, network_control, guest_set_age_band and ask_claude always are",
     )
+
+
+class LongWritingSettings(BaseModel):
+    """Limits for write_long_text (tools/long_writing_tool.py)."""
+
+    max_seconds: int = Field(default=600, gt=0, description="Time limit for one whole piece")
+    max_sections: int = Field(default=14, gt=0, le=14, description="Most sections per piece")
 
 
 class ConversationSettings(BaseModel):
@@ -450,6 +458,7 @@ class ConversationSettings(BaseModel):
         default=1, ge=0, description="Retries per tool after a schema failure"
     )
     tools: ToolTierSettings = Field(default_factory=ToolTierSettings)
+    long_writing: LongWritingSettings = Field(default_factory=LongWritingSettings)
     memory_types: list[str] = Field(
         default_factory=lambda: ["USER_FACT"],
         description="Memory segment types the native loop may put in the turn context. "

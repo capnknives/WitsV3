@@ -47,8 +47,7 @@ OWNER_APPROVAL_STOP = (
 _LOOP_SPECS: dict[str, tuple[str, dict[str, Any]]] = {
     FIND_TOOLS: (
         "Find extra tools that are not in this list (guest accounts, knowledge log "
-        "summary, running tests, code fixes, Python, MCP tools and more). Use it when no "
-        "listed tool fits the request; do not use it for a tool you can already see. "
+        "summary, MCP tools and more). Use it only when no listed tool fits the request. "
         "Returns up to five tools with their parameters; run one with use_tool. "
         'Example: {"query": "knowledge log summary"}.',
         {
@@ -57,8 +56,7 @@ _LOOP_SPECS: dict[str, tuple[str, dict[str, Any]]] = {
                 "query": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "A few plain words for what the tool should do, "
-                    "such as 'guest accounts list' or 'run tests'",
+                    "description": "A few plain words for what is needed",
                 }
             },
             "required": ["query"],
@@ -66,21 +64,18 @@ _LOOP_SPECS: dict[str, tuple[str, dict[str, Any]]] = {
         },
     ),
     USE_TOOL: (
-        "Run a tool that find_tools returned. Use it only for tools found with "
-        "find_tools; call the tools in this list directly instead. Example: "
+        "Run a tool that find_tools returned; call listed tools directly. Example: "
         '{"name": "knowledge_log_summary", "arguments": {}}.',
         {
             "type": "object",
             "properties": {
                 "name": {
                     "type": "string",
-                    "description": "Exact tool name as find_tools returned it, "
-                    "such as 'knowledge_log_summary'",
+                    "description": "Exact name as find_tools returned it",
                 },
                 "arguments": {
                     "type": "object",
-                    "description": "The tool's arguments as one JSON object matching "
-                    "the parameters find_tools showed; {} when it takes none",
+                    "description": "One JSON object; {} when it takes none",
                 },
             },
             "required": ["name"],

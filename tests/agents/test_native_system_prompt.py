@@ -12,7 +12,7 @@ from core.schemas import ConversationHistory
 
 MODEL = "resident-test:7b"
 ANCHORS = (
-    "at the length asked for",
+    "call write_long_text once",
     "document_search before answering",
     "without asking permission first",
     "look before answering",

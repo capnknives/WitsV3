@@ -38,8 +38,18 @@ def _shape(schema: dict) -> dict:
     return {"properties": props, "required": sorted(schema.get("required", []))}
 
 
+def _has_keyword(schema: dict, key: str) -> bool:
+    """True if any schema node uses ``key`` as a keyword (property names do not count)."""
+    if key in schema:
+        return True
+    subs = list(schema.get("properties", {}).values())
+    if isinstance(schema.get("items"), dict):
+        subs.append(schema["items"])
+    return any(_has_keyword(sub, key) for sub in subs)
+
+
 def test_always_payload_fits_the_budget(specs):
-    assert len(specs.payload) == len(ToolTierSettings().always)
+    assert len(specs.payload) == len(ToolTierSettings().always) == 17
     assert len(json.dumps(specs.payload)) <= MAX_PAYLOAD_CHARS
     for tool in specs.payload:
         assert len(json.dumps(tool)) <= MAX_TOOL_CHARS, tool["function"]["name"]
@@ -63,9 +73,8 @@ def test_sent_and_guard_views_agree_and_sent_view_is_slim(specs):
         guard = specs.schemas[name]
         assert _shape(sent) == _shape(guard), name
         assert guard["additionalProperties"] is False
-        text = json.dumps(sent)
-        for key in ('"title"', '"default"', '"examples"', '"additionalProperties"'):
-            assert key not in text, (name, key)
+        for key in ("title", "default", "examples", "additionalProperties"):
+            assert not _has_keyword(sent, key), (name, key)
         assert sent.get("required", None) != []
         assert not CONTEXT_PARAMS & set(sent["properties"]), name
 

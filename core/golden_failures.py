@@ -37,6 +37,7 @@ def build_record(
     tools: list[str],
     first_result_ms: float | None,
     eval_tokens: int | None,
+    written_words: int | None = None,
 ) -> dict[str, Any]:
     """Build the failure record for one failed run (exact key set is a contract)."""
     reply = reply_text(events)
@@ -50,6 +51,7 @@ def build_record(
         "tools_seen": list(tools),
         "first_result_ms": first_result_ms,
         "eval_tokens": eval_tokens,
+        "written_words": written_words,
     }
 
 
