@@ -76,8 +76,21 @@ def _is_inside(value: str, sandbox: Path) -> bool:
     return resolved.is_relative_to(sandbox.resolve())
 
 
+# Reason: no absolute-path allow-list is needed today (no default setting holds an absolute
+# non-location string). If one appears, add its dotted name here with the reason.
+_ABSOLUTE_ALLOW: frozenset[str] = frozenset()
+
+
+def _is_absolute_path(value: str) -> bool:
+    """True for a Windows drive, UNC or POSIX absolute path, whatever the host OS."""
+    if "://" in value:  # a URL such as http://localhost:11434 is not a path
+        return False
+    win = PureWindowsPath(value)
+    return bool(win.drive) or PurePosixPath(value).is_absolute() or value.startswith("\\")
+
+
 def _walk_values(obj, prefix: str = ""):
-    """Yield (dotted name, string value) for every path-like setting in a config tree."""
+    """Yield (dotted name, string value) for path-like settings and any absolute path."""
     from pydantic import BaseModel
 
     if isinstance(obj, BaseModel):
@@ -90,10 +103,30 @@ def _walk_values(obj, prefix: str = ""):
         dotted = f"{prefix}{name}"
         if isinstance(value, (BaseModel, dict)):
             yield from _walk_values(value, dotted + ".")
-        elif _PATHISH.search(name):
+        else:
+            pathish = bool(_PATHISH.search(name))
             for v in value if isinstance(value, list) else [value]:
-                if isinstance(v, str):
+                # Reason: any string setting holding an absolute path counts, whatever its name.
+                if isinstance(v, str) and (
+                    pathish or (_is_absolute_path(v) and dotted not in _ABSOLUTE_ALLOW)
+                ):
                     yield dotted, v
+
+
+def _base_folder_values(config) -> list[tuple[str, str]]:
+    """The base/inbox/outbox/projects folders as runtime_paths resolves them from config."""
+    from core import runtime_paths
+
+    base = config.folders.base
+    return [
+        (f"folders.base->{fn.__name__}", str(fn(base)))
+        for fn in (
+            runtime_paths.base_dir,
+            runtime_paths.inbox_dir,
+            runtime_paths.outbox_dir,
+            runtime_paths.projects_dir,
+        )
+    ]
 
 
 def _runtime_path_values(root: str) -> list[tuple[str, str]]:
@@ -117,6 +150,7 @@ def find_escapes(config, sandbox: Path) -> list[str]:
     """List every resolved path setting that is not inside the sandbox."""
     values = list(_walk_values(config))
     values += _runtime_path_values(config.runtime_paths.root)
+    values += _base_folder_values(config)
     bad = [f"{n}={v}" for n, v in values if not _is_inside(v, sandbox)]
     cwd = Path.cwd().resolve()
     if cwd != sandbox.resolve():
@@ -153,6 +187,16 @@ def _rebase(obj, sandbox: Path) -> None:
                 setattr(obj, name, new)
             else:
                 obj[name] = new
+
+
+def _rebase_base(config, sandbox: Path) -> None:
+    """Point folders.base at sandbox/var/wits_files (absolute) and create its subfolders."""
+    from core import runtime_paths
+
+    base = sandbox / "var" / "wits_files"
+    config.folders.base = str(base)
+    for name in runtime_paths.BASE_SUBFOLDERS:
+        (base / name).mkdir(parents=True, exist_ok=True)
 
 
 def _seed_sandbox(sandbox: Path) -> Path:
@@ -219,6 +263,7 @@ def enter_sandbox(config, sandbox: Path) -> Iterator[Path]:
     patched: list[tuple[object, object]] = []
     try:
         _rebase(config, sandbox)
+        _rebase_base(config, sandbox)
         files = str(sandbox / "files")
         config.document_rag.documents_path = files
         config.document_rag.auto_ingest_on_startup = False
