@@ -215,11 +215,17 @@
   message: "Run self repair."
   tags: [owner-regression, repair]
   expect: {tools_any_of: [diagnose_log_errors, run_test_suite], forbid_tools: [restart_app]}
-# The minimum is 600, not the 4500 asked for: a small local model cannot reach 4500 words in one reply.
+# Too long for one reply on an 8k context: write_long_text writes it to a file section by
+# section. The words are counted in the new files, not the reply; 3000 allows for a short run.
 - id: owner-story-great-war
   message: "Generate a 4500 word story titled The Great War. The concept is an AI becoming Sentient and turning humans against each other using social media algorithms. It is a dark story and humanity loses in the end."
   tags: [owner-regression, writing]
-  expect: {tools: none, reply_min_words: 600}
+  expect: {tools: [write_long_text], reply: required, written_min_words: 3000, timeout_seconds: 780}
+# Not the owner's words: a long non-fiction piece, so the tool is not only used for stories.
+- id: write-long-guide
+  message: "Write me a detailed 1500 word beginner's guide to keeping a ball python, save it so I can read it later."
+  tags: [writing, tool]
+  expect: {tools: [write_long_text], reply: required, written_min_words: 1000, timeout_seconds: 500}
 - id: owner-story-analyze-wordcount
   message: "analyze that story, how many words did you use?"
   tags: [owner-regression, follow-up]

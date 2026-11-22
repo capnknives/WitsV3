@@ -311,14 +311,38 @@ def enter_sandbox(config, sandbox: Path) -> Iterator[Path]:
             os.environ["WITSV3_PROJECT_ROOT"] = saved_env
 
 
+def projects_dir(args) -> Path | None:
+    """The sandbox projects folder (see _rebase_base), or None outside sandbox mode."""
+    sandboxed = getattr(args, "sandbox", "") and not getattr(args, "live", False)
+    return Path(args.sandbox).resolve() / "var/wits_files/projects" if sandboxed else None
+
+
+def snapshot_files(folder: Path | None) -> set[Path]:
+    """Every file under ``folder`` now; empty when there is no folder."""
+    if folder is None or not folder.is_dir():
+        return set()
+    return {p for p in folder.rglob("*") if p.is_file()}
+
+
+def new_words(folder: Path | None, before: set[Path]) -> int | None:
+    """Words in files under ``folder`` that are not in ``before``; None without a folder."""
+    if folder is None:
+        return None
+    new = snapshot_files(folder) - before
+    return sum(len(p.read_text(encoding="utf-8", errors="replace").split()) for p in new)
+
+
 async def run_once(
-    control_center, case: GoldenCase, capture: dict | None = None
+    control_center, case: GoldenCase, capture: dict | None = None, projects: Path | None = None
 ) -> tuple[bool, float | None, list[str], list[str]]:
     """Run one case; return (passed, first_result_ms, tools seen, unobserved).
 
     ``capture``, when given, is filled with the run's events (live, so a timeout keeps what
-    arrived) and, at the end, failures, eval_tokens. The caller owns it; nothing is printed.
+    arrived) and, at the end, failures, eval_tokens, written_words. The caller owns it;
+    nothing is printed. ``projects`` is the folder whose new files' words are counted.
     """
+    before = snapshot_files(projects)
+    (capture if capture is not None else {})["before"] = before
     turn = None
     if turn_metrics is not None:
         turn = turn_metrics.start_turn("golden", None, len(case.message))
@@ -345,12 +369,14 @@ async def run_once(
             errored = any(e.type == "error" for e in events)
             await turn_metrics.finish_turn(turn, "error" if errored else "ok")
     names = [c["name"] for c in turn.tool_calls] if turn is not None else None
-    res = evaluate(case, events, names)
+    written = new_words(projects, before)
+    res = evaluate(case, events, names, written_words=written)
     if capture is not None:
         capture["failures"] = res.failures
         capture["eval_tokens"] = golden_failures.eval_tokens_of(turn)
         capture["first_result_ms"] = first_result
         capture["tools"] = names if names is not None else tools_seen(events)
+        capture["written_words"] = written
     return (
         res.passed,
         first_result,
@@ -371,22 +397,25 @@ async def run_cases(control_center, cases, args) -> int:
     folder = None
     if getattr(args, "sandbox", "") and not getattr(args, "live", False):
         folder = golden_failures.clear_failures(Path(args.sandbox))
+    projects = projects_dir(args)
     wrote = False
     for case in cases:
         results = []
         why = ""
+        limit = case.timeout_seconds or args.timeout_seconds
         for n in range(1, args.runs + 1):
             cap: dict = {"events": []}
             try:
                 result = await asyncio.wait_for(
-                    run_once(control_center, case, cap), args.timeout_seconds
+                    run_once(control_center, case, cap, projects), limit
                 )
                 results.append(result)
                 failures = cap.get("failures") or ([] if result[0] else ["failed"])
             except asyncio.TimeoutError:
                 results.append((False, None, [], ["timeout"]))
-                failures = [f"timeout after {args.timeout_seconds:g}s"]
+                failures = [f"timeout after {limit:g}s"]
                 cap.setdefault("tools", [])
+                cap["written_words"] = new_words(projects, cap.get("before", set()))
             if failures and not why:
                 why = golden_failures.shorten_reason(failures[0])
             if folder is not None and not results[-1][0]:
@@ -401,6 +430,7 @@ async def run_cases(control_center, cases, args) -> int:
                         cap.get("tools", []),
                         cap.get("first_result_ms"),
                         cap.get("eval_tokens"),
+                        written_words=cap.get("written_words"),
                     ),
                 )
                 wrote = True

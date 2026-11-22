@@ -14,7 +14,8 @@ from core.tool_call_guard import validate
 from core.tool_context import CONTEXT_PARAMS
 from core.tool_registry import ToolRegistry
 
-MAX_PAYLOAD_CHARS = 8800
+# Reason: raised from 8,800 for the 17th always-tier tool, write_long_text (WP C5a).
+MAX_PAYLOAD_CHARS = 9300
 MAX_TOOL_CHARS = 800
 EXCLUDE = NativeToolOrchestrator._ORCHESTRATOR_TOOL_EXCLUDE
 
@@ -38,8 +39,18 @@ def _shape(schema: dict) -> dict:
     return {"properties": props, "required": sorted(schema.get("required", []))}
 
 
+def _has_keyword(schema: dict, key: str) -> bool:
+    """True if any schema node uses ``key`` as a keyword (property names do not count)."""
+    if key in schema:
+        return True
+    subs = list(schema.get("properties", {}).values())
+    if isinstance(schema.get("items"), dict):
+        subs.append(schema["items"])
+    return any(_has_keyword(sub, key) for sub in subs)
+
+
 def test_always_payload_fits_the_budget(specs):
-    assert len(specs.payload) == len(ToolTierSettings().always)
+    assert len(specs.payload) == len(ToolTierSettings().always) == 17
     assert len(json.dumps(specs.payload)) <= MAX_PAYLOAD_CHARS
     for tool in specs.payload:
         assert len(json.dumps(tool)) <= MAX_TOOL_CHARS, tool["function"]["name"]
@@ -63,9 +74,8 @@ def test_sent_and_guard_views_agree_and_sent_view_is_slim(specs):
         guard = specs.schemas[name]
         assert _shape(sent) == _shape(guard), name
         assert guard["additionalProperties"] is False
-        text = json.dumps(sent)
-        for key in ('"title"', '"default"', '"examples"', '"additionalProperties"'):
-            assert key not in text, (name, key)
+        for key in ("title", "default", "examples", "additionalProperties"):
+            assert not _has_keyword(sent, key), (name, key)
         assert sent.get("required", None) != []
         assert not CONTEXT_PARAMS & set(sent["properties"]), name
 
@@ -113,3 +123,39 @@ def test_context_params_supplied_are_rejected(specs):
     schema = specs.schemas["read_conversation_history"]
     for param in CONTEXT_PARAMS:
         assert validate({param: "x"}, schema), param
+
+
+# Reason: this wording was measured on the real model; a shorter version made the lookup
+# golden case fail 3 of 3, so it must not be trimmed for size again unnoticed.
+LOOKUP_WORDING = {
+    "find_tools": (
+        "Find extra tools that are not in this list (guest accounts, knowledge log "
+        "summary, running tests, code fixes, Python, MCP tools and more). Use it when no "
+        "listed tool fits the request; do not use it for a tool you can already see. "
+        "Returns up to five tools with their parameters; run one with use_tool. "
+        'Example: {"query": "knowledge log summary"}.',
+        {
+            "query": "A few plain words for what the tool should do, "
+            "such as 'guest accounts list' or 'run tests'"
+        },
+    ),
+    "use_tool": (
+        "Run a tool that find_tools returned. Use it only for tools found with "
+        "find_tools; call the tools in this list directly instead. Example: "
+        '{"name": "knowledge_log_summary", "arguments": {}}.',
+        {
+            "name": "Exact tool name as find_tools returned it, such as 'knowledge_log_summary'",
+            "arguments": "The tool's arguments as one JSON object matching "
+            "the parameters find_tools showed; {} when it takes none",
+        },
+    ),
+}
+
+
+@pytest.mark.parametrize("name", sorted(LOOKUP_WORDING))
+def test_lookup_tool_wording_is_unchanged(specs, name):
+    description, params = LOOKUP_WORDING[name]
+    tool = next(t["function"] for t in specs.payload if t["function"]["name"] == name)
+    assert tool["description"] == description
+    props = tool["parameters"]["properties"]
+    assert {k: v["description"] for k, v in props.items()} == params

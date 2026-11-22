@@ -262,6 +262,7 @@ class OllamaInterface(BaseLLMInterface):
         num_ctx: int | None = None,
         think: bool | None = None,
         keep_alive: str | None = None,
+        num_predict: int | None = None,
     ) -> LLMResponse:
         """Ollama /api/chat with optional native tool calling.
 
@@ -274,6 +275,7 @@ class OllamaInterface(BaseLLMInterface):
             think: Thinking flag (defaults to ollama_settings.think); only sent to models
                 that list the "thinking" capability.
             keep_alive: Model residency (defaults to ollama_settings.keep_alive).
+            num_predict: Output token cap; unset leaves Ollama's default.
 
         Returns:
             The model reply with any tool calls.
@@ -303,6 +305,8 @@ class OllamaInterface(BaseLLMInterface):
         }
         if await self._supports_thinking(effective_model):
             payload["think"] = think if think is not None else self.ollama_settings.think
+        if num_predict is not None:
+            payload["options"]["num_predict"] = num_predict
         if tools:
             payload["tools"] = tools
 

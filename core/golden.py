@@ -39,6 +39,8 @@ EXPECT_KEYS = {
     "reply_not_contains",
     "reply_min_words",
     "max_first_result_ms",
+    "timeout_seconds",
+    "written_min_words",
 }
 
 # Substrings of an event's ``source`` (lower-cased) that identify each route.
@@ -70,6 +72,10 @@ class GoldenCase:
     reply_min_words: int = 0
     # Reason: carried for scripts/golden_run.py, which reports "slow"; evaluate() ignores it.
     max_first_result_ms: int = 0
+    # Reason: carried for the runner, which uses it instead of --timeout-seconds when set.
+    timeout_seconds: int = 0
+    # Words the run's new files under the sandbox projects folder must hold in total.
+    written_min_words: int = 0
 
 
 @dataclass
@@ -89,7 +95,7 @@ def _check_extra(cid: str, expect: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(val, list) or not all(isinstance(v, str) and v for v in val):
             raise ValueError(f"case {cid}: bad {key} {val!r}")
         out[key] = val
-    for key in ("reply_min_words", "max_first_result_ms"):
+    for key in ("reply_min_words", "max_first_result_ms", "timeout_seconds", "written_min_words"):
         val = expect.get(key, 0)
         if isinstance(val, bool) or not isinstance(val, int) or val < 0:
             raise ValueError(f"case {cid}: bad {key} {val!r}")
@@ -200,7 +206,11 @@ def _reply_text(events: list[Any]) -> str:
 
 
 def evaluate(
-    case: GoldenCase, events: list[Any], tool_names: list[str] | None = None
+    case: GoldenCase,
+    events: list[Any],
+    tool_names: list[str] | None = None,
+    *,
+    written_words: int | None = None,
 ) -> GoldenResult:
     """Check one turn's events against a case's expectations.
 
@@ -209,6 +219,8 @@ def evaluate(
         events: ``StreamData`` events of the turn, in order.
         tool_names: Authoritative tools called (from the turn-metrics record). When given
             it replaces the names read from events.
+        written_words: Words in files the run created under the projects folder, measured
+            by the runner; None when it could not measure.
 
     Returns:
         A result with one failure line per broken expectation. ``unobserved`` names tool
@@ -257,4 +269,9 @@ def evaluate(
         failures.append(f"reply_not_contains: reply has {found}")
     if len(text.split()) < case.reply_min_words:
         failures.append(f"reply_min_words: {len(text.split())} < {case.reply_min_words}")
+    if case.written_min_words:
+        if written_words is None:
+            failures.append("written_min_words: not observable (no written word count)")
+        elif written_words < case.written_min_words:
+            failures.append(f"written_min_words: {written_words} < {case.written_min_words}")
     return GoldenResult(not failures, failures, unobserved)

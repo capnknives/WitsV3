@@ -199,3 +199,54 @@ def test_sandbox_seeds_documents_where_the_document_tools_look(tmp_path, monkeyp
         docs = documents_folder(cfg).resolve()
         assert docs.is_relative_to(sandbox) and docs in document_ingest_roots(cfg)
         assert (docs / "docs" / "guide.txt").is_file()
+
+
+class WritesAFile:
+    """Fake control center: writes a 50-word file under the sandbox projects folder."""
+
+    def __init__(self, projects: Path):
+        self.projects = projects
+
+    async def run(self, message, conversation_history=None):
+        target = self.projects / "writing" / f"{message}.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(" ".join(["word"] * 50), encoding="utf-8")
+        yield StreamData(type="result", content="saved", source="fake")
+
+
+def test_runner_counts_words_in_new_files_only(tmp_path):
+    import json
+
+    box = tmp_path / "box"
+    projects = golden_run.projects_dir(Namespace(sandbox=str(box), live=False))
+    (projects / "old").mkdir(parents=True)
+    (projects / "old" / "keep.md").write_text("old " * 500, encoding="utf-8")
+    args = Namespace(
+        runs=1, timeout_seconds=5, out=str(tmp_path / "g.md"), sandbox=str(box), live=False
+    )
+    cases = [
+        GoldenCase(id="enough", message="a", tags=["writing"], written_min_words=40),
+        GoldenCase(
+            id="short", message="b", tags=["writing"], written_min_words=60, timeout_seconds=9
+        ),
+    ]
+    asyncio.run(golden_run.run_cases(WritesAFile(projects), cases, args))
+    text = (tmp_path / "g.md").read_text(encoding="utf-8")
+    assert "| enough | 1/1 |" in text and "| short | 0/1 |" in text
+    rec = json.loads((box / "failures" / "short.run1.json").read_text(encoding="utf-8"))
+    assert rec["written_words"] == 50
+    assert rec["failures"] == ["written_min_words: 50 < 60"]
+
+
+def test_runner_honours_case_timeout(tmp_path):
+    out = tmp_path / "golden.md"
+    args = Namespace(runs=1, timeout_seconds=0.1, out=str(out))
+    case = GoldenCase(id="slowok", message="x", tags=["chat"], timeout_seconds=5)
+
+    class Slow:
+        async def run(self, message, conversation_history=None):
+            await asyncio.sleep(0.3)
+            yield StreamData(type="result", content="done", source="fake")
+
+    asyncio.run(golden_run.run_cases(Slow(), [case], args))
+    assert "| slowok | 1/1 |" in out.read_text(encoding="utf-8")

@@ -58,6 +58,7 @@ def test_failed_runs_write_files(tmp_path):
         "tools_seen",
         "first_result_ms",
         "eval_tokens",
+        "written_words",
     ]
     assert rec["case_id"] == "bad" and rec["run"] == 2 and rec["message"] == "say hi"
     assert rec["reply"] == REPLY + "\nboom"
