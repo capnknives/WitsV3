@@ -157,14 +157,17 @@ class CodingHandlersMixin:
         syntax-check each .py file with py_compile, so a broken scaffold is
         reported immediately instead of silently sitting in memory as text.
         """
-        from core.safe_code_editor import resolve_within_project, run_py_compile
+        from core.safe_code_editor import resolve_within, run_py_compile
 
         results = []
+        # Reason: project.name comes from model-supplied project_type/language,
+        # so the write must stay under var/workspace/ and off the never-list.
+        workspace_root = PROJECT_ROOT / workspace_subpath("")
         workspace_rel = workspace_subpath(project.name)
         for rel_name, content in files.items():
             file_rel = f"{workspace_rel}/{rel_name}"
             try:
-                resolved = resolve_within_project(file_rel)
+                resolved = resolve_within(workspace_root, file_rel)
             except PermissionError as e:
                 results.append(f"  ✗ {rel_name}: {e}")
                 continue

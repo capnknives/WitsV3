@@ -105,6 +105,25 @@ async def test_write_project_files_reports_syntax_errors(agent):
 
 
 @pytest.mark.asyncio
+async def test_write_project_files_refuses_model_steered_escape(agent):
+    project = CodeProject(
+        id="proj3",
+        name="../../.git/hooks/x",
+        description="",
+        language="python",
+        project_type="cli_tool",
+        structure={},
+        dependencies=[],
+        files={},
+        tests={},
+        documentation="",
+    )
+    results = await agent._write_project_files(project, {"pre-commit": "echo pwned\n"})
+    assert any("Refusing" in r for r in results)
+    assert not (PROJECT_ROOT / ".git" / "hooks" / "x").exists()
+
+
+@pytest.mark.asyncio
 async def test_run_routes_to_existing_file_fix_when_file_named():
     scratch_rel = "tests/agents/_scratch_coding_target.py"
     scratch_abs = PROJECT_ROOT / scratch_rel

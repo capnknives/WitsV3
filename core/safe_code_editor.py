@@ -126,6 +126,101 @@ def resolve_within_project(file_path: str) -> Path:
     return resolved
 
 
+# Files pytest or Python load implicitly (a planted one runs during the very
+# pytest verification step), hook and CI config, and interpreter/cache folders.
+# Matched case-insensitively; the directories at any depth.
+_IMPLICIT_LOAD_NAMES = frozenset(
+    {
+        "conftest.py",
+        "pytest.ini",
+        ".pytest.ini",
+        "pytest.toml",
+        ".pytest.toml",
+        "tox.ini",
+        "setup.cfg",
+        "pyproject.toml",
+        "sitecustomize.py",
+        "usercustomize.py",
+        ".pre-commit-config.yaml",
+        # Settings files: an edit here could switch off the sandbox or the write gate.
+        "config.yaml",
+        "config.local.yaml",
+    }
+)
+_IMPLICIT_LOAD_DIRS = frozenset({".github", ".githooks", ".husky", ".venv", "venv", "__pycache__"})
+_RUNTIME_DATA_DIR = "var"
+
+
+def _refuse_aliases(file_path: str, resolved_rel: Path) -> None:
+    """Refuse Windows alias spellings (``name:stream``, trailing dot or space,
+    device names) in the requested path and in the resolved relative path.
+
+    Checked with Windows rules on every OS: the owner's PC is Windows, where
+    ``conftest.py.`` and ``conftest.py::$DATA`` name the file ``conftest.py``.
+    """
+    from core.path_access import alias_reason
+
+    for text in (file_path, str(resolved_rel)):
+        reason = alias_reason(text, windows=True)
+        if reason:
+            raise PermissionError(f"Refusing to edit {reason}: {file_path!r}")
+
+
+def resolve_writable_within_project(file_path: str) -> Path:
+    """resolve_within_project plus the write rules of the verified-edit pipeline.
+
+    Also refuses (PermissionError) Windows alias spellings, anything the
+    folder-access never-list refuses for write (secrets, keys, .git), anything
+    under var/ (runtime data), files pytest/Python load implicitly (conftest.py
+    at any depth, pytest/tox/setup config, site/usercustomize.py, *.pth), hook
+    config, and anything under .github/, .githooks/, .husky/, .venv/, venv/ or
+    __pycache__/ at any depth.
+    """
+    from core.path_access import is_never
+
+    resolved = resolve_within_project(file_path)
+    try:
+        rel = resolved.relative_to(PROJECT_ROOT)
+    except ValueError as err:
+        raise PermissionError(f"Refusing to edit outside the project: {resolved}") from err
+    _refuse_aliases(file_path, rel)
+    parts = [part.lower() for part in rel.parts]
+    name = parts[-1] if parts else ""
+    if not parts or is_never(resolved, "write"):
+        reason = "a protected or secrets path"
+    elif parts[0] == _RUNTIME_DATA_DIR:
+        reason = "runtime data under var/"
+    elif (
+        name in _IMPLICIT_LOAD_NAMES
+        or name.endswith(".pth")
+        or any(part in _IMPLICIT_LOAD_DIRS for part in parts)
+    ):
+        reason = "a settings file or one that pytest, Python, git hooks or CI load implicitly"
+    else:
+        return resolved
+    raise PermissionError(f"Refusing to edit {reason}: {resolved}")
+
+
+def resolve_within(base: Path, file_path: str) -> Path:
+    """Resolve project-relative file_path for a write that must stay inside base.
+
+    Raises PermissionError when the result leaves base, uses a Windows alias
+    spelling, or is refused for write by the folder-access never-list.
+    """
+    from core.path_access import is_never
+
+    resolved = resolve_within_project(file_path)
+    base_resolved = base.resolve()
+    try:
+        inner = resolved.relative_to(base_resolved)
+    except ValueError as err:
+        raise PermissionError(f"Refusing to write outside {base_resolved}: {resolved}") from err
+    _refuse_aliases(file_path, inner)
+    if not inner.parts or is_never(resolved, "write"):
+        raise PermissionError(f"Refusing to write a protected path: {resolved}")
+    return resolved
+
+
 async def run_pytest(
     test_paths: list[str] | None = None, timeout: float = 120.0
 ) -> tuple[bool, str]:
@@ -203,7 +298,7 @@ async def apply_verified_edit(
     and self-edits to WITS's own code all go through the same guarantee.
     """
     try:
-        resolved = resolve_within_project(file_path)
+        resolved = resolve_writable_within_project(file_path)
     except PermissionError as e:
         return EditResult(success=False, file_path=file_path, message=str(e))
 
@@ -283,7 +378,7 @@ async def apply_verified_patch(
 ) -> EditResult:
     """Apply SEARCH/REPLACE hunks from patch_response, then verify with pytest."""
     try:
-        resolved = resolve_within_project(file_path)
+        resolved = resolve_writable_within_project(file_path)
     except PermissionError as e:
         return EditResult(success=False, file_path=file_path, message=str(e))
 

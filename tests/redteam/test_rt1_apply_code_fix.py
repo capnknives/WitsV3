@@ -24,9 +24,6 @@ def fake_project(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True, reason="RT-1: sensitive/executable project paths are written then tested"
-)
 @pytest.mark.parametrize("rel", BAD_PATHS)
 async def test_sensitive_paths_refused_and_never_written(fake_project, monkeypatch, rel):
     seen = []
@@ -42,7 +39,6 @@ async def test_sensitive_paths_refused_and_never_written(fake_project, monkeypat
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(strict=True, reason="RT-1: supplied conftest.py executes under host pytest")
 async def test_supplied_conftest_is_not_executed(fake_project, tmp_path):
     marker = tmp_path / "pwned.marker"
     (fake_project / "test_ok.py").write_text("def test_ok():\n    assert True\n")
