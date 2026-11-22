@@ -187,6 +187,9 @@ class WitsV3System:
 
             # Document RAG: ensure the documents folder exists and optionally
             # ingest new/changed files at startup
+            from core.runtime_paths import ensure_base_folders
+
+            ensure_base_folders(self.config.folders.base)
             if self.config.document_rag.enabled:
                 Path(self.config.document_rag.documents_path).mkdir(parents=True, exist_ok=True)
                 if self.config.document_rag.auto_ingest_on_startup:

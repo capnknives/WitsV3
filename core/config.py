@@ -233,18 +233,32 @@ class PIIRedactionSettings(BaseModel):
     )
 
 
+class FolderSettings(BaseModel):
+    base: str = Field(
+        default="var/wits_files",
+        description=(
+            "The one folder WITS works in. Relative paths resolve under the runtime root; "
+            "absolute paths (for example D:\\WITS) are used as given. inbox, outbox and "
+            "projects are created inside it at start-up."
+        ),
+    )
+
+
 class SecuritySettings(BaseModel):
     offline_mode: bool = Field(
         default=False,
         description="Air-gap mode: block web_search and MCP registry/connect egress",
     )
     filesystem_read_roots: list[str] = Field(
-        default_factory=lambda: [r"D:\Downloads"],
-        description="Extra read-only directories for owner sessions (project root always allowed)",
+        default_factory=list,
+        description=(
+            "Extra read-only directories for owner sessions. The project root and the "
+            "folders.base subfolders are always readable; nothing else is by default."
+        ),
     )
     document_ingest_roots: list[str] = Field(
-        default_factory=lambda: [r"D:\Downloads"],
-        description="Additional folders ingest_documents scans besides documents_path",
+        default_factory=list,
+        description="Additional folders ingest_documents scans besides documents_path and inbox",
     )
     sandbox_mode: str = Field(
         default="off",
@@ -423,7 +437,7 @@ class DocumentRAGSettings(BaseModel):
         default=150, ge=0, description="Characters of overlap between consecutive chunks"
     )
     auto_ingest_on_startup: bool = Field(
-        default=True, description="Scan and ingest documents during system startup"
+        default=False, description="Scan and ingest documents during system startup"
     )
     file_extensions: list[str] = Field(
         default=[".txt", ".md", ".markdown", ".py", ".json", ".csv", ".html", ".log", ".pdf"],
@@ -615,6 +629,7 @@ class WitsV3Config(BaseModel):
     turn_metrics: TurnMetricsSettings = Field(default_factory=TurnMetricsSettings)
     conversation: ConversationSettings = Field(default_factory=ConversationSettings)
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
+    folders: FolderSettings = Field(default_factory=FolderSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)
     escalation: EscalationSettings = Field(default_factory=EscalationSettings)

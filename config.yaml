@@ -165,12 +165,12 @@ personality:
   profile_id: richard_elliot_wits
   profile_path: config/wits_personality.yaml
 project_name: WitsV3
+folders:
+  base: var/wits_files  # set an absolute path (e.g. D:\WITS) in config.local.yaml
 security:
   offline_mode: false
-  filesystem_read_roots:
-    - D:\Downloads
-  document_ingest_roots:
-    - D:\Downloads
+  filesystem_read_roots: []
+  document_ingest_roots: []
   sandbox_mode: "docker"
   sandbox_image: witsv3-sandbox
   pii_redaction:

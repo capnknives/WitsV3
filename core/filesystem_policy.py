@@ -6,10 +6,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from core.runtime_paths import inbox_dir, outbox_dir, projects_dir
 from core.safe_code_editor import PROJECT_ROOT
-
-# Default owner read root on Windows; overridden via config / WITSV3_READ_ROOTS.
-_DEFAULT_OWNER_EXTRA_ROOTS: tuple[str, ...] = (r"D:\Downloads",)
 
 
 def _normalize_roots(paths: list[str] | tuple[str, ...] | None) -> list[Path]:
@@ -36,16 +34,20 @@ def project_read_root() -> Path:
     return PROJECT_ROOT.resolve()
 
 
+def _base_setting(config: Any | None) -> str | None:
+    value = getattr(getattr(config, "folders", None), "base", None) if config else None
+    return value if isinstance(value, str) else None
+
+
 def configured_read_roots(config: Any | None = None) -> list[Path]:
-    """All configured read roots (project + security.filesystem_read_roots + env)."""
+    """Read roots: project, base inbox/outbox/projects, security roots, env variable."""
+    base = _base_setting(config)
     roots: list[Path] = [project_read_root()]
+    # Reason: the base folders are the owner's workspace, so they are always readable.
+    roots.extend(_normalize_roots([str(f(base)) for f in (inbox_dir, outbox_dir, projects_dir)]))
     security = getattr(config, "security", None) if config else None
     extra = getattr(security, "filesystem_read_roots", None) if security else None
-    # Reason: [] means "no extras" (tests/smoke); None means use built-in defaults.
-    if extra is not None:
-        roots.extend(_normalize_roots(extra))
-    else:
-        roots.extend(_normalize_roots(_DEFAULT_OWNER_EXTRA_ROOTS))
+    roots.extend(_normalize_roots(extra))
     for env_root in _env_read_roots():
         if env_root not in roots:
             roots.append(env_root)
@@ -135,11 +137,9 @@ def resolve_allowed_read_path(
 
 
 def document_ingest_roots(config: Any | None = None) -> list[Path]:
-    """Extra folders scanned by ingest_documents (in addition to documents_path)."""
+    """Inbox plus security.document_ingest_roots (documents_path is added by the tool)."""
     security = getattr(config, "security", None) if config else None
     extra = getattr(security, "document_ingest_roots", None) if security else None
-    # Reason: [] means "documents_path only"; None falls back to non-project read roots.
-    if extra is not None:
-        return _normalize_roots(extra)
-    downloads = [r for r in configured_read_roots(config) if r != project_read_root()]
-    return downloads
+    # Reason: [] means "no extra roots"; the inbox is indexable regardless.
+    inbox = _normalize_roots([str(inbox_dir(_base_setting(config)))])
+    return inbox + [r for r in _normalize_roots(extra) if r not in inbox]
