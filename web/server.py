@@ -41,6 +41,7 @@ from web import file_route_guard
 from web.access_log import install_access_log_middleware, owner_display_name, resolve_caller_label
 from web.guest_auth import (
     guest_forbidden_response,
+    owner_locked_warning,
     resolve_auth,
     unauthorized_response,
 )
@@ -146,6 +147,9 @@ def create_app(system) -> FastAPI:
             "web_ui.require_auth is true but WITSV3_WEB_TOKEN is not set - "
             "the web UI is UNPROTECTED on your network. Add WITSV3_WEB_TOKEN to .env."
         )
+
+    if guest_access_enabled(system.config) and not web_token:
+        logger.warning(owner_locked_warning())
 
     # ------------------------------------------------------------- auth
     @app.middleware("http")
