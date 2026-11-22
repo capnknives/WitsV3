@@ -94,7 +94,17 @@ After 1.1, packages 1.2 and 1.3 run side by side. After 1.3, packages 1.5 and
 
 ### Stage 2 — Foundations
 
-Briefs are written after the Stage 1 gate.
+Briefs are written after the Stage 1 gate. Conversation core briefs are in
+[stage-2-core.md](stage-2-core.md), added one package ahead of the build.
+
+| ID | Package | Builder | Needs | Done when |
+|----|---------|---------|-------|-----------|
+| C1a | Turn metrics ([brief](stage-2-core.md)) | Sonnet | — | One line per turn; no text stored; suite still green |
+| C1b | Golden test set ([brief](stage-2-core.md)) | Sonnet | — | 30 cases load; checks pass and fail correctly without a model |
+| C2 | Serving settings and the resident model | Opus | C1 | Brief to come |
+| C3 | The native loop as the front door | Opus. Review: **high** | C2 | Brief to come |
+
+Foundations, independent of the conversation core:
 
 | ID | Package | Roadmap item | Builder |
 |----|---------|--------------|---------|
