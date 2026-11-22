@@ -44,7 +44,7 @@ Run with the script and cases from PR #22 (cases v2, 36 cases). **Not comparable
 | qwen3.5:9b | ollama | on | 100% | 67% | 100% | 75% | 75% | 100% | 89% | 94% | 3.15 | 1 |
 | qwen3.5:9b | ollama | off | 92% | 67% | 100% | 75% | 100% | 75% | 86% | 86% | 1.16 | 1 |
 
-What the failure log shows (every failure was read):
+What the failure log shows (the main failing cases were read in full; the rest are grouped by the reason the script recorded):
 
 - **No model called a tool when it should not have** ("none" is 100% everywhere). The v1 failures there were faults in the cases.
 - **Recovery (`e01`-`e04`)**: after a tool returns a temporary failure, `gemma4:e4b` never retries and `qwen3:8b` with thinking on never retries. They tell the user it failed and ask. That is a safe behavior, not a broken one, but it means the orchestrator must own retries rather than expect the model to.
