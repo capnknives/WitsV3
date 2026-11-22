@@ -13,6 +13,7 @@ from core.llm_interface import LLMMessage
 from core.prompt_prefix import order_tools
 from core.schemas import StreamData
 from core.tool_call_guard import SchemaError, normalise_schema
+from core.tool_context import strip_context_params
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +68,10 @@ def build_tool_specs(
         exclude: Tool names the loop never offers.
 
     Returns:
-        (tools payload sorted by name, tool name -> raw schema). A tool whose schema
-        cannot be normalised is left out of both, so calling it counts as unknown.
+        (tools payload sorted by name, tool name -> schema the guard checks). Both use
+        the normalised schema without ``CONTEXT_PARAMS``, so a call that supplies one fails
+        as an unknown parameter. A tool whose schema cannot be normalised is left out of
+        both, so calling it counts as unknown.
     """
     if not registry:
         return [], {}
@@ -79,7 +82,9 @@ def build_tool_specs(
             continue
         raw = tool.get_schema() if hasattr(tool, "get_schema") else {}
         try:
-            parameters = normalise_schema(raw)
+            # Reason: role, session and conversation come from the tool context; the
+            # model must not be able to set them.
+            parameters = strip_context_params(normalise_schema(raw))
         except SchemaError as exc:
             logger.warning("Native loop skips tool %s: unusable schema (%s)", name, exc)
             continue
@@ -95,7 +100,7 @@ def build_tool_specs(
                 },
             }
         )
-        schemas[name] = raw
+        schemas[name] = parameters
     return order_tools(payload), schemas
 
 

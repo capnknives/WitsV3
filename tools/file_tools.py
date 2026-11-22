@@ -9,6 +9,7 @@ from typing import Any
 import aiofiles
 
 from core.base_tool import BaseTool
+from core.tool_context import tool_user_role
 
 
 class FileReadTool(BaseTool):
@@ -36,7 +37,9 @@ class FileReadTool(BaseTool):
 
         try:
             config = load_config()
-            resolved = resolve_allowed_read_path(file_path, role=user_role, config=config)
+            resolved = resolve_allowed_read_path(
+                file_path, role=tool_user_role(user_role), config=config
+            )
         except PermissionError as e:
             self.logger.error(str(e))
             return f"Error: {e}"
@@ -174,7 +177,7 @@ class ListDirectoryTool(BaseTool):
         try:
             config = load_config()
             directory_path = resolve_allowed_read_path(
-                directory_path, role=user_role, config=config
+                directory_path, role=tool_user_role(user_role), config=config
             )
         except PermissionError as e:
             self.logger.error(str(e))
