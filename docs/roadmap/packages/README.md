@@ -85,7 +85,7 @@ read both. Briefs for 1.2 to 1.8 follow in plan order.
 | 1.4b | MCP server over HTTP at `/mcp` with the five tools ([brief](stage-1-gateway.md)) | Opus. Review: **high** | 1.4a | Tool-call tests; unauthenticated call refused |
 | 1.5 | Decision Inbox: one static page, two API routes ([brief](stage-1-gateway.md)) | Sonnet | 1.3 | A card appears; approve and deny work |
 | 1.6 | Phone push on a new approval ([brief](stage-1-gateway.md)) | Sonnet | 1.3 | Push fires in a test against a fake endpoint |
-| 1.7 | Setup guide: Tailscale, registering the MCP server | Haiku | 1.4 | The owner can follow it cold |
+| 1.7 | [Setup guide](../../guides/workspace-setup.md): Tailscale, registering the MCP server | Haiku | 1.4 | The owner can follow it cold |
 | 1.8 | Stage gate review and pilot wiring | Lead. Review: **high** | All | Stage 1 gate passes |
 
 After 1.1, packages 1.2 and 1.3 run side by side. After 1.3, packages 1.5 and
