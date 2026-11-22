@@ -5,6 +5,8 @@ lifespan, loads the optional route modules and provides the owner check. Client,
 MCP routes live in their own modules and register themselves through ``register(app)``.
 """
 
+from __future__ import annotations
+
 import asyncio
 import hmac
 import importlib
@@ -13,13 +15,18 @@ import os
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack, asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, HTTPException, Request
 
 from core.config import WorkspaceSettings, load_config
 from core.runtime_paths import project_root
-from core.workspace.db import Database, open_db
 from web.owner_controls import configured_web_token, extract_bearer_token
+
+if TYPE_CHECKING:
+    # Reason: imported lazily at startup so web.server imports without aiosqlite (absent from
+    # some runtime environments) while the workspace is disabled.
+    from core.workspace.db import Database
 
 logger = logging.getLogger("WitsV3.Workspace")
 
@@ -108,6 +115,8 @@ def _wrap_lifespan(app: FastAPI, settings: WorkspaceSettings) -> None:
     @asynccontextmanager
     async def lifespan(inner_app: FastAPI) -> AsyncIterator:
         global _db
+        from core.workspace.db import open_db
+
         async with original(inner_app) as state:
             db_path = _resolve_db_path(settings)
             # Reason: mkdir is blocking file I/O, so keep it off the event loop.
@@ -138,11 +147,20 @@ def register_workspace(app: FastAPI) -> None:
         app: The FastAPI application.
 
     Raises:
-        RuntimeError: If enabled while ``WITSV3_WEB_TOKEN`` is unset or empty.
+        RuntimeError: If enabled while ``WITSV3_WEB_TOKEN`` is unset or empty, or while
+            ``web_ui.require_auth`` is false.
     """
-    settings = load_config().workspace
+    config = load_config()
+    settings = config.workspace
     if not settings.enabled:
         return
+    # Reason: with require_auth off the existing middleware opens every other /api/* route to
+    # any caller on the network, including the agent hosts the workspace admits.
+    if not config.web_ui.require_auth:
+        raise RuntimeError(
+            "workspace.enabled is true but web_ui.require_auth is false; "
+            "set web_ui.require_auth to true before enabling the workspace"
+        )
     # Reason: without a token the existing middleware treats every caller as owner, so owner
     # routes would be open to the network.
     if not os.getenv("WITSV3_WEB_TOKEN", "").strip():

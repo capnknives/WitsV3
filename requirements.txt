@@ -47,7 +47,7 @@ fastapi>=0.110
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9  # file uploads
 qrcode>=8.0  # login QR in the startup banner
-mcp>=2.3,<2.4  # MCP server for the workspace endpoint at /mcp (core/workspace, web/workspace_mcp.py)
+mcp==2.3.0  # MCP server for the workspace endpoint at /mcp (core/workspace, web/workspace_mcp.py)
 
 # New tool dependencies
 scipy>=1.10.0  # For statistical operations
