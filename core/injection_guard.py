@@ -35,3 +35,21 @@ def check_tool_injection(tool_name: str, tool_args: dict[str, Any]) -> str | Non
                 f"({pattern.pattern[:40]}…)."
             )
     return None
+
+
+def scan_text(text: str) -> list[str]:
+    """Return the patterns that match ``text``, for flagging stored text (never for blocking).
+
+    Workspace text from network agents is stored even when it matches (contract section 8): a
+    pattern list can warn but not protect, so a hit only sets ``flagged``.
+
+    Args:
+        text: Already-cleaned text to scan.
+
+    Returns:
+        The source of each matching pattern, in pattern order; empty when nothing matches or the
+        value is not a string.
+    """
+    if not isinstance(text, str):
+        return []
+    return [p.pattern for p in _INJECTION_PATTERNS if p.search(text)]
