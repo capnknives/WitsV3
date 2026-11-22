@@ -121,3 +121,19 @@ async def test_generate_and_stream_num_ctx_override_and_think():
     assert first["options"]["num_ctx"] == 1234
     assert second["options"]["num_ctx"] == iface.ollama_settings.num_ctx
     assert first["think"] is False and second["think"] is False
+
+
+@pytest.mark.asyncio
+async def test_chat_payload_carries_tool_calls_only_when_set():
+    iface, seen = _make()
+    calls = [{"function": {"name": "lookup", "arguments": {"term": "sun"}}}]
+    await iface.generate_chat(
+        [
+            LLMMessage(role="user", content="x"),
+            LLMMessage(role="assistant", content="", tool_calls=calls),
+            LLMMessage(role="tool", content="r", name="lookup"),
+        ]
+    )
+    sent = _bodies(seen, "/api/chat")[-1]["messages"]
+    assert "tool_calls" not in sent[0] and "tool_calls" not in sent[2]
+    assert sent[1]["tool_calls"] == calls

@@ -24,6 +24,9 @@ class LLMMessage:
     role: str
     content: str
     name: str | None = None
+    # Reason: an assistant turn's calls, already in Ollama's shape
+    # ([{"function": {"name", "arguments": {...}}}]), so replies can follow their calls.
+    tool_calls: list[dict[str, Any]] | None = None
 
 
 @dataclass
@@ -279,7 +282,12 @@ class OllamaInterface(BaseLLMInterface):
         payload: dict[str, Any] = {
             "model": effective_model,
             "messages": [
-                {"role": m.role, "content": m.content, **({"name": m.name} if m.name else {})}
+                {
+                    "role": m.role,
+                    "content": m.content,
+                    **({"name": m.name} if m.name else {}),
+                    **({"tool_calls": m.tool_calls} if m.tool_calls else {}),
+                }
                 for m in messages
             ],
             "stream": False,
