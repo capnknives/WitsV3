@@ -98,6 +98,13 @@ Build:
     result with code and message (plus extra fields such as holder)
   - input schemas with additionalProperties false; every description ends with the section 3
     sentence
+  - from the 1.4a review: refuse a request body over 256 KB with HTTP 413 before the SDK reads
+    it; catch every exception from the service and never send exception text to the client
+    (anything that is not a WorkspaceError becomes internal_error); an omitted argument is
+    passed as the service default (None for claim_task body, lease_minutes, expires_minutes
+    and options; an empty string for request_decision body and link_artifact title);
+    integers must arrive as integers (20.0 is refused); never call the service without a
+    verified identity
 Acceptance (tests/web/test_workspace_mcp.py, through the mounted app with a real MCP client or
       raw JSON-RPC over httpx):
   - no token, an empty bearer, a malformed token, the owner token, a guest token and a revoked
@@ -111,6 +118,9 @@ Acceptance (tests/web/test_workspace_mcp.py, through the mounted app with a real
   - two clients interleaving calls each see their own identity (the required section 7 test)
   - a client past its rate gets rate_limited, as a tool error and not as an HTTP error
   - /mcp and /mcp/ both work; a Host header outside workspace.allowed_hosts is refused
+  - a request body over 256 KB gets 413; a service function that raises an unexpected
+    exception comes back as isError internal_error with no exception text
+  - a client that disconnects mid-call still leaves exactly one audit row for that call
   - with the workspace disabled nothing is mounted at /mcp
   - the existing web test suite still passes
 Run: pytest tests/web -q --no-cov; pytest tests/core/test_workspace_service.py -q --no-cov; ruff check web/workspace_mcp.py tests/web/test_workspace_mcp.py; black --check on the same paths

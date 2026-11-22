@@ -214,7 +214,7 @@ tool lists. Registry tools join the MCP server in Stage 3 (item 2.2).
 
 - **Spec 2026-07-28**, confirmed current on November 21, 2026. It has no sessions and no initialize
   handshake: every request stands alone and the server cannot push, so decisions are polled.
-- **SDK:** official `mcp`, pinned `>=2.3,<3`. `MCPServer` from `mcp.server`, mounted as
+- **SDK:** official `mcp`, pinned `>=2.3,<2.4` (the mount uses SDK modules a minor release may move; raise the pin with a test run). `MCPServer` from `mcp.server`, mounted as
   `Mount("/mcp", app=mcp.streamable_http_app(streamable_http_path="/"))`. The host lifespan must
   enter `mcp.session_manager.run()` (section 9); a mounted app's own lifespan never runs.
 - **Host allowlist:** the SDK answers 421 off localhost until `transport_security=` lists the
