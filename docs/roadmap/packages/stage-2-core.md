@@ -75,11 +75,15 @@ an object and `finish_turn` writes nothing.
   message: "Its richard i created the software you are wearing"
   tags: [must-not-route, chat]
   expect:
-    tools: none                         # none | any | [names] (every name listed must be called)
+    tools: none                         # none | any | optional | [names] (every name listed must be called)
     forbid_tools: []                    # names that must not be called
     forbid_routes: [coding]             # coding | self_repair | book | orchestrator
     reply: required                     # required | optional
 ```
+
+Without a `tools` key the default is `any` when `tools_any_of` is given, `optional`
+(any tool or none) when only `forbid_tools` is given, and `none` otherwise; an explicit
+`tools:` value always wins.
 
 A case passes when every `expect` key holds. The check is code over the
 `StreamData` events of the turn. No model judges a reply.
