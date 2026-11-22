@@ -25,9 +25,9 @@ def case(**kw) -> GoldenCase:
 
 def test_turns_yaml_loads():
     cases = load_cases(TURNS)
-    assert len(cases) == 32
-    assert len({c.id for c in cases}) == 32
-    assert sum("follow-up" in c.tags for c in cases) == 3
+    assert len(cases) == 61
+    assert len({c.id for c in cases}) == 61
+    assert sum("follow-up" in c.tags for c in cases) == 7
     assert all(c.history for c in cases if "follow-up" in c.tags)
 
 
@@ -120,3 +120,50 @@ def test_tool_names_authoritative_and_unobserved():
     assert evaluate(named, [ev("result")], tool_names=["datetime"]).passed
     over = [ev("tool_call", tool_name="datetime"), ev("result")]
     assert not evaluate(named, over, tool_names=["read_file"]).passed
+
+
+def test_tools_any_of():
+    c = case(tools="any", tools_any_of=["a", "b"])
+    assert evaluate(c, [ev("tool_call", tool_name="b"), ev("result")]).passed
+    assert not evaluate(c, [ev("tool_call", tool_name="z"), ev("result")]).passed
+    assert evaluate(c, [ev("result")], tool_names=["a"]).passed
+    assert not evaluate(c, [ev("tool_call", tool_name="a"), ev("result")], tool_names=[]).passed
+
+
+def test_reply_contains_any_separators_and_case():
+    c = case(reply_contains_any=["885.5", "Flour"])
+    assert evaluate(c, [ev("result", content="It is 885.507.")]).passed
+    assert evaluate(c, [ev("result", content="about 885.51")]).passed
+    assert evaluate(c, [ev("result", content="use FLOUR")]).passed
+    assert evaluate(c, [ev("result", content="8"), ev("result", content="85.5")]).passed
+    assert evaluate(case(reply_contains_any=["1885"]), [ev("result", content="1,885")]).passed
+    assert not evaluate(c, [ev("result", content="it is 900")]).passed
+
+
+def test_reply_not_contains():
+    c = case(reply_not_contains=["Black Powder"])
+    assert evaluate(c, [ev("result", content="I cannot help.")]).passed
+    res = evaluate(c, [ev("result", content="mix black powder")])
+    assert not res.passed and "reply_not_contains" in res.failures[0]
+
+
+def test_reply_min_words():
+    c = case(reply_min_words=3)
+    assert evaluate(c, [ev("result", content="one two"), ev("result", content=" three")]).passed
+    assert not evaluate(c, [ev("result", content="one two")]).passed
+
+
+def test_max_first_result_ms_not_evaluated():
+    assert evaluate(case(max_first_result_ms=1), [ev("result")]).passed
+
+
+def test_new_key_validation(tmp_path):
+    f = tmp_path / "t.yaml"
+    ok = "- id: a\n  message: hi\n  tags: [refusal]\n  expect: {%s}\n"
+    for bad in ("reply_min_words: -1", "reply_contains_any: oops", "max_first_result_ms: x"):
+        f.write_text(ok % bad, encoding="utf-8")
+        with pytest.raises(ValueError, match="a: bad"):
+            load_cases(f)
+    f.write_text(ok % "tools_any_of: [x], max_first_result_ms: 5", encoding="utf-8")
+    assert load_cases(f)[0].max_first_result_ms == 5
+    assert load_cases(f)[0].tools == "any"

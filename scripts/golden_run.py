@@ -317,6 +317,12 @@ async def run_cases(control_center, cases, args) -> int:
         med = f"{statistics.median(times):.0f}" if times else "-"
         tools = sorted({t for r in results for t in r[2]})
         unobs = sorted({u for r in results for u in r[3]})
+        if (
+            case.max_first_result_ms
+            and times
+            and statistics.median(times) > case.max_first_result_ms
+        ):
+            unobs.append("slow")
         rows.append(
             f"| {case.id} | {passes}/{args.runs} | {med} | {', '.join(tools) or '-'} "
             f"| {', '.join(unobs) or '-'} |"
