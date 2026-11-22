@@ -130,13 +130,17 @@ class TestVerify:
             "wits_00000000_" + "A" * 43,
             token + "\n",
             token[:-1],
-            "wits_" + token[5:13].upper() + token[13:],
             "",
             "wits_" + token[5:13] + "_" + "é" * 43,
             "töken",
             None,
             12345,
         ]
+        # Reason: an all-digit prefix is unchanged by upper(), which would make this candidate
+        # the real token (about 2% of runs), so it is only a rejection case when it differs.
+        upper_prefix = "wits_" + token[5:13].upper() + token[13:]
+        if upper_prefix != token:
+            bad.append(upper_prefix)
         for candidate in bad:
             assert await verify_token(db, candidate) is None
         assert await verify_token(db, expired, now=T0) is None
