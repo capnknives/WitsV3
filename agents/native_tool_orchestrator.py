@@ -49,6 +49,7 @@ from core.untrusted_content import (
     UntrustedWriteGate,
     is_untrusted_source,
     mark_untrusted,
+    turn_gate,
     write_gate_enabled,
 )
 
@@ -295,13 +296,15 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         """
         # Reason: the guard accepted these arguments, and it reads null as no arguments.
         tool_args = decode_arguments(arguments) or {}
-        gate = state["untrusted_gate"]
+        gate = turn_gate(state)
         block_reason = self._preflight_tool_call(tool_name, tool_args, state)
         block_reason = block_reason or gate.block_reason(tool_name)
-        reply = None
+        untrusted = is_untrusted_source(tool_name)
         if block_reason:
             observation = block_reason
         else:
+            # Reason: taint before the call, so a source that raises still gates the turn.
+            gate.note_dispatch(tool_name)
             try:
                 # Reason: state=None keeps _prepare_tool_args from merging loop state (such
                 # as user_role) into the arguments the guard validated.
@@ -312,16 +315,16 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                     result = await self._call_tool(tool_name, tool_args, None)
                 observation = self._format_tool_observation(tool_name, result)
                 ok = not self._tool_result_is_failure(result)
-                gate.note_result(tool_name)
-                if is_untrusted_source(tool_name):
-                    reply = mark_untrusted(tool_name, observation)
             except Exception as e:
                 observation = f"Tool {tool_name} failed: {e}"
                 ok = False
             yield tool_call_event(self.agent_name, tool_name, ok)
         state["observations"].append(observation)
         yield self.stream_observation(observation)
-        # Reason: only the copy sent to the model is wrapped; observations stay bare.
+        # Reason: only the copy sent to the model is wrapped; observations stay bare for
+        # the owner-facing synthesis, and the only observation re-sent to a model (the
+        # retry after a synthesis/save guard) is the guard's own message.
+        reply = mark_untrusted(tool_name, observation) if untrusted and not block_reason else None
         messages.append(tool_reply(tc, reply or observation))
 
     async def _answer_out_of_steps(

@@ -252,8 +252,9 @@ class SecuritySettings(BaseModel):
     untrusted_write_gate: bool = Field(
         default=True,
         description=(
-            "After a turn reads web or document content, write-capable tools are refused "
-            "for the rest of that turn (core/untrusted_content.py). False turns the gate off."
+            "After a turn reads web, document, file, memory or MCP content, only read-only "
+            "tools may run for the rest of that turn (core/untrusted_content.py). False "
+            "turns the gate off."
         ),
     )
     filesystem_read_roots: list[str] = Field(
