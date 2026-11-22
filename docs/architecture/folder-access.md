@@ -150,10 +150,16 @@ CREATE INDEX idx_folder_grants_live ON folder_grants(expires_at, revoked_at);
 
 - The verified-edit pipeline and self-repair keep `resolve_within_project`.
   On top of it, the pipeline's write path (`resolve_writable_within_project`)
-  also applies section 4 for write, refuses `var/`, and refuses files pytest or
-  Python load implicitly: `conftest.py` at any depth, `pytest.ini`, `tox.ini`,
+  also applies section 4 for write, refuses `var/`, refuses Windows alias
+  spellings (`name:stream`, trailing dot or space, device names), and refuses
+  files pytest, Python, git hooks or CI load implicitly: `conftest.py` at any
+  depth, `pytest.ini`, `.pytest.ini`, `pytest.toml`, `.pytest.toml`, `tox.ini`,
   `setup.cfg`, `pyproject.toml`, `sitecustomize.py`, `usercustomize.py`,
-  `*.pth`, and anything under `.github/`.
+  `.pre-commit-config.yaml`, `*.pth`, and anything under `.github/`,
+  `.githooks/`, `.husky/`, `.venv/`, `venv/` or `__pycache__/` at any depth.
+  Residual risk: the tool can still edit test files and modules that the host
+  pytest run then executes when `sandbox_mode` is not `docker`; the docker
+  sandbox is the containment for that.
 - `var/` runtime data stays where it is.
 - Guests keep today's limits.
 - The five MCP coordination tools are untouched; outside agents cannot request

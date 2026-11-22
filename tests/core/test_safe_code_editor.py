@@ -44,6 +44,75 @@ def test_resolve_writable_refuses_secrets_git_and_runtime_data(rel):
         sce.resolve_writable_within_project(rel)
 
 
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "conftest.py.",
+        "conftest.py ",
+        "conftest.py::$DATA",
+        "x.pth.",
+        "var./x",
+        "tools/con.py",
+        "pytest.ini",
+        ".pytest.ini",
+        "pytest.toml",
+        ".pytest.toml",
+        "tox.ini",
+        "setup.cfg",
+        "pyproject.toml",
+        "sitecustomize.py",
+        "usercustomize.py",
+        ".pre-commit-config.yaml",
+        "VAR/x",
+        ".venv/x.py",
+        "sub/venv/x.py",
+        "a/__pycache__/m.py",
+        ".githooks/pre-commit",
+        ".husky/pre-commit",
+    ],
+)
+def test_resolve_writable_refuses_aliases_config_and_tool_dirs(rel):
+    with pytest.raises(PermissionError):
+        sce.resolve_writable_within_project(rel)
+
+
+def test_resolve_writable_refuses_symlink_to_refused_target():
+    link = sce.PROJECT_ROOT / "tests" / "core" / "_scratch_link_to_conftest.py"
+    try:
+        link.symlink_to(sce.PROJECT_ROOT / "conftest.py")
+    except (OSError, NotImplementedError):
+        pytest.skip("no symlink rights on this platform")
+    try:
+        with pytest.raises(PermissionError):
+            sce.resolve_writable_within_project(str(link.relative_to(sce.PROJECT_ROOT)))
+    finally:
+        link.unlink(missing_ok=True)
+
+
+def test_resolve_writable_relative_to_error_is_permission_error(monkeypatch):
+    monkeypatch.setattr(sce, "resolve_within_project", lambda p: sce.Path("/elsewhere/x.py"))
+    with pytest.raises(PermissionError):
+        sce.resolve_writable_within_project("x.py")
+
+
+@pytest.mark.asyncio
+async def test_apply_verified_patch_reaches_refusal():
+    result = await sce.apply_verified_patch("conftest.py.", "irrelevant", reason="t", commit=False)
+    assert result.success is False
+    assert "Refusing" in result.message
+
+
+def test_resolve_within_confines_to_base():
+    base = sce.PROJECT_ROOT / "var" / "workspace"
+    assert (
+        sce.resolve_within(base, "var/workspace/demo/main.py")
+        == base.resolve() / "demo" / "main.py"
+    )
+    for rel in ["var/workspace/../../.env", "var/workspace/../../.git/hooks/x", "tools/x.py"]:
+        with pytest.raises(PermissionError):
+            sce.resolve_within(base, rel)
+
+
 @pytest.mark.asyncio
 async def test_apply_verified_edit_reverts_on_test_failure(tmp_path):
     target = tmp_path / "scratch_module.py"
