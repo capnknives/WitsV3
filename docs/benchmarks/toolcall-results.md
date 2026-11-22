@@ -28,3 +28,32 @@ Notes from the lead (not produced by the script):
 - Every failure repeated on all three runs (temperature 0), so this is effectively 36 cases per model.
 - The report does not list which cases ended in a server error (the "Errors" column). That is a gap in the script to fix.
 
+
+## Tool-calling eval 2026-11-21 19:27:02 | cases v2
+
+Host: DESKTOP-BOQHPAH (Windows 11) | Server: http://localhost:11434 | 1 run(s) per case | pass rates count server errors and timeouts as failures (also shown in Errors). Strict fails a call that adds a schema-valid optional argument; lenient passes it
+
+Run with the script and cases from PR #22 (cases v2, 36 cases). **Not comparable with the v1 table above**: v2 fixed a broken tool description, replaced four "none" cases and reworded the four recovery cases, so a change in a score between the two tables says nothing about the model.
+
+| Model | Backend | Think | single | hard | none | parallel | chain | recovery | Overall (strict) | Overall (lenient) | Median latency (s) | Errors |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| gemma4:e4b | ollama | on | 92% | 83% | 100% | 75% | 75% | 0% | 78% | 81% | 2.22 | 0 |
+| gemma4:e4b | ollama | off | 83% | 83% | 100% | 75% | 75% | 0% | 75% | 75% | 0.27 | 0 |
+| qwen3:8b | ollama | on | 83% | 100% | 100% | 50% | 0% | 0% | 67% | 81% | 3.40 | 1 |
+| qwen3:8b | ollama | off | 75% | 100% | 100% | 25% | 25% | 75% | 72% | 89% | 0.66 | 0 |
+| qwen3.5:9b | ollama | on | 100% | 67% | 100% | 75% | 75% | 100% | 89% | 94% | 3.15 | 1 |
+| qwen3.5:9b | ollama | off | 92% | 67% | 100% | 75% | 100% | 75% | 86% | 86% | 1.16 | 1 |
+
+What the failure log shows (every failure was read):
+
+- **No model called a tool when it should not have** ("none" is 100% everywhere). The v1 failures there were faults in the cases.
+- **Recovery (`e01`-`e04`)**: after a tool returns a temporary failure, `gemma4:e4b` never retries and `qwen3:8b` with thinking on never retries. They tell the user it failed and ask. That is a safe behavior, not a broken one, but it means the orchestrator must own retries rather than expect the model to.
+- **Message type (`s08`, `p04`)**: asked to "text" someone, models sent `type: "text"` (not an allowed value) or `type: "chat"` instead of `sms`. Model fault, and a hint that the real tool should accept or reject such values clearly.
+- **Angle brackets (`h04`, `h05`)**: `qwen3.5:9b` rewrote `<T=any>` as `<T name="any">`, and Ollama returned HTTP 500 ("XML syntax error") when an argument contained `</tool_call>`. Both are in the model's tool-call format handling on Ollama. These are its only non-trivial misses, and they matter for any tool that writes code or markup.
+- **Chains (`c02`, `c03`)**: `qwen3:8b` with thinking on issued both steps at once, inventing a placeholder for the result it had not seen yet. Model fault.
+- **Extra optional argument** (most of the strict-versus-lenient gap, mainly `qwen3:8b`): harmless additions such as `repeat: "none"`.
+- One `qwen3:8b` case timed out at 180 s with thinking on.
+
+Reading: `qwen3.5:9b` is the most reliable of the three at tool calling (89% strict with thinking on, 86% off). `gemma4:e4b` is by far the fastest (0.27 s median with thinking off) at 75%. `qwen3:8b` is the weakest on strict scoring. One run per case at temperature 0; 36 cases, so one case is about 3 points. The two large models have still not been run.
+
+Temperatures during the 11-minute run: CPU peak 144°F, GPU peak 154°F.
