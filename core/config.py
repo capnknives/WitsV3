@@ -351,6 +351,13 @@ class WorkspaceSettings(BaseModel):
     push: WorkspacePushSettings = Field(default_factory=WorkspacePushSettings)
 
 
+class TurnMetricsSettings(BaseModel):
+    """Per-turn timing log (core/turn_metrics.py)."""
+
+    enabled: bool = Field(default=True, description="Append one JSON line per turn")
+    retention_days: int = Field(default=30, gt=0, description="Delete older day files")
+
+
 class WebUISettings(BaseModel):
     enabled: bool = Field(default=True, description="Enable the web UI server")
     host: str = Field(
@@ -576,6 +583,7 @@ class WitsV3Config(BaseModel):
     document_rag: DocumentRAGSettings = Field(default_factory=DocumentRAGSettings)
     web_ui: WebUISettings = Field(default_factory=WebUISettings)
     workspace: WorkspaceSettings = Field(default_factory=WorkspaceSettings)
+    turn_metrics: TurnMetricsSettings = Field(default_factory=TurnMetricsSettings)
     supabase: SupabaseSettings = Field(default_factory=SupabaseSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     personality: PersonalitySettings = Field(default_factory=PersonalitySettings)

@@ -29,6 +29,9 @@ web_ui:
     content_policy_enabled: true
     default_guest_age_band: teen
     adult_allow_document_search: true
+turn_metrics:
+  enabled: true
+  retention_days: 30
 workspace:
   enabled: false  # needs WITSV3_WEB_TOKEN in .env; the ntfy topic is WITSV3_NTFY_TOPIC in .env
   db_path: var/data/workspace.db
