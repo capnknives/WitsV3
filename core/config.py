@@ -376,7 +376,12 @@ class TurnMetricsSettings(BaseModel):
 
 
 class ConversationSettings(BaseModel):
-    """Per-turn limits for the native tool loop (core/tool_call_guard.py)."""
+    """Front door choice and per-turn limits for the native tool loop (core/tool_call_guard.py)."""
+
+    front_door: Literal["legacy", "native"] = Field(
+        default="legacy",
+        description="Owner turns go to the native tool loop ('native') or the intent router",
+    )
 
     max_steps: int = Field(default=8, gt=0, description="Model rounds per turn")
     max_identical_calls: int = Field(

@@ -245,6 +245,7 @@ class WitsV3System:
                 memory_manager=self.memory_manager,
                 orchestrator_agent=self.orchestrator,
                 playbook_executor=self.playbook_executor,
+                native_orchestrator=self._create_front_door_orchestrator(),
                 specialized_agents={
                     "book_writing": self.book_writing_agent,
                     "coding": self.coding_agent,
@@ -355,6 +356,30 @@ class WitsV3System:
             sys.exit(0)
         except Exception as e:
             logger.error(f"Failed to restart system: {e}")
+
+    def _create_front_door_orchestrator(self):
+        """Build the native loop for conversation.front_door native, else None.
+
+        Reason: front_door native needs the native loop whatever tool_calling_mode says.
+        A failed build returns None so the control center falls back to legacy.
+        """
+        if getattr(self.config.conversation, "front_door", "legacy") != "native":
+            return None
+        from agents.native_tool_orchestrator import NativeToolOrchestrator
+
+        if isinstance(self.orchestrator, NativeToolOrchestrator):
+            return self.orchestrator
+        try:
+            return NativeToolOrchestrator(
+                agent_name="NativeToolOrchestrator",
+                config=self.config,
+                llm_interface=self.llm_interface,
+                memory_manager=self.memory_manager,
+                tool_registry=self.tool_registry,
+            )
+        except Exception as e:
+            logger.warning(f"Native front door unavailable, using legacy: {e}")
+            return None
 
     def _create_orchestrator(self):
         """Factory: JSON ReAct (default) or native Ollama tool-calling pilot."""

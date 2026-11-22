@@ -42,6 +42,7 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         orchestrator_agent: Any | None = None,
         specialized_agents: dict[str, Any] | None = None,
         playbook_executor: Any | None = None,
+        native_orchestrator: Any | None = None,
     ):
         """
         Initialize the Control Center Agent.
@@ -53,12 +54,17 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
             memory_manager: Optional memory manager
             orchestrator_agent: The orchestrator to delegate complex tasks to
             specialized_agents: Optional specialized agents for specific tasks
+            playbook_executor: Optional playbook executor for multi-step playbooks
+            native_orchestrator: Native tool loop used when conversation.front_door is native
         """
         super().__init__(agent_name, config, llm_interface, memory_manager)
 
         self.orchestrator_agent = orchestrator_agent
         self.specialized_agents = specialized_agents or {}
         self.playbook_executor = playbook_executor
+        self.native_orchestrator = native_orchestrator
+        # Reason: a missing native loop is a startup problem; warn once, not every turn.
+        self._warned_no_native = False
 
         # session_id -> the original request that triggered a clarifying
         # question we're still waiting on an answer to. See run()'s merge
@@ -103,6 +109,29 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
     def get_model_name(self) -> str:
         """Get the model name for the control center."""
         return self.config.ollama_settings.control_center_model
+
+    def _use_native_front_door(self, user_role: Any) -> bool:
+        """Decide whether this turn goes straight to the native tool loop.
+
+        Args:
+            user_role: The role resolved at the top of run().
+
+        Returns:
+            True only for owner turns with front_door native and a built native loop.
+        """
+        conversation = getattr(self.config, "conversation", None)
+        if getattr(conversation, "front_door", "legacy") != "native":
+            return False
+        # Reason: fail closed. Guests (and any unknown role) stay on the legacy path until
+        # the native loop has guest tool limits (C4).
+        if user_role != "owner":
+            return False
+        if self.native_orchestrator is None:
+            if not self._warned_no_native:
+                self.logger.warning("front_door is native but no native loop was built; legacy")
+                self._warned_no_native = True
+            return False
+        return True
 
     def _is_casual_reply(self, message: str) -> bool:
         """Pure greeting check for clarification merge guard."""
@@ -154,6 +183,25 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
             self.logger.info(
                 "Handled remember intent, exiting early. No further orchestration will occur."
             )
+            return
+
+        if self._use_native_front_door(user_role):
+            # Reason: the native loop owns the whole turn (and marks the turn record
+            # "native"); none of the legacy routing steps below may run first.
+            try:
+                async for event in self.native_orchestrator.run(
+                    user_input,
+                    conversation_history=conversation_history,
+                    session_id=session_id,
+                    **kwargs,
+                ):
+                    yield event
+            except Exception as e:
+                self.logger.error(f"Native front door failed: {e}")
+                yield self.stream_error(
+                    "I encountered an issue processing your request. Please try again.",
+                    details=str(e),
+                )
             return
 
         # One-shot merge: if our last turn in this session was a clarifying
