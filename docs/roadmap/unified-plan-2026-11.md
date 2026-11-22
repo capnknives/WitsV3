@@ -291,10 +291,14 @@ Built, measured once, **not merged**: C5a, long writing as a tool
 (`write_long_text`: an outline, then one fresh model call per section, saved
 as it goes). Owner decision November 22: long writing is a tool, not a skill
 file, because a turn's context cannot hold a long piece written through
-repeated tool calls. First result on the PC: the 4,500-word story case wrote
-4,552 words. Known problems: the text is repetitive and has no scenes or
-characters, and the tool is also called for short requests it should not
-take.
+repeated tool calls. On the PC, 62 cases three times: the 4,500-word story
+case wrote 4,104 to 4,629 words in about 90 seconds and passed all three runs,
+and 57 of 62 cases passed every run. It is not ready to merge (draft PR #82):
+the tool is also called where the owner wanted an answer in chat ("yes please
+do that", "make these instructions more in depth"), one refusal case that
+passed before now saves a note instead, and a plain recipe answer went from
+about 7 seconds to about 68. The text itself is repetitive and has no scenes
+or characters.
 
 **Order of work from here.**
 
