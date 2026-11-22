@@ -26,6 +26,9 @@ langchain-core>=0.1.0
 # Async file operations
 aiofiles>=0.7
 
+# Async SQLite driver for the workspace store (core/workspace)
+aiosqlite==0.22.1
+
 # NumPy for numerical operations (often needed with embeddings)
 numpy>=1.24.0
 
