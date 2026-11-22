@@ -37,6 +37,7 @@ from agents.tool_tiers import (
     find_tools_reply,
     route_call,
 )
+from agents.turn_context import bind_turn_if_unbound
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface, LLMMessage
 from core.memory_manager import MemoryManager
@@ -87,6 +88,7 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         found.sort(key=lambda seg: -(getattr(seg, "relevance_score", None) or 0.0))
         return recalled_facts(found, conv.memory_types, conv.memory_min_score)
 
+    @bind_turn_if_unbound
     async def run(
         self,
         user_input: str,
@@ -100,7 +102,6 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         # Reason: one resident model, never the router, so no turn can ask for a model the
         # owner has not installed and the model stays loaded between rounds.
         self._session_model = resident_model(self.config)
-        self._skip_global_memory_store = kwargs.get("user_role") == "guest"
         turn = current_turn()
         if turn is not None:
             turn.path = "native"

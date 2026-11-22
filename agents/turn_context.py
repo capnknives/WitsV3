@@ -4,14 +4,26 @@ One control-center agent serves every chat turn, so the caller's role must not
 live on ``self``. ``run_in_turn`` wraps a turn's async generator and binds its
 ``TurnContext`` around every step only; between steps the variable is restored,
 so two turns stepped by hand from the same task never see each other's role.
+
+Outside a bound turn, ``turn_for`` returns an explicit OWNER default (logged at debug).
+That is deliberate: every guest-reachable entry (web/server.py /api/chat) goes through
+``WitsControlCenterAgent.run()``, which binds a turn, and the orchestrators' ``run()``
+bind one from their own ``user_role`` kwarg when called directly (``bind_turn_if_unbound``).
+The only unbound callers are owner-local: run.py self-repair, BackgroundAgent jobs,
+scripts and tests. Shared agent attributes are never consulted.
 """
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
-from collections.abc import AsyncGenerator, AsyncIterator
+import functools
+import logging
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
 from typing import Any, TypeVar
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -45,16 +57,38 @@ def current_turn() -> TurnContext | None:
 
 
 def turn_for(agent: Any) -> TurnContext:
-    """Current turn; outside a turn, today's defaults (agent attributes, else owner)."""
+    """Current turn; outside a turn, a fresh owner default (see module docstring)."""
     turn = _CURRENT_TURN.get()
     if turn is not None:
         return turn
-    return TurnContext(
-        user_role=getattr(agent, "_request_user_role", "owner"),
-        guest_profile=getattr(agent, "_request_guest_profile", None),
-        skip_global_memory_store=getattr(agent, "_skip_global_memory_store", False),
-        guest_personalization_context=getattr(agent, "_guest_personalization_context", ""),
-    )
+    logger.debug("No bound turn for %s; using owner default", type(agent).__name__)
+    return TurnContext()
+
+
+@contextlib.contextmanager
+def bind_turn(turn: TurnContext) -> Iterator[TurnContext]:
+    """Bind ``turn`` for a plain (non-generator) await, e.g. scripts calling a helper."""
+    token = _CURRENT_TURN.set(turn)
+    try:
+        yield turn
+    finally:
+        _CURRENT_TURN.reset(token)
+
+
+def bind_turn_if_unbound(method: Callable[..., AsyncGenerator[T, None]]):
+    """Decorate an agent's async-generator ``run``: inside a turn, pass through; called
+    directly, bind a turn built from its own kwargs (so ``user_role="guest"`` holds)."""
+
+    @functools.wraps(method)
+    async def wrapper(self: Any, *args: Any, **kwargs: Any) -> AsyncIterator[T]:
+        agen = method(self, *args, **kwargs)
+        if _CURRENT_TURN.get() is None:
+            agen = run_in_turn(TurnContext.for_request(**kwargs), agen)
+        async with contextlib.aclosing(agen) as events:
+            async for item in events:
+                yield item
+
+    return wrapper
 
 
 async def run_in_turn(turn: TurnContext, agen: AsyncGenerator[T, None]) -> AsyncIterator[T]:

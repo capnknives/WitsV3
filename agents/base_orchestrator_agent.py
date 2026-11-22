@@ -10,6 +10,7 @@ from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.orchestrator_tool_helpers import OrchestratorToolHelpersMixin
+from agents.turn_context import bind_turn_if_unbound, turn_for
 from core.config import WitsV3Config
 from core.json_llm_parser import build_json_repair_prompt
 from core.llm_interface import BaseLLMInterface
@@ -67,6 +68,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         """Get the model name for orchestrator agents."""
         return self.config.ollama_settings.orchestrator_model
 
+    @bind_turn_if_unbound
     async def run(
         self,
         user_input: str,
@@ -99,8 +101,6 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         if self._session_model != self.get_model_name():
             self.logger.info(f"Orchestrating with routed model: {self._session_model}")
 
-        self._skip_global_memory_store = kwargs.get("user_role") == "guest"
-
         # Initial setup
         yield self.stream_thinking(f"Starting orchestration for goal: {goal}")
 
@@ -129,7 +129,11 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                     else f"Session-scoped memory:\n{session_ctx}"
                 )
         flush_context = ""
-        if conversation_history and self.memory_manager and not self._skip_global_memory_store:
+        if (
+            conversation_history
+            and self.memory_manager
+            and not turn_for(self).skip_global_memory_store
+        ):
             from core.conversation_compaction import get_session_flush_context
 
             flush_context = await get_session_flush_context(
