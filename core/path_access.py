@@ -382,8 +382,13 @@ def roots_for(config: Any | None, role: str = "owner") -> Roots:
         home=_home(),
         windows=os.name == "nt",
         role_roots=role_roots,
-        # Reason: the guest export route writes to the runtime exports folder.
-        var_allow=(str(base.resolve()), str(runtime_paths.exports_dir().resolve())),
+        # Reason: the guest export route writes to the runtime exports folder, and the
+        # coding agent writes generated projects under the runtime workspace folder.
+        var_allow=(
+            str(base.resolve()),
+            str(runtime_paths.exports_dir().resolve()),
+            str(runtime_paths.workspace_dir().resolve()),
+        ),
         private=_private_dirs(config, repo, base.resolve()),
     )
 

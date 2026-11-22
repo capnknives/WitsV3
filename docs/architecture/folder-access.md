@@ -105,12 +105,11 @@ Refused for every mode, even with a grant, and never requestable:
   policy documents such as `password_reset.py` and `password-policy.md` stay
   allowed.
 - Anything under the repo's `var/` except the `folders.base` subtree (default
-  `var/wits_files`) and `var/exports` (the guest export route). That covers
-  `var/data`, `var/secrets`, `var/logs`, `var/backups`, `var/workspace`,
+  `var/wits_files`), `var/exports` (the guest export route) and
+  `var/workspace` (projects the coding agent and the book writer generate).
+  That covers `var/data`, `var/secrets`, `var/logs`, `var/backups`,
   `var/cache`, `var/sessions` and `var/` itself. `var/data` and `var/secrets`
-  stay refused even if `folders.base` points into them. Coding handlers and
-  the book writer reach `var/workspace` through
-  `safe_code_editor.resolve_within_project`, not through `check`. The repo root
+  stay refused even if `folders.base` points into them. The repo root
   is resolved the same way as the path, so a symlinked, junction or 8.3 repo
   path cannot dodge the rule.
 - The configured data folder (`<runtime_paths.root>/data`) and the folder that
