@@ -25,6 +25,7 @@ NATIVE_SYSTEM_PROMPT = (
 )
 
 STEP_LIMIT_ERROR = "Could not complete within the step limit."
+MODEL_CALL_FAILED = "The model call failed"
 
 
 def build_tool_specs(
@@ -69,11 +70,24 @@ def build_tool_specs(
     return order_tools(payload), schemas
 
 
-def decode_arguments(arguments: Any) -> dict[str, Any]:
-    """Decode arguments the guard has already accepted (so the JSON is valid)."""
+def decode_arguments(arguments: Any) -> Any:
+    """Decode a JSON argument string; any other value is returned unchanged.
+
+    Only an empty string becomes ``{}``. Non-object values (null, lists, numbers) come
+    back as they are so the guard, not this helper, decides about them.
+
+    Raises:
+        ValueError: The string is not valid JSON.
+    """
     if isinstance(arguments, str):
         return json.loads(arguments) if arguments.strip() else {}
-    return dict(arguments or {})
+    return arguments
+
+
+def tool_reply(call: dict[str, Any], text: str) -> LLMMessage:
+    """The role "tool" reply to one call of the preceding assistant message."""
+    name = call.get("name")
+    return LLMMessage(role="tool", content=text, name=name if isinstance(name, str) else None)
 
 
 def tool_call_event(source: str, tool_name: str, ok: bool) -> StreamData:
@@ -104,8 +118,9 @@ def build_turn_context(goal: str, user_message: str, documents: str, memory: str
 def assistant_tool_message(content: str, calls: list[dict[str, Any]]) -> LLMMessage:
     """The assistant turn that made ``calls``, in Ollama's shape, to precede the replies.
 
-    Arguments that are not a JSON object (the guard rejects those) are sent as ``{}``,
-    because Ollama only accepts an object there; the tool reply explains the refusal.
+    Arguments that are not a JSON object are sent as ``{}`` here only, because Ollama
+    accepts nothing else in this field; the guard saw the raw value and the tool reply
+    carries its verdict.
     """
     shaped = []
     for call in calls:
@@ -126,25 +141,34 @@ def _role(item: Any) -> str:
 def history_window(history: list[Any], history_turns: int) -> list[Any]:
     """Trim history in blocks so the kept start stays put between cuts.
 
-    All history is kept until it exceeds ``2 * history_turns`` messages; then the oldest
-    are dropped so ``history_turns`` remain, and that cut point holds until the kept part
-    exceeds the limit again. The start is a pure function of the length, so consecutive
-    turns between cuts send the same first message and Ollama keeps its cached prefix.
+    All history is kept until it exceeds ``2 * h`` messages, where ``h`` is
+    ``history_turns`` but at least 2 (one full user/assistant exchange). Then the
+    oldest are dropped so about ``h`` remain, and that cut point holds until the kept
+    part exceeds the limit again. The start depends only on the (append-only) history,
+    so consecutive turns between cuts send the same first message and Ollama keeps its
+    cached prefix.
 
     Args:
         history: Earlier messages, oldest first (dicts or LLMMessage).
-        history_turns: Messages kept right after a cut.
+        history_turns: Messages to keep right after a cut.
 
     Returns:
-        The slice of ``history`` to send.
+        The slice of ``history`` to send; after a cut it starts on a user message.
     """
-    h = max(1, history_turns)
+    h = max(2, history_turns)
     excess = len(history) - 2 * h
     if excess <= 0:
         return list(history)
     # Reason: each cut advances the start by h + 1 (from 2h + 1 kept down to h).
-    start = -(-excess // (h + 1)) * (h + 1)
-    # Reason: never keep tool replies without the assistant message that made the calls.
-    while start > 0 and _role(history[start]) == "tool":
-        start -= 1
-    return list(history[start:])
+    cut = -(-excess // (h + 1)) * (h + 1)
+    # Reason: start on a user message; moving forward to one never lands inside a tool
+    # group (assistant tool_calls plus its replies), since groups hold no user message.
+    users = [i for i, item in enumerate(history) if _role(item) == "user"]
+    later = [i for i in users if i >= cut]
+    earlier = [i for i in users if i < cut]
+    if later and len(history) - later[0] >= 2:
+        return list(history[later[0] :])
+    if earlier:
+        # Reason: keep at least one full exchange rather than a lone trailing message.
+        return list(history[earlier[-1] :])
+    return list(history[cut:])

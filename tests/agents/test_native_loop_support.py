@@ -1,6 +1,12 @@
-"""Pure helpers of the native loop: history window, assistant tool message."""
+"""Pure helpers of the native loop: history window, arguments, assistant message."""
 
-from agents.native_loop_support import assistant_tool_message, history_window
+import pytest
+
+from agents.native_loop_support import (
+    assistant_tool_message,
+    decode_arguments,
+    history_window,
+)
 
 
 def _history(n: int) -> list[dict]:
@@ -12,32 +18,54 @@ def test_keeps_everything_until_twice_the_window():
     assert history_window(hist, 5) == hist
 
 
-def test_cut_leaves_window_and_first_message_holds_between_cuts():
-    h = 5
-    firsts = {n: history_window(_history(n), h)[0]["content"] for n in range(11, 24)}
-    assert len(history_window(_history(11), h)) == h
-    # Between cuts (kept part 5..10) the first kept message never changes.
-    assert {firsts[n] for n in range(11, 17)} == {"m6"}
-    # The next cut happens when the kept part would exceed 2 * h.
-    assert firsts[17] == "m12" and len(history_window(_history(17), h)) == h
-    assert {firsts[n] for n in range(17, 23)} == {"m12"}
+@pytest.mark.parametrize("h", [4, 5, 10])
+def test_cut_starts_on_user_and_first_message_holds_between_cuts(h):
+    previous_first, changes = None, 0
+    for n in range(2, 8 * h, 2):  # Reason: each completed turn adds a user/assistant pair.
+        window = history_window(_history(n), h)
+        assert window[0]["role"] == "user"
+        assert len(window) <= 2 * h
+        if n > 2 * h:
+            assert len(window) >= h - 1
+        if window[0]["content"] != previous_first:
+            changes += 1
+            previous_first = window[0]["content"]
+    # Reason: the start moves only at cuts (roughly every h + 1 messages), not every turn.
+    turns = len(range(2, 8 * h, 2))
+    assert 1 < changes < turns / 2
 
 
-def test_window_never_starts_on_a_tool_reply():
-    hist = (
-        _history(5)
-        + [
-            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "t"}}]},
-            {"role": "tool", "content": "r1"},
-            {"role": "tool", "content": "r2"},
-            {"role": "assistant", "content": "done"},
-        ]
-        + _history(2)
-    )
-    # 11 messages, h=5: the plain cut would start at index 6 (a tool reply).
+def test_history_turns_one_keeps_a_full_exchange():
+    for n in range(2, 30, 2):
+        window = history_window(_history(n), 1)
+        assert window[0]["role"] == "user"
+        assert [m["role"] for m in window[:2]] == ["user", "assistant"]
+
+
+def test_window_never_splits_a_tool_group():
+    group = [
+        {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "t"}}]},
+        {"role": "tool", "content": "r1"},
+        {"role": "tool", "content": "r2"},
+        {"role": "assistant", "content": "done"},
+    ]
+    hist = _history(5) + group + _history(2)
+    # 11 messages, h=5: the block cut would start at index 6, a tool reply.
     window = history_window(hist, 5)
-    assert window[0]["role"] == "assistant" and window[0].get("tool_calls")
-    assert window == hist[5:]
+    assert window[0]["role"] == "user"
+    assert window == hist[9:]
+    assert not any(m["role"] == "tool" for m in window)
+
+
+def test_decode_arguments_never_coerces_non_objects():
+    assert decode_arguments("") == {}
+    assert decode_arguments('{"k": 1}') == {"k": 1}
+    assert decode_arguments("[1, 2]") == [1, 2]
+    assert decode_arguments("null") is None
+    assert decode_arguments("3") == 3
+    assert decode_arguments(None) is None
+    with pytest.raises(ValueError):
+        decode_arguments("{bad")
 
 
 def test_assistant_message_uses_ollama_shape_and_objects():

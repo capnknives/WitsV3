@@ -10,6 +10,7 @@ from typing import Any
 
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.native_loop_support import (
+    MODEL_CALL_FAILED,
     NATIVE_SYSTEM_PROMPT,
     STEP_LIMIT_ERROR,
     assistant_tool_message,
@@ -18,6 +19,7 @@ from agents.native_loop_support import (
     decode_arguments,
     history_window,
     tool_call_event,
+    tool_reply,
 )
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface, LLMMessage
@@ -79,7 +81,13 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             "context": "",
             "documents_context": self._format_documents_context(doc_inventory),
             "conversation_history": conversation_history,
-            "history": conversation_history.to_llm_format() if conversation_history else [],
+            # Reason: to_llm_format defaults to the last 10 messages, a window that slides
+            # every turn; history_window does the trimming in stable blocks instead.
+            "history": (
+                conversation_history.to_llm_format(limit=len(conversation_history.messages))
+                if conversation_history
+                else []
+            ),
             "observations": [],
             "completed": False,
             "final_answer": None,
@@ -94,17 +102,6 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             "preferred_tool": kwargs.get("preferred_tool", ""),
         }
         self._react_state_for_tools = react_state
-
-        async for stream_data in self._bootstrap_codebase_intro(react_state, session_id):
-            yield stream_data
-
-        if react_state.get("preferred_tool") == "calculator":
-            short = await self._try_math_shortcircuit(react_state, session_id)
-            if short is not None:
-                yield tool_call_event(self.agent_name, "calculator", True)
-                yield self.stream_result(short)
-                react_state["completed"] = True
-                return
 
         chat_fn = getattr(self.llm_interface, "generate_chat", None)
         if not chat_fn:
@@ -132,36 +129,42 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         while guard.rounds <= guard.max_steps:
             guard.note_round()
             self.current_iteration = guard.rounds
-            response = await chat_fn(
-                messages=messages,
-                tools=self._ollama_tools_payload(),
-                model=getattr(self, "_session_model", None),
-                temperature=self.REASONING_TEMPERATURE,
-            )
+            try:
+                response = await self._chat(chat_fn, messages, self._ollama_tools_payload())
+            except Exception as exc:
+                yield self.stream_error(f"{MODEL_CALL_FAILED}: {exc}")
+                return
             calls = response.tool_calls or []
             stop_message = None
             if calls:
                 # Reason: the model must see what it asked for before each reply, refused
                 # calls included, so it can tell which reply answers which call.
                 messages.append(assistant_tool_message(response.content or "", calls))
-                for tc in calls:
+                for index, tc in enumerate(calls):
                     verdict = guard.check(tc.get("name"), tc.get("arguments"), self._tool_schemas)
                     if verdict.action == "stop":
                         stop_message = verdict.message
+                        # Reason: every call in the assistant message needs a reply, or
+                        # the next request carries an unanswered tool call.
+                        for rest in calls[index:]:
+                            messages.append(tool_reply(rest, verdict.message))
                         break
                     if verdict.action == "reject":
-                        messages.append(LLMMessage(role="tool", content=verdict.message))
+                        messages.append(tool_reply(tc, verdict.message))
                         continue
                     async for event in self._run_tool(tc, react_state, messages):
                         yield event
             else:
                 text = response.content or ""
                 verdict = guard.text_call_verdict(text, has_structured_call=False)
-                if verdict is not None and verdict.action == "stop":
-                    stop_message = verdict.message
-                elif verdict is not None:
-                    # Reason: a call written as text is never shown to the owner.
-                    messages.append(LLMMessage(role="tool", content=verdict.message))
+                if verdict is not None:
+                    # Reason: a call written as text is never shown to the owner; it has no
+                    # structured call to answer, so the verdict goes back as a user message.
+                    messages.append(LLMMessage(role="assistant", content=text))
+                    if verdict.action == "stop":
+                        stop_message = verdict.message
+                    else:
+                        messages.append(LLMMessage(role="user", content=verdict.message))
                 else:
                     final_answer = text.strip() or "Done."
                     final_answer, done = self._resolve_final_answer(final_answer, react_state)
@@ -169,6 +172,7 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                         yield self.stream_result(final_answer)
                         react_state["completed"] = True
                         return
+                    messages.append(LLMMessage(role="assistant", content=text))
                     messages.append(
                         LLMMessage(role="user", content=react_state["observations"][-1])
                     )
@@ -181,12 +185,22 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         async for event in self._answer_out_of_steps(react_state, messages, chat_fn):
             yield event
 
+    async def _chat(self, chat_fn: Any, messages: list[LLMMessage], tools: Any) -> Any:
+        """One model call with this turn's model and temperature."""
+        return await chat_fn(
+            messages=messages,
+            tools=tools,
+            model=getattr(self, "_session_model", None),
+            temperature=self.REASONING_TEMPERATURE,
+        )
+
     async def _run_tool(
         self, tc: dict[str, Any], state: dict[str, Any], messages: list[LLMMessage]
     ):
         """Run one guard-approved call and answer it with a role "tool" message."""
         tool_name = tc.get("name", "")
-        tool_args = decode_arguments(tc.get("arguments"))
+        # Reason: the guard accepted these arguments, and it reads null as no arguments.
+        tool_args = decode_arguments(tc.get("arguments")) or {}
         block_reason = self._preflight_tool_call(tool_name, tool_args, state)
         if block_reason:
             observation = block_reason
@@ -194,29 +208,29 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             try:
                 result = await self._call_tool(tool_name, tool_args, state)
                 observation = self._format_tool_observation(tool_name, result)
+                ok = not self._tool_result_is_failure(result)
             except Exception as e:
                 observation = f"Tool {tool_name} failed: {e}"
-            ok = not self._observation_indicates_failure(observation)
+                ok = False
             yield tool_call_event(self.agent_name, tool_name, ok)
         state["observations"].append(observation)
         yield self.stream_observation(observation)
-        messages.append(LLMMessage(role="tool", content=observation, name=tool_name))
+        messages.append(tool_reply(tc, observation))
 
     async def _answer_out_of_steps(
         self, state: dict[str, Any], messages: list[LLMMessage], chat_fn: Any
     ):
-        """End a turn that ran out of steps with an answer from the observations."""
+        """End a turn that ran out of steps with an answer from what it has."""
         fallback = self._auto_synthesize_from_observations(state)
-        if not fallback and state["observations"]:
-            # Reason: the observations are not search results the fallback can quote, so
-            # ask once more with no tools offered; the model can then only answer.
+        if not fallback:
+            # Reason: nothing quotable, so ask once more with no tools offered; the model
+            # can then only answer.
             messages.append(LLMMessage(role="user", content=OUT_OF_STEPS))
-            response = await chat_fn(
-                messages=messages,
-                tools=None,
-                model=getattr(self, "_session_model", None),
-                temperature=self.REASONING_TEMPERATURE,
-            )
+            try:
+                response = await self._chat(chat_fn, messages, None)
+            except Exception as exc:
+                yield self.stream_error(f"{MODEL_CALL_FAILED}: {exc}")
+                return
             text = (response.content or "").strip()
             if text and not response.tool_calls and "<tool_call>" not in text:
                 fallback = text
@@ -224,26 +238,6 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             yield self.stream_result(fallback)
         else:
             yield self.stream_error(STEP_LIMIT_ERROR)
-
-    async def _try_math_shortcircuit(
-        self, state: dict[str, Any], session_id: str | None
-    ) -> str | None:
-        """Skip first LLM call for pure calculator goals."""
-        goal = state.get("goal", "")
-        if not self._goal_is_pure_math(goal):
-            return None
-        args = self._normalize_calculator_args(
-            {"expression": self._extract_calculator_expression(goal)}
-        )
-        try:
-            result = await self._call_tool("calculator", args, state)
-            obs = self._format_tool_observation("calculator", result)
-            state["observations"].append(obs)
-            if isinstance(result, dict):
-                return str(result.get("result", result.get("content", obs)))
-            return str(result)
-        except Exception:
-            return None
 
     def _build_reasoning_prompt(self, state: dict[str, Any]) -> str:
         return ""
