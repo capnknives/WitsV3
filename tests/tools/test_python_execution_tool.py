@@ -19,6 +19,7 @@ def python_execution_tool(monkeypatch):
         return SimpleNamespace(
             security=SimpleNamespace(
                 sandbox_mode="off",
+                python_execution_allow_unsandboxed=True,
                 python_execution_network_access=False,
                 python_execution_subprocess_access=False,
             )

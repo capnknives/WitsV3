@@ -24,6 +24,31 @@ class SandboxResult:
     return_code: int = 0
 
 
+UNSANDBOXED_REFUSAL = (
+    "python_execute is disabled: set security.sandbox_mode to docker, or set "
+    "security.python_execution_allow_unsandboxed: true to run code directly on this computer"
+)
+
+# Reason: only what the interpreter needs to start on Windows and POSIX; never secrets.
+_CHILD_ENV_KEYS = ("PATH", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "TEMP", "TMP", "TMPDIR")
+_CHILD_ENV_LOCALE = ("LANG", "LC_ALL")
+
+
+def unsandboxed_allowed(config: Any | None) -> bool:
+    """True only when the owner opted in to running code directly on the host."""
+    security = getattr(config, "security", None) if config else None
+    return getattr(security, "python_execution_allow_unsandboxed", False) is True
+
+
+def minimal_child_env(workdir: str, extra: dict[str, str] | None = None) -> dict[str, str]:
+    """Build a small environment for a host child process (not os.environ)."""
+    env = {k: os.environ[k] for k in _CHILD_ENV_KEYS + _CHILD_ENV_LOCALE if k in os.environ}
+    env["HOME"] = workdir
+    env["USERPROFILE"] = workdir
+    env.update(extra or {})
+    return env
+
+
 def sandbox_mode(config: Any | None) -> str:
     security = getattr(config, "security", None) if config else None
     mode = getattr(security, "sandbox_mode", "off") if security else "off"
@@ -41,6 +66,10 @@ async def run_python_sandboxed(
     if mode == "off":
         return SandboxResult(success=False, output="", error="sandbox not enabled", return_code=-1)
     if mode == "subprocess":
+        if not unsandboxed_allowed(config):
+            return SandboxResult(
+                success=False, output="", error=UNSANDBOXED_REFUSAL, return_code=-1
+            )
         return await _run_subprocess_sandbox(code, config=config, timeout=timeout)
     if mode == "docker":
         return await _run_docker_sandbox(code, config=config, timeout=timeout)
@@ -69,7 +98,7 @@ async def _run_subprocess_sandbox(
             cwd=tmp,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
-            env={**os.environ, **env},
+            env=minimal_child_env(tmp, env),
         )
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
@@ -106,6 +135,10 @@ async def _run_docker_sandbox(code: str, *, config: Any | None, timeout: float) 
             "run",
             "--rm",
             "--network=none",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--pids-limit=128",
+            "--memory=512m",
             "-v",
             f"{tmp}:/sandbox:ro",
             image,

@@ -264,6 +264,12 @@ class SecuritySettings(BaseModel):
         default="off",
         description="off | subprocess | docker — optional execution boundary",
     )
+    # Reason: off/subprocess run snippets as a host process that can read and write the
+    # user's files; python_execute refuses those modes unless the owner opts in here.
+    python_execution_allow_unsandboxed: bool = Field(
+        default=False,
+        description="Let python_execute run code directly on this computer (sandbox_mode off/subprocess)",
+    )
     sandbox_image: str = Field(
         default="witsv3-sandbox",
         description="Docker image for sandbox_mode=docker",

@@ -25,6 +25,9 @@ Checked on November 22, 2026:
 
 - `security.sandbox_mode` is `docker` and Docker is running, so
   `python_execute` runs in a container there. The code default is `off`.
+  Since RT-FIX-2, `python_execute` refuses to run in `off` or `subprocess`
+  mode unless `security.python_execution_allow_unsandboxed` is true, and an
+  unsandboxed run gets a minimal environment, not the host's.
 - `require_auth` is true and a web token is set, so the "no token" case below
   is not live there.
 - Guest access is enabled.
