@@ -7,8 +7,8 @@ status: "draft"
 
 # WITS UI and UX overhaul plan
 
-**Status:** draft for the owner to react to. Nothing here is built. The first step is two mockups,
-and the owner picks a direction before any code changes.
+**Status:** draft. Nothing here is built. The owner has picked a default look from mockups
+(November 22, 2026): **Horizon**, with the others kept as alternative themes. See section 3.
 
 **Scope:** the WITS web app under `web/static/` (chat, side panel, settings, MCP page, guest
 join, personality, and the new Inbox). The portfolio site is a separate project and is not covered.
@@ -56,42 +56,63 @@ Sources are listed at the end. Four findings shaped this plan.
 
 ## 3. Direction
 
-Working name: **the relay room**. It is the image the portfolio already uses for WITS: a rack of
-relays against one wall, each labeled in pencil, one cable in, a machine humming next door.
-WITS is an instrument the owner runs, not a chat friend.
+WITS is an instrument the owner runs, not a chat friend. The look is dark, and it is allowed to
+be beautiful: light, depth and one strong visual idea per theme.
 
-Six rules, each one checkable:
+The first round of mockups followed a rule that said "type and line, not cards and glow". Five
+designs from three different models all came back in the same restrained family, and the owner
+called it the usual thing. That rule is dropped. The rules that stay are the ones about behavior.
 
-1. **Quiet until something happens.** The resting screen is nearly empty. Color and motion are
-   spent only on state: a model loading, a tool running, a decision waiting, an error.
+Five rules, each one checkable:
+
+1. **Quiet until something happens.** The resting screen is calm. Strong color and light are
+   spent on state: a model loading, a tool running, a decision waiting, an error.
 2. **Show the work.** Every reply carries its trace: how it was routed, what the guards said,
-   which tools ran and what came back. Collapsed by default, one tap to open. This is the thing
-   WITS has that a hosted chat app does not, and it is the same idea as Trace on the portfolio.
+   which tools ran and what came back. One tap to open. This is the thing WITS has that a hosted
+   chat app does not, and it is the same idea as Trace on the portfolio.
 3. **One console.** A command bar reaches every action and every page (Ctrl+K on a keyboard, a
-   button on a phone). The slash menu grows into it. This is the text-world lineage, used where
-   it helps and not as decoration.
-4. **When state changes, the room changes.** Which model is loaded, whether the heavy model is
-   in use, whether an agent is connected, whether a decision is waiting: each has a fixed place
-   on screen and looks different when it changes. A change that shows nothing is not allowed.
-5. **Type and line, not cards and glow.** Prose in a readable sans, machine speech (traces, tool
-   output, ids, timings) in a mono. Hairline rules. Drawn icons from one small set. No emoji as
-   controls, no gradients on buttons, no rounded cards stacked on rounded cards.
-6. **The phone is a first-class seat.** Everything the owner needs away from the desk (Inbox,
-   chat, stop, revoke) is reachable with a thumb, and every target is at least 44 px.
+   button on a phone). The slash menu grows into it.
+4. **When state changes, the room changes.** Which model is loaded, whether a tool is running,
+   whether an agent is connected, whether a decision is waiting: each has a fixed place on screen
+   and looks different when it changes. A change that shows nothing is not allowed.
+5. **The phone is a first-class seat.** Everything the owner needs away from the desk (Inbox,
+   chat, stop, revoke) is reachable with a thumb, and every target is at least 44 px. No emoji
+   as controls; icons are drawn from one small set.
 
-### Two looks to mock up
+### The default theme: Horizon
 
-Both sit on the same structure and the same tokens, so the choice is not a rebuild.
+Near-black ground with one very large lit arc across the top of the screen, like the edge of a
+planet with a thin band of atmosphere under it. The name sits in the dark above the line. The
+rest of the screen is spare, with cold white text, so the arc carries the look.
 
-- **A. Relay room.** Warm near-black, off-white text, one amber signal color, pencil-style mono
-  captions on every panel, small indicator lamps for state. Feels like a bench instrument.
-- **B. Deep field.** Cool near-black, cold white text, one ice-blue signal color, and a faint
-  depth-of-field backdrop that responds to load (still at rest, moving when the GPU works).
-  Feels like a ship's console.
+The arc is also the state display, which is how rule 4 is met:
 
-Neither uses the indigo-on-navy look the app has now. If both land, they can ship as two themes
-of one system, the way the portfolio has worlds: a theme then changes labels and density as well
-as color, so switching visibly does something.
+- At rest it is a plain cold-white line.
+- While a tool runs, a stretch of it lights amber.
+- In the Inbox it carries one amber segment per waiting decision.
+- Other states (a model loading, the heavy model in use, an error) get their own treatment of
+  the same arc, to be settled in package U1.
+
+Amber is the only warm color and always means "running or waiting on you". A coral red is
+reserved for warnings. Inner pages use a shallower arc so content keeps its room.
+
+### Alternative themes
+
+All themes share one structure and one token file, so adding one is a set of values plus its
+signature element, not a rebuild. A theme may change labels and density as well as color.
+
+| Theme | Where its look comes from | Signature element |
+|---|---|---|
+| **Horizon** (default) | Scale | The lit arc |
+| **Filament** | Light | A glowing wire for the trace, lamps that bloom, film grain |
+| **Orrery** | Ornament | Brass linework and the trace drawn as a dial |
+| **Relay room** | Restraint | Rules, mono labels, indicator lamps, one amber signal |
+
+Horizon ships first. The others follow as separate small packages after the gate, in whatever
+order the owner wants. Two light-ground designs from the mockup round (Field log and a similar
+outside one) are not carried forward, because the owner wants a darker theme.
+
+The mockups are on a design canvas outside the repository; the owner has the link.
 
 ## 4. What changes for the user
 
@@ -148,14 +169,15 @@ to read, the owner merges. Order matters only where shown.
 
 | # | Package | Builder | Needs | Check |
 |---|---|---|---|---|
-| U0 | Two mockups (A and B) of chat, Inbox and the shell, phone and desktop | Lead | Nothing | Owner picks a direction or sends both back |
-| U1 | Tokens, base styles, fonts, icon sprite. No page changes yet | Sonnet | U0 | Old pages still render; contrast test passes |
+| U0 | Mockups of chat and Inbox on a phone. **Done:** Horizon picked. Still to draw: Horizon on a desktop, and the shell | Lead | Nothing | Owner signs off the desktop layout |
+| U1 | Tokens, base styles, fonts, icon sprite and the Horizon arc as one reusable piece with its states. No page changes yet | Sonnet | U0 | Old pages still render; contrast test passes; the arc shows each state |
 | U2 | Shell and navigation, phone and desktop | Sonnet | U1 | Every page reachable; works at 360 px and 1440 px |
 | U3 | Trace contract, then chat anatomy and trace | Opus | U2 | Streaming tests; trace matches the server's events |
 | U4 | Command bar | Sonnet | U2 | Keyboard-only run-through of every command |
 | U5 | Inbox in the shell, Workspace view, Agents page. Review: **high** | Opus | U2, Stage 1 | Token shown once; rendering-rule test; owner routes refuse non-owners |
 | U6 | Memory, Files and Settings as full pages | Sonnet | U2 | Existing settings tests pass; search finds every setting |
 | U7 | Accessibility and speed pass, then the gate | Sonnet, then an independent review | All | Owner hand-test on phone, laptop and PC |
+| U8+ | One alternative theme per package: Filament, Orrery, Relay room | Sonnet | U7 | Switching theme visibly changes the app and breaks nothing |
 
 U3, U4, U5 and U6 touch different files and can run side by side after U2.
 
@@ -171,7 +193,7 @@ No step needs the desk.
 
 ## 7. Open decisions for the owner
 
-1. Direction A, B, both as themes, or neither (after U0).
+1. Settled: Horizon is the default; Filament, Orrery and Relay room are alternative themes. Open: the order the alternatives are built in.
 2. Whether the status strip should show GPU load and temperature. The readings exist on the PC;
    showing them means a small local endpoint.
 3. Whether guests get the new shell or keep a simpler one.
