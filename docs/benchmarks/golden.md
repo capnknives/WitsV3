@@ -297,3 +297,36 @@ C4c plus shorter tool descriptions and a slimmer schema sent to the model
 
 Same pass count for about a third fewer prompt tokens. Three runs per case is
 too few to call single-case moves of one run real.
+
+## `main` with the prompt, the trim and the corrected checker, November 22, 2026
+
+`main` @ `97d970b` (C4c, C4d and the checker and case fixes of C1g all
+merged). Same model, local settings and sandbox rules; 61 cases, three runs.
+56 cases passed all three runs and 5 failed all three; none was mixed. The
+median prompt size of a turn's first model call was 2,262 tokens (3,284
+before the trim).
+
+| run | pass all three | mixed | fail all three |
+|---|---|---|---|
+| `main` @ `a4cee73`, old checker | 49 | 1 | 11 |
+| C4c branch, old checker | 55 | 2 | 4 |
+| C4d branch, old checker | 55 | 1 | 5 |
+| `main` @ `97d970b`, corrected checker | 56 | 0 | 5 |
+
+The checker change (C1g) moved two cases by itself, so the last row is not a
+like-for-like gain over the row above it: `owner-odd-numbers-script` is now
+judged on the answer (it passes), and `owner-codebase-look-yourself` is now
+judged on whether the reply names a real folder (it fails).
+
+The five that fail every run:
+
+| case | what happens |
+|---|---|
+| owner-story-great-war | writes about 140 words where 600 is the floor (4,500 asked) |
+| owner-codebase-question | describes its code in general terms and calls no tool |
+| owner-codebase-look-yourself | lists the folder, then says it does not have access to the files |
+| owner-bugreports-feature | writes a placeholder file and says the feature exists |
+| followup-yes-do-it | saves a file nobody asked for before answering |
+
+Not measured: the old path with the shorter tool descriptions it now shares;
+thinking on; another model; any message outside the set.
