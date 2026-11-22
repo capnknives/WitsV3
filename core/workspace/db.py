@@ -1,6 +1,7 @@
 """SQLite connections, migrations and the single-writer gate (contract sections 1 and 2)."""
 
 import asyncio
+import logging
 import re
 import sqlite3
 import time
@@ -10,6 +11,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import aiosqlite
+
+# Reason: aiosqlite logs every statement with its parameters at DEBUG (handoff bodies, owner
+# notes, token hashes); with the host at DEBUG those would reach the log a repair agent reads.
+logging.getLogger("aiosqlite").setLevel(logging.INFO)
 
 # Reason: module-level so tests can point migrations at a temporary directory without widening
 # the ``open_db(path)`` signature other packages import.
@@ -23,6 +28,18 @@ _PRAGMAS = (
     "PRAGMA recursive_triggers=ON",
     "PRAGMA busy_timeout=5000",
 )
+
+
+async def _settle_begin(conn: aiosqlite.Connection, begin: asyncio.Future) -> None:
+    """Wait out an interrupted BEGIN, then roll back if it opened a transaction."""
+    try:
+        await begin
+    except Exception:
+        pass
+    # Reason: aiosqlite runs statements in order on one thread, so once BEGIN has finished
+    # in_transaction is accurate.
+    if conn.in_transaction:
+        await conn.execute("ROLLBACK")
 
 
 class Database:
@@ -45,7 +62,15 @@ class Database:
         """Hold the writer lock inside ``BEGIN IMMEDIATE``; commit on exit, roll back on error."""
         async with self._lock:
             conn = self._write_conn
-            await conn.execute("BEGIN IMMEDIATE")
+            # Reason: the statement runs on aiosqlite's thread and completes even if this await
+            # is cancelled, so a cancelled or failed BEGIN must still leave the connection
+            # outside a transaction, or every later write would fail until restart.
+            begin = asyncio.ensure_future(conn.execute("BEGIN IMMEDIATE"))
+            try:
+                await asyncio.shield(begin)
+            except BaseException:
+                await asyncio.shield(_settle_begin(conn, begin))
+                raise
             try:
                 yield conn
             except BaseException:
