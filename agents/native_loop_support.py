@@ -28,6 +28,35 @@ STEP_LIMIT_ERROR = "Could not complete within the step limit."
 MODEL_CALL_FAILED = "The model call failed"
 
 
+def resident_model(config: Any) -> str:
+    """The one model the native loop uses for every round of every turn.
+
+    Args:
+        config: WitsV3Config.
+
+    Returns:
+        ``conversation.model`` if set, else ``ollama_settings.orchestrator_model`` if set,
+        else ``ollama_settings.default_model``. The model router is never consulted.
+    """
+    ollama = config.ollama_settings
+    return (
+        getattr(config.conversation, "model", None)
+        or getattr(ollama, "orchestrator_model", None)
+        or ollama.default_model
+    )
+
+
+def model_call_error(exc: Exception, model: str | None) -> str:
+    """Event text for a failed model call; a missing model is named in plain words."""
+    text = str(exc)
+    if "404" in text or "not found" in text.lower():
+        return (
+            f"The model '{model}' was requested but is not installed on the Ollama server. "
+            f"Install it (ollama pull {model}) or set conversation.model to an installed one."
+        )
+    return f"{MODEL_CALL_FAILED}: {exc}"
+
+
 def build_tool_specs(
     registry: Any, exclude: frozenset[str]
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:

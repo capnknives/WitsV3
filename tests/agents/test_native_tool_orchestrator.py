@@ -87,7 +87,7 @@ class _ScriptedLLM:
         self.calls: list[dict] = []
 
     async def generate_chat(self, messages, tools=None, model=None, temperature=None):
-        self.calls.append({"messages": list(messages), "tools": tools})
+        self.calls.append({"messages": list(messages), "tools": tools, "model": model})
         _assert_well_formed(messages)
         if not self.replies:
             return LLMResponse(content="out of script")
@@ -412,3 +412,45 @@ async def test_no_calculator_shortcut_on_native_path():
     events = await _run(orch, "2 + 2", preferred_tool="calculator")
     assert len(llm.calls) == 1 and registry.executed == []
     assert events[-1].content == "4"
+
+
+class _NoRouter:
+    def route(self, *args, **kwargs):
+        raise AssertionError("the native loop must not call the model router")
+
+
+async def test_one_resident_model_for_every_round_and_router_never_called():
+    replies = [_tools(_call("clock", {})), LLMResponse(content="done")]
+    orch, llm, _ = _make(replies)
+    orch.model_router = _NoRouter()
+    events = await _run(orch)
+    expected = orch.config.ollama_settings.orchestrator_model
+    assert events[-1].type == "result"
+    assert len(llm.calls) == 2 and {c["model"] for c in llm.calls} == {expected}
+
+
+async def test_conversation_model_overrides():
+    orch, llm, _ = _make([LLMResponse(content="hi")], model="custom:7b")
+    orch.model_router = _NoRouter()
+    await _run(orch)
+    assert llm.calls[0]["model"] == "custom:7b"
+
+
+async def test_tool_receives_exactly_the_validated_arguments():
+    orch, _, registry = _make([_tools(_call("web_search", {"query": "x"})), LLMResponse("ok")])
+    # Reason: web_search is the tool the legacy path injected user_role into.
+    registry.tools["web_search"] = _FakeTool(
+        "web_search",
+        {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+    )
+    await _run(orch, user_role="owner", guest_profile={"a": 1}, preferred_tool="web_search")
+    assert registry.executed == [("web_search", {"query": "x"})]
+
+
+async def test_missing_model_404_yields_one_plain_error_naming_the_model():
+    orch, _, _ = _make([RuntimeError("HTTP 404 Model not found")], model="ghost:1b")
+    events = await _run(orch)
+    errors = [e for e in events if e.type == "error"]
+    assert len(errors) == 1
+    assert "ghost:1b" in errors[0].content and "not installed" in errors[0].content
+    assert "Traceback" not in errors[0].content
