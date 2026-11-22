@@ -106,3 +106,17 @@ def test_golden_run_help():
     )
     assert proc.returncode == 0
     assert "--runs" in proc.stdout
+
+
+def test_tool_names_authoritative_and_unobserved():
+    none_case = case(tools="none", forbid_tools=["write_file"])
+    res = evaluate(none_case, [ev("result")])
+    assert res.passed and res.unobserved == ["tools", "forbid_tools"]
+    res = evaluate(none_case, [ev("result")], tool_names=[])
+    assert res.passed and res.unobserved == []
+    res = evaluate(none_case, [ev("result")], tool_names=["write_file"])
+    assert not res.passed
+    named = case(tools=["datetime"])
+    assert evaluate(named, [ev("result")], tool_names=["datetime"]).passed
+    over = [ev("tool_call", tool_name="datetime"), ev("result")]
+    assert not evaluate(named, over, tool_names=["read_file"]).passed

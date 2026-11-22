@@ -28,6 +28,8 @@ CASE_KEYS = {"id", "message", "tags", "expect", "history"}
 EXPECT_KEYS = {"tools", "forbid_tools", "forbid_routes", "reply"}
 
 # Substrings of an event's ``source`` (lower-cased) that identify each route.
+# Real agent names: CodingExpert, AdvancedCoder, SystemDoctor, BookWriter, LLMOrchestrator,
+# NativeToolOrchestrator.
 ROUTE_MARKERS = {
     "coding": ("coder", "coding"),
     "self_repair": ("repair", "doctor"),
@@ -56,6 +58,7 @@ class GoldenResult:
 
     passed: bool
     failures: list[str]
+    unobserved: list[str] = field(default_factory=list)
 
 
 def _check_case(raw: Any, seen: set[str]) -> GoldenCase:
@@ -146,18 +149,29 @@ def routes_seen(events: list[Any]) -> set[str]:
     return found
 
 
-def evaluate(case: GoldenCase, events: list[Any]) -> GoldenResult:
+def evaluate(
+    case: GoldenCase, events: list[Any], tool_names: list[str] | None = None
+) -> GoldenResult:
     """Check one turn's events against a case's expectations.
 
     Args:
         case: The golden case.
         events: ``StreamData`` events of the turn, in order.
+        tool_names: Authoritative tools called (from the turn-metrics record). When given
+            it replaces the names read from events.
 
     Returns:
-        A result with one failure line per broken expectation.
+        A result with one failure line per broken expectation. ``unobserved`` names tool
+        expectations that passed only because no event carried a tool name.
     """
     failures: list[str] = []
-    seen = tools_seen(events)
+    unobserved: list[str] = []
+    seen = list(tool_names) if tool_names is not None else tools_seen(events)
+    if tool_names is None and not seen:
+        if case.tools == "none":
+            unobserved.append("tools")
+        if case.forbid_tools:
+            unobserved.append("forbid_tools")
     if case.tools == "none":
         if seen:
             failures.append(f"tools: expected none, saw {seen}")
@@ -179,4 +193,4 @@ def evaluate(case: GoldenCase, events: list[Any]) -> GoldenResult:
         has_reply = any(ev.type == "result" and (ev.content or "").strip() for ev in events)
         if not has_reply:
             failures.append("reply: required but no non-empty result event")
-    return GoldenResult(not failures, failures)
+    return GoldenResult(not failures, failures, unobserved)

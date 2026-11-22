@@ -35,8 +35,10 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-async def run_once(control_center, case: GoldenCase) -> tuple[bool, float | None, list[str]]:
-    """Run one case; return (passed, first_result_ms, tools seen)."""
+async def run_once(
+    control_center, case: GoldenCase
+) -> tuple[bool, float | None, list[str], list[str]]:
+    """Run one case; return (passed, first_result_ms, tools seen, unobserved)."""
     turn = None
     if turn_metrics is not None:
         turn = turn_metrics.start_turn("golden", None, len(case.message))
@@ -58,8 +60,16 @@ async def run_once(control_center, case: GoldenCase) -> tuple[bool, float | None
                 first_result = (time.perf_counter() - start) * 1000
     finally:
         if turn is not None:
-            await turn_metrics.finish_turn(turn, "ok")
-    return evaluate(case, events).passed, first_result, tools_seen(events)
+            errored = any(e.type == "error" for e in events)
+            await turn_metrics.finish_turn(turn, "error" if errored else "ok")
+    names = [c["name"] for c in turn.tool_calls] if turn is not None else None
+    res = evaluate(case, events, names)
+    return (
+        res.passed,
+        first_result,
+        names if names is not None else tools_seen(events),
+        res.unobserved,
+    )
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -82,12 +92,16 @@ async def main_async(args: argparse.Namespace) -> int:
         times = [r[1] for r in results if r[1] is not None]
         med = f"{statistics.median(times):.0f}" if times else "-"
         tools = sorted({t for r in results for t in r[2]})
-        rows.append(f"| {case.id} | {passes}/{args.runs} | {med} | {', '.join(tools) or '-'} |")
+        unobs = sorted({u for r in results for u in r[3]})
+        rows.append(
+            f"| {case.id} | {passes}/{args.runs} | {med} | {', '.join(tools) or '-'} "
+            f"| {', '.join(unobs) or '-'} |"
+        )
         failed_all = failed_all or passes == 0
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y-%m-%d %H:%M")
-    header = "| case | pass | median first_result_ms | tools seen |\n|---|---|---|---|\n"
+    header = "| case | pass | median first_result_ms | tools seen | unobserved |\n|---|---|---|---|---|\n"
     with out.open("a", encoding="utf-8") as fh:
         fh.write(f"\n## Golden run {stamp}\n\n{header}" + "\n".join(rows) + "\n")
     return 1 if failed_all else 0
