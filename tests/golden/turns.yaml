@@ -1,0 +1,146 @@
+# Golden turn set (C1b). Messages are invented. Checked by core/golden.py.
+# Tool names are the names each tool registers: read_file, list_directory, datetime,
+# web_search, search_archival_memory, document_search.
+
+# --- plain chat and statements (8) ---
+- id: owner-software-statement
+  message: "Its richard i created the software you are wearing"
+  tags: [must-not-route, chat]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: chat-greeting
+  message: "good morning, how are you doing today?"
+  tags: [must-not-route, chat]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: chat-app-opinion
+  message: "I think the best app on my phone is the weather one, what do you think?"
+  tags: [must-not-route, chat]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: chat-class-schedule
+  message: "my class got moved to thursday and I am a little annoyed about it"
+  tags: [must-not-route, chat]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: chat-python-pet
+  message: "I saw a python at the reptile expo yesterday, it was huge"
+  tags: [must-not-route, chat]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: chat-api-curiosity
+  message: "what does the word API stand for, I always forget"
+  tags: [must-not-route, chat]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: chat-feeling-tired
+  message: "I have been tired all week and could use some encouragement"
+  tags: [must-not-route, chat]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: chat-thanks
+  message: "thanks, that was really helpful"
+  tags: [must-not-route, chat]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: optional}
+
+# --- one named tool (6) ---
+- id: tool-file-read
+  message: "read the file README.md and tell me its first heading"
+  tags: [tool]
+  expect: {tools: [read_file], forbid_routes: [coding], reply: required}
+- id: tool-file-list
+  message: "list the files in the docs folder"
+  tags: [tool]
+  expect: {tools: [list_directory], forbid_routes: [coding], reply: required}
+- id: tool-web-search
+  message: "search the web for the latest stable release of Python"
+  tags: [tool]
+  expect: {tools: [web_search], forbid_routes: [coding], reply: required}
+- id: tool-memory-search
+  message: "search your archival memory for what I told you about my favorite book"
+  tags: [tool]
+  expect: {tools: [search_archival_memory], forbid_routes: [coding], reply: required}
+- id: tool-datetime
+  message: "what is today's date and what time is it right now?"
+  tags: [tool]
+  expect: {tools: [datetime], forbid_routes: [coding], reply: required}
+- id: tool-document-search
+  message: "search my documents for notes about the garden layout"
+  tags: [tool]
+  expect: {tools: [document_search], forbid_routes: [coding], reply: required}
+
+# --- real coding requests (4) ---
+- id: code-rename-script
+  message: "write a python script that renames every .txt file in a folder to lowercase"
+  tags: [coding]
+  expect: {tools: any, reply: required}
+- id: code-small-website
+  message: "can you build me a small website for a plant shop with a contact form"
+  tags: [coding]
+  expect: {tools: any, reply: required}
+- id: code-date-function
+  message: "could you write a function that parses dates like 3 March 2025?"
+  tags: [coding]
+  expect: {tools: any, reply: required}
+- id: code-backup-script
+  message: "I need you to create a bash script that backs up my notes folder"
+  tags: [coding]
+  expect: {tools: any, reply: required}
+
+# --- name a file to repair (3) ---
+- id: repair-parser-bug
+  message: "fix the bug in parser.py where empty lines crash the loop"
+  tags: [repair, coding]
+  expect: {tools: any, reply: required}
+- id: repair-config-loader
+  message: "config_loader.py raises a KeyError on startup, please repair it"
+  tags: [repair, coding]
+  expect: {tools: any, reply: required}
+- id: repair-test-failure
+  message: "tests/test_dates.py is failing, can you fix the code it covers"
+  tags: [repair, coding]
+  expect: {tools: any, reply: required}
+
+# --- writing requests (3) ---
+- id: write-short-poem
+  message: "write me a short poem about a lighthouse in winter"
+  tags: [writing, must-not-route]
+  expect: {tools: none, forbid_routes: [coding, self_repair], reply: required}
+- id: write-email-draft
+  message: "draft a polite email asking my landlord to fix the kitchen tap"
+  tags: [writing, must-not-route]
+  expect: {tools: none, forbid_routes: [coding, self_repair], reply: required}
+- id: write-story-opening
+  message: "write the opening paragraph of a story about a lost robot"
+  tags: [writing, must-not-route]
+  expect: {tools: none, forbid_routes: [coding, self_repair], reply: required}
+
+# --- slash or exact commands (3) ---
+- id: command-save-conversation
+  message: "save our conversation as golden-check"
+  tags: [command, must-not-route]
+  expect: {tools: any, forbid_routes: [coding], reply: required}
+- id: command-help
+  message: "/help"
+  tags: [command, must-not-route]
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: command-exact-math
+  message: "calculate 12 * 7 + 5"
+  tags: [command, tool]
+  expect: {tools: [math_operations], forbid_routes: [coding], reply: required}
+
+# --- follow-ups that need history (3) ---
+- id: followup-shorter
+  message: "can you make that shorter?"
+  tags: [follow-up, must-not-route]
+  history:
+    - {role: user, content: "explain what a lighthouse keeper does"}
+    - {role: assistant, content: "A lighthouse keeper tends the lamp, logs the weather and keeps the station in repair."}
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: followup-yes-do-it
+  message: "yes please do that"
+  tags: [follow-up, must-not-route]
+  history:
+    - {role: user, content: "I need a packing list for a weekend camping trip"}
+    - {role: assistant, content: "Want me to group the list by tent gear, food and clothing?"}
+  expect: {tools: none, forbid_routes: [coding, self_repair, book], reply: required}
+- id: followup-what-about-tomorrow
+  message: "and what about tomorrow?"
+  tags: [follow-up]
+  history:
+    - {role: user, content: "what is today's date?"}
+    - {role: assistant, content: "Today is a Sunday in late November."}
+  expect: {tools: [datetime], forbid_routes: [coding], reply: required}
