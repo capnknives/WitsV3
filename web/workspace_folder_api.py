@@ -12,14 +12,22 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
+from core import runtime_paths
 from core.workspace import folder_access
+from web import workspace_routes
 from web.workspace_routes import add_lifespan, get_db, require_owner
 
 logger = logging.getLogger("WitsV3.Workspace.FolderAPI")
 
 
 async def _list_grants() -> dict:
-    return {"grants": await folder_access.list_grants(get_db())}
+    base = workspace_routes.load_config().folders.base
+    base_folders = [
+        {"name": "inbox", "path": str(runtime_paths.inbox_dir(base)), "mode": "index"},
+        {"name": "outbox", "path": str(runtime_paths.outbox_dir(base)), "mode": "read_write"},
+        {"name": "projects", "path": str(runtime_paths.projects_dir(base)), "mode": "read_write"},
+    ]
+    return {"grants": await folder_access.list_grants(get_db()), "base_folders": base_folders}
 
 
 async def _revoke_grant(grant_id: str) -> dict:

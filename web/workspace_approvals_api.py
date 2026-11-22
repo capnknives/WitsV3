@@ -39,7 +39,23 @@ def _error(exc: WorkspaceError) -> HTTPException:
 
 
 async def _list_pending() -> dict:
-    return {"approvals": await approvals.list_pending(get_db())}
+    db = get_db()
+    items = await approvals.list_pending(db)
+    if items:
+        # Reason: a folder request carries its path, mode and reason in folder_requests; other
+        # approvals are returned exactly as before.
+        marks = ",".join("?" for _ in items)
+        async with db.read().execute(
+            "SELECT approval_id, path, mode, reason FROM folder_requests"
+            f" WHERE approval_id IN ({marks})",  # noqa: S608 - placeholders only
+            [i["id"] for i in items],
+        ) as cur:
+            found = {r["approval_id"]: dict(r) for r in await cur.fetchall()}
+        for item in items:
+            row = found.get(item["id"])
+            if row:
+                item["folder"] = {k: row[k] for k in ("path", "mode", "reason")}
+    return {"approvals": items}
 
 
 async def _resolve(approval_id: str, body: ResolveBody) -> dict:
