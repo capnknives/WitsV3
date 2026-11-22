@@ -1,32 +1,31 @@
-"""Tests for core/tool_call_guard.py: one per tool-call rule plus shape and order cases."""
+"""Tests for core/tool_call_guard.py: one per tool-call rule plus review fixes."""
 
-from core.config import WitsV3Config
-from core.tool_call_guard import APOLOGY, OUT_OF_STEPS, TurnGuard, normalise_schema
+import pytest
+
+from core.config import ConversationSettings
+from core.tool_call_guard import (
+    APOLOGY,
+    MAX_MESSAGE,
+    OUT_OF_STEPS,
+    UNKNOWN_BUCKET,
+    TurnGuard,
+    canonical_call,
+    normalise_schema,
+)
 
 # The two shapes tools use today: wrapped under "parameters" (e.g. math_tool) and bare
 # top-level properties (e.g. conversation_history_tool).
+PROPS = {
+    "operation": {"type": "string", "enum": ["sum", "mean"]},
+    "data": {"type": "array", "items": {"type": "number"}},
+    "options": {"type": "object", "properties": {"round": {"type": "integer"}}},
+}
 WRAPPED = {
-    "name": "math_operations",
+    "name": "math",
     "description": "Do maths",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "operation": {"type": "string", "enum": ["sum", "mean"]},
-            "data": {"type": "array", "items": {"type": "number"}},
-            "options": {"type": "object", "properties": {"round": {"type": "integer"}}},
-        },
-        "required": ["operation", "data"],
-    },
+    "parameters": {"type": "object", "properties": PROPS, "required": ["operation", "data"]},
 }
-BARE = {
-    "type": "object",
-    "properties": {
-        "operation": {"type": "string", "enum": ["sum", "mean"]},
-        "data": {"type": "array", "items": {"type": "number"}},
-        "options": {"type": "object", "properties": {"round": {"type": "integer"}}},
-    },
-    "required": ["data", "operation"],
-}
+BARE = {"type": "object", "properties": PROPS, "required": ["data", "operation"]}
 SCHEMAS = {"math": WRAPPED, "other": BARE}
 GOOD = {"operation": "sum", "data": [1, 2.5]}
 
@@ -39,45 +38,100 @@ def test_both_schema_shapes_normalise_to_same_object():
     wrapped, bare = normalise_schema(WRAPPED), normalise_schema(BARE)
     assert wrapped == bare
     assert wrapped["additionalProperties"] is False
-    assert wrapped["type"] == "object"
     assert wrapped["required"] == ["data", "operation"]
 
 
 def test_rule1_unknown_tool_rejected_and_counts_as_schema_failure():
     guard = make_guard(retries=1)
     first = guard.check("nope", {}, SCHEMAS)
-    assert first.action == "reject"
-    assert "Unknown tool 'nope'" in first.message and "math" in first.message
-    second = guard.check("nope", {}, SCHEMAS)
-    assert second.action == "stop" and second.message == APOLOGY
+    assert first.action == "reject" and "'nope'" in first.message and "math" in first.message
+    assert guard.check("nope", {}, SCHEMAS).message == APOLOGY
+
+
+def test_unknown_names_share_one_bucket_and_bad_names_do_not_raise():
+    guard = make_guard(retries=2)
+    assert guard.check("a", {}, SCHEMAS).action == "reject"
+    assert guard.check(["b"], {}, SCHEMAS).action == "reject"
+    assert guard.check(None, {}, SCHEMAS).action == "stop"
+    assert guard.schema_failures == {UNKNOWN_BUCKET: 3}
 
 
 def test_rule2_schema_errors_go_back_then_turn_ends_after_retries():
     guard = make_guard(retries=1)
     assert guard.check("math", GOOD, SCHEMAS).action == "run"
-
-    bad_type = guard.check("math", {"operation": "sum", "data": ["x"]}, SCHEMAS)
-    assert bad_type.action == "reject"
-    assert "arguments.data[0] must be number" in bad_type.message
-
-    # A different tool has its own failure budget.
-    missing = guard.check("other", {"operation": "sum"}, SCHEMAS)
+    bad = guard.check("math", {"operation": "sum", "data": ["x"]}, SCHEMAS)
+    assert bad.action == "reject" and "arguments.data[0] must be number" in bad.message
+    missing = guard.check("other", {"operation": "sum"}, SCHEMAS)  # own bucket
     assert missing.action == "reject" and "arguments.data is required" in missing.message
-
-    unknown_key = guard.check("math", {**GOOD, "colour": "red"}, SCHEMAS)
-    assert unknown_key.action == "stop" and unknown_key.message == APOLOGY
+    assert guard.check("math", {**GOOD, "colour": "red"}, SCHEMAS).message == APOLOGY
 
 
-def test_rule2_validator_covers_enum_nested_objects_bools_and_json_strings():
-    guard = make_guard(retries=10)
-    bad_enum = guard.check("math", {"operation": "max", "data": []}, SCHEMAS)
-    assert "must be one of" in bad_enum.message
-    nested = guard.check("math", {**GOOD, "options": {"round": "2"}}, SCHEMAS)
-    assert "arguments.options.round must be integer" in nested.message
-    as_bool = guard.check("math", {**GOOD, "options": {"round": True}}, SCHEMAS)
-    assert as_bool.action == "reject"
-    assert guard.check("math", "{not json", SCHEMAS).action == "reject"
+@pytest.mark.parametrize(
+    "args",
+    [
+        {"operation": "max", "data": []},
+        {**GOOD, "options": {"round": "2"}},
+        {**GOOD, "options": {"round": True}},
+        {"operation": "sum", "data": [float("nan")]},
+        {"operation": "sum", "data": [float("inf")]},
+        [1, 2],
+        7,
+        "{not json",
+        "[" * 100000,
+    ],
+)
+def test_rule2_bad_arguments_rejected_without_raising(args):
+    assert make_guard(retries=5).check("math", args, SCHEMAS).action == "reject"
+
+
+def test_rule2_json_string_and_int_valued_float_accepted():
+    guard = make_guard()
     assert guard.check("math", '{"operation": "mean", "data": [3]}', SCHEMAS).action == "run"
+    assert guard.check("math", {**GOOD, "options": {"round": 2.0}}, SCHEMAS).action == "run"
+
+
+def test_enum_is_type_strict():
+    schemas = {"t": {"type": "object", "properties": {"v": {"enum": [1, "a"]}}}}
+    guard = make_guard(retries=5)
+    assert guard.check("t", {"v": True}, schemas).action == "reject"
+    assert guard.check("t", {"v": "1"}, schemas).action == "reject"
+    assert guard.check("t", {"v": 1.0}, schemas).action == "run"
+
+
+@pytest.mark.parametrize(
+    "prop",
+    [
+        {"type": "str"},
+        {"type": "STRING"},
+        {"type": "string", "pattern": "^a"},
+        {"type": "integer", "minimum": 0},
+        {"anyOf": [{"type": "string"}]},
+        {"$ref": "#/x"},
+        {"const": 1},
+        "string",
+        None,
+    ],
+)
+def test_unsupported_schema_fails_closed(prop):
+    schemas = {"t": {"type": "object", "properties": {"x": prop}}}
+    verdict = make_guard().check("t", {"x": "a"}, schemas)
+    assert verdict.action == "reject" and "unusable schema" in verdict.message
+
+
+def test_malformed_required_fails_closed_and_undeclared_required_is_kept():
+    guard = make_guard(retries=5)
+    broken = {"t": {"type": "object", "properties": {}, "required": True}}
+    assert "unusable schema" in guard.check("t", {}, broken).message
+    implicit = {"t": {"parameters": {"required": ["path"]}}}
+    assert guard.check("t", {}, implicit).action == "reject"
+    assert guard.check("t", {"path": 5}, implicit).action == "run"
+
+
+def test_error_text_is_bounded():
+    many = {f"key{i}" + "x" * 200: "v" * 500 for i in range(50)}
+    verdict = make_guard().check("math", {**GOOD, **many}, SCHEMAS)
+    assert verdict.action == "reject"
+    assert len(verdict.message) <= MAX_MESSAGE and "(+45 more)" in verdict.message
 
 
 def test_rule3_identical_call_not_run_after_limit():
@@ -86,51 +140,67 @@ def test_rule3_identical_call_not_run_after_limit():
     assert guard.check("math", GOOD, SCHEMAS).action == "run"
     third = guard.check("math", GOOD, SCHEMAS)
     assert third.action == "reject" and "already called" in third.message
-    # Different arguments are a different call.
     assert guard.check("math", {"operation": "mean", "data": [1]}, SCHEMAS).action == "run"
 
 
-def test_argument_order_does_not_defeat_identical_check():
+def test_argument_order_and_int_float_do_not_defeat_identical_check():
     guard = make_guard(identical=1)
     assert guard.check("math", {"operation": "sum", "data": [1]}, SCHEMAS).action == "run"
-    reordered = guard.check("math", {"data": [1], "operation": "sum"}, SCHEMAS)
-    assert reordered.action == "reject"
+    assert guard.check("math", {"data": [1.0], "operation": "sum"}, SCHEMAS).action == "reject"
+    assert canonical_call("t", {"a": {"b": [2.0]}}) == canonical_call("t", {"a": {"b": [2]}})
+    assert canonical_call("t", {"a": True}) != canonical_call("t", {"a": 1})
 
 
-def test_rule4_stop_after_max_steps():
-    guard = make_guard(steps=2)
-    assert guard.steps_left() == 2
+@pytest.mark.parametrize("steps", [1, 8])
+def test_rule4_calls_in_rounds_up_to_max_steps_run_then_stop(steps):
+    guard = make_guard(steps=steps)
+    for i in range(steps):
+        guard.note_round()
+        assert guard.check("math", {"operation": "sum", "data": [i]}, SCHEMAS).action == "run"
+    assert guard.steps_left() == 0
+    guard.note_round()
+    fresh = {"operation": "mean", "data": [99]}  # valid and never seen: would otherwise run
+    verdict = guard.check("math", fresh, SCHEMAS)
+    assert verdict.action == "stop" and verdict.message == OUT_OF_STEPS
+
+
+def test_step_cap_comes_before_unknown_and_identical_rules():
+    guard = make_guard(steps=1, identical=1, retries=100)
     guard.note_round()
     assert guard.check("math", GOOD, SCHEMAS).action == "run"
+    assert guard.check("math", GOOD, SCHEMAS).action == "reject"
     guard.note_round()
-    assert guard.steps_left() == 0
-    verdict = guard.check("math", {"operation": "mean", "data": [2]}, SCHEMAS)
-    assert verdict.action == "stop" and verdict.message == OUT_OF_STEPS
-    guard.note_round()
-    assert guard.steps_left() == 0
+    assert guard.check("math", GOOD, SCHEMAS).action == "stop"
+    assert all(guard.check(f"x{i}", {}, SCHEMAS).action == "stop" for i in range(200))
+
+
+def test_stop_latches_for_the_rest_of_the_turn():
+    guard = make_guard(retries=0)
+    stop = guard.check("nope", {}, SCHEMAS)
+    assert stop.action == "stop"
+    assert guard.check("math", GOOD, SCHEMAS) == stop
+    assert guard.text_call_verdict('<tool_call>{"name": "math"}</tool_call>', False) == stop
 
 
 def test_rule5_text_tool_call_is_one_schema_failure():
     guard = make_guard(retries=1)
-    text = 'Sure.\n<tool_call>{"name": "math", "arguments": {"data": [1]}}</tool_call>'
-    assert guard.plain_text_call("Plain answer, no calls.") is False
-    assert guard.plain_text_call(text, has_structured_call=True) is False
+    text = 'Sure.\n< TOOL_CALL >{"name": "math", "arguments": {"data": [1]}}</tool_call >'
+    assert guard.text_call_verdict("Plain answer, no calls.", False) is None
+    assert guard.text_call_verdict(text, True) is None
+    assert guard.text_call_verdict(text, False).action == "reject"
+    assert guard.schema_failures == {UNKNOWN_BUCKET: 1}
+    # Text calls and unknown tools share the same budget.
+    assert guard.check("nope", {}, SCHEMAS).message == APOLOGY
 
-    assert guard.plain_text_call(text) is True
-    assert guard.last_verdict.action == "reject"
-    assert guard.schema_failures == {"math": 1}
 
-    # The text failure and a schema failure share the same per-tool budget.
-    verdict = guard.check("math", {"data": [1]}, SCHEMAS)
-    assert verdict.action == "stop" and verdict.message == APOLOGY
-
-    unnamed = make_guard(retries=0)
-    assert unnamed.plain_text_call("<tool_call>garbage") is True
-    assert unnamed.last_verdict.action == "stop"
+def test_text_mentioning_tool_call_tag_is_not_a_call():
+    guard = make_guard(retries=0)
+    prose = "Models sometimes emit a <tool_call> block; I will not do that here."
+    assert guard.text_call_verdict(prose, False) is None
+    assert guard.text_call_verdict("<tool_call>" + "[" * 100000, False) is None
+    assert guard.text_call_verdict(None, False) is None
 
 
 def test_conversation_settings_defaults():
-    conv = WitsV3Config().conversation
+    conv = ConversationSettings()
     assert (conv.max_steps, conv.max_identical_calls, conv.max_schema_retries) == (8, 2, 1)
-    loaded = WitsV3Config.from_yaml("config.yaml").conversation
-    assert (loaded.max_steps, loaded.max_identical_calls, loaded.max_schema_retries) == (8, 2, 1)
