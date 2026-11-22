@@ -127,3 +127,11 @@ def test_normalize_calculator_square_root_args():
     h = _harness()
     args = h._normalize_calculator_args({"operation": "square_root", "value": 75231})
     assert args["expression"] == "sqrt(75231)"
+
+
+@pytest.mark.asyncio
+async def test_prepare_write_long_text_passes_the_real_role():
+    h = _harness()
+    state = {"goal": "write a story", "observations": [], "user_role": "guest"}
+    args = await h._prepare_tool_args("write_long_text", {"title": "T", "brief": "b"}, state)
+    assert args["user_role"] == "guest"

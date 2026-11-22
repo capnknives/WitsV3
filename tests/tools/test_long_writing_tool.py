@@ -41,6 +41,14 @@ def numbered(n: int) -> str:
     return "Here is the outline:\n" + "\n".join(f"{i}. Part {i}: things happen" for i in range(n))
 
 
+class OwnerTool(LongWritingTool):
+    """The tool as the legacy path calls it for the owner: the role is injected."""
+
+    async def execute(self, **kwargs):
+        kwargs.setdefault("user_role", "owner")
+        return await super().execute(**kwargs)
+
+
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
@@ -52,7 +60,7 @@ def setup(tmp_path, monkeypatch):
     config.conversation.model = "resident:8b"
 
     def make(llm):
-        tool = LongWritingTool()
+        tool = OwnerTool()
         tool.set_dependencies(config, llm)
         return tool
 
@@ -216,3 +224,125 @@ def test_guard_schema_rejects_bad_arguments():
         {"title": "War", "brief": BRIEF, "path": "../x"},
     ):
         assert validate(bad, schema), bad
+
+
+class FailingLLM(ScriptedLLM):
+    """Raises (or hangs, when ``hang``) on call number ``at`` (0 is the outline)."""
+
+    def __init__(self, outline, at, hang=False):
+        super().__init__(outline)
+        self.at, self.hang, self.reached = at, hang, asyncio.Event()
+
+    async def generate_chat(self, messages, **kwargs):
+        if len(self.calls) == self.at:
+            self.calls.append({"messages": list(messages), **kwargs})
+            if self.hang:
+                self.reached.set()
+                await asyncio.sleep(60)
+            raise ConnectionError("secret host 10.0.0.5 refused")
+        return await super().generate_chat(messages, **kwargs)
+
+
+@pytest.mark.parametrize("at", [0, 1])
+async def test_model_error_before_first_section_leaves_no_file(setup, at):
+    make, folder, _ = setup
+    result = await make(FailingLLM(numbered(3), at)).execute(title="Broken", brief=BRIEF)
+    assert result["success"] is False and "ConnectionError" in result["error"]
+    assert "10.0.0.5" not in result["error"] and not list(folder.glob("*"))
+
+
+async def test_model_error_after_first_section_keeps_partial(setup):
+    make, folder, _ = setup
+    result = await make(FailingLLM(numbered(3), 2)).execute(title="Half", brief=BRIEF)
+    assert result["success"] and result["complete"] is False and result["sections"] == 1
+    assert result["file"] == "writing/half.md" and "ConnectionError" in result["error"]
+    assert (folder / "half.md").stat().st_size > 0
+
+
+@pytest.mark.parametrize("at, kept", [(1, False), (2, True)])
+async def test_cancel_removes_only_an_empty_file(setup, at, kept):
+    make, folder, _ = setup
+    llm = FailingLLM(numbered(3), at, hang=True)
+    task = asyncio.ensure_future(make(llm).execute(title="Stopped", brief=BRIEF))
+    await asyncio.wait_for(llm.reached.wait(), 5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert (folder / "stopped.md").exists() is kept
+    if kept:
+        assert (folder / "stopped.md").stat().st_size > 0
+
+
+async def test_role_must_be_known_owner(setup):
+    make, folder, config = setup
+    llm = ScriptedLLM(numbered(1))
+    plain = LongWritingTool()
+    plain.set_dependencies(config, llm)
+    result = await plain.execute(title="No Role", brief=BRIEF)  # no context, nothing injected
+    assert result["success"] is False and not llm.calls and not folder.exists()
+    with use_tool_context(ToolContext("s", "owner", None, None)):
+        result = await plain.execute(title="Owner Role", brief=BRIEF)
+    assert result["success"] and result["file"] == "writing/owner-role.md"
+
+
+class GatedLLM(ScriptedLLM):
+    """Holds the first section of 'First' until ``gate`` opens."""
+
+    def __init__(self, outline):
+        super().__init__(outline)
+        self.gate, self.held = asyncio.Event(), False
+
+    async def generate_chat(self, messages, **kwargs):
+        prompt = messages[-1].content
+        if "'First'" in prompt and "Plan a piece" not in prompt and not self.held:
+            self.held = True
+            await self.gate.wait()
+        return await super().generate_chat(messages, **kwargs)
+
+
+async def test_concurrent_calls_keep_their_own_deadline(setup):
+    make, _, config = setup
+    llm = GatedLLM(numbered(5))
+    tool = make(llm)
+    now = {"t": 0.0}
+    tool.clock = lambda: now["t"]
+
+    async def first():
+        config.conversation.long_writing.max_seconds = 10
+        return await tool.execute(title="First", brief=BRIEF, target_words=2250)
+
+    async def second():
+        while not llm.held:
+            await asyncio.sleep(0)
+        now["t"] = 100.0  # starts later, with a longer limit, on the same instance
+        config.conversation.long_writing.max_seconds = 1000
+        result = await tool.execute(title="Second", brief=BRIEF, target_words=2250)
+        llm.gate.set()
+        return result
+
+    one, two = await asyncio.gather(first(), second())
+    assert two["sections"] == 5 and two["complete"]
+    # Reason: a shared deadline would now read 1100 and let 'First' finish all five.
+    assert one["sections"] == 1 and one["complete"] is False
+
+
+def test_windows_reserved_names_get_a_prefix():
+    for name in ("CON", "prn", "Aux", "nul", "COM1", "lpt9"):
+        assert slugify(name) == f"text-{name.lower()}"
+    assert slugify("console") == "console" and slugify("com10") == "com10"
+
+
+async def test_worst_case_prompts_stay_bounded(setup):
+    make, _, config = setup
+    config.conversation.long_writing.max_sections = 14
+    outline = "\n".join(f"{i}. Heading {i}: " + "x" * 600 for i in range(1, 15))
+    llm = ScriptedLLM(outline)
+    brief = "b" * 2000
+    result = await make(llm).execute(title="T" * 120, brief=brief, target_words=6000)
+    assert result["sections"] == 14 and len(llm.calls) == 15
+    for call in llm.calls[1:]:
+        prompt = "".join(m.content for m in call["messages"])
+        assert len(prompt) < 7000 and prompt.count("Heading 3:") == 1
+    schema = normalise_schema(LongWritingTool().get_schema())
+    assert validate({"title": "War", "brief": "b" * 2001}, schema)
+    assert validate({"title": "W" * 121, "brief": BRIEF}, schema)

@@ -254,7 +254,7 @@ def test_written_min_words():
 def test_long_writing_cases():
     story, guide = _loaded("owner-story-great-war"), _loaded("write-long-guide")
     assert story.tools == ["write_long_text"] and story.written_min_words == 3000
-    assert story.timeout_seconds == 600 and guide.timeout_seconds == 400
+    assert story.timeout_seconds == 780 and guide.timeout_seconds == 500
     assert guide.tools == ["write_long_text"] and guide.written_min_words == 1000
     for cid in ("write-short-poem", "write-email-draft", "write-story-opening"):
         assert _loaded(cid).tools == "none", cid

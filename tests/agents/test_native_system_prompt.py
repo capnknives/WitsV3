@@ -12,7 +12,7 @@ from core.schemas import ConversationHistory
 
 MODEL = "resident-test:7b"
 ANCHORS = (
-    "call write_long_text once",
+    "names a length over about 600 words",
     "document_search before answering",
     "without asking permission first",
     "look before answering",

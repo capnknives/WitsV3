@@ -246,7 +246,7 @@ class OrchestratorToolHelpersMixin(
         ):
             args.setdefault("user_role", state.get("user_role", "owner"))
 
-        if tool_name == "web_search":
+        if tool_name in ("web_search", "write_long_text"):
             args.setdefault("user_role", state.get("user_role", "owner"))
 
         return args

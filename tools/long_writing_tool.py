@@ -28,6 +28,13 @@ MIN_CALL_SECONDS = 5
 TAIL_WORDS = 120
 OPENING_WORDS = 60
 BRIEF_CHARS = 2000
+TITLE_CHARS = 120
+OUTLINE_LINE_CHARS = 160
+_RESERVED = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{i}" for i in range(1, 10)}
+    | {f"lpt{i}" for i in range(1, 10)}
+)
 _MARKER_RE = re.compile(r"^\s*(?:[-*•]|\d+[.):]|#+)\s+")
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 _SYSTEM = "You are a skilled writer. Write only what is asked, with no commentary."
@@ -46,8 +53,9 @@ def output_cap(words: int) -> int:
 def slugify(title: str) -> str:
     """Lowercase ascii words joined by hyphens, at most 60 chars; never empty."""
     text = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", text).strip("-")[:60].strip("-")
-    return slug or "untitled"
+    slug = re.sub(r"[^a-z0-9]+", "-", text).strip("-")[:60].strip("-") or "untitled"
+    # Reason: Windows will not create a file named CON.md, COM1.md and so on.
+    return f"text-{slug}" if slug in _RESERVED else slug
 
 
 def parse_outline(text: str, wanted: int, title: str) -> list[str]:
@@ -63,7 +71,7 @@ def parse_outline(text: str, wanted: int, title: str) -> list[str]:
         line = (raw[marked.end() :] if marked else raw).replace("**", "").strip()
         head, sep, rest = line.partition(":")
         if line and (marked or (sep and head.strip() and rest.strip())):
-            lines.append(line)
+            lines.append(line[:OUTLINE_LINE_CHARS].rstrip())
     if not lines:
         return [f"Part {i} of {title}: continue the piece" for i in range(1, wanted + 1)]
     return lines[:wanted]
@@ -85,16 +93,16 @@ class LongWritingTool(BaseTool):
         super().__init__(
             name="write_long_text",
             description=(
-                "Write a long piece (story, guide, article, report) of 600 to 6,000 words to a "
-                "file, section by section. Use it whenever the owner asks for more words than "
-                "fit in one reply. Not for short text (answer in the reply) or code (write_file)."
+                "Write a long piece (story, guide, article, report) to a file, section by "
+                "section. Use it only when the owner names a length over about 600 words, or "
+                "asks for a long piece to be saved. Not for step lists or answers wanted in the "
+                "chat (answer in the reply), and not for code (write_file)."
             ),
         )
         self.config: Any = None
         self.llm_interface: Any = None
         # Reason: tests replace the clock to exercise the time limit without waiting.
         self.clock = time.monotonic
-        self._deadline = 0.0
 
     def set_dependencies(self, config, llm_interface=None, memory_manager=None, **kwargs) -> None:
         self.config = config
@@ -107,19 +115,20 @@ class LongWritingTool(BaseTool):
                 "title": {
                     "type": "string",
                     "minLength": 3,
-                    "maxLength": 120,
-                    "description": "short title; becomes the file name",
+                    "maxLength": TITLE_CHARS,
+                    "description": "short; used as file name",
                 },
                 "brief": {
                     "type": "string",
                     "minLength": 1,
-                    "description": "the owner's request in full: topic, tone, must-haves",
+                    "maxLength": BRIEF_CHARS,
+                    "description": "owner's full request: topic, tone, must-haves",
                 },
                 "target_words": {
                     "type": "integer",
                     "minimum": 300,
                     "maximum": 6000,
-                    "description": "words wanted, 300 to 6000; default 1200",
+                    "description": "words wanted; default 1200",
                 },
             },
             "required": ["title", "brief"],
@@ -128,9 +137,12 @@ class LongWritingTool(BaseTool):
     async def execute(
         self, title: str = "", brief: str = "", target_words: int = 1200, **kwargs: Any
     ) -> dict[str, Any]:
-        if tool_user_role(kwargs.get("user_role", "owner")) == "guest":
+        # Reason: fail closed; with no tool context and no injected role the caller is
+        # unknown, and only a known owner may write.
+        if tool_user_role(kwargs.get("user_role")) != "owner":
             return {"success": False, "error": "write_long_text is only available to the owner."}
-        title, brief = (title or "").strip()[:120], (brief or "").strip()[:BRIEF_CHARS]
+        # Reason: the guard rejects longer input; the cut is a second line of defence.
+        title, brief = (title or "").strip()[:TITLE_CHARS], (brief or "").strip()[:BRIEF_CHARS]
         if len(title) < 3 or not brief or self.llm_interface is None:
             reason = "the writer is not ready" if brief and title else "a title and brief"
             return {"success": False, "error": f"Cannot write: needs {reason}."}
@@ -140,34 +152,48 @@ class LongWritingTool(BaseTool):
             path, rel = await _new_file(slugify(title), config)
         except PermissionError as err:
             return {"success": False, "error": str(err)}
-        return await self._write(title, brief, target, path, rel, config)
+        written: list[str] = []
+        try:
+            return await self._write(title, brief, target, path, rel, config, written)
+        except BaseException:
+            # Reason: a cancelled or crashed call must not leave an empty file behind.
+            if not written:
+                path.unlink(missing_ok=True)
+            raise
 
     async def _write(
-        self, title: str, brief: str, target: int, path: Path, rel: str, config: Any
+        self,
+        title: str,
+        brief: str,
+        target: int,
+        path: Path,
+        rel: str,
+        config: Any,
+        written: list[str],
     ) -> dict[str, Any]:
         limits = config.conversation.long_writing
-        self._deadline = self.clock() + limits.max_seconds
+        deadline = self.clock() + limits.max_seconds
         wanted = section_count(target, limits.max_sections)
+        error = ""
         try:
-            planned = await self._outline(title, brief, wanted, config)
-        except asyncio.TimeoutError:
-            planned = ""
+            planned = await self._outline(title, brief, wanted, config, deadline)
+        except Exception as exc:  # noqa: BLE001 - any model failure ends the piece
+            planned, error = "", _failure(exc)
         outline = parse_outline(planned, wanted, title)
         per_section = max(1, round(target / len(outline)))
-        written: list[str] = []
-        timed_out = False
         for idx in range(len(outline)):
-            if self.clock() >= self._deadline:
-                timed_out = True
+            if error:
                 break
-            args = (title, brief, outline, idx, written, per_section, config)
+            if self.clock() >= deadline:
+                error = "time limit reached"
+                break
+            args = (title, brief, outline, idx, written, per_section, config, deadline)
             try:
                 text = await self._section(*args)
                 if count_words(text) < MIN_SECTION_WORDS:
                     text = await self._section(*args)
-            except asyncio.TimeoutError:
-                # Reason: a section cut off by the time limit is failed, not retried.
-                timed_out = True
+            except Exception as exc:  # noqa: BLE001 - failed, not retried, writing stops
+                error = _failure(exc)
                 break
             if count_words(text) < MIN_SECTION_WORDS:
                 continue
@@ -177,26 +203,29 @@ class LongWritingTool(BaseTool):
             written.append(text)
         if not written:
             path.unlink(missing_ok=True)
-            why = "the time limit was reached" if timed_out else "the model returned no usable text"
+            why = error or "the model returned no usable text"
             return {"success": False, "error": f"Nothing was written: {why}."}
         body = "\n\n".join(written)
         words = count_words(body)
-        return {
+        result = {
             "success": True,
             "file": rel,
             "words": words,
             "sections": len(written),
             "target_words": target,
-            "complete": len(written) == len(outline) and words >= 0.8 * target,
+            "complete": not error and len(written) == len(outline) and words >= 0.8 * target,
             "opening": " ".join(body.split()[:OPENING_WORDS]),
         }
+        if error:
+            result["error"] = error
+        return result
 
-    async def _call(self, prompt: str, words: int, config: Any) -> str:
+    async def _call(self, prompt: str, words: int, config: Any, deadline: float) -> str:
         from agents.native_loop_support import resident_model
 
         # Reason: max_seconds also bounds a single slow call, with a small floor so a call
         # started just before the limit still has a chance to answer.
-        remaining = max(MIN_CALL_SECONDS, self._deadline - self.clock())
+        remaining = max(MIN_CALL_SECONDS, deadline - self.clock())
         reply = await asyncio.wait_for(
             self.llm_interface.generate_chat(
                 [
@@ -212,13 +241,15 @@ class LongWritingTool(BaseTool):
         )
         return _clean(getattr(reply, "content", "") or "")
 
-    async def _outline(self, title: str, brief: str, wanted: int, config: Any) -> str:
+    async def _outline(
+        self, title: str, brief: str, wanted: int, config: Any, deadline: float
+    ) -> str:
         prompt = (
             f"Plan a piece titled '{title}'.\nBrief: {brief}\n\n"
             f"Write exactly {wanted} numbered lines, one per section, in reading order, each "
             "as 'heading: one-sentence summary'. Output only the lines."
         )
-        return await self._call(prompt, 40 * wanted, config)
+        return await self._call(prompt, 40 * wanted, config, deadline)
 
     async def _section(
         self,
@@ -229,12 +260,14 @@ class LongWritingTool(BaseTool):
         written: list[str],
         words: int,
         config: Any,
+        deadline: float,
     ) -> str:
-        plan = "\n".join(f"{i + 1}. {line}" for i, line in enumerate(outline))
-        done = "\n".join(f"- {outline[i]}" for i in range(min(idx, len(outline))))
+        # Reason: the outline goes in once; "(written)" marks the sections already done, so
+        # their outline lines double as the summaries of what came before.
+        plan = "\n".join(
+            f"{i + 1}. {line}{' (written)' if i < idx else ''}" for i, line in enumerate(outline)
+        )
         parts = [f"You are writing '{title}'.\nBrief: {brief}\n\nOutline:\n{plan}"]
-        if done:
-            parts.append(f"Sections already written (summaries):\n{done}")
         if written:
             tail = " ".join(written[-1].split()[-TAIL_WORDS:])
             parts.append(f"The previous section ended:\n...{tail}")
@@ -244,11 +277,18 @@ class LongWritingTool(BaseTool):
             else "Do not end the piece; later sections follow."
         )
         parts.append(
-            f"Write section {idx + 1} of {len(outline)} only ({outline[idx]}), about {words} "
-            "words. Prose only, continuing smoothly; no headings unless this kind of text "
-            f"needs them, no title, no commentary. {ending}"
+            f"Write section {idx + 1} of {len(outline)} only, about {words} words. Prose "
+            "only, continuing smoothly; no headings unless this kind of text needs them, no "
+            f"title, no commentary. {ending}"
         )
-        return await self._call("\n\n".join(parts), words, config)
+        return await self._call("\n\n".join(parts), words, config, deadline)
+
+
+def _failure(exc: BaseException) -> str:
+    """Short reason naming the exception type only (its text may be long or private)."""
+    if isinstance(exc, asyncio.TimeoutError):
+        return "time limit reached"
+    return f"model call failed ({type(exc).__name__})"
 
 
 def _load_config() -> Any:
