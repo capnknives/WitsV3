@@ -78,3 +78,5 @@ Also to check while there, lower priority:
 - The Stage 2 gate gains a safety line (see the unified plan).
 - The write gate and the untrusted-content rule, planned inside C7, are
   reconsidered for an earlier slot before the coding skill.
+- RT-3 fix: native path marks web/document/MCP results as untrusted and gates
+  write tools for the rest of that turn (`security.untrusted_write_gate`).

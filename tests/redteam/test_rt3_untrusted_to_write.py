@@ -111,10 +111,6 @@ CHAINS = {
 }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RT-3: write tool runs in the same turn right after untrusted search text, no gate",
-)
 @pytest.mark.parametrize("chain", sorted(CHAINS))
 async def test_write_after_untrusted_result_needs_owner_confirmation(chain):
     read_tool, write_call = CHAINS[chain]
@@ -126,9 +122,6 @@ async def test_write_after_untrusted_result_needs_owner_confirmation(chain):
 _UNTRUSTED = re.compile(r"untrusted|external|\bdata\b|<\s*tool_result|<\s*search_result", re.I)
 
 
-@pytest.mark.xfail(
-    strict=True, reason="RT-3e: search result goes back to the model as bare text, no marking"
-)
 @pytest.mark.parametrize("read_tool", READ_TOOLS)
 async def test_search_result_is_marked_untrusted(read_tool):
     orch, llm, _ = _make([_tools(_call(read_tool, {"query": "trip"})), LLMResponse("ok")])
@@ -145,3 +138,41 @@ async def test_f_control_guard_blocks_known_pattern():
     )
     assert registry.writes() == []
     assert "prompt-injection" in _tool_messages(llm)[-1]
+
+
+_WRITE = _call("write_file", {"file_path": "outbox/notes.txt", "content": "hello"})
+
+
+async def test_gate_switch_off_lets_the_write_through_but_keeps_marking():
+    orch, llm, registry = _make(
+        [_tools(_call("web_search", {"query": "trip"})), _tools(_WRITE), LLMResponse("ok")]
+    )
+    # Reason: SecuritySettings has no such field, so plain assignment is refused.
+    object.__setattr__(orch.config.security, "untrusted_write_gate", False)
+    _ = [e async for e in orch.run(GOAL, user_role="owner")]
+    assert registry.writes() == ["write_file"]
+    assert _tool_messages(llm)[0].startswith("[UNTRUSTED EXTERNAL CONTENT from web_search")
+
+
+async def test_turn_without_untrusted_read_writes_normally():
+    orch, llm, registry = _make([_tools(_WRITE), LLMResponse("ok")])
+    _ = [e async for e in orch.run(GOAL, user_role="owner")]
+    assert registry.writes() == ["write_file"]
+    assert "UNTRUSTED" not in _tool_messages(llm)[0]
+
+
+async def test_gate_state_does_not_leak_into_the_next_turn():
+    orch, llm, registry = _make(
+        [
+            _tools(_call("web_search", {"query": "trip"})),
+            _tools(_WRITE),
+            LLMResponse("I would save it; please confirm."),
+            _tools(_WRITE),
+            LLMResponse("saved"),
+        ]
+    )
+    _ = [e async for e in orch.run(GOAL, user_role="owner")]
+    assert registry.writes() == []
+    assert "Blocked: this turn read untrusted" in _tool_messages(llm)[-1]
+    _ = [e async for e in orch.run("yes, save it", user_role="owner")]
+    assert registry.writes() == ["write_file"]
