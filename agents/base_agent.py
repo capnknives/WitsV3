@@ -182,14 +182,17 @@ class BaseAgent(ABC):
         Returns:
             Memory segment ID if stored, None if no memory manager
         """
-        if getattr(self, "_skip_global_memory_store", False):
+        from agents.turn_context import turn_for
+
+        turn = turn_for(self)
+        if turn.skip_global_memory_store:
             return None
         if not self.memory_manager:
             return None
 
         from core.pii_redaction import maybe_redact_for_storage
 
-        role = getattr(self, "_request_user_role", "owner")
+        role = turn.user_role
         content = maybe_redact_for_storage(content, self.config, role=role)
 
         # nomic-embed-text rejects very long inputs; cap before persisting.

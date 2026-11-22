@@ -90,11 +90,6 @@ async def _drain(gen):
     return [e async for e in gen]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RT-4: guest suspended at :216 yield, owner turn sets _skip_global_memory_store="
-    "False, guest store_memory (:230, base_agent.py:185) writes guest text to global memory",
-)
 async def test_guest_input_not_written_to_global_memory(make_agent):
     mem = GatedMemory()
     agent = make_agent(mem)
@@ -105,11 +100,6 @@ async def test_guest_input_not_written_to_global_memory(make_agent):
     assert not any("zebra-guest" in text for text in mem.added)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RT-4: guest parked at await :211 (doc inventory), owner turn overwrites "
-    "_request_user_role, classifier ctx (wcca_routing_mixin.py:214) gets 'owner'",
-)
 async def test_guest_classifier_sees_guest_role(make_agent, monkeypatch):
     mem = GatedMemory(gate_first_inventory=True)
     agent = make_agent(mem)
@@ -129,11 +119,6 @@ async def test_guest_classifier_sees_guest_role(make_agent, monkeypatch):
     assert seen == [(GUEST_MSG, "guest")]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RT-4: crossed role sends guest 'recurring bugs' to owner-only knowledge_log "
-    "route (routing_classifier.py:885) and runs the owner tool (:356)",
-)
 async def test_guest_does_not_reach_owner_only_route(make_agent, monkeypatch):
     agent = make_agent(GatedMemory())
     routes: list[str | None] = []
@@ -155,11 +140,6 @@ async def test_guest_does_not_reach_owner_only_route(make_agent, monkeypatch):
     assert ran == [] and not any("OWNER KNOWLEDGE" in str(e.content) for e in out)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RT-4: owner turn appends CORE MEMORY to shared _guest_personalization_context "
-    "(:227); guest turn resumed after it hands that context to the orchestrator (:451)",
-)
 async def test_guest_does_not_get_owner_core_memory(make_agent, monkeypatch):
     import core.core_memory as cm
 
@@ -181,11 +161,6 @@ async def test_guest_does_not_get_owner_core_memory(make_agent, monkeypatch):
     assert all("OWNER_CORE_SECRET" not in k["guest_personalization_context"] for k in received)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="RT-4 (reverse): owner suspended at :216 yield, guest turn sets "
-    "_skip_global_memory_store=True, owner store_memory (:230) silently skipped",
-)
 async def test_owner_memory_write_not_skipped_by_guest_turn(make_agent):
     mem = GatedMemory()
     agent = make_agent(mem)

@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents import routing_classifier as rc
+from agents.turn_context import turn_for
 from core.schemas import ConversationHistory, StreamData
 
 
@@ -211,7 +212,7 @@ class OrchestratorRoutingMixin:
         doc_inventory = await self._get_document_inventory()
         ctx = rc.RoutingContext(
             message=user_input,
-            user_role=getattr(self, "_request_user_role", "owner"),
+            user_role=turn_for(self).user_role,
             doc_inventory=doc_inventory,
             session_id=session_id,
             active_specialized_agent=(
