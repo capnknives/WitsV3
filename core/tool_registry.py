@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from core.base_tool import BaseTool
+from core.turn_metrics import record_tool
 
 # Type alias for tool types - using BaseTool as base type
 ToolType = BaseTool
@@ -170,6 +171,7 @@ class ToolRegistry:
             finally:
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
                 tool_metrics.record(tool_name, elapsed_ms, success=success, error=error_msg)
+                record_tool(tool_name, success, elapsed_ms)
             self.logger.debug(f"Tool {tool_name} completed successfully")
             return result
         except Exception as e:

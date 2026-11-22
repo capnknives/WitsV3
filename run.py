@@ -33,6 +33,7 @@ from core.llm_interface import OllamaInterface, BaseLLMInterface
 from core.memory_manager import MemoryManager, BasicMemoryBackend
 from core.tool_registry import ToolRegistry
 from core.schemas import ConversationHistory, StreamData
+from core.turn_metrics import finish_turn, note_event, start_turn
 from core.user_errors import format_cli_error
 from agents.wits_control_center_agent import WitsControlCenterAgent
 from agents.llm_driven_orchestrator import LLMDrivenOrchestrator
@@ -502,6 +503,7 @@ class WitsV3System:
         if not self.control_center:
             raise RuntimeError("Control center not initialized")
 
+        tm, tm_out = start_turn("cli", session_id, len(user_input)), "ok"
         try:
             await maybe_flush_conversation_memory(
                 conversation,
@@ -515,6 +517,8 @@ class WitsV3System:
                 conversation_history=conversation,
                 session_id=session_id
             ):
+                note_event(stream_data.type)
+                tm_out = "error" if stream_data.type == "error" else tm_out
                 if stream_data.type == "thinking" and not self.config.cli.show_thoughts:
                     continue
                 if stream_data.type in ("action", "tool_call") and not self.config.cli.show_tool_calls:
@@ -532,7 +536,11 @@ class WitsV3System:
 
             return final_response
 
+        except (asyncio.CancelledError, GeneratorExit):
+            tm_out = "cancelled"
+            raise
         except Exception as e:
+            tm_out = "error"
             error_msg = format_cli_error(e, self.config.ollama_settings.url)
             logger.error(f"Error processing request: {e}")
             conversation.add_message("assistant", error_msg)
@@ -543,6 +551,8 @@ class WitsV3System:
             except Exception as persist_err:
                 logger.warning("Session persist failed: %s", persist_err)
             return error_msg
+        finally:
+            await finish_turn(tm, tm_out)
 
     def _format_stream_data(self, stream_data: StreamData) -> str:
         """

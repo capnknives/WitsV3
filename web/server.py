@@ -36,6 +36,7 @@ from core.guest_audit import GuestAuditLog
 from core.guest_user_profile import GuestUserProfileStore
 from core.runtime_paths import exports_dir, guest_audit_dir, guest_profiles_path
 from core.schemas import ConversationHistory, StreamData
+from core.turn_metrics import finish_turn, note_event, start_turn
 from web.access_log import install_access_log_middleware, owner_display_name, resolve_caller_label
 from web.guest_auth import (
     guest_forbidden_response,
@@ -376,6 +377,7 @@ def create_app(system) -> FastAPI:
             result_parts = []
             turn_traces: list[dict[str, Any]] = []
             profile_store = GuestUserProfileStore()
+            tm, tm_out = start_turn("web", client_session_id, len(body.message)), "ok"
             guest_personalization = ""
             if guest:
                 guest_personalization = profile_store.personalization_block(
@@ -401,6 +403,8 @@ def create_app(system) -> FastAPI:
                     guest_personalization_context=guest_personalization,
                 ):
                     payload = _stream_payload(stream_data)
+                    note_event(stream_data.type)
+                    tm_out = "error" if stream_data.type == "error" else tm_out
                     yield sse("stream", payload)
                     if stream_data.type in ("tool_call", "action", "observation"):
                         turn_traces.append(
@@ -491,7 +495,11 @@ def create_app(system) -> FastAPI:
                     logger.warning("Session persist failed: %s", persist_err)
                 yield sse("done", {"final": final_text})
 
+            except (asyncio.CancelledError, GeneratorExit):
+                tm_out = "cancelled"
+                raise
             except Exception as e:
+                tm_out = "error"
                 logger.error(f"Chat stream failed: {e}", exc_info=True)
                 fmt = format_chat_error(e, system.config.ollama_settings.url)
                 error_msg = fmt["message"]
@@ -510,6 +518,8 @@ def create_app(system) -> FastAPI:
                     },
                 )
                 yield sse("done", {"final": error_msg})
+            finally:
+                await finish_turn(tm, tm_out)
 
         return StreamingResponse(
             event_stream(),

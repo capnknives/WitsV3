@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ import httpx
 
 # Import AppConfig and relevant settings models from core.config
 from .config import OllamaSettings, WitsV3Config
+from .turn_metrics import record_first_token, record_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -203,12 +205,19 @@ class OllamaInterface(BaseLLMInterface):
         )
 
         async def _generate() -> str:
+            started = time.perf_counter()
             response = await self.http_client.post(
                 f"{self.ollama_settings.url}/api/generate",
                 json=payload,
             )
             response.raise_for_status()
             response_data = response.json()
+            record_llm_call(
+                "generate",
+                str(payload.get("model", "")),
+                (time.perf_counter() - started) * 1000.0,
+                response_data,
+            )
             return response_data.get("response", "")
 
         return await self._execute_with_retry("Text generation", _generate)
@@ -241,12 +250,14 @@ class OllamaInterface(BaseLLMInterface):
             payload["tools"] = tools
 
         async def _chat() -> LLMResponse:
+            started = time.perf_counter()
             response = await self.http_client.post(
                 f"{self.ollama_settings.url}/api/chat",
                 json=payload,
             )
             response.raise_for_status()
             data = response.json()
+            record_llm_call("chat", effective_model, (time.perf_counter() - started) * 1000.0, data)
             message = data.get("message") or {}
             content = message.get("content", "") or ""
             raw_calls = message.get("tool_calls") or []
@@ -297,6 +308,7 @@ class OllamaInterface(BaseLLMInterface):
 
         while attempt < max_attempts:
             attempt += 1
+            stream_started = time.perf_counter()
             try:
                 # This properly handles streaming in httpx
                 async with self.http_client.stream(
@@ -311,9 +323,17 @@ class OllamaInterface(BaseLLMInterface):
                         try:
                             chunk = json.loads(line)
                             if "response" in chunk and not chunk.get("done", False):
+                                if chunk["response"]:
+                                    record_first_token()
                                 yield chunk["response"]
                             elif chunk.get("done"):
                                 # End of stream
+                                record_llm_call(
+                                    "generate_stream",
+                                    str(payload.get("model", "")),
+                                    (time.perf_counter() - stream_started) * 1000.0,
+                                    chunk,
+                                )
                                 break
                         except json.JSONDecodeError:
                             self.logger.warning(f"Failed to decode JSON stream line: {line}")
