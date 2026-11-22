@@ -341,11 +341,9 @@ class FaissCPUMemoryBackend(BaseMemoryBackend):
         sorted_segments = sorted(self.segments, key=lambda s: s.timestamp, reverse=True)
 
         if filter_dict:
-            sorted_segments = [
-                s
-                for s in sorted_segments
-                if all(s.metadata.get(k) == v for k, v in filter_dict.items())
-            ]
+            # Reason: "type" is a segment attribute, not metadata; use the shared rule so
+            # {"type": "DOCUMENT_CHUNK"} matches (the indexer relies on it to find old chunks).
+            sorted_segments = [s for s in sorted_segments if self._segment_matches(s, filter_dict)]
 
         return sorted_segments[:limit]
 
