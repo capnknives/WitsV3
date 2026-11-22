@@ -8,7 +8,7 @@ status: "active"
 # WitsV3 Unified Execution Plan
 
 **Created:** November 21, 2026
-**Status:** Stage 1 gate passed on November 22, 2026. Stage 2 conversation core: C1 to C4 and folder access F1 to F3 are merged (through PR #70); the new loop is behind `conversation.front_door` and the old path is still the default. Stage 0 still has open items (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
+**Status:** Stage 1 gate passed on November 22, 2026. Stage 2 conversation core: C1 to C4 and folder access F1 to F5 are merged (through PR #80). The new loop is behind `conversation.front_door` and the old path is still the default. **Feature work is paused for a red-team pass**, see [`red-team-2026-11.md`](red-team-2026-11.md). Stage 0 still has open items (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
 **Reviewed against:** `main` @ `86a0f80` (November 17, 2026)
 
 This plan sets the **order of work**. It folds three plans into one build:
@@ -198,7 +198,9 @@ the gate.
   after the gate (absorbs 2.6).
 - [x] C4 Short tool list and tool lookup (C4a tool context, C4b tiers: 16
   always-on tools with full schemas, 12 found through a lookup tool, 4 refused
-  until the approval cards in C7 exist).
+  until the approval cards in C7 exist). Not done under C4: the design's
+  "writes pass a gate". Four tools are refused; every other write is
+  unchecked beyond the path rules. See the red-team file.
 - [ ] C5 Specialists as skills plus tools. Coding, self-repair and writing
   instructions become skill files loaded on demand. The verified-edit pipeline
   stays as code and becomes a tool. One specialist at a time, golden set run
@@ -217,8 +219,11 @@ the gate.
 - [x] F1 Safe defaults and the base folders
 - [x] F2 One path check for the file tools, the indexer and memory export
 - [x] F3 Folder requests and owner-approved, expiring grants
-- [ ] F4 Inbox page: requests in plain words, live grants, revoke, short guide
-- [ ] F2b The routes F2 did not cover (see open follow-ups)
+- [x] F4 Inbox page: requests in plain words, live grants, revoke, short guide
+- [x] F2b Export, upload, delete and memory import/export behind the path
+  check; one anchor for `folders.base`
+- [x] F5 A `documents` folder inside the base folder for uploads (owner
+  decision November 22); re-indexing now replaces a changed file's chunks
 
 **Foundations, independent of the above.**
 
@@ -240,7 +245,9 @@ the gate.
 - [ ] 2.9 Data tiers (1.9)
 - [ ] 2.10 Stage gate review
 
-**Gate:** full suite and the golden set green on the new loop; the "software"
+**Gate:** the red-team targets in [`red-team-2026-11.md`](red-team-2026-11.md)
+each have a test and none is open; a held-out set of messages the lead did
+not write is run once and reported; full suite and the golden set green on the new loop; the "software"
 sentence gets a direct reply with no tool call; a simple turn shows its first
 token in under 2 seconds on the PC; a multi-step request reaches the heavy
 provider by rule and the log shows it.
@@ -272,36 +279,49 @@ provider by rule and the log shows it.
   (nothing streams until C7); any model other than `qwen3:8b`; guests on the
   new loop; the heavy provider.
 
-**Open follow-ups (November 22, 2026), in the order they will be taken.**
+**Where things stand at the end of November 22, 2026.**
 
-1. C1e: the golden runner saves the reply and the failed expectation for each
-   failed case in the sandbox folder and prints the reason in the table. Then
-   the unexplained owner-case failures are read: two requests for long text
-   (`owner-story-great-war`, `owner-boat-sling-cannon`) get replies of only
-   about 50 to 60 tokens, and five failures have not been examined
-   (`owner-codebase-question`, `owner-odd-numbers-script`,
-   `owner-story-analyze-wordcount`, `owner-boat-more-depth`,
-   `owner-bugreports-feature`). `owner-which-model` fails in the sandbox
-   because the sandbox has no facts file.
-2. All 61 cases, three runs, sandboxed, on `main`; table recorded here.
-3. F4, then F2b: the conversation export route, the document upload and
-   delete routes, and direct memory export and import go behind the path
-   check; a relative `folders.base` is anchored to the project root, not the
-   working directory.
-4. Two cases fail on every run: a document question is answered without
-   searching, and "yes please do that" runs a document search.
-5. Prompt size: every turn starts at about 3,000 prompt tokens out of 8,192,
-   mostly the 16 tool descriptions. Trim.
-6. C5 skills, C6 escalation by rule, C7 streaming, stop button and approval
-   cards (C7 unblocks the four refused tools; guests move to the new loop only
-   once it has guest tool limits).
-7. Memory (2.8): the sqlite-vec and FTS5 claims from the outside report are
-   checked against primary sources before the brief. Core memory facts and the
-   knowledge log do not reach the turn context yet, and the old
-   remember/recall rule stores a whole message as a fact.
+Done from the earlier follow-up list: C1e and C1f (runner records failures;
+sandbox covers `folders.base`), the 61-case runs, F4, F2b, F5, the loop's
+system prompt (C4c), the tool-description trim (C4d) and the checker and case
+fixes (C1g). Latest table: 56 of 61 cases pass all three runs on `main`. What
+that number does and does not show is in the red-team file.
+
+Built, measured once, **not merged**: C5a, long writing as a tool
+(`write_long_text`: an outline, then one fresh model call per section, saved
+as it goes). Owner decision November 22: long writing is a tool, not a skill
+file, because a turn's context cannot hold a long piece written through
+repeated tool calls. On the PC, 62 cases three times: the 4,500-word story
+case wrote 4,104 to 4,629 words in about 90 seconds and passed all three runs,
+and 57 of 62 cases passed every run. It is not ready to merge (draft PR #82):
+the tool is also called where the owner wanted an answer in chat ("yes please
+do that", "make these instructions more in depth"), one refusal case that
+passed before now saves a note instead, and a plain recipe answer went from
+about 7 seconds to about 68. The text itself is repetitive and has no scenes
+or characters.
+
+**Order of work from here.**
+
+1. The red-team pass ([`red-team-2026-11.md`](red-team-2026-11.md)): each
+   target becomes a failing test first; fixes follow where a test fails.
+2. Decide from its results whether the write gate and the rule for untrusted
+   content (planned inside C7) move ahead of the coding skill.
+3. C5a: fix the over-triggering, then merge.
+4. Writing quality: named characters and a setting from the outline step,
+   distinct events per section, a note of what is already covered, and a
+   repeated-phrase check in the golden set.
+5. C5 coding skill: aim for structure by default (functions or classes, not
+   one flat script), check its own work, name what must be installed, say
+   what was and was not tested. Prompt audit with it: the task-specific
+   paragraphs of the system prompt move into the skill, and each rule that
+   stays gets a recorded reason.
+6. C6 escalation by rule, C7 streaming, stop button and approval cards.
+7. Memory (2.8), with the outside report's claims checked first. The old
+   remember/recall rule is a red-team target.
 8. 2.3 single `wits` command, then 2.11 self-update.
-9. Stage 1 leftovers (pilot wiring for 1.8, the "can wait" items from the gate
-   review) and Stage 0 (0.4b, 0.6, 0.5, on hold with the heavy runs).
+9. Stage 1 leftovers and Stage 0 (0.4b, 0.6, 0.5, on hold with the heavy
+   runs). 0.6, the tool-calling test on other models, should run before any
+   more prompt tuning.
 
 ### Stage 3 — Harness in, completed (1 week)
 
