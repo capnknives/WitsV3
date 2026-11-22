@@ -3,7 +3,7 @@
 **Created:** November 22, 2026
 **Status:** direction agreed by the owner; packages listed in
 [`unified-plan-2026-11.md`](unified-plan-2026-11.md) Stage 2, briefs not yet written.
-**Reviewed against:** `main` @ `86c04d4`
+**Reviewed against:** `main` @ `7be3d54`
 
 This file records why Stage 2 changed and what the new conversation core is. It
 draws on three inputs from November 22: a line-by-line map of the current turn
@@ -112,16 +112,44 @@ Confirmed by our own reading of primary sources:
 - The current MCP revision removed stream resumability and moved tasks to an
   extension, so approvals must be polled.
 
-Taken from the outside report and **not yet checked by us**. Verify before any
-brief depends on them:
+Checked on November 22, 2026 against primary sources (vendor documentation,
+issue trackers and the papers themselves). Four of the five claims from the
+outside report did not hold as written:
 
-- Thinking off cuts simple-turn wait by about four times.
-- A cache-reuse fault affecting Gemma 4 in llama.cpp.
-- Tool calls from Qwen 3.5 sometimes arriving as plain text.
-- A harness study showing completion checks in code lifting small-model task
-  success.
-- The event count and version of the AG-UI protocol. Sources disagree, so
-  Stage 2 borrows its event names and does not take the dependency.
+- **Thinking off cuts simple-turn wait by about four times: no source found.**
+  Ollama documents `think` (true, false, unset, or a level on some models) and
+  gives no timings. When `think` is unset the model's own default applies, so
+  it differs by model. C2 reads each model's default from `/api/show`, sets
+  `think` explicitly, and measures the difference on this PC.
+- **A cache-reuse fault affecting Gemma 4 in llama.cpp: partly.** No issue
+  matches that description. Two open issues are close. llama.cpp #21690:
+  Gemma 4 context checkpoints take about 3.6 GB of RAM each and can exhaust
+  memory on `llama-server`; the reported workaround is `--ctx-checkpoints 1`
+  (or 0), `-np 1` and `--cache-ram 0`. llama.cpp #24714: a full prompt re-read
+  when a checkpoint does not match the cached prefix, reported on a Qwen 3.5
+  model, with one report that Gemma 4 E4B was not affected. Both matter to C2
+  and C8 on a machine with 32 GB.
+- **Tool calls from Qwen 3.5 sometimes arriving as plain text: confirmed, on
+  old versions.** Ollama #14745 and #14493 report `qwen3.5:9b` printing a
+  `<tool_call>` block as text, on Ollama 0.17.6 to 0.18.2. A reported
+  workaround is a Modelfile with `RENDERER qwen3-coder` and
+  `PARSER qwen3-coder`. This PC runs 0.40.17, far newer than every report, so
+  package 0.6 decides whether it still happens here. C3 keeps a plain-text
+  tool-call check as one golden case either way.
+- **A harness study showing completion checks in code lifting small-model task
+  success: weak.** The closest paper (arXiv 2610.02001, October 2026) found
+  that removing executable finish checks cost about 0.1 on its own benchmark
+  for a 2B model, with a confidence interval that crosses zero. A second paper
+  (arXiv 2610.34577) found small gains at 1.5 to 1.8 times the cost on
+  frontier models and advises against self-checks at completion. Stage 2
+  therefore keeps cheap checks in code (schema, step and repeat caps, tests in
+  the verified-edit pipeline) and does not add a separate completion-check
+  call.
+- **The AG-UI event count and version: partly.** The current events page lists
+  31 standard event types in 8 groups; the repository README still says about
+  16. No protocol version number is published; client packages are at 1.0.0 or
+  later. The decision stands: borrow the event names, do not take the
+  dependency.
 
 Known error in the outside report's premises: it assumed 12 to 24 GB of GPU
 memory. This PC has 8 GB, and Stage 0 found the heavy model fastest on
