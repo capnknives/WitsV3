@@ -142,6 +142,9 @@ _IMPLICIT_LOAD_NAMES = frozenset(
         "sitecustomize.py",
         "usercustomize.py",
         ".pre-commit-config.yaml",
+        # Settings files: an edit here could switch off the sandbox or the write gate.
+        "config.yaml",
+        "config.local.yaml",
     }
 )
 _IMPLICIT_LOAD_DIRS = frozenset({".github", ".githooks", ".husky", ".venv", "venv", "__pycache__"})
@@ -192,7 +195,7 @@ def resolve_writable_within_project(file_path: str) -> Path:
         or name.endswith(".pth")
         or any(part in _IMPLICIT_LOAD_DIRS for part in parts)
     ):
-        reason = "a file pytest, Python, git hooks or CI load implicitly"
+        reason = "a settings file or one that pytest, Python, git hooks or CI load implicitly"
     else:
         return resolved
     raise PermissionError(f"Refusing to edit {reason}: {resolved}")

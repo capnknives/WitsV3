@@ -60,6 +60,8 @@ def test_resolve_writable_refuses_secrets_git_and_runtime_data(rel):
         "tox.ini",
         "setup.cfg",
         "pyproject.toml",
+        "config.yaml",
+        "config.local.yaml",
         "sitecustomize.py",
         "usercustomize.py",
         ".pre-commit-config.yaml",
