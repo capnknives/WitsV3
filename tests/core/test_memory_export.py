@@ -3,9 +3,8 @@
 import csv
 import json
 import os
-import shutil
-import tempfile
 from collections.abc import AsyncGenerator
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -32,12 +31,13 @@ class DummyLLM(BaseLLMInterface):
 
 
 @pytest.fixture
-def temp_dir():
-    """Create a temporary directory for test files."""
-    temp_dir = tempfile.mkdtemp()
-    yield temp_dir
-    # Clean up
-    shutil.rmtree(temp_dir)
+def temp_dir(tmp_path, monkeypatch):
+    """The outbox of a temp folders.base: the path check allows read and write there."""
+    config = SimpleNamespace(folders=SimpleNamespace(base=str(tmp_path / "wits")), security=None)
+    monkeypatch.setattr("core.config.load_config", lambda *a, **k: config)
+    outbox = tmp_path / "wits" / "outbox"
+    outbox.mkdir(parents=True)
+    return str(outbox)
 
 
 @pytest.fixture

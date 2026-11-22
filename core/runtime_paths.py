@@ -26,8 +26,8 @@ TRACKED_DATA_FILENAMES = frozenset(
     }
 )
 
-# Package location (stable); runtime paths resolve from the process cwd so tests
-# and scripts that chdir into an isolated directory stay sandboxed.
+# Package location (stable). var/ (project_root) resolves from the process cwd unless
+# WITSV3_PROJECT_ROOT is set; a relative folders.base resolves from base_anchor() instead.
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = PACKAGE_ROOT  # re-export for callers that need the install path
 
@@ -79,10 +79,21 @@ DEFAULT_BASE = "var/wits_files"
 BASE_SUBFOLDERS = ("inbox", "outbox", "projects")
 
 
+def base_anchor() -> Path:
+    """Where a relative ``folders.base`` resolves: never the working directory.
+
+    A relative base is under the repository root regardless of the working directory.
+    WITSV3_PROJECT_ROOT when set, else the repository root. ``core.path_access`` uses the
+    same anchor, so the folders created at start-up are the folders the check allows.
+    """
+    override = os.getenv("WITSV3_PROJECT_ROOT")
+    return Path(override) if override else PROJECT_ROOT.resolve()
+
+
 def base_dir(base: str | None = None) -> Path:
-    """The folder WITS works in (``folders.base``); relative values sit under the runtime root."""
+    """The folder WITS works in (``folders.base``); relative values sit under base_anchor()."""
     path = Path(base or DEFAULT_BASE).expanduser()
-    return path if path.is_absolute() else project_root() / path
+    return path if path.is_absolute() else base_anchor() / path
 
 
 def inbox_dir(base: str | None = None) -> Path:
