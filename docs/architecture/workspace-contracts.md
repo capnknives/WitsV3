@@ -106,7 +106,7 @@ half a failed file). Before migrating an existing database, `VACUUM INTO` an abs
 
 Results are structured content plus the same JSON as text. Failures are tool execution errors
 (`isError: true`) with `{"code", "message"}`; shared codes are `invalid_argument`,
-`forbidden_scope`, `forbidden_project`, `not_found`, `rate_limited`. **None of the five needs owner
+`forbidden_scope`, `forbidden_project`, `not_found`, `rate_limited`, `revoked`. **None of the five needs owner
 approval** ("allowed, logged"). Each call past auth and the rate limit writes one `audit_log` row.
 
 | Tool | Scope | Arguments (`additionalProperties: false`) |
@@ -167,6 +167,12 @@ tool lists. Registry tools join the MCP server in Stage 3 (item 2.2).
   set or `expires_at` has passed. `last_seen_at` is updated at most once a minute.
 - **Revocation**, three statements in one transaction in `clients.py`: set `revoked_at`, delete the
   client's locks, set its live pending approvals to `cancelled` with `resolved_at`. Rows are kept.
+- **Revoked mid-call** (added after the 1.2 review). A call verified just before a revoke commits
+  can still write once. So after every successful write tool, `service.py` calls
+  `clients.enforce_not_revoked(db, client_id)`: in one write transaction it reads `revoked_at`
+  and, if set, repeats the two cleanup statements and raises `WorkspaceError("revoked")`. The
+  caller gets that error, not the result. A task, handoff or artifact row written in that window
+  stays, correctly attributed; no lock or pending approval survives.
 - **Rate limits.** Per client, an in-memory token bucket of `rate_per_min`. After 10 failed
   authentications a minute from one address, further *failures* get HTTP 429; a token that verifies
   is never refused by this limiter. The address table holds at most 1,024 entries.
@@ -245,8 +251,10 @@ Accepted: agents can still mislead each other with visible text. Give `write` on
 
 ## 9. File map and seams (the signatures other packages import)
 
-No two packages edit the same file, except `requirements.txt` (1.1a then 1.4, in sequence). 1.1 is
-split: 1.1a first, then 1.1b; 1.2 and 1.3 need both.
+No two packages edit the same file, except `requirements.txt` (1.1a then 1.4b) and
+`core/workspace/clients.py` (1.2 then 1.4a), each in sequence. 1.1 is split: 1.1a first, then
+1.1b; 1.2 and 1.3 need both. 1.4 is split the same way: 1.4a (the tool logic, no network) first,
+then 1.4b (the MCP mount). Where an earlier section says 1.4, read both.
 
 | Package | Creates | Edits |
 |---------|---------|-------|
@@ -254,7 +262,8 @@ split: 1.1a first, then 1.1b; 1.2 and 1.3 need both.
 | 1.1b | `web/workspace_routes.py`, `tests/web/test_workspace_routes.py` | `core/config.py`, `config.yaml` (`workspace:` block), `web/server.py` (one call: `register_workspace(app)`) |
 | 1.2 | `core/workspace/clients.py`, `permissions.py`, `ratelimit.py`, `web/workspace_clients_api.py`, `tests/core/test_workspace_clients.py` | — |
 | 1.3 | `core/workspace/approvals.py`, `tests/core/test_workspace_approvals.py` | — |
-| 1.4 | `core/workspace/service.py`, `web/workspace_mcp.py`, `tests/web/test_workspace_mcp.py` | `core/injection_guard.py`, `requirements.txt` (mcp) |
+| 1.4a | `core/workspace/service.py`, `tests/core/test_workspace_service.py` | `core/injection_guard.py` (`scan_text`), `core/workspace/clients.py` (`rate_per_min`, `enforce_not_revoked`), `tests/core/test_workspace_clients.py` |
+| 1.4b | `web/workspace_mcp.py`, `tests/web/test_workspace_mcp.py` | `requirements.txt` (mcp) |
 | 1.5 | `web/workspace_approvals_api.py`, `web/static/inbox.html`, `web/static/inbox.js`, `tests/web/test_workspace_inbox.py` | — |
 | 1.6 | `core/workspace/notify.py`, `tests/core/test_workspace_notify.py` | — |
 
@@ -283,7 +292,8 @@ def register_workspace(app) -> None; def get_db() -> Database
 async def require_owner(request) -> None        # FastAPI dependency, raises 401
 def add_lifespan(factory: Callable[[], AsyncContextManager]) -> None       # 1.4: session manager
 # clients.py (1.2)
-@dataclass(frozen=True) class ClientIdentity: id: str; name: str; scopes: frozenset; projects: frozenset
+@dataclass(frozen=True) class ClientIdentity: id: str; name: str; scopes: frozenset; projects: frozenset; rate_per_min: int
+async def enforce_not_revoked(db, client_id) -> None                       # 1.4a adds; raises "revoked"
 async def create_client(db, name, scopes, projects, rate_per_min=60, expires_at=None) -> tuple[ClientIdentity, str]
 async def verify_token(db, token: str) -> ClientIdentity | None
 async def revoke_client(db, client_id) -> bool
@@ -295,5 +305,18 @@ async def resolve(db, approval_id, choice, note) -> dict | None            # Non
 async def list_for_project(db, project) -> list[dict]; async def list_pending(db) -> list[dict]
 ```
 
-`service.py` (1.4) alone cleans and scans agent text, checks permissions and project binding, and
-merges `project_state` with `list_for_project`. The resolve route (1.5) cleans the owner's note.
+```python
+# service.py (1.4a): identity is a verified ClientIdentity; each returns the section 3 result
+# or raises WorkspaceError. None for lease_minutes or expires_minutes means the config default.
+async def get_project_state(db, identity, project, since_handoff_id=0, limit=20) -> dict
+async def claim_task(db, identity, project, task_id=None, title=None, body=None, lease_minutes=None) -> dict
+async def append_handoff(db, identity, project, body, task_id=None, kind="note") -> dict
+async def request_decision(db, identity, project, title, body="", task_id=None, options=None, expires_minutes=None) -> dict
+async def link_artifact(db, identity, project, kind, uri, task_id=None, title="") -> dict
+def configure(lease_minutes: int, approval_ttl_minutes: int) -> None      # 1.4b calls from config
+```
+
+`service.py` (1.4a) alone cleans and scans agent text, checks permissions and project binding,
+merges `project_state` with `list_for_project`, and writes the one audit row per call (outcome
+`ok` or the error code). It fails closed on a `None` identity. 1.4b applies the rate limit before
+calling in. The resolve route (1.5) cleans the owner's note.
