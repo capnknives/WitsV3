@@ -49,7 +49,7 @@ transcripts.
 ## Review ladder
 
 1. Agent self-check: targeted tests and lint.
-2. CI on the PR: pytest on Python 3.10 and 3.11, ruff, black.
+2. CI on the PR: pytest on Python 3.10 and 3.13, ruff, black.
 3. Lead diff review against the brief's acceptance list.
 4. Independent high-effort review for packages marked **high** and every stage gate.
 5. Owner hand-test at the stage gate. Owner merges.
