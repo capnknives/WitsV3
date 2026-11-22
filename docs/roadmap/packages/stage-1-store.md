@@ -2,13 +2,13 @@
 title: "Stage 1 Briefs — Store and Gateway Shell (1.1a, 1.1b)"
 created: "2026-11-21"
 last_updated: "2026-11-21"
-status: "draft"
+status: "active"
 ---
 
 # Stage 1 briefs: 1.1a and 1.1b
 
-Draft until [`workspace-contracts.md`](../../architecture/workspace-contracts.md) (WP 1.0) is
-merged; neither package starts before that. Rules and the review ladder are in
+Checked against the merged [`workspace-contracts.md`](../../architecture/workspace-contracts.md)
+(WP 1.0), which is the authority where a brief and the contract differ. Rules and the review ladder are in
 [README.md](README.md). The contract split package 1.1 in two: 1.1a first, then 1.1b. Packages 1.2
 and 1.3 need both.
 
@@ -33,6 +33,11 @@ Acceptance (tests/core/test_workspace_store.py, each on a temp database file):
   - a fresh database migrates to version 1; reopening applies nothing; a migration that fails
     leaves no objects behind
   - update, delete and INSERT OR REPLACE on handoffs and audit_log all abort
+  - foreign keys are enforced: a task row naming a client that does not exist is refused
+  - with a second migration file present, opening an existing database writes a timestamped
+    .bak copy before migrating; a fresh database writes none
+  - claim with a title creates the task and its lock in one transaction and returns created
+    true; a failure after the task insert leaves neither row
   - claim: fresh claim; second claimer gets task_locked with holder and expiry; holder renewal
     keeps claimed_at; takeover at expiry; a lapsed holder gets not_lock_holder on done
   - handoff kinds: note keeps the lock and never shortens the lease; handoff, blocked and done
@@ -40,10 +45,13 @@ Acceptance (tests/core/test_workspace_store.py, each on a temp database file):
   - a task_id from another project gives not_found in claim_task, append_handoff, link_artifact
   - link_artifact twice with one uri returns created false and the same id
   - project_state: caps, ordering and since_handoff_id as in section 3
-  - two connections writing at once: both rows land (the two-writer test)
+  - two-writer test: two tasks writing at once through Database.write(), and a second
+    open_db on the same file writing at the same time; every row lands, none is lost
+  - audit() appends one row; project_state reports client names, never client ids
   - clean_text: drops tag, zero-width, bidirectional and variation-selector characters; keeps
     newline and tab; rejects over-limit text instead of truncating
 Run: pytest tests/core/test_workspace_store.py -q --no-cov; ruff check core/workspace tests/core/test_workspace_store.py; black --check core/workspace tests/core/test_workspace_store.py
+Size: under about 450 changed lines outside the migration file and the test file
 Out of scope: clients, tokens, approvals logic, config, anything under web/, the MCP server
 Report: files changed, test tail, open questions. 20 lines at most.
 ```

@@ -69,8 +69,8 @@ transcripts.
 ### Stage 1 — Workspace slice
 
 Brief for 1.0: [wp-1.0-contracts.md](wp-1.0-contracts.md). The contract split 1.1 into 1.1a and
-1.1b; their briefs are drafted in [stage-1-store.md](stage-1-store.md). Where the index says 1.1,
-read both. Briefs for 1.2 to 1.8 are written after 1.0 merges, because they cite it.
+1.1b; their briefs are in [stage-1-store.md](stage-1-store.md). Where the index says 1.1,
+read both. Briefs for 1.2 to 1.8 follow in plan order.
 
 | ID | Package | Builder | Needs | Done when |
 |----|---------|---------|-------|-----------|
