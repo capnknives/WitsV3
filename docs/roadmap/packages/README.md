@@ -79,8 +79,8 @@ read both. Briefs for 1.2 to 1.8 follow in plan order.
 | 1.0 | Contracts: schema, tool signatures, token scopes | Lead. Review: **high** | — | Merged before any build starts |
 | 1.1a | SQLite store with migrations and async access ([brief](stage-1-store.md)) | Sonnet | 1.0 | Tests for every table, plus a two-writer test |
 | 1.1b | Gateway shell: config block, route registry, owner check ([brief](stage-1-store.md)) | Sonnet | 1.1a | Disabled by default; owner-only tests pass |
-| 1.2 | Client tokens: create, scope, revoke, hashed at rest | Opus. Review: **high** | 1.1 | A revoked token is refused; scope tests pass |
-| 1.3 | Approval queue, reusing the `core/escalation.py` pattern | Opus | 1.1 | Request, approve, deny, expire tests |
+| 1.2 | Client tokens: create, scope, revoke, hashed at rest ([brief](stage-1-auth.md)) | Opus. Review: **high** | 1.1 | A revoked token is refused; scope tests pass |
+| 1.3 | Approval queue, reusing the `core/escalation.py` pattern ([brief](stage-1-auth.md)) | Opus | 1.1 | Request, approve, deny, expire tests |
 | 1.4 | MCP server over HTTP at `/mcp` with five tools; inbound text through `core/injection_guard.py` | Opus. Review: **high** | 1.2, 1.3 | Tool-call tests; unauthenticated call refused |
 | 1.5 | Decision Inbox: one static page, two API routes | Sonnet | 1.3 | A card appears; approve and deny work |
 | 1.6 | Phone push on a new approval | Sonnet | 1.3 | Push fires in a test against a fake endpoint |
