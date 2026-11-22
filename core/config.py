@@ -31,6 +31,23 @@ class OllamaSettings(BaseModel):
         default=True, description="Use exponential backoff for retries"
     )
 
+    # Serving settings: keep the model resident and the prompt prefix cacheable.
+    keep_alive: str = Field(
+        default="30m", description="How long Ollama keeps a model loaded after a request"
+    )
+    think: bool = Field(
+        default=False, description="Ask thinking-capable models to think (others never get it)"
+    )
+    embedding_on_cpu: bool = Field(
+        default=True, description="Run embeddings on CPU so they do not evict the chat model"
+    )
+    num_ctx: int = Field(
+        default=8192,
+        gt=0,
+        description="Context window sent with every chat call; Ollama's own default is far "
+        "smaller and silently truncates long prompts",
+    )
+
     # Model fallback configuration
     fallback_models: list[str] = Field(
         default=["qwen3:8b", "qwen2.5-coder:7b"],

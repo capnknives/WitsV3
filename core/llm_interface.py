@@ -84,6 +84,31 @@ class OllamaInterface(BaseLLMInterface):
         # TODO: Consider managing the lifecycle of the client, e.g., closing it on app shutdown.
         self.http_client = httpx.AsyncClient(timeout=self.ollama_settings.request_timeout)
         self.logger = logging.getLogger("WitsV3.OllamaInterface")
+        # Reason: /api/show is slow-ish and a model's capabilities do not change at runtime.
+        self._thinking_support: dict[str, bool] = {}
+
+    async def _supports_thinking(self, model: str) -> bool:
+        """Return whether Ollama lists the "thinking" capability for a model.
+
+        Args:
+            model: Model name.
+
+        Returns:
+            True only when /api/show lists "thinking"; any failure counts as False.
+        """
+        if model in self._thinking_support:
+            return self._thinking_support[model]
+        try:
+            response = await self.http_client.post(
+                f"{self.ollama_settings.url}/api/show", json={"model": model}
+            )
+            response.raise_for_status()
+            supported = "thinking" in (response.json().get("capabilities") or [])
+        except Exception as e:
+            self.logger.debug(f"Could not read capabilities for {model}: {e}")
+            supported = False
+        self._thinking_support[model] = supported
+        return supported
 
     async def _prepare_payload(
         self,
@@ -106,12 +131,15 @@ class OllamaInterface(BaseLLMInterface):
             options["num_predict"] = max_tokens
         if stop_sequences is not None:
             options["stop"] = stop_sequences
-        if num_ctx is not None:
-            options["num_ctx"] = num_ctx
+        # Reason: without num_ctx Ollama loads the model's own (huge) default and spills to CPU.
+        options["num_ctx"] = num_ctx if num_ctx is not None else self.ollama_settings.num_ctx
 
         payload = {"model": effective_model, "prompt": prompt, "stream": stream, "options": options}
         if format is not None:
             payload["format"] = format
+        payload["keep_alive"] = self.ollama_settings.keep_alive
+        if await self._supports_thinking(effective_model):
+            payload["think"] = self.ollama_settings.think
         return payload
 
     async def _execute_with_retry(
@@ -228,8 +256,25 @@ class OllamaInterface(BaseLLMInterface):
         tools: list[dict[str, Any]] | None = None,
         model: str | None = None,
         temperature: float | None = None,
+        num_ctx: int | None = None,
+        think: bool | None = None,
+        keep_alive: str | None = None,
     ) -> LLMResponse:
-        """Ollama /api/chat with optional native tool calling."""
+        """Ollama /api/chat with optional native tool calling.
+
+        Args:
+            messages: Conversation messages.
+            tools: Optional tool schemas.
+            model: Model name (defaults to config).
+            temperature: Sampling temperature (defaults to config).
+            num_ctx: Context window (defaults to ollama_settings.num_ctx).
+            think: Thinking flag (defaults to ollama_settings.think); only sent to models
+                that list the "thinking" capability.
+            keep_alive: Model residency (defaults to ollama_settings.keep_alive).
+
+        Returns:
+            The model reply with any tool calls.
+        """
         effective_model = model or self.ollama_settings.default_model
         payload: dict[str, Any] = {
             "model": effective_model,
@@ -243,9 +288,13 @@ class OllamaInterface(BaseLLMInterface):
                     temperature
                     if temperature is not None
                     else self.config.agents.default_temperature
-                )
+                ),
+                "num_ctx": num_ctx if num_ctx is not None else self.ollama_settings.num_ctx,
             },
+            "keep_alive": keep_alive if keep_alive is not None else self.ollama_settings.keep_alive,
         }
+        if await self._supports_thinking(effective_model):
+            payload["think"] = think if think is not None else self.ollama_settings.think
         if tools:
             payload["tools"] = tools
 
@@ -394,7 +443,13 @@ class OllamaInterface(BaseLLMInterface):
 
         safe_text = prepare_text_for_embedding(text or "", self.config)
         effective_model = model or self.ollama_settings.embedding_model
-        payload = {"model": effective_model, "prompt": safe_text}
+        payload: dict[str, Any] = {
+            "model": effective_model,
+            "prompt": safe_text,
+            "keep_alive": self.ollama_settings.keep_alive,
+        }
+        if self.ollama_settings.embedding_on_cpu:
+            payload["options"] = {"num_gpu": 0}
 
         async def _get_embedding() -> list[float]:
             response = await self.http_client.post(
