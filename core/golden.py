@@ -21,11 +21,25 @@ VALID_TAGS = {
     "writing",
     "command",
     "follow-up",
+    "owner-regression",
+    "refusal",
+    "arithmetic",
+    "self-knowledge",
 }
 VALID_ROUTES = {"coding", "self_repair", "book", "orchestrator"}
 VALID_REPLY = {"required", "optional"}
 CASE_KEYS = {"id", "message", "tags", "expect", "history"}
-EXPECT_KEYS = {"tools", "forbid_tools", "forbid_routes", "reply"}
+EXPECT_KEYS = {
+    "tools",
+    "forbid_tools",
+    "forbid_routes",
+    "reply",
+    "tools_any_of",
+    "reply_contains_any",
+    "reply_not_contains",
+    "reply_min_words",
+    "max_first_result_ms",
+}
 
 # Substrings of an event's ``source`` (lower-cased) that identify each route.
 # Real agent names: CodingExpert, AdvancedCoder, SystemDoctor, BookWriter, LLMOrchestrator,
@@ -50,6 +64,12 @@ class GoldenCase:
     forbid_routes: list[str] = field(default_factory=list)
     reply: str = "required"
     history: list[dict[str, str]] = field(default_factory=list)
+    tools_any_of: list[str] = field(default_factory=list)
+    reply_contains_any: list[str] = field(default_factory=list)
+    reply_not_contains: list[str] = field(default_factory=list)
+    reply_min_words: int = 0
+    # Reason: carried for scripts/golden_run.py, which reports "slow"; evaluate() ignores it.
+    max_first_result_ms: int = 0
 
 
 @dataclass
@@ -59,6 +79,22 @@ class GoldenResult:
     passed: bool
     failures: list[str]
     unobserved: list[str] = field(default_factory=list)
+
+
+def _check_extra(cid: str, expect: dict[str, Any]) -> dict[str, Any]:
+    """Validate the list and int expectation keys; return them as GoldenCase kwargs."""
+    out: dict[str, Any] = {}
+    for key in ("tools_any_of", "reply_contains_any", "reply_not_contains"):
+        val = expect.get(key, [])
+        if not isinstance(val, list) or not all(isinstance(v, str) and v for v in val):
+            raise ValueError(f"case {cid}: bad {key} {val!r}")
+        out[key] = val
+    for key in ("reply_min_words", "max_first_result_ms"):
+        val = expect.get(key, 0)
+        if isinstance(val, bool) or not isinstance(val, int) or val < 0:
+            raise ValueError(f"case {cid}: bad {key} {val!r}")
+        out[key] = val
+    return out
 
 
 def _check_case(raw: Any, seen: set[str]) -> GoldenCase:
@@ -83,7 +119,8 @@ def _check_case(raw: Any, seen: set[str]) -> GoldenCase:
     unknown = set(expect) - EXPECT_KEYS
     if unknown:
         raise ValueError(f"case {cid}: unknown expect key {sorted(unknown)}")
-    tools = expect.get("tools", "none")
+    # Reason: tools_any_of alone must not inherit the "none" default, which would contradict it.
+    tools = expect.get("tools", "any" if expect.get("tools_any_of") else "none")
     if tools not in ("none", "any") and not (
         isinstance(tools, list) and tools and all(isinstance(t, str) for t in tools)
     ):
@@ -97,12 +134,13 @@ def _check_case(raw: Any, seen: set[str]) -> GoldenCase:
     reply = expect.get("reply", "required")
     if reply not in VALID_REPLY:
         raise ValueError(f"case {cid}: bad reply {reply!r}")
+    extra = _check_extra(cid, expect)
     history = raw.get("history") or []
     for turn in history:
         if not isinstance(turn, dict) or set(turn) != {"role", "content"}:
             raise ValueError(f"case {cid}: history items need role and content")
     return GoldenCase(
-        cid, raw["message"], list(tags), tools, forbid_tools, forbid_routes, reply, history
+        cid, raw["message"], list(tags), tools, forbid_tools, forbid_routes, reply, history, **extra
     )
 
 
@@ -149,6 +187,11 @@ def routes_seen(events: list[Any]) -> set[str]:
     return found
 
 
+def _reply_text(events: list[Any]) -> str:
+    """Return the concatenated content of ``result`` events."""
+    return "".join((ev.content or "") for ev in events if ev.type == "result")
+
+
 def evaluate(
     case: GoldenCase, events: list[Any], tool_names: list[str] | None = None
 ) -> GoldenResult:
@@ -189,8 +232,20 @@ def evaluate(
     routed = sorted(set(case.forbid_routes) & routes_seen(events))
     if routed:
         failures.append(f"forbid_routes: took {routed}")
-    if case.reply == "required":
-        has_reply = any(ev.type == "result" and (ev.content or "").strip() for ev in events)
-        if not has_reply:
-            failures.append("reply: required but no non-empty result event")
+    if case.tools_any_of and not set(case.tools_any_of) & set(seen):
+        failures.append(f"tools_any_of: none of {case.tools_any_of} called, saw {seen}")
+    text = _reply_text(events)
+    if case.reply == "required" and not text.strip():
+        failures.append("reply: required but no non-empty result event")
+    # Reason: strip thousands separators so "885.5" matches "885.507" and "1,885" matches "1885".
+    plain = text.replace(",", "").lower()
+    if case.reply_contains_any and not any(
+        s.replace(",", "").lower() in plain for s in case.reply_contains_any
+    ):
+        failures.append(f"reply_contains_any: none of {case.reply_contains_any} in reply")
+    found = [s for s in case.reply_not_contains if s.lower() in text.lower()]
+    if found:
+        failures.append(f"reply_not_contains: reply has {found}")
+    if len(text.split()) < case.reply_min_words:
+        failures.append(f"reply_min_words: {len(text.split())} < {case.reply_min_words}")
     return GoldenResult(not failures, failures, unobserved)
