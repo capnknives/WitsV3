@@ -30,7 +30,7 @@ UNSANDBOXED_REFUSAL = (
 )
 
 # Reason: only what the interpreter needs to start on Windows and POSIX; never secrets.
-_CHILD_ENV_KEYS = ("PATH", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "TEMP", "TMP", "TMPDIR")
+_CHILD_ENV_KEYS = ("PATH", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR")
 _CHILD_ENV_LOCALE = ("LANG", "LC_ALL")
 
 
@@ -45,6 +45,9 @@ def minimal_child_env(workdir: str, extra: dict[str, str] | None = None) -> dict
     env = {k: os.environ[k] for k in _CHILD_ENV_KEYS + _CHILD_ENV_LOCALE if k in os.environ}
     env["HOME"] = workdir
     env["USERPROFILE"] = workdir
+    # Reason: temp files land in the throwaway dir, not the host's shared temp.
+    for key in ("TEMP", "TMP", "TMPDIR"):
+        env[key] = workdir
     env.update(extra or {})
     return env
 
@@ -130,6 +133,10 @@ async def _run_docker_sandbox(code: str, *, config: Any | None, timeout: float) 
     with tempfile.TemporaryDirectory(prefix="wits_docker_sandbox_") as tmp:
         script = Path(tmp) / "user_code.py"
         script.write_text(code, encoding="utf-8")
+        # Reason: --cap-drop=ALL drops DAC_OVERRIDE and the run is uid 65534, so the
+        # 0700 temp dir would be unreadable on native Linux. Contents are only the snippet.
+        os.chmod(tmp, 0o755)
+        os.chmod(script, 0o644)
         cmd = [
             exe,
             "run",
@@ -139,18 +146,30 @@ async def _run_docker_sandbox(code: str, *, config: Any | None, timeout: float) 
             "--security-opt=no-new-privileges",
             "--pids-limit=128",
             "--memory=512m",
+            "--memory-swap=512m",
+            "--user=65534:65534",
+            "--read-only",
+            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
+            "-e",
+            "HOME=/tmp",
             "-v",
             f"{tmp}:/sandbox:ro",
             image,
             "python",
             "/sandbox/user_code.py",
         ]
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            env=_docker_env(),
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env=_docker_env(),
+            )
+        except OSError as exc:
+            # Never fall back to host execution when docker cannot start.
+            return SandboxResult(
+                success=False, output="", error=f"docker failed to start: {exc}", return_code=-1
+            )
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:

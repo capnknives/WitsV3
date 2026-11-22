@@ -142,6 +142,14 @@ subprocess.check_output = restricted_subprocess
                 "error": result.error,
                 "return_code": result.return_code,
             }
+        if mode != "off":
+            # Reason: only an explicit "off" may run on the host; typos are refused.
+            return {
+                "success": False,
+                "output": "",
+                "error": f"unknown sandbox_mode: {mode}; {UNSANDBOXED_REFUSAL}",
+                "return_code": -1,
+            }
 
         try:
             # Create temporary directory for execution
