@@ -29,6 +29,15 @@ web_ui:
     content_policy_enabled: true
     default_guest_age_band: teen
     adult_allow_document_search: true
+workspace:
+  enabled: false  # needs WITSV3_WEB_TOKEN in .env; the ntfy topic is WITSV3_NTFY_TOPIC in .env
+  db_path: var/data/workspace.db
+  lease_minutes: 30
+  approval_ttl_minutes: 1440
+  allowed_hosts: [localhost, 127.0.0.1]  # add your tailnet hostname for remote /mcp access
+  push:
+    provider: none  # none or ntfy
+    ntfy_url: https://ntfy.sh
 document_rag:
   enabled: true
   documents_path: var/user_files
