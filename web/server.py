@@ -142,7 +142,11 @@ def create_app(system) -> FastAPI:
     guest_cfg = system.config.web_ui.guest_access
     guest_audit = GuestAuditLog(base_dir=guest_audit_dir(), enabled=guest_cfg.audit_chat)
 
-    if system.config.web_ui.require_auth and not web_token:
+    if (
+        system.config.web_ui.require_auth
+        and not web_token
+        and not guest_access_enabled(system.config)
+    ):
         logger.warning(
             "web_ui.require_auth is true but WITSV3_WEB_TOKEN is not set - "
             "the web UI is UNPROTECTED on your network. Add WITSV3_WEB_TOKEN to .env."
