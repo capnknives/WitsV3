@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 
 DEFAULT_URL = "http://localhost:11434"
+DEFAULT_OPENAI_URL = "http://127.0.0.1:8080"
 CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
 NUM_PREDICT = 256  # Cap output so a rambling model cannot stall the whole sweep.
 
@@ -108,6 +109,59 @@ async def run_once(
     }
 
 
+async def run_once_openai(
+    client: httpx.AsyncClient, model: str, ctx: int, prompt: str, timeout: float
+) -> dict[str, Any]:
+    """Stream one /v1/chat/completions call (llama-server) and return its metrics.
+
+    ctx is deliberately not sent: llama-server fixes the context at launch.
+    """
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "stream": True,
+        "stream_options": {"include_usage": True},
+        "temperature": 0.0,
+        "max_tokens": NUM_PREDICT,
+    }
+    start = time.perf_counter()
+    first: float | None = None
+    timings: dict[str, Any] = {}
+    usage: dict[str, Any] = {}
+    async with client.stream("POST", "/v1/chat/completions", json=payload, timeout=timeout) as resp:
+        resp.raise_for_status()
+        async for line in resp.aiter_lines():
+            line = line.strip()
+            if not line.startswith("data:"):
+                continue
+            data = line[len("data:") :].strip()
+            if data == "[DONE]":
+                break
+            chunk = json.loads(data)
+            if chunk.get("error"):
+                raise RuntimeError(chunk["error"])
+            for choice in chunk.get("choices") or []:
+                delta = choice.get("delta") or {}
+                # Reasoning models stream "reasoning_content" first; it counts as a first token.
+                if first is None and (delta.get("content") or delta.get("reasoning_content")):
+                    first = time.perf_counter()
+            # Reason: llama-server puts timings (and some builds usage) in the last chunks.
+            timings = chunk.get("timings") or timings
+            usage = chunk.get("usage") or usage
+    end = time.perf_counter()
+    if first is None and not timings and not usage:
+        raise RuntimeError("stream ended without any tokens or timings")
+    ttft = None if first is None else first - start
+    tps = timings.get("predicted_per_second")
+    prompt_tps = timings.get("prompt_per_second")
+    if not tps and first is not None:
+        # Fallback: wall-clock from first token to end of stream.
+        tps = _rate(usage.get("completion_tokens"), int((end - first) * 1e9))
+    if not prompt_tps and ttft:
+        prompt_tps = _rate(usage.get("prompt_tokens"), int(ttft * 1e9))
+    return {"ttft_s": ttft, "tps": tps or None, "prompt_tps": prompt_tps or None, "load_s": None}
+
+
 def _same_model(a: str, b: str) -> bool:
     """Treat 'x' and 'x:latest' as the same model, as Ollama reports the tagged name."""
 
@@ -179,16 +233,20 @@ async def benchmark(
     runs: int,
     prompt: str,
     timeout: float = 300,
+    backend: str = "ollama",
 ) -> list[dict[str, Any]]:
     """Run every (model, ctx, run) combination; failures become rows and the sweep continues."""
     rows: list[dict[str, Any]] = []
+    openai = backend == "openai"
     for model in models:
         for ctx in ctxs:
             for run in range(1, runs + 1):
-                row: dict[str, Any] = {"model": model, "ctx": ctx, "run": run}
+                row: dict[str, Any] = {"model": model, "backend": backend, "ctx": ctx, "run": run}
                 try:
-                    row.update(await run_once(client, model, ctx, prompt, timeout))
-                    row["split"] = await gpu_split(client, model)
+                    runner = run_once_openai if openai else run_once
+                    row.update(await runner(client, model, ctx, prompt, timeout))
+                    # No /api/ps on llama-server, so there is no CPU/GPU split to report.
+                    row["split"] = None if openai else await gpu_split(client, model)
                     row["vram"] = await gpu_mem_mib()
                     row["ram"] = ram_used_mib()
                 except httpx.TimeoutException:
@@ -200,7 +258,8 @@ async def benchmark(
                 if "error" in row:
                     # Fail fast: a missing model should not cost runs x timeout.
                     break
-        await unload(client, model)
+        if not openai:
+            await unload(client, model)
     return rows
 
 
@@ -208,21 +267,23 @@ def _fmt(value: float | int | None, spec: str = ".1f") -> str:
     return "-" if value is None else format(value, spec)
 
 
-def format_table(rows: list[dict[str, Any]], url: str, runs: int) -> str:
+def format_table(rows: list[dict[str, Any]], url: str, runs: int, label: str | None = None) -> str:
     """Render one timestamped markdown section; one row per run (no aggregation)."""
     host = f"{platform.node()} ({platform.system()} {platform.release()})"
+    server = "Server" if any(r.get("backend") == "openai" for r in rows) else "Ollama"
+    tag = f" | Label: {label}" if label else ""
     lines = [
         f"## Benchmark {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         "",
-        f"Host: {host} | Ollama: {url} | {runs} run(s) per model/ctx, one row per run "
-        "(run 1 includes cold model load)",
+        f"Host: {host} | {server}: {url}{tag} | {runs} run(s) per model/ctx, "
+        "one row per run (run 1 includes cold model load)",
         "",
-        "| Model | Ctx | Run | TTFT (s) | Gen tok/s | Prompt tok/s | Load (s) | CPU/GPU "
+        "| Model | Backend | Ctx | Run | TTFT (s) | Gen tok/s | Prompt tok/s | Load (s) | CPU/GPU "
         "| VRAM used (MiB) | RAM used (MiB) |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
-        head = f"| {r['model']} | {r['ctx']} | {r['run']} |"
+        head = f"| {r['model']} | {r.get('backend', 'ollama')} | {r['ctx']} | {r['run']} |"
         if "error" in r:
             lines.append(f"{head} FAILED: {r['error'].replace('|', '/')} | | | | | | |")
             continue
@@ -245,9 +306,18 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser (kept free of I/O so --help works anywhere)."""
     p = argparse.ArgumentParser(description="Benchmark Ollama models across context sizes.")
     p.add_argument("--models", required=True, help="Comma-separated model names")
-    p.add_argument("--ctx", default="8192,32768", help="Comma-separated num_ctx values")
+    p.add_argument(
+        "--ctx",
+        default="8192,32768",
+        help="Comma-separated num_ctx values (informational only with --backend openai)",
+    )
     p.add_argument("--runs", type=int, default=3, help="Runs per model/ctx (one row each)")
+    p.add_argument("--backend", choices=["ollama", "openai"], default="ollama")
     p.add_argument("--url", default=None, help="Ollama URL (default: config.yaml, then localhost)")
+    p.add_argument(
+        "--base-url", default=None, help=f"openai backend URL (default: {DEFAULT_OPENAI_URL})"
+    )
+    p.add_argument("--label", default=None, help="Text added to the section's host line")
     p.add_argument("--out", default="docs/benchmarks/results.md", help="Markdown file to append to")
     p.add_argument("--prompt-file", default=None, help="Text file to use instead of the built-in")
     p.add_argument("--timeout", type=float, default=300, help="Per-run timeout in seconds")
@@ -256,15 +326,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def main_async(args: argparse.Namespace) -> int:
     """Run the sweep and append the table."""
-    url = args.url or default_url()
+    openai = args.backend == "openai"
+    url = (args.base_url or DEFAULT_OPENAI_URL) if openai else (args.url or default_url())
     models = [m.strip() for m in args.models.split(",") if m.strip()]
     ctxs = [int(c) for c in args.ctx.split(",") if c.strip()]
     prompt = (
         Path(args.prompt_file).read_text(encoding="utf-8") if args.prompt_file else DEFAULT_PROMPT
     )
     async with httpx.AsyncClient(base_url=url) as client:
-        rows = await benchmark(client, models, ctxs, args.runs, prompt, args.timeout)
-    append_results(Path(args.out), format_table(rows, url, args.runs))
+        rows = await benchmark(client, models, ctxs, args.runs, prompt, args.timeout, args.backend)
+    append_results(Path(args.out), format_table(rows, url, args.runs, args.label))
     print(f"Appended {len(rows)} row(s) to {args.out}")
     return 0
 
