@@ -54,10 +54,12 @@ class WebSearchTool(BaseTool):
         super().__init__(
             name="web_search",
             description=(
-                "Search the live web and return a list of results (title, link, "
-                "snippet). Uses Tavily or Brave if an API key is configured, "
-                "otherwise DuckDuckGo. Use this for current events, facts, and "
-                "anything not in local memory or documents."
+                "Search the live web and return results (title, link, snippet). Use it "
+                "for current events, recent releases, prices and facts you are unsure "
+                "of. Not for the owner's own documents (use document_search) or past "
+                'conversations (use search_archival_memory). Examples: {"query": '
+                '"latest stable Python release"}, {"query": "rain tomorrow Austin", '
+                '"max_results": 3}.'
             ),
         )
         # Populated by set_dependencies(); safe defaults until then.
@@ -459,21 +461,19 @@ class WebSearchTool(BaseTool):
     def get_schema(self) -> dict[str, Any]:
         return {
             "name": "web_search",
-            "description": (
-                "Search the live web. Returns a list of results with title, link, "
-                "and snippet. Uses Tavily/Brave when an API key is configured, "
-                "otherwise DuckDuckGo."
-            ),
+            "description": self.description,
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The search query",
+                        "description": "What to search for, in a few plain words, such "
+                        "as 'python 3.13 release date'",
                     },
                     "max_results": {
                         "type": "integer",
-                        "description": "Maximum number of results to return",
+                        "description": "How many results to return; leave it out for "
+                        "the usual 5",
                         "default": 5,
                     },
                 },

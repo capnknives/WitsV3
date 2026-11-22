@@ -18,7 +18,12 @@ class ReadConversationHistoryTool(BaseTool):
     def __init__(self):
         super().__init__(
             name="read_conversation_history",
-            description="Read and format conversation history for analysis",
+            description=(
+                "Return the messages of this conversation, oldest first. Use it when the "
+                "owner asks to save, export, summarise or review this conversation (for "
+                "saving, then pass the text to write_file). Not for earlier conversations "
+                '(use search_archival_memory). Examples: {}, {"max_messages": 0}.'
+            ),
         )
 
     async def execute(
@@ -82,12 +87,14 @@ class ReadConversationHistoryTool(BaseTool):
                 },
                 "max_messages": {
                     "type": "integer",
-                    "description": "Maximum number of messages to include (0 for all)",
+                    "description": "How many recent messages to include; 0 for the "
+                    "whole conversation",
                     "default": 10,
                 },
                 "include_metadata": {
                     "type": "boolean",
-                    "description": "Whether to include message metadata",
+                    "description": "true to add each message's timestamp and other "
+                    "stored details",
                     "default": False,
                 },
             },

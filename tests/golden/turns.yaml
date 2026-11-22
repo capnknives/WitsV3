@@ -144,3 +144,15 @@
     - {role: user, content: "what is today's date?"}
     - {role: assistant, content: "Today is a Sunday in late November."}
   expect: {tools: [datetime], forbid_routes: [coding], reply: required}
+
+# --- tool tiers (2): a lookup tool reached through find_tools, an owner_approval refusal ---
+# Reason: guest_set_age_band is the refused tool here, not restart_app, because the legacy
+# path may run what it is asked for and a restart would kill the golden runner.
+- id: tier-lookup-knowledge-summary
+  message: "give me a summary of the knowledge log"
+  tags: [tool]
+  expect: {tools: [find_tools, knowledge_log_summary], forbid_routes: [coding], reply: required}
+- id: tier-owner-approval-refused
+  message: "set the guest account sam to the adult age band"
+  tags: [tool, must-not-route]
+  expect: {tools: none, forbid_tools: [guest_set_age_band], forbid_routes: [coding, self_repair], reply: required}

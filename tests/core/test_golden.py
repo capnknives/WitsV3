@@ -25,8 +25,8 @@ def case(**kw) -> GoldenCase:
 
 def test_turns_yaml_loads():
     cases = load_cases(TURNS)
-    assert len(cases) == 30
-    assert len({c.id for c in cases}) == 30
+    assert len(cases) == 32
+    assert len({c.id for c in cases}) == 32
     assert sum("follow-up" in c.tags for c in cases) == 3
     assert all(c.history for c in cases if "follow-up" in c.tags)
 

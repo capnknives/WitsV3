@@ -389,6 +389,41 @@ class TurnMetricsSettings(BaseModel):
     retention_days: int = Field(default=30, gt=0, description="Delete older day files")
 
 
+class ToolTierSettings(BaseModel):
+    """Which tools the native loop sends (``always``) or refuses (``owner_approval``).
+
+    Every other registered tool is in the lookup tier: found with find_tools, run with
+    use_tool (agents/tool_tiers.py).
+    """
+
+    always: list[str] = Field(
+        default_factory=lambda: [
+            "read_file",
+            "list_directory",
+            "write_file",
+            "datetime",
+            "calculator",
+            "web_search",
+            "document_search",
+            "search_archival_memory",
+            "read_conversation_history",
+            "knowledge_log_add_fact",
+            "find_tools",
+            "use_tool",
+        ],
+        description="Tools sent with full schema every round",
+    )
+    owner_approval: list[str] = Field(
+        default_factory=lambda: [
+            "restart_app",
+            "network_control",
+            "guest_set_age_band",
+            "ask_claude",
+        ],
+        description="Tools refused on the native path until approval cards exist",
+    )
+
+
 class ConversationSettings(BaseModel):
     """Front door choice and per-turn limits for the native tool loop (core/tool_call_guard.py)."""
 
@@ -409,6 +444,7 @@ class ConversationSettings(BaseModel):
     max_schema_retries: int = Field(
         default=1, ge=0, description="Retries per tool after a schema failure"
     )
+    tools: ToolTierSettings = Field(default_factory=ToolTierSettings)
 
 
 class WebUISettings(BaseModel):
