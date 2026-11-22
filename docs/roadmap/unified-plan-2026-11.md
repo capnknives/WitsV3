@@ -213,6 +213,15 @@ the gate.
 - [ ] 2.1 Remove unused dependencies (1.1)
 - [ ] 2.2 Move research code into `research/` (1.2)
 - [ ] 2.3 Single `wits` command (1.3)
+- [ ] 2.11 Self-update and restart (**new**, owner request November 22). The
+  runtime folder follows `main` without a manual pull. `wits update` (part of
+  2.3) and a scheduled check: fetch, fast-forward only, never with local
+  changes in tracked files it would touch, install changed requirements,
+  restart through the existing restart path, then a health check on `/api`
+  and a one-line push to the phone. On a failed health check it returns to
+  the previous commit and restarts again. Idle only: never during a turn or a
+  GPU job. Off by default; the owner turns it on in `config.local.yaml`.
+  Briefed after 2.3
 - [ ] 2.4 Provider interface with OpenAI-compatible and Anthropic providers (1.5). The OpenAI-compatible provider also covers `llama-server` and the free cloud tiers; a provider is marked private-safe or not
 - [ ] 2.7 Official MCP SDK client (1.7)
 - [ ] 2.8 Sessions and memory records into SQLite (rest of 1.4). Memory writes follow the rules in the conversation core file: stated facts with their source, nothing from an untrusted page without the owner's say-so
@@ -237,6 +246,9 @@ provider by rule and the log shows it.
 - Nine plain chat cases from the golden set passed on the old path after the
   fix, 0.5 to 4.3 s each. The other cases have not been run: golden runs wait
   for the sandbox in package C1c.
+- First full golden runs, sandboxed: 20 of 30 on the old path and 25 of 30 on
+  the new loop, with tool turns at about one second against 5 to 35. Table in
+  [`docs/benchmarks/golden.md`](../benchmarks/golden.md).
 - A high-effort independent review is used for C3a and the stage gate only.
   C3b and C3c get an independent review at medium.
 
