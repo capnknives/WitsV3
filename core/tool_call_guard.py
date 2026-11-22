@@ -33,11 +33,17 @@ OUT_OF_STEPS = "Step limit reached. Answer now from the observations you already
 # Reason: names the model invents must not each get a fresh retry budget, so unknown
 # tools and text-written calls all share this one bucket.
 UNKNOWN_BUCKET = "<unknown>"
+NUMBER_BOUNDS = ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")
+SIZE_BOUNDS = ("minLength", "maxLength", "minItems", "maxItems")
 SUPPORTED_KEYWORDS = frozenset(
-    {"type", "description", "title", "default", "examples", "enum"}
+    {"type", "description", "title", "default", "examples", "enum", "pattern"}
     | {"properties", "required", "items", "additionalProperties"}
+    | set(NUMBER_BOUNDS)
+    | set(SIZE_BOUNDS)
 )
 MAX_ERRORS, MAX_REPR, MAX_MESSAGE = 5, 80, 600
+# Reason: bounds the cost of a model-supplied string against a tool's regex.
+MAX_PATTERN_INPUT = 10_000
 
 _TEXT_CALL_RE = re.compile(
     r"<\s*tool_call\s*>(.*?)(?:<\s*/\s*tool_call\s*>|$)", re.DOTALL | re.IGNORECASE
@@ -111,6 +117,18 @@ def _check_schema(schema: Any, path: str) -> None:
         _check_schema(sub, f"{path}.{key}")
     if "items" in schema:
         _check_schema(schema["items"], f"{path}.items")
+    for key in NUMBER_BOUNDS:
+        if key in schema and not _is_number(schema[key]):
+            raise SchemaError(f"{path}.{key} is not a number")
+    for key in SIZE_BOUNDS:
+        bound = schema.get(key, 0)
+        if isinstance(bound, bool) or not isinstance(bound, int) or bound < 0:
+            raise SchemaError(f"{path}.{key} is not a non-negative integer")
+    if "pattern" in schema:
+        try:
+            re.compile(schema["pattern"])
+        except (re.error, TypeError) as exc:
+            raise SchemaError(f"{path}.pattern does not compile: {exc}") from None
 
 
 def normalise_schema(raw: dict[str, Any]) -> dict[str, Any]:
@@ -120,8 +138,11 @@ def normalise_schema(raw: dict[str, Any]) -> dict[str, Any]:
     ``{"type": "object", "properties": {...}}``; ``{"function": {...}}`` wrappers are
     unwrapped too. Supported keywords: ``type`` (string, integer, number, boolean,
     object, array, null, or a list of these), ``enum``, ``properties``, ``required``,
-    ``items``, ``additionalProperties`` (bool), plus the annotations ``description``,
-    ``title``, ``default`` and ``examples``. Anything else is refused, never skipped.
+    ``items``, ``additionalProperties`` (bool), ``minimum``, ``maximum``,
+    ``exclusiveMinimum``, ``exclusiveMaximum`` (numbers), ``minLength``, ``maxLength``,
+    ``minItems``, ``maxItems``, ``pattern`` (``re.search``), plus the ignored annotations
+    ``description``, ``title``, ``default`` and ``examples``. Anything else (``anyOf``,
+    ``oneOf``, ``allOf``, ``not``, ``$ref``, ``const``, ...) is refused, never skipped.
 
     Args:
         raw: The schema as a tool or registry provides it.
@@ -173,6 +194,9 @@ def validate(value: Any, schema: dict[str, Any], path: str = "arguments") -> lis
         allowed = {_canon_text(v) for v in schema["enum"]}
         if _canon_text(value) not in allowed:
             return [f"{path} must be one of {_short(schema['enum'])}, got {_short(value)}"]
+    bound_error = _bounds_error(value, schema)
+    if bound_error:
+        return [f"{path} {bound_error}, got {_short(value)}"]
 
     errors: list[str] = []
     if isinstance(value, dict):
@@ -189,6 +213,30 @@ def validate(value: Any, schema: dict[str, Any], path: str = "arguments") -> lis
         for i, item in enumerate(value):
             errors.extend(validate(item, schema["items"], f"{path}[{i}]"))
     return errors
+
+
+def _bounds_error(value: Any, schema: dict[str, Any]) -> str | None:
+    """Return the first broken number, size or pattern constraint, if any."""
+    if _is_number(value):
+        if "minimum" in schema and value < schema["minimum"]:
+            return f"must be >= {schema['minimum']}"
+        if "maximum" in schema and value > schema["maximum"]:
+            return f"must be <= {schema['maximum']}"
+        if "exclusiveMinimum" in schema and value <= schema["exclusiveMinimum"]:
+            return f"must be > {schema['exclusiveMinimum']}"
+        if "exclusiveMaximum" in schema and value >= schema["exclusiveMaximum"]:
+            return f"must be < {schema['exclusiveMaximum']}"
+    sizes = {str: ("minLength", "maxLength"), list: ("minItems", "maxItems")}
+    for kind, (low, high) in sizes.items():
+        if isinstance(value, kind):
+            if low in schema and len(value) < schema[low]:
+                return f"must have length >= {schema[low]}"
+            if high in schema and len(value) > schema[high]:
+                return f"must have length <= {schema[high]}"
+    if isinstance(value, str) and "pattern" in schema:
+        if not re.search(schema["pattern"], value[:MAX_PATTERN_INPUT]):
+            return f"must match {_short(schema['pattern'])}"
+    return None
 
 
 def _canon(value: Any) -> Any:

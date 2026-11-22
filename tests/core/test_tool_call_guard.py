@@ -103,8 +103,10 @@ def test_enum_is_type_strict():
     [
         {"type": "str"},
         {"type": "STRING"},
-        {"type": "string", "pattern": "^a"},
-        {"type": "integer", "minimum": 0},
+        {"type": "string", "pattern": "("},
+        {"type": "integer", "minimum": "0"},
+        {"type": "string", "maxLength": -1},
+        {"not": {"type": "string"}},
         {"anyOf": [{"type": "string"}]},
         {"$ref": "#/x"},
         {"const": 1},
@@ -116,6 +118,42 @@ def test_unsupported_schema_fails_closed(prop):
     schemas = {"t": {"type": "object", "properties": {"x": prop}}}
     verdict = make_guard().check("t", {"x": "a"}, schemas)
     assert verdict.action == "reject" and "unusable schema" in verdict.message
+
+
+BOUNDED = {
+    "b": {
+        "type": "object",
+        "properties": {
+            "n": {"type": "number", "minimum": 1, "exclusiveMaximum": 10},
+            "m": {"type": "integer", "exclusiveMinimum": 0, "maximum": 5},
+            "s": {"type": "string", "minLength": 2, "maxLength": 4, "pattern": "^[a-z]+$"},
+            "a": {"type": "array", "minItems": 1, "maxItems": 2, "title": "t", "examples": []},
+            "p": {"type": "string", "pattern": "end$"},
+        },
+    }
+}
+
+
+@pytest.mark.parametrize(
+    "args, ok",
+    [
+        ({"n": 1, "m": 5, "s": "ab", "a": [1, 2]}, True),
+        ({"n": 0.5}, False),
+        ({"n": 10}, False),
+        ({"m": 0}, False),
+        ({"m": 6}, False),
+        ({"s": "a"}, False),
+        ({"s": "abcde"}, False),
+        ({"s": "AB"}, False),
+        ({"a": []}, False),
+        ({"a": [1, 2, 3]}, False),
+        ({"p": "x" * 20_000 + "end"}, False),  # only the first 10,000 chars are matched
+        ({"p": "the end"}, True),
+    ],
+)
+def test_number_size_and_pattern_constraints(args, ok):
+    verdict = make_guard(retries=5).check("b", args, BOUNDED)
+    assert verdict.action == ("run" if ok else "reject"), verdict.message
 
 
 def test_malformed_required_fails_closed_and_undeclared_required_is_kept():
