@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1117">
+  <title>WITS - Decision Inbox</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { display: block; overflow: auto; }
+    .wrap { max-width: 640px; margin: 0 auto; padding: 18px 16px 60px; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    .sub { color: var(--fg-dim); font-size: 13px; margin-bottom: 18px; }
+    .card { background: var(--bg-2); border: 1px solid #2c3245; border-radius: var(--radius);
+            padding: 16px; margin-bottom: 14px; }
+    .meta { color: var(--fg-dim); font-size: 13px; margin-bottom: 8px; }
+    .card h2 { font-size: 17px; margin: 0 0 8px; overflow-wrap: anywhere; }
+    .body { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.45;
+            margin-bottom: 12px; }
+    .warn { background: #3a2f1a; color: #ffcf8f; border-radius: 8px; padding: 8px 10px;
+            font-size: 13px; margin-bottom: 10px; }
+    .note { width: 100%; box-sizing: border-box; background: var(--bg-3); color: var(--fg);
+            border: 1px solid #2c3245; border-radius: 8px; padding: 10px 12px; font: inherit;
+            margin-bottom: 10px; resize: vertical; }
+    .options { display: flex; flex-wrap: wrap; gap: 8px; }
+    .options button { flex: 1 1 120px; min-height: 48px; border: none; border-radius: 10px;
+                      background: var(--accent); color: #fff; font: inherit; font-weight: 600;
+                      cursor: pointer; overflow-wrap: anywhere; }
+    .options button.approve { background: #2f9e6b; }
+    .options button.deny { background: #a63d3d; }
+    .options button:disabled { opacity: .5; }
+    .status { color: var(--fg-dim); font-size: 13px; margin-bottom: 12px; }
+    .status.error { color: var(--error); }
+    .empty { color: var(--fg-dim); text-align: center; padding: 40px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Decision Inbox</h1>
+    <div class="sub">Requests from your agents waiting on you. Approving records your answer; the agent acts on it.</div>
+    <div id="status" class="status" role="status"></div>
+    <div id="list"></div>
+  </div>
+  <script src="/inbox.js"></script>
+</body>
+</html>
