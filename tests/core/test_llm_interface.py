@@ -25,6 +25,8 @@ def mock_config() -> WitsV3Config:
     config.ollama_settings.retry_attempts = 3
     config.ollama_settings.retry_delay = 0.01  # Fast for testing
     config.ollama_settings.exponential_backoff = False
+    config.ollama_settings.keep_alive = "30m"
+    config.ollama_settings.embedding_on_cpu = False
 
     config.agents = MagicMock()
     config.agents.default_temperature = 0.5
@@ -68,6 +70,7 @@ async def test_prepare_payload_default_params(mock_config: WitsV3Config):
         "prompt": "Test prompt",
         "stream": False,
         "options": {"temperature": 0.5},
+        "keep_alive": "30m",
     }
     assert payload == expected
 
@@ -91,6 +94,7 @@ async def test_prepare_payload_override_params(mock_config: WitsV3Config):
         "prompt": "Test prompt",
         "stream": True,
         "options": {"temperature": 0.8, "num_predict": 100, "stop": ["stop1", "stop2"]},
+        "keep_alive": "30m",
     }
     assert payload == expected
 
@@ -113,6 +117,7 @@ async def test_generate_text_success(mock_config: WitsV3Config, mock_async_clien
         "prompt": "Hello",
         "stream": False,
         "options": {"temperature": 0.5},
+        "keep_alive": "30m",
     }
     mock_async_client.post.assert_called_once_with(
         f"{mock_config.ollama_settings.url}/api/generate", json=expected_payload
@@ -164,6 +169,7 @@ async def test_generate_text_request_error(mock_config: WitsV3Config, mock_async
         "prompt": "Hello",
         "stream": False,
         "options": {"temperature": 0.5},
+        "keep_alive": "30m",
     }
     assert mock_async_client.post.call_count == mock_config.ollama_settings.retry_attempts
     mock_async_client.post.assert_called_with(
@@ -205,6 +211,7 @@ async def test_stream_text_success(mock_config: WitsV3Config, mock_async_client:
         "prompt": "Stream hello",
         "stream": True,
         "options": {"temperature": 0.5},
+        "keep_alive": "30m",
     }
     mock_async_client.stream.assert_called_once_with(
         "POST",
@@ -247,6 +254,7 @@ async def test_stream_text_http_status_error(
         "prompt": "Stream error",
         "stream": True,
         "options": {"temperature": 0.5},
+        "keep_alive": "30m",
     }
     # 400 errors are not retried
     mock_async_client.stream.assert_called_once_with(
@@ -280,6 +288,7 @@ async def test_stream_text_request_error(mock_config: WitsV3Config, mock_async_c
         "prompt": "Stream net error",
         "stream": True,
         "options": {"temperature": 0.5},
+        "keep_alive": "30m",
     }
     assert mock_async_client.stream.call_count == mock_config.ollama_settings.retry_attempts
     mock_async_client.stream.assert_called_with(
@@ -339,7 +348,11 @@ async def test_get_embedding_success(mock_config: WitsV3Config, mock_async_clien
         interface = OllamaInterface(mock_config)
         embedding = await interface.get_embedding("Embed this text")
 
-    expected_payload = {"model": "test-embedding-model", "prompt": "Embed this text"}
+    expected_payload = {
+        "model": "test-embedding-model",
+        "prompt": "Embed this text",
+        "keep_alive": "30m",
+    }
     mock_async_client.post.assert_called_once_with(
         f"{mock_config.ollama_settings.url}/api/embeddings", json=expected_payload
     )
@@ -362,7 +375,11 @@ async def test_get_embedding_override_model(
         interface = OllamaInterface(mock_config)
         embedding = await interface.get_embedding("Embed this", model="override-embed-model")
 
-    expected_payload = {"model": "override-embed-model", "prompt": "Embed this"}  # Overridden model
+    expected_payload = {
+        "model": "override-embed-model",
+        "prompt": "Embed this",
+        "keep_alive": "30m",
+    }
     mock_async_client.post.assert_called_once_with(
         f"{mock_config.ollama_settings.url}/api/embeddings", json=expected_payload
     )
