@@ -53,6 +53,14 @@ a heavy class in the model router, and one-GPU-job-at-a-time scheduling.
 - No GPU purchase. RAM is revisited only if Stage 0 shows the heavy model is
   RAM-bound.
 
+Added November 22, 2026:
+
+- Stage 2 rebuilds the **conversation core** as one tool-calling loop, replacing
+  the intent call and keyword routing. Design and evidence:
+  [`conversation-core-2026-11.md`](conversation-core-2026-11.md).
+- **Free cloud models are allowed as optional providers** for turns that carry
+  nothing private. Private WITS data stays on local models.
+
 ## Host facts the plan rests on
 
 Measured on the machine, November 21, 2026. Benchmarks are in
@@ -163,21 +171,58 @@ Found during the hand-test and tracked separately:
 
 ### Stage 2 — Foundations (2–3 weeks)
 
-The rest of Phase 1, plus the model lineup from Stage 0.
+The rest of Phase 1, the model lineup from Stage 0, and the conversation core
+(revised November 22, see
+[`conversation-core-2026-11.md`](conversation-core-2026-11.md)).
+
+**Conversation core, in this order.** Each is one or more small packages; C1
+ships before anything changes behavior, and the old path stays selectable until
+the gate.
+
+- [ ] C1 Turn metrics and a golden test set. Per-turn timing (first token,
+  prompt time, model, tool calls) and a labelled set of messages with expected
+  tool use, including the "software" sentence as a must-not-route case.
+  Assertions in code, no model as judge. Records the baseline for the old path.
+- [ ] C2 Serving settings and the resident model. `/api/chat` with a message
+  list, thinking off by default, model kept loaded, fixed `num_ctx`, embeddings
+  on the CPU, stable prompt prefix. Stop storing intent output and remove the
+  stored rows. The resident model is picked by measurement on the PC (absorbs
+  2.5).
+- [ ] C3 The native loop as the front door. Finish and test
+  `NativeToolOrchestrator`, put it behind a setting at the single
+  `control_center.run` seam, add schema checks, one retry, repeat and step
+  caps. Old intent call, keyword lists and JSON-repair loop are deleted only
+  after the gate (absorbs 2.6).
+- [ ] C4 Short tool list and tool lookup. About a dozen always-on tools with
+  full schemas; the rest found through a lookup tool.
+- [ ] C5 Specialists as skills plus tools. Coding, self-repair and writing
+  instructions become skill files loaded on demand. The verified-edit pipeline
+  stays as code and becomes a tool. One specialist at a time, golden set run
+  three times per fold.
+- [ ] C6 Escalation. Thinking on for the same model first; then the heavy
+  provider on an explicit command or two failed tool rounds, given a brief and
+  file paths. Heavy provider is local or a free cloud model (needs 2.4).
+- [ ] C7 Streaming and control in the UI. Token streaming, one collapsed
+  activity line, a stop button, write-gate cards from the approval queue. Built
+  with the UI overhaul packages.
+- [ ] C8 PC test: cache save and restore on `llama-server` across a model swap.
+  Waits for the hold on PC runs to lift.
+
+**Foundations, independent of the above.**
 
 - [ ] 2.1 Remove unused dependencies (1.1)
 - [ ] 2.2 Move research code into `research/` (1.2)
 - [ ] 2.3 Single `wits` command (1.3)
-- [ ] 2.4 Provider interface with OpenAI-compatible and Anthropic providers (1.5)
-- [ ] 2.5 Model router heavy class, lineup, explicit `num_ctx` per role, one model on the GPU at a time with the heavy model swapped in deliberately (**new**)
-- [ ] 2.6 Native tool calling as default, `json_react` as fallback (1.6)
+- [ ] 2.4 Provider interface with OpenAI-compatible and Anthropic providers (1.5). The OpenAI-compatible provider also covers `llama-server` and the free cloud tiers; a provider is marked private-safe or not
 - [ ] 2.7 Official MCP SDK client (1.7)
-- [ ] 2.8 Sessions and memory records into SQLite (rest of 1.4)
+- [ ] 2.8 Sessions and memory records into SQLite (rest of 1.4). Memory writes follow the rules in the conversation core file: stated facts with their source, nothing from an untrusted page without the owner's say-so
 - [ ] 2.9 Data tiers (1.9)
 - [ ] 2.10 Stage gate review
 
-**Gate:** full suite green on native tool calls; the log shows a greeting going
-to the fast model and a multi-step request going to the heavy one.
+**Gate:** full suite and the golden set green on the new loop; the "software"
+sentence gets a direct reply with no tool call; a simple turn shows its first
+token in under 2 seconds on the PC; a multi-step request reaches the heavy
+provider by rule and the log shows it.
 
 ### Stage 3 — Harness in, completed (1 week)
 
