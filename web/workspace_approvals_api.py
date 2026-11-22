@@ -67,6 +67,14 @@ async def _inbox_script() -> FileResponse:
     )
 
 
+async def _inbox_link_script() -> FileResponse:
+    # Reason: the main page always loads this script; it is only served when the workspace is on,
+    # so a 404 (workspace off) leaves the link hidden.
+    return FileResponse(
+        _STATIC_DIR / "inbox-link.js", media_type="application/javascript", headers=_NO_STORE
+    )
+
+
 def register(app: FastAPI) -> None:
     """Add the owner approval routes and the Inbox page to the app.
 
@@ -79,4 +87,7 @@ def register(app: FastAPI) -> None:
     app.include_router(router)
     app.add_api_route("/inbox", _inbox_page, methods=["GET"], include_in_schema=False)
     app.add_api_route("/inbox.js", _inbox_script, methods=["GET"], include_in_schema=False)
+    app.add_api_route(
+        "/inbox-link.js", _inbox_link_script, methods=["GET"], include_in_schema=False
+    )
     logger.info("workspace approval routes registered")

@@ -64,6 +64,16 @@ header .logo { color: var(--accent); font-size: 13px; }
 .icon-btn:hover { color: var(--fg); background: var(--bg-3); }
 .icon-btn:active { background: var(--bg-3); transform: scale(.94); }
 
+.inbox-link { position: relative; }
+.inbox-link[hidden] { display: none; }
+.inbox-count {
+  position: absolute; top: 2px; right: 0;
+  min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 8px; background: #ffcf8f; color: #14161c;
+  font-size: 11px; font-weight: 700; line-height: 16px; text-align: center;
+}
+.inbox-count[hidden] { display: none; }
+
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #666; display: inline-block; }
 .dot.ok { background: var(--accent-2); }
 .dot.warn { background: #ffcf8f; }
