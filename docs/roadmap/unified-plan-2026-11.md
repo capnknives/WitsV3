@@ -1,14 +1,14 @@
 ---
 title: "WitsV3 Unified Execution Plan"
 created: "2026-11-21"
-last_updated: "2026-11-21"
+last_updated: "2026-11-22"
 status: "active"
 ---
 
 # WitsV3 Unified Execution Plan
 
 **Created:** November 21, 2026
-**Status:** Stage 1 gate passed on November 22, 2026. Stage 0 still has open items (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
+**Status:** Stage 1 gate passed on November 22, 2026. Stage 2 conversation core: C1 to C4 and folder access F1 to F3 are merged (through PR #70); the new loop is behind `conversation.front_door` and the old path is still the default. Stage 0 still has open items (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
 **Reviewed against:** `main` @ `86a0f80` (November 17, 2026)
 
 This plan sets the **order of work**. It folds three plans into one build:
@@ -179,22 +179,26 @@ The rest of Phase 1, the model lineup from Stage 0, and the conversation core
 ships before anything changes behavior, and the old path stays selectable until
 the gate.
 
-- [ ] C1 Turn metrics and a golden test set. Per-turn timing (first token,
+- [x] C1 Turn metrics and a golden test set (C1a to C1d shipped; 61 cases). Per-turn timing (first token,
   prompt time, model, tool calls) and a labelled set of messages with expected
   tool use, including the "software" sentence as a must-not-route case.
   Assertions in code, no model as judge. Records the baseline for the old path.
-- [ ] C2 Serving settings and the resident model. `/api/chat` with a message
+- [ ] C2 Serving settings and the resident model (C2a serving settings, C2b
+  stable prefix and C2c purge script shipped; still open: C2m, the resident
+  model by measurement, on hold with the heavy PC runs). `/api/chat` with a message
   list, thinking off by default, model kept loaded, fixed `num_ctx`, embeddings
   on the CPU, stable prompt prefix. Stop storing intent output and remove the
   stored rows. The resident model is picked by measurement on the PC (absorbs
   2.5).
-- [ ] C3 The native loop as the front door. Finish and test
+- [x] C3 The native loop as the front door (C3a to C3f shipped; deleting the
+  old path still waits for the gate). Finish and test
   `NativeToolOrchestrator`, put it behind a setting at the single
   `control_center.run` seam, add schema checks, one retry, repeat and step
   caps. Old intent call, keyword lists and JSON-repair loop are deleted only
   after the gate (absorbs 2.6).
-- [ ] C4 Short tool list and tool lookup. About a dozen always-on tools with
-  full schemas; the rest found through a lookup tool.
+- [x] C4 Short tool list and tool lookup (C4a tool context, C4b tiers: 16
+  always-on tools with full schemas, 12 found through a lookup tool, 4 refused
+  until the approval cards in C7 exist).
 - [ ] C5 Specialists as skills plus tools. Coding, self-repair and writing
   instructions become skill files loaded on demand. The verified-edit pipeline
   stays as code and becomes a tool. One specialist at a time, golden set run
@@ -207,6 +211,14 @@ the gate.
   with the UI overhaul packages.
 - [ ] C8 PC test: cache save and restore on `llama-server` across a model swap.
   Waits for the hold on PC runs to lift.
+
+**Folder access** ([contract](../architecture/folder-access.md)).
+
+- [x] F1 Safe defaults and the base folders
+- [x] F2 One path check for the file tools, the indexer and memory export
+- [x] F3 Folder requests and owner-approved, expiring grants
+- [ ] F4 Inbox page: requests in plain words, live grants, revoke, short guide
+- [ ] F2b The routes F2 did not cover (see open follow-ups)
 
 **Foundations, independent of the above.**
 
@@ -251,6 +263,45 @@ provider by rule and the log shows it.
   [`docs/benchmarks/golden.md`](../benchmarks/golden.md).
 - A high-effort independent review is used for C3a and the stage gate only.
   C3b and C3c get an independent review at medium.
+- Later the same day, new loop with tool tiers (C4b branch, before merge): 30
+  of 32 cases passed all three runs. The two that failed all three are
+  `tool-document-search` and `followup-yes-do-it`.
+- The 29 owner cases (the owner's July messages) were run once on the new
+  loop: 28 ran and 19 passed. One run is a first reading, not a pass rate.
+- Not measured yet: all 61 cases three times on `main`; first-token time
+  (nothing streams until C7); any model other than `qwen3:8b`; guests on the
+  new loop; the heavy provider.
+
+**Open follow-ups (November 22, 2026), in the order they will be taken.**
+
+1. C1e: the golden runner saves the reply and the failed expectation for each
+   failed case in the sandbox folder and prints the reason in the table. Then
+   the unexplained owner-case failures are read: two requests for long text
+   (`owner-story-great-war`, `owner-boat-sling-cannon`) get replies of only
+   about 50 to 60 tokens, and five failures have not been examined
+   (`owner-codebase-question`, `owner-odd-numbers-script`,
+   `owner-story-analyze-wordcount`, `owner-boat-more-depth`,
+   `owner-bugreports-feature`). `owner-which-model` fails in the sandbox
+   because the sandbox has no facts file.
+2. All 61 cases, three runs, sandboxed, on `main`; table recorded here.
+3. F4, then F2b: the conversation export route, the document upload and
+   delete routes, and direct memory export and import go behind the path
+   check; a relative `folders.base` is anchored to the project root, not the
+   working directory.
+4. Two cases fail on every run: a document question is answered without
+   searching, and "yes please do that" runs a document search.
+5. Prompt size: every turn starts at about 3,000 prompt tokens out of 8,192,
+   mostly the 16 tool descriptions. Trim.
+6. C5 skills, C6 escalation by rule, C7 streaming, stop button and approval
+   cards (C7 unblocks the four refused tools; guests move to the new loop only
+   once it has guest tool limits).
+7. Memory (2.8): the sqlite-vec and FTS5 claims from the outside report are
+   checked against primary sources before the brief. Core memory facts and the
+   knowledge log do not reach the turn context yet, and the old
+   remember/recall rule stores a whole message as a fact.
+8. 2.3 single `wits` command, then 2.11 self-update.
+9. Stage 1 leftovers (pilot wiring for 1.8, the "can wait" items from the gate
+   review) and Stage 0 (0.4b, 0.6, 0.5, on hold with the heavy runs).
 
 ### Stage 3 — Harness in, completed (1 week)
 

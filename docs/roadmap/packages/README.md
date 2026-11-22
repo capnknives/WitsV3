@@ -1,7 +1,7 @@
 ---
 title: "WitsV3 Work Packages"
 created: "2026-11-21"
-last_updated: "2026-11-21"
+last_updated: "2026-11-22"
 status: "active"
 ---
 
@@ -102,6 +102,8 @@ Briefs are written after the Stage 1 gate. Conversation core briefs are in
 | C1a | Turn metrics ([brief](stage-2-core.md)) | Sonnet | — | One line per turn; no text stored; suite still green |
 | C1b | Golden test set ([brief](stage-2-core.md)) | Sonnet | — | 30 cases load; checks pass and fail correctly without a model |
 | C1c | Golden runs in a sandbox ([brief](stage-2-core.md)) | Sonnet | C1a, C1b | No path outside the sandbox; per-case timeout |
+| C1d | Owner regression cases (shipped, PR #70) | Sonnet | C1b | 29 owner messages as cases; 61 in all |
+| C1e | Golden runner records why a case failed | Sonnet | C1c | Reply and failed expectation saved in the sandbox; reason in the table |
 | C2a | Chat serving settings ([brief](stage-2-core.md)) | Sonnet | C1a | `num_ctx`, `keep_alive`, `think` and CPU embeddings in the payloads |
 | C2b | Stable prompt prefix ([brief](stage-2-core.md)) | Sonnet | — | Prefix fingerprint equal across turns |
 | C2c | Remove stored intent rows ([brief](stage-2-core.md)) | Sonnet | — | Dry run and apply tested on a temp file |
@@ -111,6 +113,7 @@ Briefs are written after the Stage 1 gate. Conversation core briefs are in
 | C3c | The front door setting ([brief](stage-2-core.md)) | Opus. Independent review, medium | C3b | The "software" sentence gets a direct reply on `native` |
 | C3d | As-sent history ([brief](stage-2-core.md)) | Opus | C3b | Prefix equal across turns with history |
 | C3e | One resident model, clean tool arguments (shipped, PR #60) | Sonnet | C3b | — |
+| C3f | Only remembered facts in the turn context (shipped, PR #69) | See the PR | C3d | — |
 | C4a | Tool context ([brief](stage-2-core.md)) | Opus. Independent review, medium | C3d | Tools get the session; the model cannot set its role |
 | C4b | Tool tiers and lookup ([brief](stage-2-core.md)) | Opus. Independent review, medium | C4a | Fixed tool list; risky tools refused until C7 |
 
@@ -122,6 +125,7 @@ Folder access ([contract](../../architecture/folder-access.md), [briefs](folder-
 | F2 | One path check | Opus. Independent review, medium | F1 | One test per rule; secrets refused everywhere |
 | F3 | Requests and grants | Opus. Independent review, medium | F2 | No grant without a resolved approval |
 | F4 | Inbox page and guide | Sonnet | F3 | Grants listed and revocable from the phone |
+| F2b | Remaining routes behind the path check; `folders.base` anchored to the project root | Opus. Independent review, medium | F2 | Export, upload, delete and memory import refuse a path the check refuses |
 
 Foundations, independent of the conversation core:
 
