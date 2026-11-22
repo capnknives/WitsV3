@@ -554,9 +554,8 @@ failure. The model never chooses its own role.
 - An `owner_approval` tool called by either route gets a `reject` verdict that
   says owner approval is needed and is not available yet.
 - A `tool_call` event always carries the real tool name.
-- Descriptions for the `always` tier are rewritten to say when to use the tool
-  and when not to, each with one or two short argument examples. No parameter
-  description under 40 characters is left in that tier.
+- `always` descriptions (C4d): one short sentence, at most one "Not for ..." and one example; parameter descriptions are phrases (the 40-character floor is withdrawn).
+- The sent schema drops `title`, `default`, `examples`, `additionalProperties` and empty `required` (the guard keeps the full schema); payload at most 8,800 characters, 800 per tool.
 
 ## WP C3d: As-sent history
 
