@@ -17,6 +17,7 @@ Path layout for runtime data: [`docs/architecture/paths-and-layout.md`](../docs/
 | `setup_mcp_servers.py` | Configure MCP server entries |
 | `clone_mcp_servers.py` | Clone optional MCP repos into `mcp_servers/` |
 | `debug_init.py` | Step-through Wits init (config, LLM, tools, memory) |
+| `show_owner_token_qr.py` | Show the owner token (`WITSV3_WEB_TOKEN` from `.env`) as a console QR for phone sign-in: double-click `show_owner_token_qr.bat` or run `.venv\Scripts\python.exe scripts/show_owner_token_qr.py` (`--text` also prints it, `--no-wait` skips the clear). The QR is the owner key: anyone who sees the screen can sign in as owner. |
 
 ## Smoke & verification
 
