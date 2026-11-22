@@ -291,7 +291,7 @@ async def test_goal_left_out_when_it_equals_the_message():
     orch, llm, _ = _make([LLMResponse("Hi.")])
     await _run(orch, "  hello there ")
     last = llm.calls[0]["messages"][-1].content
-    assert "goal:" not in last and "documents:" in last
+    assert "goal:" not in last and "documents:" not in last
 
 
 async def _two_turns_with_history() -> tuple:
