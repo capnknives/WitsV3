@@ -38,7 +38,13 @@ class SearchArchivalMemoryTool(BaseTool):
     def __init__(self):
         super().__init__(
             name="search_archival_memory",
-            description="Search long-term archival memory (FAISS/basic backend)",
+            description=(
+                "Search your long-term memory of earlier conversations and saved notes. "
+                "Use it when the owner asks what they told you before or refers to a past "
+                "chat. Not for the owner's documents (use document_search) or this "
+                'conversation (use read_conversation_history). Examples: {"query": '
+                '"favorite book"}, {"query": "printer model", "limit": 3}.'
+            ),
         )
         self.memory_manager = None
 
@@ -61,8 +67,16 @@ class SearchArchivalMemoryTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Search query"},
-                "limit": {"type": "integer", "default": 5},
+                "query": {
+                    "type": "string",
+                    "description": "What to recall, in a few plain words, such as "
+                    "'favorite book'",
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 5,
+                    "description": "How many memories to return; leave it out for the " "usual 5",
+                },
             },
             "required": ["query"],
         }

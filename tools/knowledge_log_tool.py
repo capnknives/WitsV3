@@ -50,11 +50,11 @@ class KnowledgeLogAddFactTool(BaseTool):
         super().__init__(
             name="knowledge_log_add_fact",
             description=(
-                "Owner-only: save a durable fact about the project or owner for "
-                "future reference (e.g. hardware, defaults, standing preferences). "
-                "Not for guest-specific info — use guest profile facts for that, "
-                "and not for one-off conversational recall — use it only when the "
-                "owner explicitly asks to remember something lasting."
+                "Owner-only: save a lasting fact about the project or owner (hardware, "
+                "defaults, standing preferences). Use it only when the owner explicitly "
+                "asks you to remember something lasting. Not for guest details or "
+                'one-off chat. Examples: {"text": "The GPU is an RTX 3060"}, '
+                '{"text": "Prefers metric units", "category": "preference"}.'
             ),
         )
         self.store = KnowledgeLogStore()
@@ -74,11 +74,12 @@ class KnowledgeLogAddFactTool(BaseTool):
             "properties": {
                 "text": {
                     "type": "string",
-                    "description": "The durable fact to remember",
+                    "description": "The fact to keep, as one short sentence, such as "
+                    "'The NAS is at 192.168.1.20'",
                 },
                 "category": {
                     "type": "string",
-                    "description": "project|preference|other",
+                    "description": "One of 'project' (the default), 'preference' or " "'other'",
                     "default": "project",
                 },
             },

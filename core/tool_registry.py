@@ -546,7 +546,15 @@ class CalculatorTool(BaseTool):
     """Simple calculator tool."""
 
     def __init__(self):
-        super().__init__(name="calculator", description="Perform basic mathematical calculations")
+        super().__init__(
+            name="calculator",
+            description=(
+                "Evaluate an arithmetic expression exactly (+ - * / and brackets, or "
+                "sqrt(n)). Use it for any calculation the owner asks for instead of "
+                "working it out yourself. Not for unit conversion or symbolic algebra. "
+                'Examples: {"expression": "12 * 7 + 5"}, {"expression": "sqrt(144)"}.'
+            ),
+        )
 
     async def execute(self, expression: str = "", **kwargs) -> str:
         """Execute calculation."""
@@ -592,7 +600,8 @@ class CalculatorTool(BaseTool):
             "properties": {
                 "expression": {
                     "type": "string",
-                    "description": "Mathematical expression to evaluate (e.g., '2 + 2', '10 * 5')",
+                    "description": "The arithmetic to evaluate, digits and operators "
+                    "only, such as '(3 + 4) * 2'",
                 }
             },
             "required": ["expression"],

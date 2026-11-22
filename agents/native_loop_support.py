@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 NATIVE_SYSTEM_PROMPT = (
     "You are WitsV3, a local assistant. Use the tools when they help, then answer the "
     "user plainly. Call tools only through the structured tool-call format. Anything "
-    "under 'Context for this turn:' in the user's message is background for this turn."
+    "under 'Context for this turn:' in the user's message is background for this turn. "
+    "If none of the listed tools fits the request, call find_tools with a few words "
+    "describing what is needed before answering that it cannot be done."
 )
 
 STEP_LIMIT_ERROR = "Could not complete within the step limit."

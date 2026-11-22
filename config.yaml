@@ -39,6 +39,13 @@ conversation:
   max_steps: 8
   max_identical_calls: 2
   max_schema_retries: 1
+  tools:  # native loop tiers; every other registered tool is found with find_tools
+    always: [read_file, list_directory, write_file, datetime, calculator, web_search,
+      document_search, search_archival_memory, read_conversation_history,
+      knowledge_log_add_fact, apply_code_fix, diagnose_log_errors, run_test_suite,
+      python_execute, find_tools, use_tool]
+    # the four below are refused even if removed here; listed names add to them
+    owner_approval: [restart_app, network_control, guest_set_age_band, ask_claude]
 workspace:
   enabled: false  # needs WITSV3_WEB_TOKEN in .env; the ntfy topic is WITSV3_NTFY_TOPIC in .env
   db_path: var/data/workspace.db

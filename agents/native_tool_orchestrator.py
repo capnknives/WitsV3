@@ -6,6 +6,7 @@ through the tool-call guard (core/tool_call_guard.py).
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from agents.base_orchestrator_agent import BaseOrchestratorAgent
@@ -14,7 +15,6 @@ from agents.native_loop_support import (
     STEP_LIMIT_ERROR,
     as_sent_history,
     assistant_tool_message,
-    build_tool_specs,
     build_turn_context,
     decode_arguments,
     estimate_tokens,
@@ -25,6 +25,15 @@ from agents.native_loop_support import (
     tool_call_event,
     tool_reply,
 )
+from agents.tool_tiers import (
+    FIND_TOOLS,
+    LOOP_TOOLS,
+    ApprovalGate,
+    TierSpecs,
+    build_tier_specs,
+    find_tools_reply,
+    route_call,
+)
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface, LLMMessage
 from core.memory_manager import MemoryManager
@@ -32,7 +41,7 @@ from core.prompt_prefix import build_messages, context_block
 from core.schemas import ConversationHistory
 from core.tool_call_guard import OUT_OF_STEPS, TurnGuard
 from core.tool_context import ToolContext, use_tool_context
-from core.turn_metrics import current_turn
+from core.turn_metrics import current_turn, record_tool
 
 
 class NativeToolOrchestrator(BaseOrchestratorAgent):
@@ -49,10 +58,14 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         tool_registry: Any | None = None,
     ):
         super().__init__(agent_name, config, llm_interface, memory_manager, tool_registry)
-        self.available_tools, self._tool_schemas = self._get_tool_specs()
+        self._load_tool_specs()
 
-    def _get_tool_specs(self) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
-        return build_tool_specs(self.tool_registry, self._ORCHESTRATOR_TOOL_EXCLUDE)
+    def _load_tool_specs(self) -> None:
+        """Resolve the tool tiers; only the ``always`` tier is sent to the model."""
+        self._specs: TierSpecs = build_tier_specs(
+            self.tool_registry, self._ORCHESTRATOR_TOOL_EXCLUDE, self.config.conversation.tools
+        )
+        self.available_tools, self._tool_schemas = self._specs.payload, self._specs.schemas
 
     def _ollama_tools_payload(self) -> list[dict[str, Any]]:
         return self.available_tools
@@ -69,7 +82,7 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         session_id: str | None = None,
         **kwargs,
     ):
-        self.available_tools, self._tool_schemas = self._get_tool_specs()
+        self._load_tool_specs()
         goal = user_input
         self.current_iteration = 0
         # Reason: one resident model, never the router, so no turn can ask for a model the
@@ -142,6 +155,7 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         messages = build_messages(NATIVE_SYSTEM_PROMPT, "", window, user_input, turn_context)
         conv = self.config.conversation
         guard = TurnGuard(conv.max_steps, conv.max_identical_calls, conv.max_schema_retries)
+        approvals = ApprovalGate()
 
         # Reason: rounds 1..max_steps may run tools and round max_steps+1 may still answer;
         # the guard turns any later tool call into `stop`, so this bound is only a backstop.
@@ -154,13 +168,23 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                 yield self.stream_error(model_call_error(exc, self._session_model))
                 return
             calls = response.tool_calls or []
-            stop_message = None
+            stop_message, stop_answers = None, False
             if calls:
                 # Reason: the model must see what it asked for before each reply, refused
                 # calls included, so it can tell which reply answers which call.
                 messages.append(assistant_tool_message(response.content or "", calls))
                 for index, tc in enumerate(calls):
-                    verdict = guard.check(tc.get("name"), tc.get("arguments"), self._tool_schemas)
+                    # Reason: use_tool is unwrapped first so every rule, count and event
+                    # applies to the real tool name.
+                    route = route_call(tc.get("name"), tc.get("arguments"), self._specs.tiers)
+                    if route.reject:
+                        messages.append(tool_reply(tc, route.reject))
+                        continue
+                    if self._specs.tiers.approval_name(route.name):
+                        verdict = approvals.check(route.name)
+                        stop_answers = verdict.action == "stop"
+                    else:
+                        verdict = guard.check(route.name, route.arguments, self._tool_schemas)
                     if verdict.action == "stop":
                         stop_message = verdict.message
                         # Reason: every call in the assistant message needs a reply, or
@@ -171,7 +195,16 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                     if verdict.action == "reject":
                         messages.append(tool_reply(tc, verdict.message))
                         continue
-                    async for event in self._run_tool(tc, react_state, messages):
+                    if route.name == FIND_TOOLS:
+                        yield self._find_tools(tc, route.arguments, react_state, messages)
+                        continue
+                    if route.name in LOOP_TOOLS:
+                        # Reason: use_tool must have been unwrapped by now; never hand a
+                        # loop-only name to the registry.
+                        messages.append(tool_reply(tc, f"'{route.name}' cannot run here."))
+                        continue
+                    run = self._run_tool(tc, react_state, messages, route.name, route.arguments)
+                    async for event in run:
                         yield event
             else:
                 text = response.content or ""
@@ -195,6 +228,10 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                     messages.append(
                         LLMMessage(role="user", content=react_state["observations"][-1])
                     )
+            if stop_answers:
+                # Reason: a refused approval is an answer to the owner, not a failure.
+                yield self.stream_result(stop_message)
+                return
             if stop_message is not None and stop_message != OUT_OF_STEPS:
                 yield self.stream_error(stop_message)
                 return
@@ -213,13 +250,32 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             temperature=self.REASONING_TEMPERATURE,
         )
 
+    def _find_tools(
+        self, tc: dict[str, Any], arguments: Any, state: dict[str, Any], messages: list
+    ) -> Any:
+        """Answer a guard-approved find_tools call from the lookup tier."""
+        started = time.perf_counter()
+        query = (decode_arguments(arguments) or {}).get("query", "")
+        observation = find_tools_reply(query, self._specs.lookup)
+        record_tool(FIND_TOOLS, True, (time.perf_counter() - started) * 1000)
+        state["observations"].append(observation)
+        messages.append(tool_reply(tc, observation))
+        return tool_call_event(self.agent_name, FIND_TOOLS, True)
+
     async def _run_tool(
-        self, tc: dict[str, Any], state: dict[str, Any], messages: list[LLMMessage]
+        self,
+        tc: dict[str, Any],
+        state: dict[str, Any],
+        messages: list[LLMMessage],
+        tool_name: str,
+        arguments: Any,
     ):
-        """Run one guard-approved call and answer it with a role "tool" message."""
-        tool_name = tc.get("name", "")
+        """Run one guard-approved call and answer ``tc`` with a role "tool" message.
+
+        ``tool_name`` and ``arguments`` are the real tool's, after use_tool is unwrapped.
+        """
         # Reason: the guard accepted these arguments, and it reads null as no arguments.
-        tool_args = decode_arguments(tc.get("arguments")) or {}
+        tool_args = decode_arguments(arguments) or {}
         block_reason = self._preflight_tool_call(tool_name, tool_args, state)
         if block_reason:
             observation = block_reason

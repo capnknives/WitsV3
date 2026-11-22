@@ -107,6 +107,8 @@ def _tools(*calls: dict) -> LLMResponse:
 
 def _make(replies: list[LLMResponse], **conversation) -> tuple:
     config = WitsV3Config()
+    # Reason: these tests are about the loop, so every fake tool is sent directly.
+    config.conversation.tools.always = ["boom", "clock", "lookup", "sad"]
     for key, value in conversation.items():
         setattr(config.conversation, key, value)
     llm = _ScriptedLLM(replies)

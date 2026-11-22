@@ -307,9 +307,13 @@ class DocumentSearchTool(_DocumentToolBase):
         super().__init__(
             name="document_search",
             description=(
-                "Search the user's ingested documents by meaning and return the "
-                "most relevant passages with their source files. Use this when "
-                "the user asks about their documents, notes, or files."
+                "Call this whenever the owner asks about or to search 'my documents', "
+                "'my notes' or 'my files' without giving a specific file path. It "
+                "searches their indexed documents by meaning and returns the best "
+                "passages with source files; no results is a valid answer to report. "
+                "Not for the web (use web_search) or one known file path (use read_file). "
+                'Examples: {"query": "garden layout"}, {"query": "budget", '
+                '"file_name": "plans.md"}.'
             ),
         )
 
@@ -457,16 +461,19 @@ class DocumentSearchTool(_DocumentToolBase):
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "What to look for in the documents (natural language)",
+                        "description": "What to look for in the documents, in plain "
+                        "words, such as 'garden layout'",
                     },
                     "max_results": {
                         "type": "integer",
-                        "description": "Maximum number of passages to return",
+                        "description": "How many passages to return; leave it out for "
+                        "the usual 5",
                         "default": 5,
                     },
                     "min_relevance": {
                         "type": "number",
-                        "description": "Minimum similarity score (0-1) for a passage to be included",
+                        "description": "Lowest similarity score (0 to 1) a passage needs "
+                        "to be included; usually leave it out",
                         "default": 0.3,
                     },
                     "file_name": {

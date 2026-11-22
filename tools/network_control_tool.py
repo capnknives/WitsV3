@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 class NetworkControlTool(BaseTool):
     """Tool for controlling network access permissions."""
 
+    requires_owner_approval = True
+
     def __init__(self):
         """Initialize the network control tool."""
         super().__init__(

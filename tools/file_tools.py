@@ -16,7 +16,15 @@ class FileReadTool(BaseTool):
     """Tool for reading files."""
 
     def __init__(self):
-        super().__init__(name="read_file", description="Read the contents of a text file")
+        super().__init__(
+            name="read_file",
+            description=(
+                "Read a text file and return its contents. Use it when the owner names a "
+                "file to read, quote or explain. Not for searching the owner's indexed "
+                "documents (use document_search) or listing a folder (use list_directory). "
+                'Examples: {"file_path": "README.md"}, {"file_path": "docs/notes.txt"}.'
+            ),
+        )
 
     async def execute(
         self, file_path: str, encoding: str = "utf-8", user_role: str = "owner"
@@ -64,10 +72,15 @@ class FileReadTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "file_path": {"type": "string", "description": "Path to the file to read"},
+                "file_path": {
+                    "type": "string",
+                    "description": "Path of the file to read, relative to the project "
+                    "folder or absolute, such as 'README.md'",
+                },
                 "encoding": {
                     "type": "string",
-                    "description": "File encoding (default: utf-8)",
+                    "description": "Text encoding of the file; leave it out for the "
+                    "usual 'utf-8'",
                     "default": "utf-8",
                 },
             },
@@ -79,7 +92,17 @@ class FileWriteTool(BaseTool):
     """Tool for writing files."""
 
     def __init__(self):
-        super().__init__(name="write_file", description="Write content to a text file")
+        super().__init__(
+            name="write_file",
+            description=(
+                "Create or overwrite a text file with the given content. Call it whenever "
+                "the owner asks to create, save or write a script, file, page or website: "
+                "write the file, do not just print the code in your reply. Relative paths "
+                "are fine and missing folders are created. Not for reading files. "
+                'Examples: {"file_path": "scripts/rename.py", "content": "print(1)"}, '
+                '{"file_path": "site/index.html", "content": "<h1>Hi</h1>"}.'
+            ),
+        )
 
     async def execute(
         self, file_path: str, content: str, encoding: str = "utf-8", mode: str = "w"
@@ -134,16 +157,25 @@ class FileWriteTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "file_path": {"type": "string", "description": "Path to the file to write"},
-                "content": {"type": "string", "description": "Content to write to the file"},
+                "file_path": {
+                    "type": "string",
+                    "description": "Path of the file to write; relative paths such as "
+                    "'scripts/backup.sh' are fine",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The full text to put in the file, such as the "
+                    "complete script or page",
+                },
                 "encoding": {
                     "type": "string",
-                    "description": "File encoding (default: utf-8)",
+                    "description": "Text encoding to write with; leave it out for the "
+                    "usual 'utf-8'",
                     "default": "utf-8",
                 },
                 "mode": {
                     "type": "string",
-                    "description": "Write mode: 'w' for overwrite, 'a' for append",
+                    "description": "'w' replaces the file (the default), 'a' appends " "to its end",
                     "default": "w",
                 },
             },
@@ -155,7 +187,15 @@ class ListDirectoryTool(BaseTool):
     """Tool for listing directory contents."""
 
     def __init__(self):
-        super().__init__(name="list_directory", description="List the contents of a directory")
+        super().__init__(
+            name="list_directory",
+            description=(
+                "List the files and folders in a directory with their sizes. Use it when "
+                "the owner asks what is in a folder or you need a file's exact name. Not "
+                "for reading a file's contents (use read_file). "
+                'Examples: {"directory_path": "docs"}, {"directory_path": "."}.'
+            ),
+        )
 
     async def execute(
         self, directory_path: str, include_hidden: bool = False, user_role: str = "owner"
@@ -217,11 +257,13 @@ class ListDirectoryTool(BaseTool):
             "properties": {
                 "directory_path": {
                     "type": "string",
-                    "description": "Path to the directory to list",
+                    "description": "Path of the folder to list, relative to the project "
+                    "folder, such as 'docs' or '.'",
                 },
                 "include_hidden": {
                     "type": "boolean",
-                    "description": "Whether to include hidden files and directories",
+                    "description": "true to also list hidden entries whose names start "
+                    "with a dot",
                     "default": False,
                 },
             },
@@ -233,7 +275,14 @@ class DateTimeTool(BaseTool):
     """Tool for date and time operations."""
 
     def __init__(self):
-        super().__init__(name="datetime", description="Get current date and time information")
+        super().__init__(
+            name="datetime",
+            description=(
+                "Get the current local date and time. Use it whenever the answer depends "
+                "on today's date, the day of the week or the time now. Not for date maths "
+                'on dates the owner gives. Examples: {}, {"format_string": "%A %d %B %Y"}.'
+            ),
+        )
 
     async def execute(self, format_string: str = "%Y-%m-%d %H:%M:%S") -> str:
         """
@@ -263,7 +312,8 @@ class DateTimeTool(BaseTool):
             "properties": {
                 "format_string": {
                     "type": "string",
-                    "description": "Datetime format string (default: '%Y-%m-%d %H:%M:%S')",
+                    "description": "Python strftime format; leave it out for "
+                    "'%Y-%m-%d %H:%M:%S'",
                     "default": "%Y-%m-%d %H:%M:%S",
                 }
             },
