@@ -4,12 +4,14 @@ WITS Control Center Agent for WitsV3.
 The main entry point that handles user input and determines response strategy.
 """
 
+import contextlib
 import re
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.base_agent import BaseAgent
+from agents.turn_context import TurnContext, current_turn, run_in_turn, turn_for
 from agents.wcca_intent_mixin import WCCAIntentMixin
 from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 from core.config import WitsV3Config
@@ -144,6 +146,21 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         session_id: str | None = None,
         **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
+        """Run one turn with its caller role bound per turn (RT-4), never on ``self``."""
+        turn = TurnContext.for_request(**kwargs)
+        inner = self._run_turn(turn, user_input, conversation_history, session_id, **kwargs)
+        async with contextlib.aclosing(run_in_turn(turn, inner)) as events:
+            async for event in events:
+                yield event
+
+    async def _run_turn(
+        self,
+        turn: TurnContext,
+        user_input: str,
+        conversation_history: ConversationHistory | None = None,
+        session_id: str | None = None,
+        **kwargs,
+    ) -> AsyncGenerator[StreamData, None]:
         """
         Process user input and determine the appropriate response.
 
@@ -156,15 +173,19 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         Yields:
             StreamData objects showing the processing steps
         """
+        if current_turn() is not turn:
+            # Reason: called directly (not via run()); bind ``turn`` so deep callees
+            # such as store_memory see the same role as this body.
+            inner = self._run_turn(turn, user_input, conversation_history, session_id, **kwargs)
+            async with contextlib.aclosing(run_in_turn(turn, inner)) as events:
+                async for event in events:
+                    yield event
+            return
+
         if not session_id:
             session_id = str(uuid.uuid4())
 
-        user_role = kwargs.get("user_role", "owner")
-        guest_profile = kwargs.get("guest_profile")
-        self._request_user_role = user_role
-        self._request_guest_profile = guest_profile
-        self._skip_global_memory_store = user_role == "guest"
-        self._guest_personalization_context = kwargs.get("guest_personalization_context", "")
+        user_role = turn.user_role
 
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
 
@@ -224,7 +245,9 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
 
                 core_block = get_core_memory_store(self.config).as_prompt_block()
                 if core_block:
-                    self._guest_personalization_context = f"{self._guest_personalization_context}\n\nCORE MEMORY:\n{core_block}".strip()
+                    turn.guest_personalization_context = (
+                        f"{turn.guest_personalization_context}\n\nCORE MEMORY:\n{core_block}"
+                    ).strip()
 
             # Store user input in memory
             await self.store_memory(
@@ -327,10 +350,7 @@ User input: {user_input}
         routing_destination = intent_analysis.get("routing_destination")
 
         # Deterministic classifier short-circuits (owner-only direct tools).
-        if (
-            getattr(self, "_request_user_role", "owner") == "owner"
-            and routing_destination == "guest_chat_history"
-        ):
+        if turn_for(self).user_role == "owner" and routing_destination == "guest_chat_history":
             yield self.stream_thinking("Reading guest chat audit log...")
             from tools.guest_audit_tool import GuestAuditSummaryTool
 
@@ -340,10 +360,7 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
-        if (
-            getattr(self, "_request_user_role", "owner") == "owner"
-            and routing_destination == "guest_profile"
-        ):
+        if turn_for(self).user_role == "owner" and routing_destination == "guest_profile":
             yield self.stream_thinking("Loading saved guest profile (no web search)...")
             from tools.guest_profile_tool import GuestUserProfileSummaryTool
 
@@ -353,10 +370,7 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
-        if (
-            getattr(self, "_request_user_role", "owner") == "owner"
-            and routing_destination == "knowledge_log"
-        ):
+        if turn_for(self).user_role == "owner" and routing_destination == "knowledge_log":
             yield self.stream_thinking("Loading accumulated project knowledge...")
             from tools.knowledge_log_tool import KnowledgeLogSummaryTool
 
@@ -367,7 +381,7 @@ User input: {user_input}
 
         if routing_destination == "read_file_direct":
             file_path = intent_analysis.get("file_path", "")
-            user_role = getattr(self, "_request_user_role", "owner")
+            user_role = turn_for(self).user_role
             from core.filesystem_policy import configured_read_roots, resolve_allowed_read_path
 
             yield self.stream_thinking(f"Reading {file_path}...")
@@ -426,7 +440,7 @@ User input: {user_input}
                     conversation_history=conversation_history,
                     session_id=session_id,
                     playbook_id=playbook_id,
-                    user_role=getattr(self, "_request_user_role", "owner"),
+                    user_role=turn_for(self).user_role,
                 ):
                     yield stream_data
                 return
@@ -446,9 +460,9 @@ User input: {user_input}
                 user_input=user_input,
                 conversation_history=conversation_history,
                 session_id=session_id,
-                user_role=getattr(self, "_request_user_role", "owner"),
-                guest_profile=getattr(self, "_request_guest_profile", None),
-                guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
+                user_role=turn_for(self).user_role,
+                guest_profile=turn_for(self).guest_profile,
+                guest_personalization_context=turn_for(self).guest_personalization_context,
                 preferred_tool=intent_analysis.get("preferred_tool", ""),
             ):
                 yield stream_data
@@ -504,7 +518,7 @@ User input: {user_input}
         # unconditionally `return` once entered, so a specialized agent match
         # checked afterward would never actually be reached in practice.
         # Guests stay on chat/orchestrator with the filtered tool allowlist.
-        if getattr(self, "_request_user_role", "owner") != "guest" and (
+        if turn_for(self).user_role != "guest" and (
             suggested_response == "specialized" or complexity in ["moderate", "complex", "research"]
         ):
             # A continuation phrase ("make it", "write it all") carries no
@@ -544,7 +558,7 @@ User input: {user_input}
 
         # Enhanced capabilities: skip extra compose LLM — delegate straight to orchestrator.
         if (
-            getattr(self, "_request_user_role", "owner") != "guest"
+            turn_for(self).user_role != "guest"
             and self.has_enhanced_capabilities
             and requires_tools
             and complexity in ["moderate", "complex", "research"]
@@ -561,9 +575,9 @@ User input: {user_input}
                 user_input=user_input,
                 conversation_history=conversation_history,
                 session_id=session_id,
-                user_role=getattr(self, "_request_user_role", "owner"),
-                guest_profile=getattr(self, "_request_guest_profile", None),
-                guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
+                user_role=turn_for(self).user_role,
+                guest_profile=turn_for(self).guest_profile,
+                guest_personalization_context=turn_for(self).guest_personalization_context,
                 preferred_tool=intent_analysis.get("preferred_tool", ""),
             ):
                 yield stream_data
@@ -582,9 +596,9 @@ User input: {user_input}
                 user_input=user_input,
                 conversation_history=conversation_history,
                 session_id=session_id,
-                user_role=getattr(self, "_request_user_role", "owner"),
-                guest_profile=getattr(self, "_request_guest_profile", None),
-                guest_personalization_context=getattr(self, "_guest_personalization_context", ""),
+                user_role=turn_for(self).user_role,
+                guest_profile=turn_for(self).guest_profile,
+                guest_personalization_context=turn_for(self).guest_personalization_context,
                 preferred_tool=intent_analysis.get("preferred_tool", ""),
             ):
                 yield stream_data
@@ -654,11 +668,11 @@ User input: {user_input}
         yield self.stream_thinking("Generating greeting reply...")
 
         guest_rules_block = ""
-        if getattr(self, "_request_user_role", "owner") == "guest":
+        if turn_for(self).user_role == "guest":
             from core.content_policy import guest_system_prompt_slice
 
             age_band = "teen"
-            guest_profile = getattr(self, "_request_guest_profile", None) or {}
+            guest_profile = turn_for(self).guest_profile or {}
             if guest_profile.get("age_band"):
                 age_band = guest_profile["age_band"]
             guest_rules_block = f"\n{guest_system_prompt_slice(age_band)}\n"
