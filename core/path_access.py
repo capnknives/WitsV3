@@ -107,7 +107,9 @@ async def _no_grants() -> Sequence[Grant]:
     return ()
 
 
-# Reason: F3 swaps this for the folder_grants table; until then nothing is granted.
+# Reason: core.workspace.folder_access.activate() swaps in the live folder_grants reader at
+# workspace start-up; with the workspace off nothing is granted. Synchronous callers of
+# enforce() (filesystem_policy.resolve_allowed_read_path) never consult it and see no grants.
 grants_provider: Callable[[], Awaitable[Sequence[Grant]]] = _no_grants
 
 

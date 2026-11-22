@@ -35,6 +35,7 @@ logger = logging.getLogger("WitsV3.Workspace")
 _OPTIONAL_MODULES: tuple[str, ...] = (
     "web.workspace_clients_api",
     "web.workspace_approvals_api",
+    "web.workspace_folder_api",
     "web.workspace_mcp",
     "core.workspace.notify",
 )

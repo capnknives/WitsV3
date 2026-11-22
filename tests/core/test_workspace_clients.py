@@ -67,7 +67,7 @@ class TestCreate:
         identity, token = await _new(db, scopes=["read", "write"], projects=["proj-a"], now=T0)
         assert TOKEN_RE.match(token)
         assert identity.scopes == frozenset({"read", "write"})
-        (row,) = await _rows(db, "SELECT * FROM clients")
+        (row,) = await _rows(db, "SELECT * FROM clients WHERE id != 'cli_internal_wits'")
         assert row["token_prefix"] == token[5:13]
         assert row["token_hash"] == hashlib.sha256(token.encode()).hexdigest()
         assert token[14:] not in " ".join(str(v) for v in row.values())
@@ -149,7 +149,7 @@ class TestVerify:
 
     async def test_last_seen_throttled(self, db):
         identity, token = await _new(db)
-        sql = "SELECT last_seen_at FROM clients"
+        sql = "SELECT last_seen_at FROM clients WHERE id != 'cli_internal_wits'"
         assert (await _rows(db, sql))[0]["last_seen_at"] is None
         await verify_token(db, token, now=T0)
         assert (await _rows(db, sql))[0]["last_seen_at"] == T0
@@ -196,7 +196,7 @@ class TestRevoke:
         assert appr["apr_live"] == {"id": "apr_live", "status": "cancelled", "resolved_at": T0}
         assert appr["apr_expired"]["status"] == "pending"
         assert appr["apr_done"] == {"id": "apr_done", "status": "approved", "resolved_at": T0 - 5}
-        assert len(await _rows(db, "SELECT * FROM clients")) == 2
+        assert len(await _rows(db, "SELECT * FROM clients WHERE id != 'cli_internal_wits'")) == 2
         assert await verify_token(db, token) is None
         assert await revoke_client(db, identity.id, now=T0 + 1) is False
         assert await revoke_client(db, "cli_missing") is False
@@ -214,7 +214,7 @@ class TestRevoke:
         monkeypatch.setattr(clients, "_audit_row", boom)
         with pytest.raises(RuntimeError):
             await revoke_client(db, identity.id, now=T0)
-        (row,) = await _rows(db, "SELECT revoked_at FROM clients")
+        (row,) = await _rows(db, "SELECT revoked_at FROM clients WHERE id != 'cli_internal_wits'")
         assert row["revoked_at"] is None
         assert len(await _rows(db, "SELECT * FROM task_locks")) == 1
 

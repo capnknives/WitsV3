@@ -15,6 +15,7 @@ import secrets
 import time
 import unicodedata
 from collections.abc import Awaitable, Callable, Sequence
+from typing import Any
 
 from .db import Database
 from .store import WorkspaceError
@@ -22,6 +23,7 @@ from .store import WorkspaceError
 logger = logging.getLogger(__name__)
 
 CreatedListener = Callable[[str, str], Awaitable[None]]
+InsertHook = Callable[[Any, str, int], Awaitable[None]]
 
 MAX_OPTIONS = 3
 OPTION_MAX_LEN = 40
@@ -121,6 +123,7 @@ async def create(
     flagged: int,
     *,
     now: int | None = None,
+    on_insert: InsertHook | None = None,
 ) -> dict:
     """Queue a decision for the owner and notify created-listeners after commit.
 
@@ -135,6 +138,8 @@ async def create(
         ttl_seconds: Seconds until the request expires (5 minutes to 7 days).
         flagged: Injection-guard flag for the text.
         now: Unix seconds override for tests.
+        on_insert: Optional ``await on_insert(conn, approval_id, ts)`` run inside the same
+            transaction right after the insert; raising rolls the whole create back.
 
     Returns:
         ``{approval_id, status: "pending", expires_at}``.
@@ -209,6 +214,8 @@ async def create(
                 "exp": expires,
             },
         )
+        if on_insert is not None:
+            await on_insert(conn, approval_id, ts)
         await _audit(conn, client_id, "approval.create", approval_id, "ok", ts)
     # Reason: after the context exits the row is committed and the write lock released, so a
     # listener can read the row and even write without deadlocking against this caller.
@@ -264,6 +271,11 @@ async def resolve(
         if cur.rowcount == 0:
             return None
         await _audit(conn, "owner", "approval.resolve", approval_id, status, ts)
+        # Reason: imported here because folder_access imports this module; a folder request is
+        # the one approval whose resolution acts, and only through this call in this transaction.
+        from .folder_access import grant_from_resolution
+
+        await grant_from_resolution(conn, approval_id, choice, ts)
     return {
         "id": approval_id,
         "project": row["project"],

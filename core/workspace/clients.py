@@ -28,6 +28,8 @@ VALID_SCOPES = frozenset({"read", "write", "decide:request"})
 NAME_MAX = 100
 _LAST_SEEN_INTERVAL = 60
 _PREFIX_ATTEMPTS = 8
+# Reason: inserted by migration 0002 so folder requests can own approvals; never a credential.
+INTERNAL_CLIENT_ID = "cli_internal_wits"
 
 
 @dataclass(frozen=True)
@@ -190,7 +192,9 @@ async def verify_token(
         {"p": match.group(1)},
     ) as cur:
         row = await cur.fetchone()
-    if row is None:
+    # Reason: the internal WITS row (migration 0002) only anchors foreign keys; it is never a
+    # credential, even if its placeholder hash or prefix were ever changed.
+    if row is None or row["id"] == INTERNAL_CLIENT_ID:
         return None
     if not hmac.compare_digest(_hash(token), row["token_hash"]):
         return None
@@ -217,10 +221,13 @@ async def revoke_client(db: Database, client_id: str, *, now: int | None = None)
     Rows are kept. Returns True if the client was active, False if unknown or already revoked.
     """
     ts = _now(now)
-    params = {"id": client_id, "ts": ts}
+    params = {"id": client_id, "ts": ts, "internal": INTERNAL_CLIENT_ID}
     async with db.write() as conn:
+        # Reason: revoking the internal row would cancel the owner's pending folder requests.
         cur = await conn.execute(
-            "UPDATE clients SET revoked_at = :ts WHERE id = :id AND revoked_at IS NULL", params
+            "UPDATE clients SET revoked_at = :ts WHERE id = :id AND revoked_at IS NULL"
+            " AND id != :internal",
+            params,
         )
         if cur.rowcount != 1:
             await _audit_row(conn, ts, "client.revoke", str(client_id)[:100], "not_found", "")
@@ -272,10 +279,15 @@ async def enforce_not_revoked(db: Database, client_id: str, *, now: int | None =
 
 
 async def list_clients(db: Database) -> list[dict]:
-    """List every client for the owner, newest first; no token, hash or prefix is selected."""
+    """List every client for the owner, newest first; no token, hash or prefix is selected.
+
+    The internal WITS row is left out: it is not a client the owner created or can revoke.
+    """
     async with db.read().execute(
         "SELECT id, name, scopes, projects, rate_per_min, created_at, expires_at,"
-        " last_seen_at, revoked_at FROM clients ORDER BY created_at DESC, id"
+        " last_seen_at, revoked_at FROM clients WHERE id != :internal"
+        " ORDER BY created_at DESC, id",
+        {"internal": INTERNAL_CLIENT_ID},
     ) as cur:
         rows = await cur.fetchall()
     return [
