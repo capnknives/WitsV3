@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Any
 
 from agents.orchestrator_codebase import OrchestratorCodebaseMixin
@@ -18,6 +19,8 @@ from agents.orchestrator_synthesis import OrchestratorSynthesisMixin
 from agents.routing_classifier import FILE_SAVE_SIGNALS
 from core.runtime_paths import exports_subpath, upgrade_runtime_path
 from core.schemas import ConversationHistory, StreamData
+
+_WRITTEN_PATH_RE = re.compile(r"Successfully (?:written|appended) to file: ([^\n]+)")
 
 
 class OrchestratorToolHelpersMixin(
@@ -93,13 +96,16 @@ class OrchestratorToolHelpersMixin(
             return False
         if "Successfully" not in write_obs and "written to" not in write_obs.lower():
             return False
-        from core.path_access import resolve_write_path
-
+        # Reason: stat only the path write_file reported, which already passed check(write).
+        match = _WRITTEN_PATH_RE.search(write_obs)
+        if not match:
+            return False
         try:
-            # Reason: verify where write_file actually wrote (projects folder for relative paths).
-            resolved = resolve_write_path(file_path).resolve()
-            return resolved.is_file() and resolved.stat().st_size >= min_bytes
-        except (OSError, PermissionError):
+            written = Path(match.group(1).strip())
+            if written.name != Path(file_path).name:
+                return False
+            return written.is_file() and written.stat().st_size >= min_bytes
+        except (OSError, ValueError):
             return False
 
     async def _auto_write_saved_conversation(

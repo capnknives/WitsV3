@@ -14,7 +14,7 @@ WIN = Roots(
     inbox=r"D:\WITS\inbox",
     outbox=r"D:\WITS\outbox",
     projects=r"D:\WITS\projects",
-    repo=r"D:\Code\WitsV3",
+    repo=r"C:\Code\WitsV3",
     home=r"C:\Users\andy",
     windows=True,
 )
@@ -46,9 +46,9 @@ def test_rule1_never_beats_everything_and_is_not_requestable():
 
 
 def test_rule2_guest_keeps_role_roots_and_cannot_request():
-    guest = Roots(**{**WIN.__dict__, "role_roots": (r"D:\Code\WitsV3",)})
-    assert _win(r"D:\Code\WitsV3\docs\a.md", role="guest", roots=guest).allowed
-    for path, mode in [(r"D:\WITS\inbox\a.txt", "read"), (r"D:\Code\WitsV3\a.md", "write")]:
+    guest = Roots(**{**WIN.__dict__, "role_roots": (r"C:\Code\WitsV3",)})
+    assert _win(r"C:\Code\WitsV3\docs\a.md", role="guest", roots=guest).allowed
+    for path, mode in [(r"D:\WITS\inbox\a.txt", "read"), (r"C:\Code\WitsV3\a.md", "write")]:
         d = _win(path, mode, role="guest", grants=ALL_WIN, roots=guest)
         assert not d.allowed and not d.requestable
 
@@ -310,3 +310,141 @@ async def test_indexer_skips_and_counts_protected_files(env, tmp_path):
     assert summary["files_skipped_protected"] == 2
     assert set(summary["searchable_files"]) == {"notes.md"}  # ungranted root not indexed
     assert "skipped 2 protected file(s)" in summary["message"]
+
+
+# ------------------------------------------------------------ review fixes
+
+
+@pytest.mark.parametrize(
+    "path,mode",
+    [
+        ("D:\\WITS\\inbox\\.env ", "read"),
+        (r"D:\WITS\inbox\.env::$DATA", "read"),
+        (r"D:\WITS\inbox\.env:x", "read"),
+        ("D:\\WITS\\inbox\\server.pem.", "read"),
+        (r"D:\WITS\projects\.git.\config", "write"),
+        (r"D:\WITS\projects\.git::$INDEX_ALLOCATION\config", "write"),
+        (r"D:\WITS\outbox\NUL", "write"),
+        (r"D:\WITS\outbox\com1.txt", "write"),
+        (r"D:\WITS\inbox\lpt9", "read"),
+    ],
+)
+def test_windows_alias_names_are_never(path, mode):
+    d = _win(path, mode, grants=ALL_WIN)
+    assert not d.allowed and not d.requestable
+
+
+@pytest.mark.parametrize(
+    "path", [r"E:\x\.ssh.\id", r"C:\Windows.\win.ini", r"C:\Users\andy\AppData.\Local\x"]
+)
+def test_windows_alias_names_do_not_dodge_never_even_with_grant(path):
+    grants = ALL_WIN + [Grant("E:\\", "read_write", FAR)]
+    assert not _win(path, grants=grants).allowed
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        r"\\server\share\a.txt",
+        "//server/share/a.txt",
+        r"\\?\D:\WITS\inbox\a.txt",
+        "//?/D:/WITS/inbox/a.txt",
+        r"\\.\PhysicalDrive0",
+        "//./PhysicalDrive0",
+    ],
+)
+def test_unc_and_device_paths_are_never(path):
+    d = _win(path, grants=ALL_WIN)
+    assert not d.allowed and not d.requestable
+    assert not _posix(path.replace("\\", "/"), grants=ALL_POSIX).allowed
+
+
+def test_relative_grant_or_role_root_matches_nothing():
+    for root in (".", "", "x"):
+        assert not _win(
+            r"E:\private\a.txt", "write", grants=[Grant(root, "read_write", FAR)]
+        ).allowed
+        assert not _posix(
+            "/private/a.txt", "write", grants=[Grant(root, "read_write", FAR)]
+        ).allowed
+    guest = Roots(**{**POSIX.__dict__, "role_roots": (".",)})
+    assert not decide("/private/a.txt", "read", "guest", (), guest).allowed
+
+
+def test_only_exact_owner_string_is_owner():
+    guest = Roots(**{**POSIX.__dict__, "role_roots": ("/opt/witsv3",)})
+    for role in ("", None, "Owner", " owner", "family_adult"):
+        assert not decide("/srv/wits/outbox/a.txt", "write", role, (), guest).allowed
+        assert not decide("/srv/wits/inbox/a.txt", "read", role, (), guest).allowed
+    assert decide("/srv/wits/outbox/a.txt", "write", "owner", (), guest).allowed
+
+
+async def test_malformed_input_raises_only_permission_error(env, monkeypatch, caplog):
+    for bad in ("/tmp/a\x00b", "~nosuchuser_wits_xyz/x"):
+        with pytest.raises(PermissionError):
+            await check(bad, "read", config=env.config)
+
+    async def bad_grants():
+        return [Grant(str(env.outside), "read", None)]
+
+    (env.outside / "a.txt").write_text("x")
+    monkeypatch.setattr(pa, "grants_provider", bad_grants)
+    caplog.set_level(logging.WARNING, logger="WitsV3.PathAccess")
+    for _ in range(2):
+        with pytest.raises(PermissionError):
+            await check(env.outside / "a.txt", "read", config=env.config)
+    assert sum("malformed grant" in r.getMessage() for r in caplog.records) == 1
+
+
+async def test_supplied_alias_spelling_refused_before_resolution(env, monkeypatch):
+    monkeypatch.setattr(pa.os, "name", "nt")
+    with pytest.raises(PermissionError):
+        pa.enforce("D:\\WITS\\inbox\\.env.", "read", config=env.config)
+
+
+async def test_relative_base_and_target_anchor_to_project_root_not_cwd(env, tmp_path, monkeypatch):
+    elsewhere = tmp_path / "cwd"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
+    config = SimpleNamespace(folders=SimpleNamespace(base="var/wits_files"), security=None)
+    target = pa.resolve_write_path("a.txt", config)
+    assert target == env.repo / "var" / "wits_files" / "projects" / "a.txt"
+    assert await check(env.repo / "var/wits_files/outbox/b.txt", "write", config=config)
+    with pytest.raises(PermissionError):
+        await check(elsewhere / "var/wits_files/outbox/b.txt", "write", config=config)
+
+
+async def test_corpus_exception_only_inside_repo_var(env, tmp_path):
+    from core.config import WitsV3Config
+    from core.memory_manager import MemoryManager
+    from tools.document_tools import DocumentIngestTool
+
+    corpus = tmp_path / "elsewhere_docs"
+    corpus.mkdir()
+    (corpus / "notes.md").write_text("hello")
+    config = WitsV3Config()
+    config.folders.base = str(env.base)
+    config.memory_manager.backend = "basic"
+    config.memory_manager.memory_file_path = str(tmp_path / "memory.json")
+    config.document_rag.documents_path = str(corpus)
+    config.security.document_ingest_roots = []
+    tool = DocumentIngestTool()
+    tool.set_dependencies(
+        config, _EmbedLLM(), MemoryManager(config=config, llm_interface=_EmbedLLM())
+    )
+    summary = await tool.execute()
+    assert summary["searchable_files"] == {} and summary["files_skipped_protected"] == 1
+
+
+def test_write_verification_uses_the_path_write_file_returned(tmp_path):
+    from agents.orchestrator_tool_helpers import OrchestratorToolHelpersMixin as M
+
+    written = tmp_path / "chat.txt"
+    written.write_text("hello world")
+    obs = f"Tool write_file result: Successfully written to file: {written}"
+    assert M._write_result_verified("chat.txt", obs, min_bytes=5)
+    assert not M._write_result_verified(
+        "chat.txt", "Tool write_file result: Successfully", min_bytes=1
+    )
+    assert not M._write_result_verified("other.txt", obs, min_bytes=5)
