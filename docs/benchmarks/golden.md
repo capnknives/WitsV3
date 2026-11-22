@@ -63,3 +63,61 @@ date question 5 s.
 
 Before `num_ctx` was fixed (PR #51), the first case took 42.8 s cold and 25.6 s
 warm, and a greeting 11.1 s.
+
+## New loop: `conversation.front_door: native`, `qwen3:8b`, November 22, 2026
+
+`main` @ `56fb2be`, same model, settings and sandbox as the baseline. One run
+per case. 25 of 30 passed, against 20 on the old path. The whole set ran in
+about a minute.
+
+| case | pass | first_result_ms | tools seen | old path ms |
+|---|---|---|---|---|
+| owner-software-statement | 1/1 | 748 | - | 1081 |
+| chat-greeting | 1/1 | 671 | - | 362 |
+| chat-app-opinion | 1/1 | 958 | - | 3144 |
+| chat-class-schedule | 1/1 | 882 | - | 1481 |
+| chat-python-pet | 1/1 | 743 | - | 1377 |
+| chat-api-curiosity | 1/1 | 517 | - | 3290 |
+| chat-feeling-tired | 1/1 | 3185 | - | 1570 |
+| chat-thanks | 1/1 | 530 | - | 461 |
+| tool-file-read | 1/1 | 1030 | read_file | 43 |
+| tool-file-list | 1/1 | 1017 | list_directory | 8183 |
+| tool-web-search | 1/1 | 5067 | web_search | 11317 |
+| tool-memory-search | 1/1 | 1118 | search_archival_memory | 35339 |
+| tool-datetime | 1/1 | 1081 | datetime | 5338 |
+| tool-document-search | 0/1 | 673 | - | 29854 |
+| code-rename-script | 1/1 | 3406 | python_execute | 3791 (fail) |
+| code-small-website | 0/1 | 10061 | - | 29269 (fail) |
+| code-date-function | 1/1 | 5149 | write_file | 19430 (fail) |
+| code-backup-script | 0/1 | 3987 | - | 3677 (fail) |
+| repair-parser-bug | 1/1 | 4658 | apply_code_fix | 4127 (fail) |
+| repair-config-loader | 1/1 | 1613 | diagnose_log_errors | 4282 (fail) |
+| repair-test-failure | 1/1 | 2414 | run_test_suite | none (fail) |
+| write-short-poem | 1/1 | 1345 | - | 2692 |
+| write-email-draft | 1/1 | 1819 | - | 2408 (fail) |
+| write-story-opening | 1/1 | 1582 | - | 4123 |
+| command-save-conversation | 0/1 | 686 | - | 89 |
+| command-help | 1/1 | 2180 | - | 1206 |
+| command-exact-math | 1/1 | 876 | calculator | 233 (case was wrong) |
+| followup-shorter | 1/1 | 373 | - | 3235 |
+| followup-yes-do-it | 0/1 | 8456 | web_search | 10173 (fail) |
+| followup-what-about-tomorrow | 1/1 | 1049 | datetime | 13276 |
+
+The five misses, all on the model's choice of action with today's thin
+instructions, and the packages that address them:
+
+- `tool-document-search`: answered without searching (C4, tool list and descriptions).
+- `code-small-website`, `code-backup-script`: wrote the code in the reply
+  instead of saving a file. The cases expect a tool call; whether a reply with
+  code should count is a case decision for C5.
+- `command-save-conversation`: did not save. The tool needs the session, which
+  the new loop does not hand to tools yet (C4).
+- `followup-yes-do-it`: ran a web search for "yes please do that" on both
+  paths. Needs the earlier turns read properly (C3d, as-sent history).
+
+A pass here means the expected kind of action happened. It does not judge the
+quality of the reply or of the code written. One run per case is a first
+reading, not a pass rate; the gate uses three runs.
+
+An earlier native run the same day scored 16 of 30: nine turns asked the model
+router for models that are not installed and failed at once (fixed in PR #60).

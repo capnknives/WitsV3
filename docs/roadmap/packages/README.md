@@ -126,6 +126,7 @@ Foundations, independent of the conversation core:
 | 2.1 | Remove unused dependencies | 1.1 | Haiku |
 | 2.2 | Move research code into `research/` | 1.2 | Sonnet |
 | 2.3 | Single `wits` command | 1.3 | Sonnet |
+| 2.11 | Self-update and restart, with health check and rollback | New | Opus |
 | 2.4 | Provider interface; OpenAI-compatible and Anthropic providers | 1.5 | Opus |
 | 2.5 | Model router heavy class, lineup, `num_ctx` per role | New | Sonnet |
 | 2.6 | Native tool calling as default | 1.6 | Opus |
