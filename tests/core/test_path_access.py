@@ -505,3 +505,16 @@ def test_never_list_holds_inside_documents(name, mode):
     assert not d.allowed and not d.requestable
     d = decide(f"/srv/wits/documents/{name}", mode, "owner", ALL_POSIX, POSIX, now=1000)
     assert not d.allowed and not d.requestable
+
+
+def test_guests_do_not_gain_the_documents_folder(env):
+    for name in ("documents", "inbox"):
+        (env.base / name).mkdir(exist_ok=True)
+        (env.base / name / "a.txt").write_text("x")
+    doc = env.base / "documents" / "a.txt"
+    assert pa.enforce(doc, "read", role="owner", config=env.config) == doc.resolve()
+    for role in ("family_adult", "some_unknown_role"):
+        with pytest.raises(PermissionError):
+            pa.enforce(doc, "read", role=role, config=env.config)
+    inbox = env.base / "inbox" / "a.txt"
+    assert pa.enforce(inbox, "read", role="family_adult", config=env.config) == inbox.resolve()

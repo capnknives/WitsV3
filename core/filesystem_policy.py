@@ -94,7 +94,7 @@ def read_roots_for_role(
                 if token in ("project", "project_root"):
                     resolved.append(project_read_root())
                 elif token in ("downloads", "user_downloads"):
-                    for root in configured_read_roots(config):
+                    for root in _roots_without_documents(config):
                         if root != project_read_root():
                             resolved.append(root)
                 else:
@@ -106,7 +106,13 @@ def read_roots_for_role(
     if role_key == "guest":
         return [project_read_root()]
 
-    return configured_read_roots(config)
+    return _roots_without_documents(config)
+
+
+def _roots_without_documents(config: Any | None) -> list[Path]:
+    # Reason: guests keep pre-F5 limits (contract section 6); uploads are the owner's alone.
+    documents = _normalize_roots([str(documents_folder(config))])
+    return [r for r in configured_read_roots(config) if r not in documents]
 
 
 def resolve_allowed_read_path(
@@ -139,29 +145,40 @@ def document_ingest_roots(config: Any | None = None) -> list[Path]:
     return fixed + [r for r in _normalize_roots(extra) if r not in fixed]
 
 
+def old_documents_folder(config: Any | None = None) -> Path | None:
+    """The old ``document_rag.documents_path`` when it is set and is not the documents folder."""
+    rag = getattr(config, "document_rag", None) if config else None
+    old = getattr(rag, "documents_path", None) if rag else None
+    if not isinstance(old, str) or not old.strip():
+        return None
+    try:
+        folder = Path(old).expanduser()
+        folder = (folder if folder.is_absolute() else project_root() / folder).resolve()
+        return None if folder == documents_folder(config).resolve() else folder
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
 def warn_old_documents_path(config: Any | None = None) -> int:
     """Log one warning when the old ``document_rag.documents_path`` still holds files.
 
     Nothing there is moved, deleted or indexed; returns the file count (0 when no warning).
     """
-    rag = getattr(config, "document_rag", None) if config else None
-    old = getattr(rag, "documents_path", None) if rag else None
-    if not isinstance(old, str) or not old.strip():
-        return 0
+    folder = old_documents_folder(config)
     try:
-        folder = Path(old).expanduser()
-        folder = (folder if folder.is_absolute() else project_root() / folder).resolve()
-        if not folder.is_dir() or folder == documents_folder(config).resolve():
+        if folder is None or not folder.is_dir():
             return 0
         count = sum(1 for p in folder.rglob("*") if p.is_file() and p.name != ".gitkeep")
     except OSError:
         return 0
     if count:
         logger.warning(
-            "document_rag.documents_path %s holds %d file(s); uploads now go to %s. "
-            "Those files are not moved or indexed; move them yourself to keep them.",
+            "document_rag.documents_path %s holds %d file(s). Uploads now go to %s. Those "
+            "files stay searchable from what is already indexed, but are not re-indexed if "
+            "they change and do not appear on the Documents page; move them into %s.",
             folder,
             count,
+            documents_folder(config),
             documents_folder(config),
         )
     return count

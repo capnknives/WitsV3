@@ -13,7 +13,9 @@ four subfolders that WITS may always use.
 
 Files uploaded before November 22, 2026 stay in the old upload folder
 (`document_rag.documents_path`, usually `var/user_files`) until you move them into
-`documents` yourself; WITS logs one warning at start-up while any are there.
+`documents` yourself. Until then they stay searchable from what is already
+indexed, but are not re-indexed if they change and do not appear on the Documents
+page; WITS logs one warning at start-up while any are there.
 
 ## When WITS needs another folder
 

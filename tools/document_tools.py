@@ -138,7 +138,11 @@ class DocumentIngestTool(_DocumentToolBase):
         if not_ready:
             return not_ready
 
-        from core.filesystem_policy import document_ingest_roots, documents_folder
+        from core.filesystem_policy import (
+            document_ingest_roots,
+            documents_folder,
+            old_documents_folder,
+        )
 
         settings = self.config.document_rag
         uploads = documents_folder(self.config)
@@ -250,7 +254,12 @@ class DocumentIngestTool(_DocumentToolBase):
                     summary["errors"].append(f"{rel_path}: {e}")
 
         # Remove chunks for files that no longer exist on disk
+        # Reason: nothing is removed automatically from the pre-F5 upload folder, so chunks
+        # stay while the file is still there; they go once it is gone from both places.
+        old_dir = old_documents_folder(self.config)
         for stale_path in set(stored_hashes) - seen_paths:
+            if old_dir is not None and (old_dir / stale_path).is_file():
+                continue
             removed = await self.memory_manager.delete_segments(
                 {"type": DOCUMENT_SEGMENT_TYPE, "file_path": stale_path}
             )
