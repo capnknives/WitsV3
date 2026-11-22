@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from agents.turn_context import TurnContext, bind_turn
 from core.runtime_paths import exports_dir
 from core.schemas import ConversationHistory, StreamData
 from core.smoke_metrics import get_current, scenario_metrics, smoke_metrics_enabled
@@ -253,19 +254,16 @@ async def run_routing_scenario(scenario: dict[str, Any], wcca, state: SmokeRunSt
             return
 
         if check == "guest_no_specialist":
-            wcca._request_user_role = "guest"
-            try:
+            with bind_turn(TurnContext.for_request(user_role="guest")):
                 intent = await wcca._analyze_user_intent(message, None)
-            finally:
-                wcca._request_user_role = "owner"
             agent = intent.get("specialized_agent")
             _record(state, sid, tier, agent is None, f"agent={agent}")
             return
 
         history = _build_history(scenario, session_id)
         role = scenario.get("role", "owner")
-        prev_role = getattr(wcca, "_request_user_role", "owner")
-        wcca._request_user_role = role
+        role_binding = bind_turn(TurnContext.for_request(user_role=role))
+        role_binding.__enter__()
 
         last_task_route = scenario.get("last_task_route")
         if last_task_route:
@@ -286,14 +284,14 @@ async def run_routing_scenario(scenario: dict[str, Any], wcca, state: SmokeRunSt
                 intent = await wcca._analyze_user_intent(message, history, session_id=session_id)
             finally:
                 wcca._get_document_inventory = original  # type: ignore[method-assign]
-                wcca._request_user_role = prev_role
+                role_binding.__exit__(None, None, None)
                 if last_task_route:
                     wcca._last_task_context.pop(session_id, None)
         else:
             try:
                 intent = await wcca._analyze_user_intent(message, history, session_id=session_id)
             finally:
-                wcca._request_user_role = prev_role
+                role_binding.__exit__(None, None, None)
                 if last_task_route:
                     wcca._last_task_context.pop(session_id, None)
 

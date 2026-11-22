@@ -4,13 +4,14 @@ WITS Control Center Agent for WitsV3.
 The main entry point that handles user input and determines response strategy.
 """
 
+import contextlib
 import re
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.base_agent import BaseAgent
-from agents.turn_context import TurnContext, run_in_turn, turn_for
+from agents.turn_context import TurnContext, current_turn, run_in_turn, turn_for
 from agents.wcca_intent_mixin import WCCAIntentMixin
 from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 from core.config import WitsV3Config
@@ -147,12 +148,14 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
     ) -> AsyncGenerator[StreamData, None]:
         """Run one turn with its caller role bound per turn (RT-4), never on ``self``."""
         turn = TurnContext.for_request(**kwargs)
-        inner = self._run_turn(user_input, conversation_history, session_id, **kwargs)
-        async for event in run_in_turn(turn, inner):
-            yield event
+        inner = self._run_turn(turn, user_input, conversation_history, session_id, **kwargs)
+        async with contextlib.aclosing(run_in_turn(turn, inner)) as events:
+            async for event in events:
+                yield event
 
     async def _run_turn(
         self,
+        turn: TurnContext,
         user_input: str,
         conversation_history: ConversationHistory | None = None,
         session_id: str | None = None,
@@ -170,10 +173,18 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         Yields:
             StreamData objects showing the processing steps
         """
+        if current_turn() is not turn:
+            # Reason: called directly (not via run()); bind ``turn`` so deep callees
+            # such as store_memory see the same role as this body.
+            inner = self._run_turn(turn, user_input, conversation_history, session_id, **kwargs)
+            async with contextlib.aclosing(run_in_turn(turn, inner)) as events:
+                async for event in events:
+                    yield event
+            return
+
         if not session_id:
             session_id = str(uuid.uuid4())
 
-        turn = turn_for(self)
         user_role = turn.user_role
 
         self.logger.info(f"Processing user input in session {session_id}: {user_input[:100]}...")
