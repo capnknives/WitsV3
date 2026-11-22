@@ -8,7 +8,7 @@ status: "active"
 # WitsV3 Unified Execution Plan
 
 **Created:** November 21, 2026
-**Status:** Stage 0 in progress (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
+**Status:** Stage 1 gate passed on November 22, 2026. Stage 0 still has open items (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
 **Reviewed against:** `main` @ `86a0f80` (November 17, 2026)
 
 This plan sets the **order of work**. It folds three plans into one build:
@@ -124,19 +124,42 @@ Each stage ends at a gate the owner tests by hand. Sizes are rough, part-time.
 
 Pulls forward parts of 1.4, 1.8, 2.1 and 3.3.
 
-- [ ] 1.0 Contracts: SQLite schema, five coordination tool signatures, token scopes
-- [ ] 1.1 SQLite store for tasks, locks, approvals, handoffs, clients (1.4, part)
-- [ ] 1.2 Per-client tokens with scopes and revocation (1.8, part)
-- [ ] 1.3 Approval queue on the store, reusing the `core/escalation.py` pattern (1.8, part)
-- [ ] 1.4 MCP server over HTTP at `/mcp` with `claim_task`, `append_handoff`,
+- [x] 1.0 Contracts: SQLite schema, five coordination tool signatures, token scopes
+- [x] 1.1 SQLite store for tasks, locks, approvals, handoffs, clients (1.4, part)
+- [x] 1.2 Per-client tokens with scopes and revocation (1.8, part)
+- [x] 1.3 Approval queue on the store, reusing the `core/escalation.py` pattern (1.8, part)
+- [x] 1.4 MCP server over HTTP at `/mcp` with `claim_task`, `append_handoff`,
       `request_decision`, `link_artifact`, `get_project_state` (2.1)
-- [ ] 1.5 Decision Inbox page in the PWA
-- [ ] 1.6 Phone push on a new approval, via ntfy or Web Push (3.3)
-- [ ] 1.7 Setup guide: Tailscale on PC, phone and laptop; registering the MCP server with an agent
-- [ ] 1.8 Stage gate review and pilot wiring
+- [x] 1.5 Decision Inbox page in the PWA
+- [x] 1.6 Phone push on a new approval, via ntfy or Web Push (3.3)
+- [ ] 1.7 Setup guide: Tailscale on PC, phone and laptop; registering the MCP server with an agent (written; PR #34 open)
+- [ ] 1.8 Stage gate review and pilot wiring (gate review and hand-test done; pilot wiring still to do)
 
 **Gate:** an outside agent claims a task and posts a decision; the owner
 approves it from the phone away from home Wi-Fi; revoking the token cuts access.
+
+**Gate result (November 22, 2026): passed.** Run on the owner's PC against `main` at `86c04d4`.
+
+- An independent review built the real app, walked the whole scenario with the official MCP
+  client, and passed it with six fixes, which were merged before the hand-test (PR #35).
+- A test agent was created through the owner route, connected to `/mcp` with its own token,
+  claimed a task, left a handoff, linked a pull request and asked for a decision.
+- Two refusals were checked on the way: a misleading link (`invalid_argument`) and a project
+  outside the agent's list (`forbidden_project`).
+- The owner approved the decision in the Inbox from his phone, on mobile data over the private
+  network. The agent then read the approval back.
+- The agent was revoked. Its next call got 401, no lock or pending decision was left, and the
+  audit log held a row for each step.
+
+Found during the hand-test and tracked separately:
+
+- Nothing on the main page links to the Inbox.
+- Chat routing sent a plain statement to the coding agent, and intent analysis was being saved
+  to memory (PR #38). The slash menu was empty right after sign-in (PR #39).
+- The configured code and trivial models are not installed, so those calls fall back. This waits
+  on package 0.5 (final model lineup).
+- The first reply of a session took about 45 seconds for intent analysis alone.
+- The pilot wiring half of 1.8 (connecting Aquainspection's agents) is not done yet.
 
 ### Stage 2 — Foundations (2–3 weeks)
 
