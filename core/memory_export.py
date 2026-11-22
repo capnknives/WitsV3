@@ -10,11 +10,21 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .memory_manager import MemoryManager, MemorySegment
 
 logger = logging.getLogger(__name__)
+
+
+async def _checked(path: str | Path, mode: Literal["read", "write"]) -> Path:
+    """Run the folder-access check before any caller-supplied path is opened.
+
+    Raises PermissionError on refusal, so nothing is read, created or written.
+    """
+    from core.path_access import check
+
+    return await check(path, mode)
 
 
 class MemoryExporter:
@@ -48,6 +58,7 @@ class MemoryExporter:
             Number of segments exported
         """
         try:
+            output_path = await _checked(output_path, "write")
             # Retrieve segments
             segments = await self.memory_manager.get_recent_memory(
                 limit=limit if limit > 0 else 100000,  # Large number to get all
@@ -62,7 +73,6 @@ class MemoryExporter:
             segments_data = [segment.model_dump(mode="json") for segment in segments]
 
             # Ensure the output directory exists
-            output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Write to file
@@ -104,6 +114,7 @@ class MemoryExporter:
             Number of segments exported
         """
         try:
+            output_path = await _checked(output_path, "write")
             # Retrieve segments
             segments = await self.memory_manager.get_recent_memory(
                 limit=limit if limit > 0 else 100000,  # Large number to get all
@@ -111,7 +122,6 @@ class MemoryExporter:
             )
 
             # Ensure the output directory exists
-            output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Define CSV fields
@@ -173,6 +183,7 @@ class MemoryExporter:
             Number of segments exported
         """
         try:
+            output_path = await _checked(output_path, "write")
             # Retrieve segments
             segments = await self.memory_manager.get_recent_memory(
                 limit=limit if limit > 0 else 100000,  # Large number to get all
@@ -180,7 +191,6 @@ class MemoryExporter:
             )
 
             # Ensure the output directory exists
-            output_path = Path(output_path)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Write to file
@@ -237,7 +247,7 @@ class MemoryImporter:
             Number of segments imported
         """
         try:
-            input_path = Path(input_path)
+            input_path = await _checked(input_path, "read")
 
             if not input_path.exists():
                 self.logger.error(f"Input file not found: {input_path}")
@@ -295,7 +305,7 @@ class MemoryImporter:
             Number of segments imported
         """
         try:
-            input_path = Path(input_path)
+            input_path = await _checked(input_path, "read")
 
             if not input_path.exists():
                 self.logger.error(f"Input file not found: {input_path}")
@@ -382,7 +392,7 @@ class MemoryImporter:
             Number of segments imported
         """
         try:
-            input_path = Path(input_path)
+            input_path = await _checked(input_path, "read")
 
             if not input_path.exists():
                 self.logger.error(f"Input file not found: {input_path}")

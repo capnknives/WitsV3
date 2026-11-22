@@ -7,6 +7,7 @@ import pytest
 
 import core.filesystem_policy as fp
 import core.path_access as pa
+from core import runtime_paths
 from core.path_access import Grant, Roots, check, decide
 
 FAR = 4_000_000_000  # an expiry far in the future
@@ -211,6 +212,7 @@ def env(tmp_path, monkeypatch):
     for folder in (base / "inbox", base / "outbox", base / "projects", repo, outside):
         folder.mkdir(parents=True)
     monkeypatch.setattr(fp, "PROJECT_ROOT", repo)
+    monkeypatch.setattr(runtime_paths, "PROJECT_ROOT", repo)
     config = SimpleNamespace(folders=SimpleNamespace(base=str(base)), security=None)
     monkeypatch.setattr("core.config.load_config", lambda *a, **k: config)
     return SimpleNamespace(base=base, repo=repo, outside=outside, config=config)
@@ -448,3 +450,25 @@ def test_write_verification_uses_the_path_write_file_returned(tmp_path):
         "chat.txt", "Tool write_file result: Successfully", min_bytes=1
     )
     assert not M._write_result_verified("other.txt", obs, min_bytes=5)
+
+
+def test_runtime_paths_and_check_share_one_anchor_not_cwd(env, tmp_path, monkeypatch):
+    elsewhere = tmp_path / "cwd"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
+    config = SimpleNamespace(folders=SimpleNamespace(base="var/wits_files"), security=None)
+    assert str(runtime_paths.inbox_dir("var/wits_files")) == pa.roots_for(config).inbox
+    created = runtime_paths.ensure_base_folders("var/wits_files")
+    assert created[0] == env.repo / "var" / "wits_files" / "inbox" and created[0].is_dir()
+    assert not (elsewhere / "var").exists()
+    monkeypatch.setenv("WITSV3_PROJECT_ROOT", str(tmp_path / "pinned"))
+    assert runtime_paths.outbox_dir("rel") == tmp_path / "pinned" / "rel" / "outbox"
+    assert runtime_paths.outbox_dir(str(tmp_path / "abs")) == tmp_path / "abs" / "outbox"
+
+
+@pytest.mark.parametrize("name", [".env", "id_rsa", "client_secret_x.json", "secrets.txt"])
+def test_is_never_answers_section_4_alone(tmp_path, name):
+    assert pa.is_never(tmp_path / name, "index")
+    assert pa.is_never(tmp_path / ".ssh" / "notes.txt", "read")
+    assert not pa.is_never(tmp_path / "notes.txt", "write")

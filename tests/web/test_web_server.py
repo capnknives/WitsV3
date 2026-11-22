@@ -90,6 +90,7 @@ class FakeSystem:
     def __init__(self, tmp_path):
         self.config = WitsV3Config()
         self.config.document_rag.documents_path = str(tmp_path / "documents")
+        self.config.folders.base = str(tmp_path / "wits")  # owner exports land in its outbox
         self.control_center = FakeControlCenter()
         self.tool_registry = FakeToolRegistry(tmp_path)
         self.memory_manager = FakeMemoryManager()

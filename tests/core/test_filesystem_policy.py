@@ -17,6 +17,9 @@ def test_owner_can_read_inside_project(tmp_path, monkeypatch):
         tmp_path,
         raising=False,
     )
+    # Reason: relative paths anchor at runtime_paths.base_anchor() (WP F2b).
+    monkeypatch.setattr("core.runtime_paths.PROJECT_ROOT", tmp_path)
+    monkeypatch.delenv("WITSV3_PROJECT_ROOT", raising=False)
     f = tmp_path / "README.md"
     f.write_text("hello", encoding="utf-8")
     resolved = resolve_allowed_read_path("README.md", role="owner", config=None)

@@ -34,9 +34,10 @@ from core.guest_access import (
 )
 from core.guest_audit import GuestAuditLog
 from core.guest_user_profile import GuestUserProfileStore
-from core.runtime_paths import exports_dir, guest_audit_dir, guest_profiles_path
+from core.runtime_paths import guest_audit_dir, guest_profiles_path
 from core.schemas import ConversationHistory, StreamData
 from core.turn_metrics import finish_turn, note_event, start_turn
+from web import file_route_guard
 from web.access_log import install_access_log_middleware, owner_display_name, resolve_caller_label
 from web.guest_auth import (
     guest_forbidden_response,
@@ -562,19 +563,18 @@ def create_app(system) -> FastAPI:
         if not content.strip():
             return JSONResponse({"detail": "conversation is empty"}, status_code=400)
 
-        export_dir = exports_dir()
-        export_dir.mkdir(parents=True, exist_ok=True)
-        if body.file_path:
-            rel = Path(body.file_path.replace("\\", "/"))
-            if rel.is_absolute() or ".." in rel.parts or len(rel.parts) != 1:
-                return JSONResponse({"detail": "invalid file_path"}, status_code=400)
-            out_path = export_dir / rel.name
-        else:
-            stamp = uuid.uuid4().hex[:8]
-            out_path = export_dir / f"chat_export_{stamp}.txt"
-
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+        name = file_route_guard.export_name(body.file_path)
+        if name is None:
+            return JSONResponse({"detail": "invalid file_path"}, status_code=400)
+        try:
+            out_path = await file_route_guard.export_target(
+                name, guest=bool(guest), config=system.config
+            )
+        except PermissionError as err:
+            return JSONResponse({"detail": str(err)}, status_code=403)
         out_path.write_text(content, encoding="utf-8")
+        # Reason: guests learn only the file name, never where the server keeps it.
+        shown = out_path.name if guest else str(out_path).replace("\\", "/")
 
         message_count = len(conversation.messages)
         warning = None
@@ -586,9 +586,9 @@ def create_app(system) -> FastAPI:
 
         return {
             "success": True,
-            "file_path": str(out_path).replace("\\", "/"),
+            "file_path": shown,
             "message_count": message_count,
-            "message": f"Exported {message_count} messages to {out_path}",
+            "message": f"Exported {message_count} messages to {shown}",
             "warning": warning,
         }
 
@@ -1033,7 +1033,12 @@ def create_app(system) -> FastAPI:
         # attempts (..\\..\\evil.txt) cannot survive on POSIX runners.
         raw_name = (file.filename or "upload.txt").replace("\\", "/")
         safe_name = Path(raw_name).name
-        target = docs_dir / safe_name
+        try:
+            target = file_route_guard.document_target(docs_dir, safe_name)
+        except ValueError:
+            return JSONResponse({"detail": "invalid document name"}, status_code=400)
+        except PermissionError as err:
+            return JSONResponse({"detail": str(err)}, status_code=403)
         target.write_bytes(await file.read())
 
         ingest_tool = system.tool_registry.get_tool("ingest_documents")
@@ -1047,10 +1052,13 @@ def create_app(system) -> FastAPI:
     @app.post("/api/documents/delete")
     async def delete_document(body: DocumentDeleteRequest):
         docs_dir = Path(system.config.document_rag.documents_path).resolve()
-        # Resolve within docs_dir; reject traversal or the dir itself.
-        target = (docs_dir / body.name).resolve()
-        if not target.is_relative_to(docs_dir) or target == docs_dir:
+        # Resolve within docs_dir; reject traversal, the dir itself and never-listed names.
+        try:
+            target = file_route_guard.document_target(docs_dir, body.name)
+        except ValueError:
             return JSONResponse({"detail": "invalid document name"}, status_code=400)
+        except PermissionError as err:
+            return JSONResponse({"detail": str(err)}, status_code=403)
 
         rel = target.relative_to(docs_dir).as_posix()
         existed = target.is_file()

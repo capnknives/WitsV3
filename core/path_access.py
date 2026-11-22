@@ -21,7 +21,7 @@ from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 from typing import Any, Literal
 
 from core import filesystem_policy as fp
-from core.runtime_paths import DEFAULT_BASE
+from core import runtime_paths
 
 Mode = Literal["read", "write", "index"]
 GrantMode = Literal["read", "read_write", "index"]
@@ -293,13 +293,11 @@ def _load_config_quietly() -> Any | None:
 
 def _anchor() -> Path:
     """Where relative paths and a relative ``folders.base`` resolve: never the cwd."""
-    override = os.getenv("WITSV3_PROJECT_ROOT")
-    return Path(override) if override else fp.project_read_root()
+    return runtime_paths.base_anchor()
 
 
 def _base_dir(config: Any | None) -> Path:
-    base = Path(fp._base_setting(config or _load_config_quietly()) or DEFAULT_BASE).expanduser()
-    return base if base.is_absolute() else _anchor() / base
+    return runtime_paths.base_dir(fp._base_setting(config or _load_config_quietly()))
 
 
 def _role_roots(role: Any, config: Any | None) -> tuple[str, ...]:
@@ -315,18 +313,40 @@ def roots_for(config: Any | None, role: str = "owner") -> Roots:
     """Build Roots from config (``folders.base``) and the live repo location."""
     base = _base_dir(config)
     role_roots = _role_roots(role, config)
-    try:
-        home = str(Path.home().resolve())
-    except (RuntimeError, OSError):
-        home = ""
     return Roots(
         inbox=str((base / "inbox").resolve()),
         outbox=str((base / "outbox").resolve()),
         projects=str((base / "projects").resolve()),
         repo=str(fp.project_read_root()),
-        home=home,
+        home=_home(),
         windows=os.name == "nt",
         role_roots=role_roots,
+    )
+
+
+def _home() -> str:
+    try:
+        return str(Path.home().resolve())
+    except (RuntimeError, OSError):
+        return ""
+
+
+def is_never(path: str | Path, mode: Mode) -> bool:
+    """True when section 4 refuses *path* for *mode*, whatever the role or grants.
+
+    For callers that keep their own folder rule but must still apply the never-list.
+    Unusable input counts as never, so a caller cannot be tricked into allowing it.
+    """
+    windows = os.name == "nt"
+    if alias_reason(str(path), windows):
+        return True
+    try:
+        resolved = _resolve(path)
+    except (ValueError, RuntimeError, OSError, TypeError):
+        return True
+    return (
+        never_reason(resolved, mode, Roots("", "", "", "", home=_home(), windows=windows))
+        is not None
     )
 
 
