@@ -93,10 +93,11 @@ class OrchestratorToolHelpersMixin(
             return False
         if "Successfully" not in write_obs and "written to" not in write_obs.lower():
             return False
-        from core.safe_code_editor import resolve_within_project
+        from core.path_access import resolve_write_path
 
         try:
-            resolved = resolve_within_project(file_path)
+            # Reason: verify where write_file actually wrote (projects folder for relative paths).
+            resolved = resolve_write_path(file_path).resolve()
             return resolved.is_file() and resolved.stat().st_size >= min_bytes
         except (OSError, PermissionError):
             return False

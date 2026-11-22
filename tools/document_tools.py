@@ -19,6 +19,11 @@ from pathlib import Path
 from typing import Any
 
 from core.base_tool import BaseTool
+from core.document_filters import (
+    coerce_file_filters,
+    default_query_from_filename,
+    file_matches_filter,
+)
 from core.document_hybrid_search import fuse_hybrid_scores
 
 logger = logging.getLogger(__name__)
@@ -92,52 +97,6 @@ def _chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     return [c for c in chunks if c.strip()]
 
 
-def _coerce_file_filters(*values: Any) -> list[str]:
-    """Normalize LLM file filter args (file_name, file_names, source_files, …)."""
-    out: list[str] = []
-    for value in values:
-        if value is None:
-            continue
-        if isinstance(value, str):
-            if value.strip():
-                out.append(value.strip())
-            continue
-        if isinstance(value, (list, tuple, set)):
-            for item in value:
-                if isinstance(item, str) and item.strip():
-                    out.append(item.strip())
-    # Preserve order while de-duplicating (case-insensitive).
-    seen: set = set()
-    unique: list[str] = []
-    for name in out:
-        key = name.lower()
-        if key not in seen:
-            seen.add(key)
-            unique.append(name)
-    return unique
-
-
-def _file_matches_filter(file_path: str, filters: list[str]) -> bool:
-    """True when *file_path* matches any basename or substring filter."""
-    if not filters:
-        return True
-    path_lower = (file_path or "").lower()
-    base_lower = Path(file_path).name.lower()
-    for filt in filters:
-        fl = filt.lower()
-        if fl in (path_lower, base_lower):
-            return True
-        if fl in path_lower or base_lower.endswith(fl) or path_lower.endswith(fl):
-            return True
-    return False
-
-
-def _default_query_from_filename(file_name: str) -> str:
-    """Build a searchable query when the LLM only passes a file name."""
-    stem = Path(file_name).stem.replace("_", " ").replace("-", " ").strip()
-    return stem or file_name
-
-
 class _DocumentToolBase(BaseTool):
     """Shared dependency plumbing for the document tools."""
 
@@ -194,6 +153,9 @@ class DocumentIngestTool(_DocumentToolBase):
             "chunks_added": 0,
             "errors": [],
         }
+        from core.path_access import IndexGate
+
+        gate = await IndexGate.load(self.config, corpus=docs_dir)
 
         # Map of file_path -> file_hash for chunks currently in memory
         existing = await self.memory_manager.get_recent_memory(
@@ -214,14 +176,16 @@ class DocumentIngestTool(_DocumentToolBase):
         from core.filesystem_policy import document_ingest_roots
 
         for extra in document_ingest_roots(self.config):
-            if extra.is_dir() and extra not in ingest_dirs:
+            if extra.is_dir() and extra not in ingest_dirs and gate.allows_root(extra):
                 ingest_dirs.append(extra)
 
         for docs_dir in ingest_dirs:
             prefix = "" if docs_dir == Path(settings.documents_path) else f"{docs_dir.name}/"
 
             for path in sorted(docs_dir.rglob("*")):
-                if not path.is_file() or path.suffix.lower() not in extensions:
+                if not path.is_file() or not gate.allows_file(path):
+                    continue
+                if path.suffix.lower() not in extensions:
                     continue
 
                 if docs_dir == Path(settings.documents_path):
@@ -316,6 +280,9 @@ class DocumentIngestTool(_DocumentToolBase):
             parts.append("no documents are currently ingested")
         if summary["errors"]:
             parts.append(f"{len(summary['errors'])} file(s) failed to ingest")
+        summary["files_skipped_protected"] = gate.skipped
+        if gate.skipped:
+            parts.append(f"skipped {gate.skipped} protected file(s)")
         summary["searchable_files"] = searchable
         summary["message"] = "Scan complete: " + "; ".join(parts) + "."
 
@@ -359,7 +326,7 @@ class DocumentSearchTool(_DocumentToolBase):
         if not_ready:
             return not_ready
 
-        file_filters = _coerce_file_filters(
+        file_filters = coerce_file_filters(
             file_name,
             file_names,
             extra.get("filename"),
@@ -370,7 +337,7 @@ class DocumentSearchTool(_DocumentToolBase):
         explicit_query = bool((query or "").strip())
         query = (query or "").strip()
         if not query and file_filters:
-            query = _default_query_from_filename(file_filters[0])
+            query = default_query_from_filename(file_filters[0])
         if not query:
             return {"success": False, "error": "query must not be empty", "results": []}
 
@@ -418,7 +385,7 @@ class DocumentSearchTool(_DocumentToolBase):
         matched = [
             seg
             for seg in all_segments
-            if _file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
+            if file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
         ]
         matched.sort(
             key=lambda s: (
@@ -448,7 +415,7 @@ class DocumentSearchTool(_DocumentToolBase):
             vector_segments = [
                 seg
                 for seg in vector_segments
-                if _file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
+                if file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
             ]
 
         corpus = await self.memory_manager.get_recent_memory(
@@ -458,7 +425,7 @@ class DocumentSearchTool(_DocumentToolBase):
             corpus = [
                 seg
                 for seg in corpus
-                if _file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
+                if file_matches_filter(seg.metadata.get("file_path", seg.source), file_filters)
             ]
 
         merged: dict[str, Any] = {}

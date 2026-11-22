@@ -431,6 +431,9 @@ class MemoryImporter:
 
 
 async def export_memory(memory_manager: MemoryManager, output_path: str, limit: int = 0) -> int:
-    """Convenience wrapper used by tests to export memory to JSON."""
+    """Export memory to JSON at a path that passes ``path_access.check(write)``."""
+    from core.path_access import check, resolve_write_path
+
+    target = await check(resolve_write_path(output_path), "write")
     exporter = MemoryExporter(memory_manager)
-    return await exporter.export_to_json(output_path, limit=limit)
+    return await exporter.export_to_json(str(target), limit=limit)

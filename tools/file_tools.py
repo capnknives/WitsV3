@@ -33,13 +33,11 @@ class FileReadTool(BaseTool):
             File contents as string
         """
         from core.config import load_config
-        from core.filesystem_policy import resolve_allowed_read_path
+        from core.path_access import check
 
         try:
             config = load_config()
-            resolved = resolve_allowed_read_path(
-                file_path, role=tool_user_role(user_role), config=config
-            )
+            resolved = await check(file_path, "read", role=tool_user_role(user_role), config=config)
         except PermissionError as e:
             self.logger.error(str(e))
             return f"Error: {e}"
@@ -87,8 +85,8 @@ class FileWriteTool(BaseTool):
         self, file_path: str, content: str, encoding: str = "utf-8", mode: str = "w"
     ) -> str:
         """
-        Write content to file. Refuses to write outside the project
-        directory (see core.safe_code_editor.resolve_within_project).
+        Write content to file. Relative paths land in the projects folder;
+        absolute paths must pass core.path_access.check(write), so the repo is refused.
 
         Args:
             file_path: Path to the file to write
@@ -99,10 +97,12 @@ class FileWriteTool(BaseTool):
         Returns:
             Success message or error
         """
-        from core.safe_code_editor import resolve_within_project
+        from core.config import load_config
+        from core.path_access import check, resolve_write_path
 
         try:
-            resolved = resolve_within_project(file_path)
+            config = load_config()
+            resolved = await check(resolve_write_path(file_path, config), "write", config=config)
         except PermissionError as e:
             self.logger.error(str(e))
             return f"Error: {e}"
@@ -172,12 +172,12 @@ class ListDirectoryTool(BaseTool):
             Directory listing as formatted string
         """
         from core.config import load_config
-        from core.filesystem_policy import resolve_allowed_read_path
+        from core.path_access import check
 
         try:
             config = load_config()
-            directory_path = resolve_allowed_read_path(
-                directory_path, role=tool_user_role(user_role), config=config
+            directory_path = await check(
+                directory_path, "read", role=tool_user_role(user_role), config=config
             )
         except PermissionError as e:
             self.logger.error(str(e))
