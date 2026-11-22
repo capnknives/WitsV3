@@ -2,12 +2,17 @@
 
 Everything goes through the real mounted app: the FastAPI app is started with its own lifespan
 on the test's event loop and reached over in-process ASGI transports, with the official MCP
-client (``httpx2``, the SDK's HTTP library) or raw JSON-RPC (``httpx``). No network, no sleeps.
-Auth and transport checks live in ``test_workspace_mcp_auth.py``.
+client or raw JSON-RPC (``httpx``). The MCP client needs ``httpx2``: the SDK's
+``streamable_http_client`` only accepts an ``httpx2.AsyncClient``, and only a client built here
+can carry an in-process ASGI transport. Raw requests run on both protocol paths: with the
+``MCP-Protocol-Version: 2026-07-28`` header and without it (the handshake-era path). No network,
+no sleeps. Auth and transport checks live in ``test_workspace_mcp_auth.py``.
 """
 
 import asyncio
 import json
+import logging
+from collections import deque
 from contextlib import asynccontextmanager
 
 import httpx
@@ -17,6 +22,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
+from mcp.types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
 
 from core.config import WitsV3Config, WorkspaceSettings
 from core.workspace import clients, ratelimit, service, store
@@ -31,6 +37,7 @@ SENTENCE = (
 )
 TOOLS = {"get_project_state", "claim_task", "append_handoff", "request_decision", "link_artifact"}
 ALL_SCOPES = ["read", "write", "decide:request"]
+BOTH_PATHS = pytest.mark.parametrize("modern", [True, False], ids=[MODERN, "no-version-header"])
 
 
 @pytest.fixture(autouse=True)
@@ -118,6 +125,35 @@ def rpc_body(method: str = "tools/list", params: dict | None = None) -> dict:
     return {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
 
 
+def rpc(method="tools/list", params=None, token=None, modern=True) -> tuple[dict, dict]:
+    """Headers and body for one raw request on the 2026-07-28 path or the handshake-era one."""
+    headers, params = rpc_headers(token), dict(params or {})
+    if modern:
+        params["_meta"] = {PROTOCOL_VERSION_META_KEY: MODERN, CLIENT_CAPABILITIES_META_KEY: {}}
+        headers.update({"MCP-Protocol-Version": MODERN, "Mcp-Method": method})
+        if method == "tools/call":
+            headers["Mcp-Name"] = params["name"]
+    return headers, rpc_body(method, params)
+
+
+async def post(app, method="tools/list", params=None, token=None, modern=True, **kw):
+    """POST one raw JSON-RPC request; ``headers`` in ``kw`` are merged over the defaults."""
+    headers, body = rpc(method, params, token, modern)
+    headers.update(kw.pop("headers", {}))
+    path, base_url = kw.pop("path", "/mcp/"), kw.pop("base_url", "http://localhost")
+    async with raw_http(app, base_url) as http:
+        return await http.post(path, headers=headers, **({"json": body} | kw))
+
+
+async def call_tool(app, token, name, arguments, modern=True) -> dict:
+    """Raw tools/call; returns the JSON-RPC result after checking text equals structure."""
+    resp = await post(app, "tools/call", {"name": name, "arguments": arguments}, token, modern)
+    assert resp.status_code == 200, resp.text
+    result = resp.json()["result"]
+    assert result["structuredContent"] == json.loads(result["content"][0]["text"])
+    return result
+
+
 @asynccontextmanager
 async def mcp_session(app, token: str, path: str = "/mcp", mode: str = MODERN):
     """An official MCP client session to the mounted app, authenticated with ``token``."""
@@ -147,14 +183,48 @@ async def audit_count(action: str, outcome: str | None = None) -> int:
         return (await cur.fetchone())[0]
 
 
-async def test_tools_list_exactly_five_closed_schemas(app):
+async def test_tools_list_with_the_mcp_client(app):
     _, token = await new_client("lister")
     async with mcp_session(app, token) as session:
         listed = (await session.list_tools()).tools
     assert {t.name for t in listed} == TOOLS and len(listed) == 5
-    for tool in listed:
-        assert tool.input_schema["additionalProperties"] is False
-        assert tool.description.endswith(SENTENCE)
+
+
+# Section 3 integer ranges: (minimum, maximum or None).
+RANGES = {
+    ("get_project_state", "since_handoff_id"): (0, None),
+    ("get_project_state", "limit"): (1, 100),
+    ("claim_task", "lease_minutes"): (5, 240),
+    ("request_decision", "expires_minutes"): (5, 10080),
+}
+
+
+@BOTH_PATHS
+async def test_tools_list_closed_schemas_and_ranges(app, modern):
+    _, token = await new_client("lister")
+    resp = await post(app, token=token, modern=modern)
+    assert resp.status_code == 200
+    listed = {t["name"]: t for t in resp.json()["result"]["tools"]}
+    assert set(listed) == TOOLS and len(listed) == 5
+    for tool in listed.values():
+        assert tool["inputSchema"]["additionalProperties"] is False
+        assert tool["description"].endswith(SENTENCE)
+    ints = {
+        (name, arg): (spec["minimum"], spec.get("maximum"))
+        for name, tool in listed.items()
+        for arg, spec in tool["inputSchema"]["properties"].items()
+        if spec.get("type") == "integer"
+    }
+    assert ints == RANGES
+    options = listed["request_decision"]["inputSchema"]["properties"]["options"]
+    assert (options["minItems"], options["maxItems"]) == (1, 3)
+
+
+@BOTH_PATHS
+async def test_raw_tool_call_end_to_end(app, modern):
+    _, token = await new_client("raw-worker")
+    result = await call_tool(app, token, "claim_task", {"project": "p", "title": "Do"}, modern)
+    assert result["isError"] is False and result["structuredContent"]["created"] is True
 
 
 async def test_each_tool_end_to_end(app):
@@ -252,8 +322,8 @@ async def test_omitted_arguments_take_service_defaults(app, monkeypatch, tool, a
     assert seen == {**arguments, **expected, "identity": "defaults"}
 
 
-@pytest.mark.parametrize("mode", [MODERN, "legacy"])
-async def test_two_clients_interleaved_each_see_own_identity(app, monkeypatch, mode):
+@BOTH_PATHS
+async def test_two_clients_interleaved_each_see_own_identity(app, monkeypatch, modern):
     """Required section 7 test: both calls are in flight at once and keep their identity."""
     ident_a, token_a = await new_client("agent-a")
     ident_b, token_b = await new_client("agent-b")
@@ -272,14 +342,13 @@ async def test_two_clients_interleaved_each_see_own_identity(app, monkeypatch, m
 
     monkeypatch.setattr(store, "claim_task", gated_claim)
 
-    async def run(token, title):
-        async with mcp_session(app, token, mode=mode) as session:
-            return payload(await session.call_tool("claim_task", {"project": "p", "title": title}))
-
-    await asyncio.gather(run(token_a, "from-a"), run(token_b, "from-b"))
+    args = {"project": "p"}
+    await asyncio.gather(
+        call_tool(app, token_a, "claim_task", {**args, "title": "from-a"}, modern),
+        call_tool(app, token_b, "claim_task", {**args, "title": "from-b"}, modern),
+    )
     assert sorted(calls) == sorted([(ident_a.id, "from-a"), (ident_b.id, "from-b")])
-    async with mcp_session(app, token_a) as session:
-        state = payload(await session.call_tool("get_project_state", {"project": "p"}))
+    state = (await call_tool(app, token_a, "get_project_state", args, modern))["structuredContent"]
     holders = {t["title"]: t["lock"]["client"] for t in state["tasks"]}
     assert holders == {"from-a": "agent-a", "from-b": "agent-b"}
 
@@ -298,18 +367,18 @@ async def test_rate_limited_is_tool_error_not_http_error(app):
     assert resp.json()["result"]["isError"] is True
 
 
-async def test_unexpected_exception_is_internal_error_without_text(app, monkeypatch):
+@BOTH_PATHS
+async def test_unexpected_exception_is_internal_error_without_text(app, monkeypatch, modern):
     async def boom(*args, **kwargs):
         raise RuntimeError("secret-detail /etc/passwd")
 
-    monkeypatch.setattr(store, "link_artifact", boom)
+    # Reason: the service function itself raises, so the handler's own except branch runs.
+    monkeypatch.setattr(service, "link_artifact", boom)
     _, token = await new_client("crashy")
-    async with raw_http(app) as http:
-        body = rpc_body(
-            "tools/call",
-            {"name": "link_artifact", "arguments": {"project": "p", "kind": "pr", "uri": "a/b"}},
-        )
-        resp = await http.post("/mcp/", json=body, headers=rpc_headers(token))
+    arguments = {"project": "p", "kind": "pr", "uri": "a/b"}
+    resp = await post(
+        app, "tools/call", {"name": "link_artifact", "arguments": arguments}, token, modern
+    )
     assert resp.status_code == 200
     result = resp.json()["result"]
     assert result["isError"] is True
@@ -341,3 +410,68 @@ async def test_disconnect_mid_call_leaves_one_audit_row(app, monkeypatch):
     await asyncio.gather(*list(service._inflight), return_exceptions=True)
     assert await audit_count("append_handoff") == 1
     assert await audit_count("append_handoff", "ok") == 1
+
+
+@pytest.mark.parametrize(
+    "tool, arguments",
+    [("append_handoff", {"project": "p"}), ("request_decision", {"project": "p"})],
+)
+async def test_missing_required_text_is_invalid_argument(app, tool, arguments):
+    _, token = await new_client("forgetful")
+    result = await call_tool(app, token, tool, arguments)
+    assert result["isError"] is True
+    assert result["structuredContent"]["code"] == "invalid_argument"
+    assert await audit_count(tool, "invalid_argument") == 1
+
+
+async def test_disconnect_mid_body_returns_quietly(app, caplog):
+    _, token = await new_client("halfway")
+    headers = [(k.lower().encode(), v.encode()) for k, v in rpc_headers(token).items()]
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/mcp/",
+        "raw_path": b"/mcp/",
+        "root_path": "",
+        "query_string": b"",
+        "headers": [(b"host", b"localhost"), *headers],
+        "client": ("127.0.0.1", 50000),
+        "server": ("localhost", 80),
+    }
+    inbox = deque(
+        [
+            {"type": "http.request", "body": b'{"jsonrpc"', "more_body": True},
+            {"type": "http.disconnect"},
+        ]
+    )
+    sent: list = []
+
+    async def receive():
+        return inbox.popleft()
+
+    async def send(message):
+        sent.append(message)
+
+    with caplog.at_level(logging.WARNING):
+        await app(scope, receive, send)
+    assert sent == [] and not inbox
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+@pytest.mark.parametrize("existing", [0, 1])
+def test_register_leaves_the_root_logger_alone(monkeypatch, tmp_path, existing):
+    make_app(monkeypatch, tmp_path, enabled=False)  # patches load_config for register()
+    root = logging.getLogger()
+    saved = (list(root.handlers), root.level)
+    mine = [logging.NullHandler()] if existing else []
+    try:
+        root.handlers[:] = mine
+        root.setLevel(logging.WARNING)
+        workspace_mcp.register(FastAPI())
+        assert root.handlers == mine and root.level == logging.WARNING
+    finally:
+        root.handlers[:] = saved[0]
+        root.setLevel(saved[1])
