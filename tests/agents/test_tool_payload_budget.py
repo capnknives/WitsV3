@@ -14,7 +14,8 @@ from core.tool_call_guard import validate
 from core.tool_context import CONTEXT_PARAMS
 from core.tool_registry import ToolRegistry
 
-MAX_PAYLOAD_CHARS = 8800
+# Reason: raised from 8,800 for the 17th always-tier tool, write_long_text (WP C5a).
+MAX_PAYLOAD_CHARS = 9300
 MAX_TOOL_CHARS = 800
 EXCLUDE = NativeToolOrchestrator._ORCHESTRATOR_TOOL_EXCLUDE
 

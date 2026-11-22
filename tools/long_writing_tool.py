@@ -8,6 +8,7 @@ appends each section to ``<projects>/writing/<slug>.md`` as soon as it is writte
 
 from __future__ import annotations
 
+import asyncio
 import math
 import re
 import time
@@ -23,6 +24,7 @@ from core.tool_context import tool_user_role
 
 WORDS_PER_SECTION = 450
 MIN_SECTION_WORDS = 40
+MIN_CALL_SECONDS = 5
 TAIL_WORDS = 120
 OPENING_WORDS = 60
 BRIEF_CHARS = 2000
@@ -92,6 +94,7 @@ class LongWritingTool(BaseTool):
         self.llm_interface: Any = None
         # Reason: tests replace the clock to exercise the time limit without waiting.
         self.clock = time.monotonic
+        self._deadline = 0.0
 
     def set_dependencies(self, config, llm_interface=None, memory_manager=None, **kwargs) -> None:
         self.config = config
@@ -105,14 +108,18 @@ class LongWritingTool(BaseTool):
                     "type": "string",
                     "minLength": 3,
                     "maxLength": 120,
-                    "description": "title",
+                    "description": "short title; becomes the file name",
                 },
-                "brief": {"type": "string", "minLength": 1, "description": "owner's request"},
+                "brief": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "the owner's request in full: topic, tone, must-haves",
+                },
                 "target_words": {
                     "type": "integer",
                     "minimum": 300,
                     "maximum": 6000,
-                    "description": "default 1200",
+                    "description": "words wanted, 300 to 6000; default 1200",
                 },
             },
             "required": ["title", "brief"],
@@ -139,19 +146,29 @@ class LongWritingTool(BaseTool):
         self, title: str, brief: str, target: int, path: Path, rel: str, config: Any
     ) -> dict[str, Any]:
         limits = config.conversation.long_writing
-        started = self.clock()
+        self._deadline = self.clock() + limits.max_seconds
         wanted = section_count(target, limits.max_sections)
-        outline = parse_outline(await self._outline(title, brief, wanted, config), wanted, title)
+        try:
+            planned = await self._outline(title, brief, wanted, config)
+        except asyncio.TimeoutError:
+            planned = ""
+        outline = parse_outline(planned, wanted, title)
         per_section = max(1, round(target / len(outline)))
         written: list[str] = []
         timed_out = False
         for idx in range(len(outline)):
-            if idx and self.clock() - started >= limits.max_seconds:
+            if self.clock() >= self._deadline:
                 timed_out = True
                 break
-            text = await self._section(title, brief, outline, idx, written, per_section, config)
-            if count_words(text) < MIN_SECTION_WORDS:
-                text = await self._section(title, brief, outline, idx, written, per_section, config)
+            args = (title, brief, outline, idx, written, per_section, config)
+            try:
+                text = await self._section(*args)
+                if count_words(text) < MIN_SECTION_WORDS:
+                    text = await self._section(*args)
+            except asyncio.TimeoutError:
+                # Reason: a section cut off by the time limit is failed, not retried.
+                timed_out = True
+                break
             if count_words(text) < MIN_SECTION_WORDS:
                 continue
             head = f"# {title}\n\n" if not written else "\n\n"
@@ -177,12 +194,21 @@ class LongWritingTool(BaseTool):
     async def _call(self, prompt: str, words: int, config: Any) -> str:
         from agents.native_loop_support import resident_model
 
-        reply = await self.llm_interface.generate_chat(
-            [LLMMessage(role="system", content=_SYSTEM), LLMMessage(role="user", content=prompt)],
-            model=resident_model(config),
-            num_ctx=config.ollama_settings.num_ctx,
-            think=False,
-            num_predict=output_cap(words),
+        # Reason: max_seconds also bounds a single slow call, with a small floor so a call
+        # started just before the limit still has a chance to answer.
+        remaining = max(MIN_CALL_SECONDS, self._deadline - self.clock())
+        reply = await asyncio.wait_for(
+            self.llm_interface.generate_chat(
+                [
+                    LLMMessage(role="system", content=_SYSTEM),
+                    LLMMessage(role="user", content=prompt),
+                ],
+                model=resident_model(config),
+                num_ctx=config.ollama_settings.num_ctx,
+                think=False,
+                num_predict=output_cap(words),
+            ),
+            remaining,
         )
         return _clean(getattr(reply, "content", "") or "")
 

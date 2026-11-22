@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 
 import pytest
 
@@ -12,6 +14,7 @@ from core.config import WitsV3Config
 from core.llm_interface import LLMResponse
 from core.tool_call_guard import normalise_schema, validate
 from core.tool_context import ToolContext, use_tool_context
+from tools import long_writing_tool
 from tools.long_writing_tool import LongWritingTool, parse_outline, section_count, slugify
 
 BRIEF = "A dark story about an AI turning people against each other; humanity loses."
@@ -129,11 +132,33 @@ async def test_time_limit_stops_after_current_section(setup):
     config.conversation.long_writing.max_seconds = 10
     llm = ScriptedLLM(numbered(10))
     tool = make(llm)
-    ticks = iter([0, 5, 11, 12, 13])
-    tool.clock = lambda: next(ticks)
+    tool.clock = lambda: len(llm.calls) * 4  # each model call "takes" four seconds
     result = await tool.execute(title="Cut Short", brief=BRIEF, target_words=4500)
     assert result["success"] and result["sections"] == 2 and result["words"] == 900
     assert result["complete"] is False and len(llm.calls) == 3
+
+
+class SleepyLLM(ScriptedLLM):
+    """Answers the outline and first section at once, then hangs on the next call."""
+
+    async def generate_chat(self, messages, **kwargs):
+        if len(self.calls) >= 2:
+            self.calls.append({"messages": list(messages), **kwargs})
+            await asyncio.sleep(30)
+        return await super().generate_chat(messages, **kwargs)
+
+
+async def test_time_limit_cuts_a_slow_section_without_retry(setup, monkeypatch):
+    make, folder, config = setup
+    monkeypatch.setattr(long_writing_tool, "MIN_CALL_SECONDS", 0.05)
+    config.conversation.long_writing.max_seconds = 1
+    llm = SleepyLLM(numbered(3))
+    started = time.monotonic()
+    result = await make(llm).execute(title="Slow One", brief=BRIEF, target_words=1200)
+    assert time.monotonic() - started < 5
+    assert len(llm.calls) == 3  # outline, section 1, section 2 cut off and not retried
+    assert result["success"] and result["sections"] == 1 and result["complete"] is False
+    assert len((folder / "slow-one.md").read_text(encoding="utf-8").split()) == 453
 
 
 async def test_nothing_written_leaves_no_file(setup):
