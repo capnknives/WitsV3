@@ -11,7 +11,13 @@ from fastapi.testclient import TestClient
 from core.config import WitsV3Config, WorkspaceSettings
 from core.guest_access import issue_guest_token
 from core.workspace import clients, ratelimit
-from core.workspace.clients import ClientIdentity, create_client, revoke_client, verify_token
+from core.workspace.clients import (
+    ClientIdentity,
+    create_client,
+    enforce_not_revoked,
+    revoke_client,
+    verify_token,
+)
 from core.workspace.db import open_db
 from core.workspace.permissions import check
 from core.workspace.ratelimit import AuthFailureLimiter, TokenBuckets
@@ -208,9 +214,48 @@ class TestRevoke:
         assert row["revoked_at"] is None
         assert len(await _rows(db, "SELECT * FROM task_locks")) == 1
 
+    async def test_enforce_not_revoked_passes_active_client(self, db):
+        identity, _ = await _new(db)
+        await self._seed(db, identity.id)
+        await enforce_not_revoked(db, identity.id, now=T0)
+        assert len(await _rows(db, "SELECT * FROM task_locks")) == 1
+        live = await _rows(db, "SELECT status FROM approvals WHERE id = 'apr_live'")
+        assert live == [{"status": "pending"}]
+
+    async def test_enforce_not_revoked_cleans_late_write(self, db):
+        identity, _ = await _new(db)
+        assert await revoke_client(db, identity.id, now=T0 - 10)
+        # Reason: seeding after the revoke stands in for a write verified before it committed.
+        await self._seed(db, identity.id)
+        with pytest.raises(WorkspaceError) as exc:
+            await enforce_not_revoked(db, identity.id, now=T0)
+        assert exc.value.code == "revoked"
+        assert await _rows(db, "SELECT * FROM task_locks") == []
+        live = await _rows(db, "SELECT status, resolved_at FROM approvals WHERE id = 'apr_live'")
+        assert live == [{"status": "cancelled", "resolved_at": T0}]
+        assert len(await _rows(db, "SELECT * FROM tasks")) == 1
+
+    async def test_enforce_not_revoked_unknown_client(self, db):
+        with pytest.raises(WorkspaceError) as exc:
+            await enforce_not_revoked(db, "cli_missing")
+        assert exc.value.code == "revoked"
+
+
+class TestRatePerMin:
+    async def test_create_and_verify_carry_rate(self, db):
+        identity, token = await _new(db, rate_per_min=7)
+        assert identity.rate_per_min == 7
+        verified = await verify_token(db, token)
+        assert verified.rate_per_min == 7 and verified == identity
+
+    async def test_default_rate(self, db):
+        identity, token = await _new(db)
+        assert identity.rate_per_min == 60
+        assert (await verify_token(db, token)).rate_per_min == 60
+
 
 def _ident(scopes, projects=("*",)):
-    return ClientIdentity("cli_x", "x", frozenset(scopes), frozenset(projects))
+    return ClientIdentity("cli_x", "x", frozenset(scopes), frozenset(projects), 60)
 
 
 class TestPermissions:

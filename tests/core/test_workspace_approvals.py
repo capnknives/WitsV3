@@ -260,6 +260,7 @@ class TestLists:
             "status": "approved",
             "choice": "approve",
             "note": "go",
+            "flagged": 0,
             "expires_at": T0 + TTL,
         }
         assert items[live]["client"] == "alice"

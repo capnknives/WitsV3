@@ -32,12 +32,13 @@ _PREFIX_ATTEMPTS = 8
 
 @dataclass(frozen=True)
 class ClientIdentity:
-    """A verified client: id, unique name, granted scopes, and project slugs or ``{"*"}``."""
+    """A verified client: id, unique name, scopes, project slugs or ``{"*"}``, and rate limit."""
 
     id: str
     name: str
     scopes: frozenset
     projects: frozenset
+    rate_per_min: int
 
 
 def _now(now: int | None) -> int:
@@ -80,6 +81,7 @@ def _identity(row: Any) -> ClientIdentity:
         name=row["name"],
         scopes=frozenset(row["scopes"].split()),
         projects=frozenset(row["projects"].split()),
+        rate_per_min=row["rate_per_min"],
     )
 
 
@@ -162,7 +164,8 @@ async def create_client(
         detail = f"name={clean_name} scopes={scope_text}"
         await _audit_row(conn, ts, "client.create", client_id, "ok", detail)
     logger.info("workspace client created: %s (%s)", client_id, clean_name)
-    return ClientIdentity(client_id, clean_name, scope_set, project_set), token
+    identity = ClientIdentity(client_id, clean_name, scope_set, project_set, rate_per_min)
+    return identity, token
 
 
 async def verify_token(
@@ -182,8 +185,8 @@ async def verify_token(
     if match is None:
         return None
     async with db.read().execute(
-        "SELECT id, name, token_hash, scopes, projects, expires_at, last_seen_at, revoked_at"
-        " FROM clients WHERE token_prefix = :p",
+        "SELECT id, name, token_hash, scopes, projects, rate_per_min, expires_at, last_seen_at,"
+        " revoked_at FROM clients WHERE token_prefix = :p",
         {"p": match.group(1)},
     ) as cur:
         row = await cur.fetchone()
@@ -232,6 +235,40 @@ async def revoke_client(db: Database, client_id: str, *, now: int | None = None)
         await _audit_row(conn, ts, "client.revoke", client_id, "ok", detail)
     logger.info("workspace client revoked: %s", client_id)
     return True
+
+
+async def enforce_not_revoked(db: Database, client_id: str, *, now: int | None = None) -> None:
+    """Undo what a write made in the revoke window, then refuse (contract section 5).
+
+    A call verified just before a revoke committed can still write once. Called after every
+    successful write tool: if the client is revoked by now, its locks and live pending
+    approvals are cleared again and the caller gets ``revoked`` instead of the result. An
+    unknown client id is treated as revoked, so a missing row never passes.
+
+    Args:
+        db: Open database. Must not be called inside ``db.write()`` (it is not re-entrant).
+        client_id: The caller's client id.
+        now: Unix seconds override for tests.
+
+    Raises:
+        WorkspaceError: ``revoked`` when the client is revoked or missing.
+    """
+    ts = _now(now)
+    params = {"id": client_id, "ts": ts}
+    async with db.write() as conn:
+        async with conn.execute("SELECT revoked_at FROM clients WHERE id = :id", params) as cur:
+            row = await cur.fetchone()
+        if row is not None and row["revoked_at"] is None:
+            return
+        # Reason: the same two cleanup statements as revoke_client, so nothing the late write
+        # created (a lock or a pending approval) survives the revoke.
+        await conn.execute("DELETE FROM task_locks WHERE client_id = :id", params)
+        await conn.execute(
+            "UPDATE approvals SET status = 'cancelled', resolved_at = :ts"
+            " WHERE client_id = :id AND status = 'pending' AND expires_at > :ts",
+            params,
+        )
+    raise WorkspaceError("revoked", "this client has been revoked")
 
 
 async def list_clients(db: Database) -> list[dict]:
