@@ -163,7 +163,7 @@ async def test_remember_returns_early_on_both_settings(monkeypatch, front_door):
     monkeypatch.setattr(
         agent, "_analyze_user_intent", lambda *a, **k: pytest.fail("intent after remember")
     )
-    events, _ = await _run(agent, "remember my truck is blue", user_role="owner")
+    events, _ = await _run(agent, "remember that my truck is blue", user_role="owner")
     assert stored == ["USER_FACT"]
     assert llm.chat_calls == 0
     assert [e.type for e in events] == ["result"]
