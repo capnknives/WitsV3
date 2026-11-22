@@ -309,13 +309,55 @@ async def test_prefix_stable_span_holds_with_turn_one_in_history():
     assert [m.content for m in second["messages"][1:3]] == ["first question", "One."]
 
 
-@pytest.mark.xfail(strict=True, reason="as-sent history, package C3d")
-async def test_prefix_equal_over_shared_span_with_turn_one_in_history():
-    first, second = await _two_turns_with_history()
-    as_sent = first["messages"] + [LLMMessage("assistant", "One."), second["messages"][-1]]
-    assert prefix_fingerprint(as_sent, first["tools"]) == prefix_fingerprint(
-        second["messages"], second["tools"]
-    )
+async def _turn(orch, history, question: str, memory: str) -> list:
+    """One turn as the server runs it: user message added first, answer after."""
+
+    async def _memory(goal):
+        return memory
+
+    orch._memory_context = _memory
+    history.add_message("user", question)
+    await _run(orch, question, conversation_history=history)
+    history.add_message("assistant", f"Answer to {question}.")
+    return orch.llm_interface.calls[-1]["messages"]
+
+
+def _assert_shared_span(earlier: list, later: list, reply: str) -> None:
+    as_sent = earlier + [LLMMessage("assistant", reply), later[-1]]
+    assert prefix_fingerprint(as_sent, []) == prefix_fingerprint(later, [])
+
+
+async def test_prefix_equal_over_shared_span_across_three_turns():
+    replies = [LLMResponse(f"Answer to q{i}.") for i in range(3)]
+    orch, _, _ = _make(replies)
+    history = ConversationHistory(session_id="s")
+    sent = [await _turn(orch, history, f"q{i}", f"memory {i}") for i in range(3)]
+    for i in range(2):
+        _assert_shared_span(sent[i], sent[i + 1], f"Answer to q{i}.")
+    assert history.messages[0].metadata["sent_context"].startswith(f"\n\n{CONTEXT_HEADING}")
+    assert [m.metadata for m in history.messages[1::2]] == [None] * 3
+
+
+async def test_sent_context_survives_session_store(tmp_path):
+    from core.session_store import load_sessions, persist_session
+
+    orch, _, _ = _make([LLMResponse("Answer to q0."), LLMResponse("Answer to q1.")])
+    history = ConversationHistory(session_id="s")
+    first = await _turn(orch, history, "q0", "memory 0")
+    persist_session(history, root=str(tmp_path))
+    loaded = load_sessions(root=str(tmp_path))["s"]
+    assert loaded.messages[0].metadata == history.messages[0].metadata
+    _assert_shared_span(first, await _turn(orch, loaded, "q1", "memory 1"), "Answer to q0.")
+
+
+async def test_older_matching_message_is_never_written():
+    orch, llm, _ = _make([LLMResponse("Two.")])
+    history = ConversationHistory(session_id="s")
+    history.add_message("user", "same words")
+    history.add_message("assistant", "One.")
+    await _run(orch, "same words", conversation_history=history)
+    assert history.messages[0].metadata is None
+    assert [m.content for m in llm.calls[0]["messages"][1:3]] == ["same words", "One."]
 
 
 async def test_tool_that_raises_becomes_reply_and_loop_continues():

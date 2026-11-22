@@ -12,20 +12,23 @@ from agents.base_orchestrator_agent import BaseOrchestratorAgent
 from agents.native_loop_support import (
     NATIVE_SYSTEM_PROMPT,
     STEP_LIMIT_ERROR,
+    as_sent_history,
     assistant_tool_message,
     build_tool_specs,
     build_turn_context,
     decode_arguments,
+    estimate_tokens,
     history_window,
     model_call_error,
     resident_model,
+    store_sent_context,
     tool_call_event,
     tool_reply,
 )
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface, LLMMessage
 from core.memory_manager import MemoryManager
-from core.prompt_prefix import build_messages
+from core.prompt_prefix import build_messages, context_block
 from core.schemas import ConversationHistory
 from core.tool_call_guard import OUT_OF_STEPS, TurnGuard
 from core.turn_metrics import current_turn
@@ -77,18 +80,15 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             turn.path = "native"
 
         doc_inventory = await self._get_document_inventory()
+        history, current_message = as_sent_history(conversation_history, user_input)
         react_state = {
             "goal": goal,
             "context": "",
             "documents_context": self._format_documents_context(doc_inventory),
             "conversation_history": conversation_history,
-            # Reason: to_llm_format defaults to the last 10 messages, a window that slides
-            # every turn; history_window does the trimming in stable blocks instead.
-            "history": (
-                conversation_history.to_llm_format(limit=len(conversation_history.messages))
-                if conversation_history
-                else []
-            ),
+            # Reason: built from the stored messages, not to_llm_format, so earlier user
+            # messages carry the context block they were sent with; history_window trims.
+            "history": history,
             "observations": [],
             "completed": False,
             "final_answer": None,
@@ -113,15 +113,22 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
 
         react_state["context"] = await self._memory_context(goal)
         hist_turns = self.config.orchestrator.history_turns
-        messages = build_messages(
-            NATIVE_SYSTEM_PROMPT,
-            "",
-            history_window(react_state["history"], hist_turns),
-            user_input,
-            build_turn_context(
-                goal, user_input, react_state["documents_context"], react_state["context"]
-            ),
+        turn_context = build_turn_context(
+            goal, user_input, react_state["documents_context"], react_state["context"]
         )
+        # Reason: store the block now so the next turn resends this message exactly as sent.
+        store_sent_context(current_message, context_block(turn_context))
+        # Reason: the tool list is fixed for the turn, so its size is estimated once.
+        base_tokens = estimate_tokens(self._ollama_tools_payload()) + estimate_tokens(
+            NATIVE_SYSTEM_PROMPT
+        )
+        window = history_window(
+            react_state["history"],
+            hist_turns,
+            token_budget=0.6 * self.config.ollama_settings.num_ctx,
+            base_tokens=base_tokens,
+        )
+        messages = build_messages(NATIVE_SYSTEM_PROMPT, "", window, user_input, turn_context)
         conv = self.config.conversation
         guard = TurnGuard(conv.max_steps, conv.max_identical_calls, conv.max_schema_retries)
 

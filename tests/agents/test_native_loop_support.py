@@ -77,3 +77,21 @@ def test_assistant_message_uses_ollama_shape_and_objects():
         {"function": {"name": "a", "arguments": {"k": 1}}},
         {"function": {"name": "b", "arguments": {}}},
     ]
+
+
+def test_token_budget_cuts_on_user_and_cut_holds_next_turn():
+    big = [{"role": r, "content": "x" * 400} for r in ["user", "assistant"] * 3]
+    # Six 100-token messages fit a 700 budget; the next exchange does not.
+    assert history_window(big, 5, token_budget=700) == big
+    grown = big + [{"role": "user", "content": "x" * 400}, {"role": "assistant", "content": "y"}]
+    window = history_window(grown, 5, token_budget=700)
+    assert window[0]["role"] == "user" and len(window) < len(grown)
+    # Reason: without the budget 8 messages are under 2 * h, so this cut is the token one.
+    assert history_window(grown, 5) == grown
+    small = [{"role": "user", "content": "z"}, {"role": "assistant", "content": "w"}]
+    assert history_window(grown + small, 5, token_budget=700)[0] is window[0]
+
+
+def test_no_budget_matches_count_rule():
+    hist = _history(23)
+    assert history_window(hist, 5, token_budget=None) == history_window(hist, 5)
