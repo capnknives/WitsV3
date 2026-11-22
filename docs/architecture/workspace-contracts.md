@@ -205,6 +205,8 @@ tool lists. Registry tools join the MCP server in Stage 3 (item 2.2).
   HTTP 409. `choice` must be in the stored `options`. Status is `approved` only for exactly
   `approve`, `denied` only for exactly `deny`, and `answered` for anything else.
 - **Approving records a choice and runs nothing.** The agent reads the outcome and acts itself.
+  One exception, added November 22, 2026: resolving a folder request also inserts its grant
+  row in the same transaction ([folder access contract](folder-access.md), section 5).
 - **From `core/escalation.py`:** one request at a time, no "always allow", change only from
   pending, deny always present. **Audit:** the row, plus `approval.create` and `approval.resolve`.
 - **Listener:** `add_created_listener(cb)`, `async def cb(approval_id: str, client_name: str)`: run

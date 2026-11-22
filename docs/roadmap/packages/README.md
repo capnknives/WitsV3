@@ -110,6 +110,15 @@ Briefs are written after the Stage 1 gate. Conversation core briefs are in
 | C3b | Finish the native loop ([brief](stage-2-core.md)) | Opus. Independent review, medium | C2a, C2b, C3a | Scripted-model tests pass |
 | C3c | The front door setting ([brief](stage-2-core.md)) | Opus. Independent review, medium | C3b | The "software" sentence gets a direct reply on `native` |
 
+Folder access ([contract](../../architecture/folder-access.md), [briefs](folder-access.md)):
+
+| ID | Package | Builder | Needs | Done when |
+|----|---------|---------|-------|-----------|
+| F1 | Safe defaults and the base folders | Sonnet | — | No default path outside the repo; three folders created |
+| F2 | One path check | Opus. Independent review, medium | F1 | One test per rule; secrets refused everywhere |
+| F3 | Requests and grants | Opus. Independent review, medium | F2 | No grant without a resolved approval |
+| F4 | Inbox page and guide | Sonnet | F3 | Grants listed and revocable from the phone |
+
 Foundations, independent of the conversation core:
 
 | ID | Package | Roadmap item | Builder |
