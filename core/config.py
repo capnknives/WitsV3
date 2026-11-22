@@ -450,6 +450,16 @@ class ConversationSettings(BaseModel):
         default=1, ge=0, description="Retries per tool after a schema failure"
     )
     tools: ToolTierSettings = Field(default_factory=ToolTierSettings)
+    memory_types: list[str] = Field(
+        default_factory=lambda: ["USER_FACT"],
+        description="Memory segment types the native loop may put in the turn context. "
+        "Transcript kinds (REASONING, USER_INPUT, ...) are refused whatever this lists.",
+    )
+    memory_min_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Drop recalled facts scoring below this; 0.0 turns the check off",
+    )
 
 
 class WebUISettings(BaseModel):

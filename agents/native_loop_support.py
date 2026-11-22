@@ -22,10 +22,33 @@ logger = logging.getLogger(__name__)
 NATIVE_SYSTEM_PROMPT = (
     "You are WitsV3, a local assistant. Use the tools when they help, then answer the "
     "user plainly. Call tools only through the structured tool-call format. Anything "
-    "under 'Context for this turn:' in the user's message is background for this turn. "
+    "under 'Context for this turn:' in the user's message is background that may be "
+    "irrelevant; answer the newest user message, not the background. "
     "If none of the listed tools fits the request, call find_tools with a few words "
     "describing what is needed before answering that it cannot be done."
 )
+
+MEMORY_HEADING = "Things the owner has told you before (background, not a request):"
+MEMORY_FACT_CHARS = 300
+MEMORY_FETCH_LIMIT = 25
+MEMORY_KEEP = 5
+# Reason: these are the old path's transcript residue; replaying one makes the model
+# answer an old request, so no setting may let them into the turn context.
+NEVER_RECALLED_TYPES = frozenset(
+    {
+        "REASONING",
+        "OBSERVATION",
+        "GOAL",
+        "FINAL_ANSWER",
+        "INTENT_ANALYSIS",
+        "USER_INPUT",
+        "AGENT_THOUGHT",
+        "TOOL_CALL",
+        "TOOL_RESPONSE",
+        "GENERATED_CODE",
+    }
+)
+_TRANSCRIPT_PREFIXES = ("user input:", "goal:", "final answer:")
 
 STEP_LIMIT_ERROR = "Could not complete within the step limit."
 MODEL_CALL_FAILED = "The model call failed"
@@ -149,6 +172,37 @@ def build_turn_context(goal: str, user_message: str, documents: str, memory: str
     if memory.strip():
         context["memory"] = memory
     return context
+
+
+def recalled_facts(
+    segments: list[Any], allowed: list[str], min_score: float, keep: int = MEMORY_KEEP
+) -> str:
+    """The background memory block for the turn context, or "" when nothing qualifies.
+
+    Args:
+        segments: Search results, best first.
+        allowed: Configured ``conversation.memory_types``; transcript kinds are removed.
+        min_score: Drop results whose ``relevance_score`` is lower; 0 turns it off.
+        keep: Most facts to include.
+    """
+    types = {t.upper() for t in allowed} - NEVER_RECALLED_TYPES
+    lines: list[str] = []
+    for seg in segments:
+        if str(getattr(seg, "type", "")).upper() not in types:
+            continue
+        score = getattr(seg, "relevance_score", None)
+        if min_score > 0 and score is not None and score < min_score:
+            continue
+        text = " ".join((getattr(seg.content, "text", None) or "").split())
+        # Reason: a stored fact may begin with the old path's label, which would read
+        # as a fresh request.
+        if text.lower().startswith(_TRANSCRIPT_PREFIXES):
+            text = text.split(":", 1)[1].strip()
+        if text:
+            lines.append(f"- {text[:MEMORY_FACT_CHARS]}")
+        if len(lines) >= keep:
+            break
+    return f"{MEMORY_HEADING}\n" + "\n".join(lines) if lines else ""
 
 
 def assistant_tool_message(content: str, calls: list[dict[str, Any]]) -> LLMMessage:
