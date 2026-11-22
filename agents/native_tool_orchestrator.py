@@ -27,6 +27,7 @@ from agents.native_loop_support import (
 )
 from agents.tool_tiers import (
     FIND_TOOLS,
+    LOOP_TOOLS,
     ApprovalGate,
     TierSpecs,
     build_tier_specs,
@@ -179,7 +180,7 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                     if route.reject:
                         messages.append(tool_reply(tc, route.reject))
                         continue
-                    if route.name in self._specs.tiers.owner_approval:
+                    if self._specs.tiers.approval_name(route.name):
                         verdict = approvals.check(route.name)
                         stop_answers = verdict.action == "stop"
                     else:
@@ -196,6 +197,11 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
                         continue
                     if route.name == FIND_TOOLS:
                         yield self._find_tools(tc, route.arguments, react_state, messages)
+                        continue
+                    if route.name in LOOP_TOOLS:
+                        # Reason: use_tool must have been unwrapped by now; never hand a
+                        # loop-only name to the registry.
+                        messages.append(tool_reply(tc, f"'{route.name}' cannot run here."))
                         continue
                     run = self._run_tool(tc, react_state, messages, route.name, route.arguments)
                     async for event in run:

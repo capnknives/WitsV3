@@ -408,6 +408,10 @@ class ToolTierSettings(BaseModel):
             "search_archival_memory",
             "read_conversation_history",
             "knowledge_log_add_fact",
+            "apply_code_fix",
+            "diagnose_log_errors",
+            "run_test_suite",
+            "python_execute",
             "find_tools",
             "use_tool",
         ],
@@ -420,7 +424,8 @@ class ToolTierSettings(BaseModel):
             "guest_set_age_band",
             "ask_claude",
         ],
-        description="Tools refused on the native path until approval cards exist",
+        description="Tools refused on the native path until approval cards exist; "
+        "restart_app, network_control, guest_set_age_band and ask_claude always are",
     )
 
 

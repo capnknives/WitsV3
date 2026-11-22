@@ -17,6 +17,8 @@ from core.escalation import get_escalation_manager
 class AskClaudeTool(BaseTool):
     """Queue a question for Claude, pending user approval in the web UI."""
 
+    requires_owner_approval = True
+
     def __init__(self):
         super().__init__(
             name="ask_claude",

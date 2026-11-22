@@ -18,6 +18,10 @@ class BaseTool(ABC):
     Base class for all tools in WitsV3.
     """
 
+    # Reason: a tool that can change the machine or spend money declares it here, so the
+    # native loop refuses it whatever conversation.tools says (agents/tool_tiers.py).
+    requires_owner_approval: bool = False
+
     def __init__(self, name: str, description: str):
         """
         Initialize the tool.

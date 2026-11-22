@@ -307,10 +307,11 @@ class DocumentSearchTool(_DocumentToolBase):
         super().__init__(
             name="document_search",
             description=(
-                "Search the owner's indexed documents and notes by meaning and return "
-                "the best passages with their source files. You must call it whenever "
-                "the owner asks about their documents, notes or files. Not for the web "
-                "(use web_search) or reading one known file in full (use read_file). "
+                "Call this whenever the owner asks about or to search 'my documents', "
+                "'my notes' or 'my files' without giving a specific file path. It "
+                "searches their indexed documents by meaning and returns the best "
+                "passages with source files; no results is a valid answer to report. "
+                "Not for the web (use web_search) or one known file path (use read_file). "
                 'Examples: {"query": "garden layout"}, {"query": "budget", '
                 '"file_name": "plans.md"}.'
             ),

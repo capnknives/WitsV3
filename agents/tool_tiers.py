@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -25,6 +26,11 @@ FIND_TOOLS = "find_tools"
 USE_TOOL = "use_tool"
 LOOP_TOOLS = (FIND_TOOLS, USE_TOOL)
 MAX_MATCHES = 5
+# Reason: fail closed. These are refused on the native path whatever conversation.tools
+# says, so an empty or mistyped setting can never move one into a callable tier.
+OWNER_APPROVAL_FLOOR = frozenset(
+    {"restart_app", "network_control", "guest_set_age_band", "ask_claude"}
+)
 # Reason: the third request for one refused tool in a turn means the model will not stop
 # asking, so the turn ends instead of burning the remaining steps.
 MAX_APPROVAL_REQUESTS = 3
@@ -83,7 +89,7 @@ _LOOP_SPECS: dict[str, tuple[str, dict[str, Any]]] = {
     ),
 }
 
-_logged_unknown: set[str] = set()
+_logged_unknown: set[tuple[str, str]] = set()
 _WORD_RE = re.compile(r"[a-z0-9]+")
 _STOP_WORDS = frozenset(
     "a an and are be can do for from i in is it me my of on or please the this to tool "
@@ -98,6 +104,17 @@ class ToolTiers:
     always: frozenset[str]
     lookup: frozenset[str]
     owner_approval: frozenset[str]
+
+    def approval_name(self, name: Any) -> str | None:
+        """The owner_approval tool ``name`` means, matched loosely, or None.
+
+        Case, spaces and invisible characters are ignored, so a near-miss spelling of a
+        refused tool is still refused rather than reported as unknown.
+        """
+        if not isinstance(name, str):
+            return None
+        wanted = canonical_name(name)
+        return next((n for n in self.owner_approval if canonical_name(n) == wanted), None)
 
 
 @dataclass(frozen=True)
@@ -133,37 +150,59 @@ class Route:
     reject: str = ""
 
 
-def _log_unknown_once(name: str) -> None:
-    if name not in _logged_unknown:
-        _logged_unknown.add(name)
-        logger.warning("conversation.tools names %r, which is not a registered tool", name)
+def canonical_name(name: str) -> str:
+    """Name with case, whitespace and invisible (format) characters removed."""
+    text = unicodedata.normalize("NFKC", name)
+    kept = "".join(c for c in text if not c.isspace() and unicodedata.category(c) != "Cf")
+    return kept.casefold()
+
+
+def _matched(configured: Iterable[Any], known: Iterable[str], setting: str) -> set[str]:
+    """Known names the configured ones mean (strip + casefold); warn about the rest."""
+    by_key = {n.strip().casefold(): n for n in known}
+    found = set()
+    for name in configured or []:
+        hit = by_key.get(str(name).strip().casefold())
+        if hit is not None:
+            found.add(hit)
+        elif (setting, str(name)) not in _logged_unknown:
+            _logged_unknown.add((setting, str(name)))
+            logger.warning(
+                "conversation.tools.%s names %r, which matches no registered tool",
+                setting,
+                name,
+            )
+    return found
 
 
 def resolve_tiers(
-    registered: Iterable[str], always: Iterable[str], owner_approval: Iterable[str]
+    registered: Iterable[str],
+    always: Iterable[str] | None,
+    owner_approval: Iterable[str] | None,
+    flagged: Iterable[str] = (),
 ) -> ToolTiers:
-    """Sort registered tools into tiers.
+    """Sort registered tools into tiers, failing closed.
 
     Args:
         registered: Names of the registered tools the loop may use.
         always: ``conversation.tools.always``.
         owner_approval: ``conversation.tools.owner_approval``.
+        flagged: Registered tools whose class sets ``requires_owner_approval``.
 
     Returns:
-        The tiers. A configured name that is not registered (other than find_tools and
-        use_tool) is logged once and ignored; a name in both lists is ``owner_approval``,
-        the safer choice; every other registered tool is ``lookup``.
+        The tiers. ``owner_approval`` is ``OWNER_APPROVAL_FLOOR`` plus flagged tools plus
+        the configured names, and wins over ``always``. Configured names are matched
+        after strip and casefold; one that matches nothing is warned about once and
+        ignored. Every other registered tool is ``lookup``.
     """
     registered = set(registered)
-    always, owner_approval = list(always), list(owner_approval)
-    for name in always + owner_approval:
-        if name not in registered and name not in LOOP_TOOLS:
-            _log_unknown_once(name)
-    approval = frozenset(n for n in owner_approval if n in registered)
-    sent = frozenset(
-        n for n in always if (n in registered or n in LOOP_TOOLS) and n not in approval
+    approval = (
+        _matched(owner_approval, registered, "owner_approval")
+        | {n for n in registered if n in OWNER_APPROVAL_FLOOR}
+        | (set(flagged) & registered)
     )
-    return ToolTiers(sent, frozenset(registered - sent - approval), approval)
+    sent = _matched(always, registered | set(LOOP_TOOLS), "always") - approval
+    return ToolTiers(frozenset(sent), frozenset(registered - sent - approval), frozenset(approval))
 
 
 def build_tier_specs(registry: Any, exclude: frozenset[str], settings: Any) -> TierSpecs:
@@ -179,8 +218,9 @@ def build_tier_specs(registry: Any, exclude: frozenset[str], settings: Any) -> T
         settings are unchanged, so Ollama keeps its cached prefix.
     """
     payload, schemas = build_tool_specs(registry, exclude)
-    registered = [n for n in (registry.tools if registry else {}) if n not in exclude]
-    tiers = resolve_tiers(registered, settings.always, settings.owner_approval)
+    tools = {n: t for n, t in (registry.tools if registry else {}).items() if n not in exclude}
+    flagged = [n for n, t in tools.items() if getattr(t, "requires_owner_approval", False) is True]
+    tiers = resolve_tiers(tools, settings.always, settings.owner_approval, flagged)
     sent = [t for t in payload if t["function"]["name"] in tiers.always]
     guard = {n: s for n, s in schemas.items() if n not in tiers.owner_approval}
     for name in LOOP_TOOLS:
@@ -252,7 +292,9 @@ def route_call(name: Any, arguments: Any, tiers: ToolTiers) -> Route:
 
     A malformed ``use_tool`` call (not an object, no string name, extra keys) is passed
     on as ``use_tool`` so the guard records the schema failure against it. Arguments
-    that are not an object are passed on to fail the named tool's schema.
+    that are not an object are passed on to fail the named tool's schema. A name that
+    loosely matches an owner_approval tool becomes that tool's name so it is refused; a
+    non-string name passes through for the guard to reject as unknown.
 
     Args:
         name: Tool name the model called.
@@ -262,8 +304,10 @@ def route_call(name: Any, arguments: Any, tiers: ToolTiers) -> Route:
     Returns:
         The route for the loop.
     """
-    if name != USE_TOOL or USE_TOOL not in tiers.always:
+    if not isinstance(name, str):
         return Route(name, arguments)
+    if name != USE_TOOL or USE_TOOL not in tiers.always:
+        return Route(tiers.approval_name(name) or name, arguments)
     outer = arguments
     if isinstance(outer, str):
         try:
@@ -276,7 +320,7 @@ def route_call(name: Any, arguments: Any, tiers: ToolTiers) -> Route:
         or set(outer) - {"name", "arguments"}
     ):
         return Route(name, arguments)
-    real = outer["name"]
+    real = tiers.approval_name(outer["name"]) or outer["name"]
     if real in LOOP_TOOLS:
         return Route(real, None, f"use_tool cannot run '{real}'; call {FIND_TOOLS} directly.")
     if real in tiers.always:

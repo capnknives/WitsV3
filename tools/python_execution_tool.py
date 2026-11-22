@@ -23,7 +23,13 @@ class PythonExecutionTool(BaseTool):
         """Initialize the Python execution tool."""
         super().__init__(
             name="python_execute",
-            description="Execute Python code in a sandboxed environment. Returns the output or error.",
+            description=(
+                "Run a short Python snippet in a sandbox and return what it prints or the "
+                "error. Use it to test an idea or compute something too complex for "
+                "calculator. Not for saving code (use write_file) or fixing project files "
+                '(use apply_code_fix). Examples: {"code": "print(sorted([3, 1, 2]))"}, '
+                '{"code": "import math; print(math.pi)", "timeout": 10}.'
+            ),
         )
         self.timeout = 30  # seconds
         self.max_output_size = 1024 * 1024  # 1MB
@@ -273,8 +279,14 @@ subprocess.check_output = restricted_subprocess
             "allowed" if current_config.security.python_execution_subprocess_access else "blocked"
         )
 
-        description = f"Execute Python code in a sandboxed environment (network access: {network_status}, subprocess: {subprocess_status})"
-        code_description = f"The Python code to execute (network: {network_status}, subprocess: {subprocess_status})"
+        description = (
+            f"{self.description} Network access: {network_status}; "
+            f"subprocess: {subprocess_status}."
+        )
+        code_description = (
+            "The Python code to run; print() what you need back "
+            f"(network: {network_status}, subprocess: {subprocess_status})"
+        )
 
         return {
             "name": "python_execute",
@@ -285,7 +297,8 @@ subprocess.check_output = restricted_subprocess
                     "code": {"type": "string", "description": code_description},
                     "timeout": {
                         "type": "integer",
-                        "description": "Optional timeout in seconds",
+                        "description": "Seconds before the run is stopped; leave it out "
+                        "for the usual 30",
                         "default": 30,
                     },
                 },

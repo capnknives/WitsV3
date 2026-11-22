@@ -132,6 +132,8 @@ class GuestAuditSummaryTool(BaseTool):
 class GuestSetAgeBandTool(BaseTool):
     """Owner assigns child / teen / adult protection tier for a guest."""
 
+    requires_owner_approval = True
+
     def __init__(self):
         super().__init__(
             name="guest_set_age_band",

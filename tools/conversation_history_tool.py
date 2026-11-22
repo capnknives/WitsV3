@@ -19,10 +19,11 @@ class ReadConversationHistoryTool(BaseTool):
         super().__init__(
             name="read_conversation_history",
             description=(
-                "Return the messages of this conversation, oldest first. Use it when the "
-                "owner asks to save, export, summarise or review this conversation (for "
-                "saving, then pass the text to write_file). Not for earlier conversations "
-                '(use search_archival_memory). Examples: {}, {"max_messages": 0}.'
+                "Return this conversation's messages, oldest first: the 10 most recent "
+                "by default, or all of them with max_messages 0. Use it when the owner "
+                "asks to save, export, summarise or review this conversation (to save, "
+                "pass the text to write_file). Not for earlier conversations (use "
+                'search_archival_memory). Examples: {}, {"max_messages": 0}.'
             ),
         )
 

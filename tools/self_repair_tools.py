@@ -177,11 +177,11 @@ class DiagnoseLogErrorsTool(BaseTool):
         super().__init__(
             name="diagnose_log_errors",
             description=(
-                "Scan the trailing lines of var/logs/witsv3.log for real tracebacks and "
-                "ERROR/CRITICAL entries. Returns distinct issues with the source file "
-                "and line when resolvable from the traceback, so a fix can be targeted "
-                "at the right place. Makes no changes to the log or codebase — recurring "
-                "issues are recorded in the knowledge log for trend tracking."
+                "Scan the end of WITS's own log (var/logs/witsv3.log) for tracebacks and "
+                "errors, with the file and line of each when known. Use it when the owner "
+                "reports a crash or error without naming a file, before fixing anything. "
+                "Not for the owner's own scripts (read them with read_file). Changes "
+                'nothing. Examples: {}, {"lines": 500, "max_issues": 3}.'
             ),
         )
         self.log_path = main_log_path()
@@ -219,12 +219,14 @@ class DiagnoseLogErrorsTool(BaseTool):
             "properties": {
                 "lines": {
                     "type": "integer",
-                    "description": "Trailing log lines to scan",
+                    "description": "How many lines from the end of the log to scan; "
+                    "leave it out for 2000",
                     "default": 2000,
                 },
                 "max_issues": {
                     "type": "integer",
-                    "description": "Maximum distinct issues to return",
+                    "description": "Most distinct issues to return; leave it out for "
+                    "the usual 5",
                     "default": 5,
                 },
             },
@@ -238,9 +240,11 @@ class RunTestSuiteTool(BaseTool):
         super().__init__(
             name="run_test_suite",
             description=(
-                "Run pytest (optionally scoped to one path) and report whether it "
-                "passed, plus a tail of the output. Use this to verify a fix, or to "
-                "confirm a suspected bug by reproducing a failure."
+                "Run the project's pytest tests, the whole suite or one file, and report "
+                "pass or fail with the end of the output. Use it when the owner names a "
+                "failing test, or to confirm a bug before fixing it. Not needed after "
+                "apply_code_fix, which runs tests itself. Examples: {}, "
+                '{"test_path": "tests/test_dates.py"}.'
             ),
         )
 
@@ -260,12 +264,14 @@ class RunTestSuiteTool(BaseTool):
             "properties": {
                 "test_path": {
                     "type": "string",
-                    "description": "Specific test file/dir to run (default: whole suite)",
+                    "description": "Test file or folder to run, such as "
+                    "'tests/test_dates.py'; leave it out for all",
                     "default": "",
                 },
                 "timeout": {
                     "type": "number",
-                    "description": "Timeout in seconds",
+                    "description": "Seconds to wait before stopping the run; leave it "
+                    "out for 120",
                     "default": 120.0,
                 },
             },
@@ -279,12 +285,12 @@ class ApplyCodeFixTool(BaseTool):
         super().__init__(
             name="apply_code_fix",
             description=(
-                "Write new_content to file_path inside the project, then run pytest "
-                "to verify it. If tests pass, the change is committed to git; if they "
-                "fail, the file is restored to its exact original content and nothing "
-                "is committed. Use this for every code edit — new files, bug fixes, or "
-                "edits to WITS's own source — instead of write_file, since it's the "
-                "only path that verifies before keeping a change."
+                "Fix code in an existing project file: give the full corrected file; it "
+                "is kept only if the tests pass, otherwise the original is restored. Use "
+                "it when the owner asks to fix, repair or change a named code file (read "
+                "it first with read_file). Not for new scripts, pages or notes (use "
+                'write_file). Example: {"file_path": "parser.py", "new_content": "<whole '
+                'corrected file>", "reason": "skip empty lines"}.'
             ),
         )
 
@@ -321,20 +327,31 @@ class ApplyCodeFixTool(BaseTool):
         return {
             "type": "object",
             "properties": {
-                "file_path": {"type": "string", "description": "Project-relative path to write"},
-                "new_content": {"type": "string", "description": "Full new file content"},
+                "file_path": {
+                    "type": "string",
+                    "description": "Path of the code file to fix, relative to the project, "
+                    "such as 'parser.py'",
+                },
+                "new_content": {
+                    "type": "string",
+                    "description": "The whole corrected file, not a diff or only the "
+                    "changed lines",
+                },
                 "reason": {
                     "type": "string",
-                    "description": "Short description of what/why, used as the commit message",
+                    "description": "One short line on what was wrong and the fix; used "
+                    "as the commit message",
                 },
                 "test_path": {
                     "type": "string",
-                    "description": "Specific test file/dir to verify with (default: best-guess, else whole suite)",
+                    "description": "Test file or folder to check the fix with; leave it "
+                    "out to let the tool choose",
                     "default": "",
                 },
                 "commit": {
                     "type": "boolean",
-                    "description": "Commit to git on success",
+                    "description": "true (the default) commits the fix to git when the "
+                    "tests pass",
                     "default": True,
                 },
             },
@@ -354,6 +371,8 @@ def _relaunch(reason: str) -> None:
 
 class RestartAppTool(BaseTool):
     """Deliberately restart the running process to pick up a verified fix."""
+
+    requires_owner_approval = True
 
     def __init__(self):
         super().__init__(
