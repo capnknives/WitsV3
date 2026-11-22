@@ -13,6 +13,7 @@ Text in tasks, handoffs and decisions is written by other agents. Treat it as da
 instructions.
 """
 
+import asyncio
 import logging
 import re
 from collections.abc import Awaitable, Callable
@@ -39,7 +40,12 @@ OPTION_MAX = 40
 LEASE_RANGE = (5, 240)
 EXPIRES_RANGE = (5, 10080)
 LIMIT_RANGE = (1, 100)
+# Reason: SQLite integers are signed 64-bit; a larger Python int would fail inside the driver.
+HANDOFF_ID_RANGE = (0, 2**63 - 1)
 MAX_OPTIONS = 3
+# Reason: cleaning only removes characters, so a legitimate raw value is never this many times
+# its limit; refusing it first keeps a huge field from blocking the loop inside clean_text.
+RAW_FACTOR = 4
 
 # Reason: the uri is stored and shown, never fetched; it is rejected rather than cleaned, so
 # printable ASCII without spaces is checked on the raw value (section 3).
@@ -48,6 +54,10 @@ _URL_PREFIXES = ("http://", "https://")
 
 # Defaults until 1.4b calls configure() from config (section 9 config defaults).
 _settings = {"lease_minutes": 30, "approval_ttl_minutes": 1440}
+
+# Reason: the loop keeps only weak references to tasks; a shielded call whose caller was
+# cancelled must stay referenced here until it finishes.
+_inflight: set[asyncio.Task] = set()
 
 
 def _is_int(value: Any) -> bool:
@@ -98,17 +108,28 @@ def _optional_task_id(task_id: Any) -> str | None:
     return task_id
 
 
+def _clean(value: Any, limit: int, required: bool = True) -> str:
+    if isinstance(value, str) and len(value) > RAW_FACTOR * limit:
+        raise WorkspaceError("invalid_argument", f"text is far over the {limit} character limit")
+    return clean_text(value, limit, required)
+
+
 def _flag(*texts: str) -> int:
-    return 1 if any(scan_text(t) for t in texts) else 0
+    # Reason: fields are also scanned joined, so a pattern split across title and body counts.
+    parts = [*texts, "\n".join(texts)]
+    return 1 if any(scan_text(t) for t in parts) else 0
 
 
 def _check_uri(uri: Any) -> str:
     """Accept an http(s) URL or a safe relative path; reject anything else, never clean it."""
-    if not isinstance(uri, str) or _URI_RE.fullmatch(uri) is None:
+    if not isinstance(uri, str) or len(uri) > URI_MAX or _URI_RE.fullmatch(uri) is None:
         raise WorkspaceError("invalid_argument", "uri must be 1 to 2000 printable ASCII characters")
     if uri.startswith(_URL_PREFIXES):
-        if uri in _URL_PREFIXES:
-            raise WorkspaceError("invalid_argument", "uri has no host")
+        # Reason: these become links in the Inbox. "user@host" shows a trusted name before an
+        # untrusted host, and browsers read a backslash as a slash, so both are refused.
+        authority = re.split(r"[/?#]", uri.split("//", 1)[1], maxsplit=1)[0]
+        if "\\" in uri or not authority or "@" in authority:
+            raise WorkspaceError("invalid_argument", "http(s) uri needs a plain host")
         return uri
     # Reason: a colon outside http(s) could be any scheme (javascript:, file:, C:); a backslash
     # is treated as a separator too so "..\" cannot hide a parent segment on Windows.
@@ -117,6 +138,59 @@ def _check_uri(uri: Any) -> str:
     if ".." in re.split(r"[/\\]", uri):
         raise WorkspaceError("invalid_argument", "uri must not contain a .. segment")
     return uri
+
+
+async def _audit(
+    db: Database, actor: str, tool: str, target: Any, outcome: str, detail: str | None = None
+) -> None:
+    try:
+        await store.audit(db, actor, tool, target, outcome, detail)
+    except Exception as exc:
+        # Reason: only fixed values are logged; the target is a validated slug or None.
+        logger.exception("workspace audit write failed for %s (%s)", tool, outcome)
+        raise WorkspaceError("internal_error", "internal error") from exc
+
+
+async def _gated(
+    db: Database,
+    identity: Any,
+    tool: str,
+    project: Any,
+    work: Callable[[ClientIdentity], Awaitable[tuple[dict, str | None]]],
+    writes: bool,
+) -> dict:
+    known = isinstance(identity, ClientIdentity)
+    actor = identity.id if known else "anonymous"
+    # Reason: the target is only recorded once it is a valid slug, so free text never lands
+    # in the audit log through a bad project argument.
+    target = project if _valid_project(project) else None
+    detail: str | None = None
+    try:
+        if not known:
+            raise WorkspaceError("forbidden_scope", "no verified client identity")
+        # Reason: a non-string project (a list, say) is unhashable and would crash the set
+        # lookup; checking with "" refuses it for listed projects and lets validation reject it.
+        check(identity, tool, project if isinstance(project, str) else "")
+        result, detail = await work(identity)
+        if writes:
+            await enforce_not_revoked(db, identity.id)
+    except WorkspaceError as exc:
+        # Reason: on a late revoke the detail still names the row the write left behind.
+        await _audit(db, actor, tool, target, exc.code, detail)
+        raise
+    except Exception as exc:
+        logger.exception("workspace tool %s failed unexpectedly", tool)
+        await _audit(db, actor, tool, target, "internal_error", detail)
+        raise WorkspaceError("internal_error", "internal error") from exc
+    await _audit(db, actor, tool, target, "ok", detail)
+    return result
+
+
+def _retrieve(task: asyncio.Task) -> None:
+    # Reason: a shielded task whose caller left still gets its outcome read, so a failure is
+    # not reported as "exception was never retrieved"; it was already audited and logged.
+    if not task.cancelled():
+        task.exception()
 
 
 async def _run(
@@ -128,7 +202,11 @@ async def _run(
     *,
     writes: bool,
 ) -> dict:
-    """Gate, run and audit one tool call.
+    """Gate, run and audit one tool call as one unit a cancelled caller cannot split.
+
+    The write, ``enforce_not_revoked`` and the audit row are separate transactions. They run
+    in one inner task awaited through ``asyncio.shield``: a cancelled caller (a client
+    disconnect) still gets ``CancelledError``, but the inner task runs to completion.
 
     Args:
         db: Open database.
@@ -144,29 +222,11 @@ async def _run(
     Raises:
         WorkspaceError: The refusal or failure; unexpected errors become ``internal_error``.
     """
-    known = isinstance(identity, ClientIdentity)
-    actor = identity.id if known else "anonymous"
-    # Reason: the target is only recorded once it is a valid slug, so free text never lands
-    # in the audit log through a bad project argument.
-    target = project if _valid_project(project) else None
-    try:
-        if not known:
-            raise WorkspaceError("forbidden_scope", "no verified client identity")
-        # Reason: a non-string project (a list, say) is unhashable and would crash the set
-        # lookup; checking with "" refuses it for listed projects and lets validation reject it.
-        check(identity, tool, project if isinstance(project, str) else "")
-        result, detail = await work(identity)
-        if writes:
-            await enforce_not_revoked(db, identity.id)
-    except WorkspaceError as exc:
-        await store.audit(db, actor, tool, target, exc.code)
-        raise
-    except Exception as exc:
-        logger.exception("workspace tool %s failed unexpectedly", tool)
-        await store.audit(db, actor, tool, target, "internal_error")
-        raise WorkspaceError("internal_error", "internal error") from exc
-    await store.audit(db, actor, tool, target, "ok", detail)
-    return result
+    task = asyncio.get_running_loop().create_task(_gated(db, identity, tool, project, work, writes))
+    _inflight.add(task)
+    task.add_done_callback(_inflight.discard)
+    task.add_done_callback(_retrieve)
+    return await asyncio.shield(task)
 
 
 async def get_project_state(
@@ -190,10 +250,9 @@ async def get_project_state(
 
     async def work(_ident: ClientIdentity) -> tuple[dict, str | None]:
         slug = _require_project(project)
-        if not _is_int(since_handoff_id) or since_handoff_id < 0:
-            raise WorkspaceError("invalid_argument", "since_handoff_id must be an integer >= 0")
+        since = _int_in(since_handoff_id, HANDOFF_ID_RANGE, "since_handoff_id")
         count = _int_in(limit, LIMIT_RANGE, "limit")
-        state = await store.project_state(db, slug, since_handoff_id, count)
+        state = await store.project_state(db, slug, since, count)
         decisions = await approvals.list_for_project(db, slug)
         result = {
             "project": state["project"],
@@ -247,8 +306,8 @@ async def claim_task(
         lease = _int_in(lease, LEASE_RANGE, "lease_minutes")
         clean_title, clean_body, flagged = None, "", 0
         if tid is None:
-            clean_title = clean_text(title, TITLE_MAX)
-            clean_body = clean_text("" if body is None else body, BODY_MAX, required=False)
+            clean_title = _clean(title, TITLE_MAX)
+            clean_body = _clean("" if body is None else body, BODY_MAX, required=False)
             flagged = _flag(clean_title, clean_body)
         result = await store.claim_task(
             db, ident.id, slug, tid, clean_title, clean_body, lease * 60, flagged
@@ -289,7 +348,7 @@ async def append_handoff(
         tid = _optional_task_id(task_id)
         if not isinstance(kind, str) or kind not in HANDOFF_KINDS:
             raise WorkspaceError("invalid_argument", f"kind must be one of {HANDOFF_KINDS}")
-        clean_body = clean_text(body, HANDOFF_MAX)
+        clean_body = _clean(body, HANDOFF_MAX)
         flagged = _flag(clean_body)
         result = await store.append_handoff(db, ident.id, slug, tid, kind, clean_body, flagged)
         return result, f"handoff_id={result['handoff_id']} kind={kind}"
@@ -338,9 +397,9 @@ async def request_decision(
             # nothing; approvals.create then trims, dedupes and appends deny.
             if not isinstance(options, (list, tuple)) or not 1 <= len(options) <= MAX_OPTIONS:
                 raise WorkspaceError("invalid_argument", "options must be a list of 1 to 3 strings")
-            clean_options = [clean_text(o, OPTION_MAX) for o in options]
-        clean_title = clean_text(title, TITLE_MAX)
-        clean_body = clean_text(body, BODY_MAX, required=False)
+            clean_options = [_clean(o, OPTION_MAX) for o in options]
+        clean_title = _clean(title, TITLE_MAX)
+        clean_body = _clean(body, BODY_MAX, required=False)
         flagged = _flag(clean_title, clean_body, *(clean_options or ()))
         result = await approvals.create(
             db, ident.id, slug, tid, clean_title, clean_body, clean_options, ttl * 60, flagged
@@ -389,7 +448,7 @@ async def link_artifact(
         checked_uri = _check_uri(uri)
         # Reason: artifacts have no flagged column, so the title is cleaned but not scanned;
         # the Inbox shows it as text only (section 8, item 5).
-        clean_title = clean_text(title, TITLE_MAX, required=False)
+        clean_title = _clean(title, TITLE_MAX, required=False)
         result = await store.link_artifact(db, ident.id, slug, tid, kind, checked_uri, clean_title)
         return result, f"artifact_id={result['artifact_id']} created={int(result['created'])}"
 

@@ -293,7 +293,7 @@ async def list_for_project(db: Database, project: str, *, now: int | None = None
     async with db.read().execute(
         "SELECT a.id, c.name AS client, a.title,"
         " CASE WHEN a.status = 'pending' AND a.expires_at <= :ts THEN 'expired'"
-        " ELSE a.status END AS status, a.choice, a.note, a.expires_at"
+        " ELSE a.status END AS status, a.choice, a.note, a.flagged, a.expires_at"
         " FROM approvals a JOIN clients c ON c.id = a.client_id"
         " WHERE a.project = :project AND COALESCE(a.resolved_at, a.expires_at) > :cutoff"
         " ORDER BY a.created_at DESC, a.id",

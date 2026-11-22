@@ -9,7 +9,9 @@ _INJECTION_PATTERNS = (
     re.compile(r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions", re.I),
     re.compile(r"disregard\s+(your|the)\s+(system|safety|rules)", re.I),
     re.compile(r"you\s+are\s+now\s+(in\s+)?(developer|admin|root)\s+mode", re.I),
-    re.compile(r"<\s*/?\s*system\s*>", re.I),
+    # Reason: the slash and its trailing spaces form one optional group; two adjacent \s* here
+    # backtrack quadratically on "<" followed by many spaces.
+    re.compile(r"<\s*(?:/\s*)?system\s*>", re.I),
     re.compile(r"BEGIN\s+SYSTEM\s+PROMPT", re.I),
 )
 
