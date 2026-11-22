@@ -49,10 +49,10 @@ class TestMigrations:
     async def test_fresh_then_reopen(self, tmp_path):
         path = tmp_path / "w.db"
         first = await open_db(path)
-        assert await _scalar(first, "SELECT MAX(version) FROM schema_version") == 1
+        assert await _scalar(first, "SELECT MAX(version) FROM schema_version") == 2
         await first.close()
         second = await open_db(path)
-        assert await _scalar(second, "SELECT COUNT(*) FROM schema_version") == 1
+        assert await _scalar(second, "SELECT COUNT(*) FROM schema_version") == 2
         await second.close()
         assert list(tmp_path.glob("*.bak")) == []
 
@@ -74,11 +74,12 @@ class TestMigrations:
 
     async def test_backup_only_when_migrating_existing(self, tmp_path, monkeypatch):
         path = tmp_path / "w.db"
-        await (await open_db(path)).close()
-        assert list(tmp_path.glob("*.bak")) == []
         mig = tmp_path / "mig"
         mig.mkdir()
         shutil.copy(dbmod.MIGRATIONS_DIR / "0001_init.sql", mig)
+        monkeypatch.setattr(dbmod, "MIGRATIONS_DIR", mig)
+        await (await open_db(path)).close()
+        assert list(tmp_path.glob("*.bak")) == []
         (mig / "0002_extra.sql").write_text("CREATE TABLE extra (x INTEGER);\n")
         monkeypatch.setattr(dbmod, "MIGRATIONS_DIR", mig)
         upgraded = await open_db(path)
