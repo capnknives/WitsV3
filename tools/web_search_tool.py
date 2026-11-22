@@ -33,6 +33,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 from core.base_tool import BaseTool
+from core.tool_context import tool_user_role
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class WebSearchTool(BaseTool):
     def _safesearch_mode(self) -> str:
         """Guest sessions always use strict safe-search."""
         kwargs = getattr(self, "_search_kwargs", {}) or {}
-        if kwargs.get("user_role") == "guest":
+        if tool_user_role(kwargs.get("user_role")) == "guest":
             return "strict"
         mode = str(self._get("safesearch", "moderate")).lower()
         if mode not in _SAFESEARCH_VQD:

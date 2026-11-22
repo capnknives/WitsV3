@@ -7,6 +7,7 @@ from typing import Any
 from core.base_tool import BaseTool
 from core.guest_access import GuestRegistry, format_active_guest_accounts
 from core.guest_audit import GuestAuditLog, build_owner_audit_digest
+from core.tool_context import tool_user_role
 
 
 class GuestAccountsListTool(BaseTool):
@@ -24,7 +25,7 @@ class GuestAccountsListTool(BaseTool):
         self.registry = GuestRegistry()
 
     async def execute(self, include_revoked: bool = False, **kwargs: Any) -> str:
-        user_role = kwargs.get("user_role", "owner")
+        user_role = tool_user_role(kwargs.get("user_role", "owner"))
         if user_role == "guest":
             return (
                 "guest_accounts_list is only available to the owner. "
@@ -75,7 +76,7 @@ class GuestAuditSummaryTool(BaseTool):
         include_all_guests: bool = False,
         **kwargs: Any,
     ) -> str:
-        user_role = kwargs.get("user_role", "owner")
+        user_role = tool_user_role(kwargs.get("user_role", "owner"))
         if user_role == "guest":
             return (
                 "guest_audit_summary is only available to the owner. "
@@ -149,7 +150,7 @@ class GuestSetAgeBandTool(BaseTool):
         guest_id: str | None = None,
         **kwargs: Any,
     ) -> str:
-        user_role = kwargs.get("user_role", "owner")
+        user_role = tool_user_role(kwargs.get("user_role", "owner"))
         if user_role == "guest":
             return "guest_set_age_band is only available to the owner."
 

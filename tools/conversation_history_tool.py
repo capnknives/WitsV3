@@ -9,6 +9,7 @@ from typing import Any
 
 from core.base_tool import BaseTool
 from core.schemas import ConversationHistory
+from core.tool_context import tool_conversation
 
 
 class ReadConversationHistoryTool(BaseTool):
@@ -37,6 +38,7 @@ class ReadConversationHistoryTool(BaseTool):
         Returns:
             Formatted conversation history
         """
+        conversation_history = tool_conversation(conversation_history)
         try:
             if not conversation_history:
                 return "Starting new conversation."
@@ -117,6 +119,7 @@ class AnalyzeConversationTool(BaseTool):
         Returns:
             Analysis results
         """
+        conversation_history = tool_conversation(conversation_history)
         try:
             if not conversation_history:
                 return {

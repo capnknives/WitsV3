@@ -31,6 +31,7 @@ from core.memory_manager import MemoryManager
 from core.prompt_prefix import build_messages, context_block
 from core.schemas import ConversationHistory
 from core.tool_call_guard import OUT_OF_STEPS, TurnGuard
+from core.tool_context import ToolContext, use_tool_context
 from core.turn_metrics import current_turn
 
 
@@ -103,6 +104,16 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             "preferred_tool": kwargs.get("preferred_tool", ""),
         }
         self._react_state_for_tools = react_state
+        # Reason: kept in this turn's state, not on self, so concurrent turns on one
+        # orchestrator never see each other's context.
+        react_state["tool_context"] = ToolContext(
+            session_id=session_id,
+            # Reason: the role exactly as the caller sent it; "owner" when absent only
+            # because the front door already sends every non-owner turn to the old path.
+            user_role=kwargs.get("user_role", "owner"),
+            conversation_history=conversation_history,
+            turn_id=turn.turn_id if turn is not None else None,
+        )
 
         chat_fn = getattr(self.llm_interface, "generate_chat", None)
         if not chat_fn:
@@ -216,7 +227,11 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             try:
                 # Reason: state=None keeps _prepare_tool_args from merging loop state (such
                 # as user_role) into the arguments the guard validated.
-                result = await self._call_tool(tool_name, tool_args, None)
+                # Reason: the context is set around each call, not across the whole
+                # generator, because a ContextVar held over a yield would leak into the
+                # consumer and could be reset from another Context.
+                with use_tool_context(state["tool_context"]):
+                    result = await self._call_tool(tool_name, tool_args, None)
                 observation = self._format_tool_observation(tool_name, result)
                 ok = not self._tool_result_is_failure(result)
             except Exception as e:
