@@ -26,6 +26,7 @@ def mock_config() -> WitsV3Config:
     config.ollama_settings.retry_delay = 0.01  # Fast for testing
     config.ollama_settings.exponential_backoff = False
     config.ollama_settings.keep_alive = "30m"
+    config.ollama_settings.num_ctx = 8192
     config.ollama_settings.embedding_on_cpu = False
 
     config.agents = MagicMock()
@@ -35,6 +36,13 @@ def mock_config() -> WitsV3Config:
     config.llm_interface.default_provider = "ollama"
 
     return config
+
+
+@pytest.fixture(autouse=True)
+def _no_capability_lookup():
+    """Keep /api/show out of these exact-call assertions (covered in test_llm_serving)."""
+    with patch.object(OllamaInterface, "_supports_thinking", return_value=False):
+        yield
 
 
 @pytest.fixture
@@ -69,7 +77,7 @@ async def test_prepare_payload_default_params(mock_config: WitsV3Config):
         "model": "test-model",
         "prompt": "Test prompt",
         "stream": False,
-        "options": {"temperature": 0.5},
+        "options": {"temperature": 0.5, "num_ctx": 8192},
         "keep_alive": "30m",
     }
     assert payload == expected
@@ -93,7 +101,12 @@ async def test_prepare_payload_override_params(mock_config: WitsV3Config):
         "model": "custom-model",
         "prompt": "Test prompt",
         "stream": True,
-        "options": {"temperature": 0.8, "num_predict": 100, "stop": ["stop1", "stop2"]},
+        "options": {
+            "temperature": 0.8,
+            "num_predict": 100,
+            "stop": ["stop1", "stop2"],
+            "num_ctx": 8192,
+        },
         "keep_alive": "30m",
     }
     assert payload == expected
@@ -116,7 +129,7 @@ async def test_generate_text_success(mock_config: WitsV3Config, mock_async_clien
         "model": "test-model",
         "prompt": "Hello",
         "stream": False,
-        "options": {"temperature": 0.5},
+        "options": {"temperature": 0.5, "num_ctx": 8192},
         "keep_alive": "30m",
     }
     mock_async_client.post.assert_called_once_with(
@@ -168,7 +181,7 @@ async def test_generate_text_request_error(mock_config: WitsV3Config, mock_async
         "model": "test-model",
         "prompt": "Hello",
         "stream": False,
-        "options": {"temperature": 0.5},
+        "options": {"temperature": 0.5, "num_ctx": 8192},
         "keep_alive": "30m",
     }
     assert mock_async_client.post.call_count == mock_config.ollama_settings.retry_attempts
@@ -210,7 +223,7 @@ async def test_stream_text_success(mock_config: WitsV3Config, mock_async_client:
         "model": "test-model",
         "prompt": "Stream hello",
         "stream": True,
-        "options": {"temperature": 0.5},
+        "options": {"temperature": 0.5, "num_ctx": 8192},
         "keep_alive": "30m",
     }
     mock_async_client.stream.assert_called_once_with(
@@ -253,7 +266,7 @@ async def test_stream_text_http_status_error(
         "model": "test-model",
         "prompt": "Stream error",
         "stream": True,
-        "options": {"temperature": 0.5},
+        "options": {"temperature": 0.5, "num_ctx": 8192},
         "keep_alive": "30m",
     }
     # 400 errors are not retried
@@ -287,7 +300,7 @@ async def test_stream_text_request_error(mock_config: WitsV3Config, mock_async_c
         "model": "test-model",
         "prompt": "Stream net error",
         "stream": True,
-        "options": {"temperature": 0.5},
+        "options": {"temperature": 0.5, "num_ctx": 8192},
         "keep_alive": "30m",
     }
     assert mock_async_client.stream.call_count == mock_config.ollama_settings.retry_attempts

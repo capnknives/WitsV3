@@ -131,13 +131,15 @@ class OllamaInterface(BaseLLMInterface):
             options["num_predict"] = max_tokens
         if stop_sequences is not None:
             options["stop"] = stop_sequences
-        if num_ctx is not None:
-            options["num_ctx"] = num_ctx
+        # Reason: without num_ctx Ollama loads the model's own (huge) default and spills to CPU.
+        options["num_ctx"] = num_ctx if num_ctx is not None else self.ollama_settings.num_ctx
 
         payload = {"model": effective_model, "prompt": prompt, "stream": stream, "options": options}
         if format is not None:
             payload["format"] = format
         payload["keep_alive"] = self.ollama_settings.keep_alive
+        if await self._supports_thinking(effective_model):
+            payload["think"] = self.ollama_settings.think
         return payload
 
     async def _execute_with_retry(

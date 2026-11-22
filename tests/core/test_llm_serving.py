@@ -108,4 +108,16 @@ async def test_generate_and_stream_send_keep_alive_and_keep_returns():
     assert chunks == ["a"]
     for body in _bodies(seen, "/api/generate"):
         assert body["keep_alive"] == "30m"
+        assert body["options"]["num_ctx"] == iface.ollama_settings.num_ctx
         assert "think" not in body
+
+
+@pytest.mark.asyncio
+async def test_generate_and_stream_num_ctx_override_and_think():
+    iface, seen = _make()
+    await iface.generate_text("p", model="think-model", num_ctx=1234)
+    _ = [c async for c in iface.stream_text("p", model="think-model")]
+    first, second = _bodies(seen, "/api/generate")
+    assert first["options"]["num_ctx"] == 1234
+    assert second["options"]["num_ctx"] == iface.ollama_settings.num_ctx
+    assert first["think"] is False and second["think"] is False

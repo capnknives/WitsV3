@@ -40,7 +40,10 @@ def mock_config():
 @pytest.fixture
 def ollama_interface(mock_config):
     """Fixture for an OllamaInterface."""
-    return OllamaInterface(mock_config)
+    iface = OllamaInterface(mock_config)
+    # Keep /api/show out of the call-count assertions (covered in test_llm_serving).
+    iface._thinking_support["test-model"] = False
+    return iface
 
 
 @pytest.mark.asyncio
