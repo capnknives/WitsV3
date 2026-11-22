@@ -46,6 +46,13 @@ from core.schemas import ConversationHistory
 from core.tool_call_guard import OUT_OF_STEPS, TurnGuard
 from core.tool_context import ToolContext, use_tool_context
 from core.turn_metrics import current_turn, record_tool
+from core.untrusted_content import (
+    UntrustedWriteGate,
+    is_untrusted_source,
+    mark_untrusted,
+    turn_gate,
+    write_gate_enabled,
+)
 
 
 class NativeToolOrchestrator(BaseOrchestratorAgent):
@@ -140,6 +147,8 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             conversation_history=conversation_history,
             turn_id=turn.turn_id if turn is not None else None,
         )
+        # Reason: per turn, like tool_context, so a read in one turn never gates the next.
+        react_state["untrusted_gate"] = UntrustedWriteGate(write_gate_enabled(self.config))
 
         chat_fn = getattr(self.llm_interface, "generate_chat", None)
         if not chat_fn:
@@ -288,10 +297,15 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         """
         # Reason: the guard accepted these arguments, and it reads null as no arguments.
         tool_args = decode_arguments(arguments) or {}
+        gate = turn_gate(state)
         block_reason = self._preflight_tool_call(tool_name, tool_args, state)
+        block_reason = block_reason or gate.block_reason(tool_name)
+        untrusted = is_untrusted_source(tool_name)
         if block_reason:
             observation = block_reason
         else:
+            # Reason: taint before the call, so a source that raises still gates the turn.
+            gate.note_dispatch(tool_name)
             try:
                 # Reason: state=None keeps _prepare_tool_args from merging loop state (such
                 # as user_role) into the arguments the guard validated.
@@ -308,7 +322,11 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             yield tool_call_event(self.agent_name, tool_name, ok)
         state["observations"].append(observation)
         yield self.stream_observation(observation)
-        messages.append(tool_reply(tc, observation))
+        # Reason: only the copy sent to the model is wrapped; observations stay bare for
+        # the owner-facing synthesis, and the only observation re-sent to a model (the
+        # retry after a synthesis/save guard) is the guard's own message.
+        reply = mark_untrusted(tool_name, observation) if untrusted and not block_reason else None
+        messages.append(tool_reply(tc, reply or observation))
 
     async def _answer_out_of_steps(
         self, state: dict[str, Any], messages: list[LLMMessage], chat_fn: Any
