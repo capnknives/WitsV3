@@ -113,12 +113,15 @@ async def test_two_concurrent_turns_keep_their_contexts_apart():
         _result(orch, "who b", session_id="b", user_role="family"),
     )
     assert first.endswith("session=a role=owner")
-    assert second.endswith("session=b role=family")
+    # Reason: RT-10, "family" is not owner, so its turn is a guest and the owner-only tool
+    # is blocked (it used to run with the raw role); the owner turn beside it is unaffected.
+    assert "not available for guest" in second
     assert current_tool_context() is None
 
 
-async def test_role_defaults_to_owner_when_the_caller_sends_none():
+async def test_role_is_guest_when_the_caller_sends_none():
+    # Reason: RT-10 reversed the old owner default; trusted callers now pass "owner".
     call = {"name": "whoami", "arguments": {}}
     orch, _, _ = _make({"who": call})
     out = await _result(orch, "who", session_id="c")
-    assert out.endswith("session=c role=owner")
+    assert "not available for guest" in out

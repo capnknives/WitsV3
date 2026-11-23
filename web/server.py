@@ -34,6 +34,7 @@ from core.guest_access import (
 )
 from core.guest_audit import GuestAuditLog
 from core.guest_user_profile import GuestUserProfileStore
+from core.roles import normalize_role
 from core.runtime_paths import guest_audit_dir, guest_profiles_path
 from core.schemas import ConversationHistory, StreamData
 from core.turn_metrics import finish_turn, note_event, start_turn
@@ -271,7 +272,9 @@ def create_app(system) -> FastAPI:
     @app.post("/api/chat")
     async def chat(body: ChatRequest, request: Request):
         guest = getattr(request.state, "guest", None)
-        auth_role = getattr(request.state, "auth_role", None) or "owner"
+        # Reason: RT-10, fail closed. Only an exact "owner" set by the auth middleware
+        # (including auth-off local mode) is owner; anything else is a guest.
+        auth_role = normalize_role(getattr(request.state, "auth_role", None))
         raw_session = body.session_id or str(uuid.uuid4())
         if guest:
             session_id = guest_session_key(guest["guest_id"], raw_session)
@@ -324,7 +327,7 @@ def create_app(system) -> FastAPI:
                 "session",
                 {
                     "session_id": client_session_id,
-                    "role": "guest" if guest else "owner",
+                    "role": auth_role,
                     "display_name": (guest or {}).get("display_name"),
                 },
             )
@@ -407,7 +410,7 @@ def create_app(system) -> FastAPI:
                     user_input=body.message,
                     conversation_history=conversation,
                     session_id=session_id,
-                    user_role=auth_role if auth_role in ("owner", "guest") else "owner",
+                    user_role=auth_role,
                     guest_profile=guest,
                     guest_personalization_context=guest_personalization,
                 ):
@@ -706,7 +709,7 @@ def create_app(system) -> FastAPI:
                 ollama_available = await llm.is_service_available()
             except Exception:
                 ollama_available = False
-        role = getattr(request.state, "auth_role", None) or "owner"
+        role = normalize_role(getattr(request.state, "auth_role", None))
         guest = getattr(request.state, "guest", None)
         return {
             "project": cfg.project_name,
@@ -730,7 +733,7 @@ def create_app(system) -> FastAPI:
     @app.get("/api/commands")
     async def slash_commands(request: Request):
         """Slash commands available in the chat composer for this caller."""
-        role = getattr(request.state, "auth_role", None) or "owner"
+        role = normalize_role(getattr(request.state, "auth_role", None))
         return {"commands": list_slash_commands(role)}
 
     @app.get("/api/tools")

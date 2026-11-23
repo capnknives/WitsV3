@@ -140,9 +140,12 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                 self.memory_manager, conversation_history.session_id
             )
         doc_inventory = await self._get_document_inventory()
+        # Reason: RT-10. The bound turn (always set by @bind_turn_if_unbound) holds the
+        # normalised role; the raw kwarg could be "", "Owner" or missing.
+        user_role = turn_for(self).user_role
         guest_profile = kwargs.get("guest_profile") or {}
         guest_age_band = guest_profile.get("age_band") or "teen"
-        if guest_profile.get("guest_id") and kwargs.get("user_role") == "guest":
+        if guest_profile.get("guest_id") and user_role == "guest":
             from core.guest_access import GuestRegistry
 
             reg = GuestRegistry()
@@ -165,7 +168,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "tool_total_failures": {},
             "lookup_search_done": False,
             "synthesis_guard_retries": 0,
-            "user_role": kwargs.get("user_role", "owner"),
+            "user_role": user_role,
             "guest_profile": guest_profile,
             "guest_age_band": guest_age_band,
             "guest_personalization_context": kwargs.get("guest_personalization_context", ""),

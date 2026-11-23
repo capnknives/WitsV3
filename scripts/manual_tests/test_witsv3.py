@@ -139,7 +139,7 @@ class WitsV3Tester:
 
                 # Process the test input
                 response_parts = []
-                async for stream_data in control_center.run(user_input=test_input, goal="Answer the question or respond to the statement"):
+                async for stream_data in control_center.run(user_input=test_input, goal="Answer the question or respond to the statement", user_role="owner"):
                     if stream_data.type in ["result", "error"]:
                         response_parts.append(stream_data.content)
 

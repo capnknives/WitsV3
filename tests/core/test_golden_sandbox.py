@@ -89,7 +89,7 @@ def test_no_flags_exits_2_before_building():
 
 
 class HangingThenOk:
-    async def run(self, message, conversation_history=None):
+    async def run(self, message, conversation_history=None, user_role=None):
         if message == "hang":
             await asyncio.sleep(60)
         yield StreamData(type="result", content="ok", source="fake")

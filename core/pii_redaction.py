@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from core.roles import is_owner
+
 _DEFAULT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
     ("phone", re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")),
@@ -35,8 +37,9 @@ def is_pii_redaction_enabled(config: Any | None, *, role: str = "owner") -> bool
     pii = getattr(security, "pii_redaction", None) if security else None
     if pii is None or not getattr(pii, "enabled", False):
         return False
-    role_key = (role or "owner").lower()
-    if role_key == "owner" and not getattr(pii, "redact_owner", False):
+    # Reason: RT-10, fail closed. Only the exact "owner" may skip redaction; "OWNER" or
+    # None no longer lower-case/default their way into the owner exemption.
+    if is_owner(role) and not getattr(pii, "redact_owner", False):
         return False
     return True
 
@@ -64,7 +67,8 @@ def maybe_redact_for_storage(text: str, config: Any | None, *, role: str = "owne
 
 
 def maybe_redact_for_guest(text: str, config: Any | None, *, role: str) -> str:
-    if role != "guest" and not role.startswith("family"):
+    # Reason: RT-10, fail closed. Any non-owner role (unknown ones included) is redacted.
+    if is_owner(role):
         return text
     if not is_pii_redaction_enabled(config, role=role):
         return text

@@ -105,10 +105,11 @@ async def test_native_owner_software_sentence_one_call_no_tool(monkeypatch):
     assert result.failures == []
 
 
-async def test_native_cli_default_role_is_owner(monkeypatch):
+async def test_native_cli_owner_role_takes_native_path(monkeypatch):
     agent, llm, _ = _make("native")
     _forbid_legacy(agent, monkeypatch)
-    events, turn = await _run(agent, "good morning")
+    # Reason: RT-10, the CLI (run.py) now passes user_role="owner"; no role is a guest.
+    events, turn = await _run(agent, "good morning", user_role="owner")
     assert llm.chat_calls == 1 and turn.path == "native"
 
 

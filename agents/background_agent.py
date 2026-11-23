@@ -262,7 +262,9 @@ class BackgroundAgent(BaseAgent):
         )
         results = []
         async for stream_data in agent.run(
-            "Scan for recent errors and fix any that can be safely resolved."
+            "Scan for recent errors and fix any that can be safely resolved.",
+            # Reason: RT-10, a missing role is a guest; this scheduled job is the owner's.
+            user_role="owner",
         ):
             if stream_data.type in ("result", "observation"):
                 results.append(f"[{stream_data.type}] {stream_data.content}")

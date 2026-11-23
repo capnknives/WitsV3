@@ -23,6 +23,8 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
+from core.roles import normalize_role
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -37,7 +39,17 @@ class TurnContext:
 
     @classmethod
     def for_request(cls, **kwargs: Any) -> TurnContext:
-        role = kwargs.get("user_role", "owner")
+        """Build the turn for one request from the caller's kwargs.
+
+        Args:
+            **kwargs: Request kwargs; ``user_role`` is the caller's role.
+
+        Returns:
+            A turn whose ``user_role`` is exactly ``"owner"`` or ``"guest"``.
+        """
+        # Reason: RT-10, fail closed. A missing, empty or unknown role is a guest; trusted
+        # internal callers (CLI, scheduled jobs, scripts) pass user_role="owner" explicitly.
+        role = normalize_role(kwargs.get("user_role"))
         return cls(
             user_role=role,
             guest_profile=kwargs.get("guest_profile"),

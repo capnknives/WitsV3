@@ -21,7 +21,7 @@ REPLY = "Sorry, I can't help.é | no"
 class FakeControl:
     """Replies per message: 'hang' stalls after one result, anything else answers REPLY."""
 
-    async def run(self, message, conversation_history=None):
+    async def run(self, message, conversation_history=None, user_role=None):
         yield StreamData(type="result", content=REPLY, source="fake")
         if message == "hang":
             await asyncio.sleep(60)

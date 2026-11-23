@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.roles import normalize_role
+
 # roles: owner | guest — who may see the command in the picker
 SLASH_COMMANDS: list[dict[str, Any]] = [
     {
@@ -139,7 +141,8 @@ SLASH_COMMANDS: list[dict[str, Any]] = [
 
 def list_slash_commands(role: str | None) -> list[dict[str, Any]]:
     """Return slash commands visible to the caller."""
-    normalized = role if role in ("owner", "guest") else "owner"
+    # Reason: RT-10, fail closed; an unknown role sees only the guest commands.
+    normalized = normalize_role(role)
     visible: list[dict[str, Any]] = []
     for cmd in SLASH_COMMANDS:
         if normalized not in cmd.get("roles", []):

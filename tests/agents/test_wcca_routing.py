@@ -327,7 +327,9 @@ async def test_run_self_repair_reaches_self_repair_agent(wcca_with_specialists):
 
     streams = [
         item
-        async for item in wcca_with_specialists.run("Run self repair", session_id="sess-selfrepair")
+        async for item in wcca_with_specialists.run(
+            "Run self repair", session_id="sess-selfrepair", user_role="owner"
+        )
     ]
     assert self_repair_agent.received_input == "Run self repair"
     assert any("self_repair ran" in s.content for s in streams)
@@ -434,7 +436,9 @@ async def test_continuation_followup_resumes_previous_specialized_agent(wcca_wit
     wcca_with_specialists.specialized_agents["book_writing"] = book_agent
     session_id = "sess-book-continuation"
 
-    async for _ in wcca_with_specialists.run("write a story about a dragon", session_id=session_id):
+    async for _ in wcca_with_specialists.run(
+        "write a story about a dragon", session_id=session_id, user_role="owner"
+    ):
         pass
     assert wcca_with_specialists._active_specialized_agent[session_id] == "book_writing"
 
@@ -501,7 +505,10 @@ async def test_followup_reply_merges_with_pending_clarification_and_reaches_self
     )
 
     streams = [
-        item async for item in agent.run("Specifically the wits v3 codebase", session_id=session_id)
+        item
+        async for item in agent.run(
+            "Specifically the wits v3 codebase", session_id=session_id, user_role="owner"
+        )
     ]
 
     assert session_id not in agent._pending_clarifications

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from core.roles import is_owner
 from core.runtime_paths import documents_dir, inbox_dir, outbox_dir, project_root, projects_dir
 from core.safe_code_editor import PROJECT_ROOT
 
@@ -73,9 +74,13 @@ def read_roots_for_role(
     guest_policy: dict[str, Any] | None = None,
 ) -> list[Path]:
     """Resolve read roots for owner, guest, or RBAC role name."""
-    role_key = (role or "owner").strip().lower()
-    if role_key in ("owner", ""):
+    if is_owner(role):
         return configured_read_roots(config)
+    # Reason: RT-10, fail closed. None, "" and owner look-alikes ("Owner", "owner ") get
+    # the legacy guest roots, never the owner's.
+    role_key = role.strip().lower() if isinstance(role, str) else ""
+    if role_key in ("owner", ""):
+        role_key = "guest"
 
     policy = guest_policy
     if policy is None:
@@ -102,11 +107,9 @@ def read_roots_for_role(
             if resolved:
                 return resolved
 
-    # Legacy guest: project only
-    if role_key == "guest":
-        return [project_read_root()]
-
-    return _roots_without_documents(config)
+    # Reason: legacy guest, and any role the policy does not define, read the project
+    # only; an unknown role must not fall through to the owner's wider roots.
+    return [project_read_root()]
 
 
 def _roots_without_documents(config: Any | None) -> list[Path]:

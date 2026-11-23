@@ -118,6 +118,8 @@ def _make(replies: list[LLMResponse], **conversation) -> tuple:
 
 
 async def _run(orch, message: str = "what is the weather word", **kwargs) -> list:
+    # Reason: RT-10, a turn with no role is a guest; these loop tests model an owner turn.
+    kwargs.setdefault("user_role", "owner")
     events = [event async for event in orch.run(message, **kwargs)]
     for call in orch.llm_interface.calls:
         _assert_well_formed(call["messages"])

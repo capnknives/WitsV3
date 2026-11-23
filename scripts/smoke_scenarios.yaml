@@ -168,21 +168,23 @@ scenarios:
         assert:
           stream_type: result
 
-  - id: family-adult-downloads-read
+  # RT-10: a turn role is "owner" or a guest; an RBAC name in the role slot is a guest,
+  # so it takes the guest path (no direct file read) like route-downloads-guest-denied.
+  - id: family-adult-downloads-guest-path
     tier: routing
     requires_live: false
     message: list my downloads folder
     role: family_adult
     assert:
-      routing_destination: read_file_direct
+      suggested_response: orchestrator
 
-  - id: family-kid-downloads-denied-at-fs
+  - id: family-kid-downloads-guest-path
     tier: routing
     requires_live: false
     message: read secret.pdf in my downloads
     role: family_kid
     assert:
-      routing_destination: read_file_direct
+      suggested_response: orchestrator
 
   - id: route-continue-orchestrator
     tier: routing
