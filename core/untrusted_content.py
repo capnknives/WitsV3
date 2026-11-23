@@ -61,7 +61,8 @@ WRITE_BLOCKED = (
 #   counting it is one confirmation, so it is a private read.
 # - python_execute: only docker mode enforces --network=none and mounts nothing but the
 #   snippet (core/sandbox_runner.py); subprocess and off modes can open any host file,
-#   and their "no network" is only an env var nothing reads, so it is both.
+#   and their "no network" is only an env var nothing reads, so it is both; the gate
+#   treats it as local-only when built with python_sandboxed (see python_sandboxed()).
 # - ask_claude sends its prompt to Anthropic; it is also owner-approval only.
 # - enhanced_reasoning draws on neural-web memory, so it is a private read.
 # Setting the private fact never refuses a write by itself: write tools are "neither"
@@ -143,6 +144,20 @@ def mark_untrusted(tool_name: Any, text: str) -> str:
     )
 
 
+def python_sandboxed(config: Any) -> bool:
+    """True only when python_execute's sandbox mode normalises to exactly ``docker``.
+
+    Reason: docker mode enforces --network=none and mounts only the snippet, so there
+    python_execute is local-only for RT-11. Any other or unreadable mode fails closed.
+    """
+    try:
+        from core.sandbox_runner import sandbox_mode
+
+        return sandbox_mode(config).strip().lower() == "docker"
+    except Exception:
+        return False
+
+
 def write_gate_enabled(config: Any) -> bool:
     """The ``security.untrusted_write_gate`` switch; on unless set to False."""
     security = getattr(config, "security", None)
@@ -164,16 +179,22 @@ def is_local_only(tool_name: Any) -> bool:
 class UntrustedWriteGate:
     """One turn's gate: set when an untrusted-source or private-read tool is dispatched."""
 
-    def __init__(self, enabled: bool = True):
+    def __init__(self, enabled: bool = True, python_sandboxed: bool = False):
         self.enabled = enabled
+        # Reason: only the RT-11 rule reads this; RT-3 refuses python_execute in every mode.
+        self.python_sandboxed = python_sandboxed is True
         self.tainted_by: str | None = None
         self.private_read_by: str | None = None
+
+    def _python_local(self, tool_name: Any) -> bool:
+        return self.python_sandboxed and tool_name == "python_execute"
 
     def note_dispatch(self, tool_name: Any) -> None:
         """Record, before it runs, that ``tool_name`` is about to run in this turn."""
         if self.tainted_by is None and is_untrusted_source(tool_name):
             self.tainted_by = tool_name
-        if self.private_read_by is None and is_private_read(tool_name):
+        private = is_private_read(tool_name) and not self._python_local(tool_name)
+        if self.private_read_by is None and private:
             self.private_read_by = tool_name
 
     def block_reason(self, tool_name: Any) -> str | None:
@@ -185,7 +206,8 @@ class UntrustedWriteGate:
         tainted_ok = isinstance(tool_name, str) and tool_name in READ_ONLY_TOOLS
         if self.tainted_by and not tainted_ok:
             return WRITE_BLOCKED.format(name=_safe_name(tool_name))
-        if self.private_read_by and not is_local_only(tool_name):
+        local = is_local_only(tool_name) or self._python_local(tool_name)
+        if self.private_read_by and not local:
             return OUTBOUND_BLOCKED.format(name=_safe_name(tool_name))
         return None
 

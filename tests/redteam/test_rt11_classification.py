@@ -6,6 +6,8 @@ exact, known local-only names may run.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from core.tool_registry import ToolRegistry
@@ -15,6 +17,7 @@ from core.untrusted_content import (
     TOOL_CLASSES,
     WRITE_BLOCKED,
     UntrustedWriteGate,
+    python_sandboxed,
 )
 
 
@@ -88,3 +91,31 @@ def test_setting_off_blocks_nothing():
     gate.note_dispatch("read_file")
     assert gate.block_reason("web_search") is None
     assert gate.block_reason("mcp_x") is None
+
+
+@pytest.mark.parametrize(
+    "mode,expected",
+    [("docker", True), (" DOCKER\n", True), ("subprocess", False), ("off", False)]
+    + [(None, False), ("dockerish", False), (42, False)],
+)
+def test_python_sandboxed_reads_the_mode(mode, expected):
+    assert (
+        python_sandboxed(SimpleNamespace(security=SimpleNamespace(sandbox_mode=mode))) is expected
+    )
+
+
+@pytest.mark.parametrize("config", [None, object(), SimpleNamespace(security=None)])
+def test_python_sandboxed_fails_closed_without_a_mode(config):
+    assert python_sandboxed(config) is False
+
+
+def test_python_sandboxed_gate_never_relaxes_rt3():
+    gate = UntrustedWriteGate(True, python_sandboxed=True)
+    gate.note_dispatch("web_search")
+    assert gate.block_reason("python_execute") == WRITE_BLOCKED.format(name="python_execute")
+
+
+def test_python_sandboxed_needs_a_real_true():
+    gate = UntrustedWriteGate(True, python_sandboxed="yes")
+    gate.note_dispatch("list_directory")
+    assert gate.block_reason("python_execute")

@@ -43,6 +43,7 @@ _SCHEMAS = {
     "write_file": {"file_path": "string", "content": "string"},
     "analyze_conversation": {"query": "string"},
     "python_execute": {"code": "string"},
+    "list_directory": {"path": "string"},
 }
 _BLOCK = "Blocked:"
 
@@ -76,9 +77,10 @@ class _Registry:
         return [kw for n, kw in self.executed if n == "web_search"]
 
 
-def _make(replies, gate_on=True, real_tiers=False):
+def _make(replies, gate_on=True, real_tiers=False, sandbox="subprocess"):
     config = WitsV3Config()
     config.security.untrusted_write_gate = gate_on
+    config.security.sandbox_mode = sandbox
     # Reason: real_tiers keeps the shipped always tier (with find_tools/use_tool), so the
     # mcp_*, search_mcp_tools and analyze_conversation fakes sit in the lookup tier.
     if not real_tiers:
@@ -320,3 +322,45 @@ async def test_conversation_history_then_python_execute_is_blocked():
     await _run(orch)
     assert registry.names() == ["read_conversation_history"]
     assert _tool_messages(llm)[-1].startswith(_BLOCK)
+
+
+_PY = _call("python_execute", {"code": "print(sorted(open('notes.txt').read()))"})
+_LIST = _call("list_directory", {"path": "inbox"})
+
+
+async def _pair(first, second, sandbox):
+    orch, llm, registry = _make([_tools(first), _tools(second), LLMResponse("ok")], sandbox=sandbox)
+    await _run(orch)
+    return llm, registry
+
+
+@pytest.mark.parametrize("sandbox", ["docker", "Docker "])
+@pytest.mark.parametrize(
+    "first,second",
+    [(_LIST, _PY), (READS["read_conversation_history"], _PY), (_PY, _LEAK)],
+    ids=["list-then-python", "history-then-python", "python-then-search"],
+)
+async def test_docker_sandbox_python_is_local_only(first, second, sandbox):
+    llm, registry = await _pair(first, second, sandbox)
+    assert registry.names() == [first["name"], second["name"]]
+    assert not any(m.startswith(_BLOCK) for m in _tool_messages(llm))
+
+
+@pytest.mark.parametrize("sandbox", ["subprocess", "off", "garbage", ""])
+async def test_other_sandbox_modes_refuse_python_after_a_private_read(sandbox):
+    llm, registry = await _pair(_LIST, _PY, sandbox)
+    assert registry.names() == ["list_directory"]
+    assert "private local content" in _tool_messages(llm)[-1]
+
+
+@pytest.mark.parametrize("sandbox", ["subprocess", "off", "garbage", ""])
+async def test_other_sandbox_modes_refuse_search_after_python(sandbox):
+    llm, registry = await _pair(_PY, _LEAK, sandbox)
+    assert registry.names() == ["python_execute"]
+    assert "'web_search' was not run" in _tool_messages(llm)[-1]
+
+
+async def test_docker_sandbox_keeps_the_rt3_rule_for_python():
+    llm, registry = await _pair(READS["read_file"], _PY, "docker")
+    assert registry.names() == ["read_file"]
+    assert "untrusted external content" in _tool_messages(llm)[-1]
