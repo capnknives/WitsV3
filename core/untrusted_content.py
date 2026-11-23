@@ -3,8 +3,9 @@
 Text from the web, ingested documents, files or MCP servers can carry instructions. On
 the native path such text reaches the model inside an envelope that says it is data,
 and once an untrusted-source tool has been dispatched in a turn, only the read-only
-tools in ``READ_ONLY_TOOLS`` may run for the rest of that turn. The owner confirms in a
-new message, which starts a new turn.
+tools in ``READ_ONLY_TOOLS`` may run for the rest of that turn. Once a private local read
+has run (RT-11), only tools in ``LOCAL_ONLY_TOOLS`` may run for the rest of that turn. The owner
+confirms in a new message, which starts a new turn.
 
 The gate state is one ``UntrustedWriteGate`` per turn, made in
 ``NativeToolOrchestrator.run``; it is never kept on a shared object.
@@ -14,6 +15,7 @@ from __future__ import annotations
 
 import re
 import secrets
+from collections.abc import Callable
 from typing import Any
 
 # Reason: tools whose results can hold text from outside the owner's control: web
@@ -51,6 +53,83 @@ WRITE_BLOCKED = (
     "Tell the owner what you would do and ask them to confirm in their next message."
 )
 
+# Reason: RT-11. Every registered tool, classified from what its code does (a test fails
+# when a registered tool is missing). "private" returns the owner's local data (files,
+# logs, memory, conversation, knowledge log, guest/audit data, test or code output);
+# "outbound" sends model-chosen text to a network service; "both"; "neither". The model
+# itself already sees every result, so a call to the local LLM is not outbound.
+# - list_directory: file names can be private ("divorce-lawyer.pdf"), and the cost of
+#   counting it is one confirmation, so it is a private read.
+# - python_execute: only docker mode enforces --network=none and mounts nothing but the
+#   snippet (core/sandbox_runner.py); subprocess and off modes can open any host file,
+#   and their "no network" is only an env var nothing reads, so it is both; the gate
+#   treats it as local-only while python_sandboxed() is True (see SANDBOX_LOCAL_TOOLS).
+# - run_test_suite and apply_code_fix run pytest on model-written code: run_test_suite
+#   always on the host, apply_code_fix in docker mode through run_pytest_sandboxed, whose
+#   container has the network, so both are "both" in every mode.
+# - ask_claude sends its prompt to Anthropic; it is also owner-approval only.
+# - enhanced_reasoning draws on neural-web memory, so it is a private read.
+# Setting the private fact never refuses a write by itself: write tools are "neither"
+# here and stay governed by the RT-3 rule above.
+TOOL_CLASSES: dict[str, str] = {
+    "read_file": "private",
+    "list_directory": "private",
+    "document_search": "private",
+    "ingest_documents": "private",
+    "search_archival_memory": "private",
+    "read_conversation_history": "private",
+    "analyze_conversation": "private",
+    "diagnose_log_errors": "private",
+    "knowledge_log_summary": "private",
+    "guest_accounts_list": "private",
+    "guest_audit_summary": "private",
+    "guest_user_profile_summary": "private",
+    "enhanced_reasoning": "private",
+    "neural_web_visualize": "private",
+    "python_execute": "both",
+    "run_test_suite": "both",
+    "apply_code_fix": "both",
+    "web_search": "outbound",
+    "search_mcp_tools": "outbound",
+    "ask_claude": "outbound",
+    "write_file": "neither",
+    "knowledge_log_add_fact": "neither",
+    "promote_to_core_memory": "neither",
+    "guest_set_age_band": "neither",
+    "request_folder_access": "neither",
+    "list_mcp_tools": "neither",
+    "network_control": "neither",
+    "restart_app": "neither",
+    "neural_web_nlp_extract": "neither",
+    "datetime": "neither",
+    "calculator": "neither",
+    "math_operations": "neither",
+    "think": "neither",
+}
+# Reason: an MCP server may read local data (a filesystem server) and may send its
+# arguments anywhere, so every ``mcp_*`` tool counts as both.
+BOTH_PREFIXES = ("mcp_",)
+# Reason: the tools classed as private readers by name; the gate uses is_private_read(),
+# which also counts unknown and mcp_* names. Kept for tests and readers of the table.
+PRIVATE_READ_TOOLS = frozenset(n for n, c in TOOL_CLASSES.items() if c in ("private", "both"))
+# Reason: code-running tools whose only network-less path is the docker sandbox
+# (core/sandbox_runner.py _run_docker_sandbox: --network=none, snippet-only mount).
+SANDBOX_LOCAL_TOOLS = frozenset({"python_execute"})
+# Reason: fail closed. After a private read only these may run; ``mcp_*``, outbound,
+# unknown, wrong-case and non-string names are all refused.
+LOCAL_ONLY_TOOLS = frozenset(n for n, c in TOOL_CLASSES.items() if c in ("private", "neither"))
+
+OUTBOUND_BLOCKED = (
+    "Blocked: this turn read private local content, so '{name}' was not run, because it "
+    "could send text off this computer. Tell the owner what you wanted to do and ask "
+    "them to confirm in their next message."
+)
+UNKNOWN_BLOCKED = (
+    "Blocked: this turn read private local content, so '{name}' was not run, because it "
+    "is not a tool known to keep data on this computer. Tell the owner what you wanted "
+    "to do and ask them to confirm in their next message."
+)
+
 _END = "[END UNTRUSTED EXTERNAL CONTENT"
 
 
@@ -79,31 +158,85 @@ def mark_untrusted(tool_name: Any, text: str) -> str:
     )
 
 
+def python_sandboxed(config: Any = None) -> bool:
+    """True only when python_execute would run in docker mode right now.
+
+    Reason: the same source and comparison as tools/python_execution_tool.py, which reads
+    ``load_config()`` at run time and checks ``sandbox_mode(config) != "docker"``; the gate
+    calls this at each decision, so a mid-turn mode change is seen. Errors fail closed.
+    """
+    try:
+        from core.config import load_config
+        from core.sandbox_runner import sandbox_mode
+
+        return sandbox_mode(load_config() if config is None else config) == "docker"
+    except Exception:
+        return False
+
+
 def write_gate_enabled(config: Any) -> bool:
     """The ``security.untrusted_write_gate`` switch; on unless set to False."""
     security = getattr(config, "security", None)
     return getattr(security, "untrusted_write_gate", True) is not False
 
 
-class UntrustedWriteGate:
-    """One turn's gate: set when an untrusted-source tool is dispatched."""
+def is_private_read(tool_name: Any) -> bool:
+    """True unless ``tool_name`` is classed "neither" or "outbound" (fail closed)."""
+    return not isinstance(tool_name, str) or TOOL_CLASSES.get(tool_name) not in (
+        "neither",
+        "outbound",
+    )
 
-    def __init__(self, enabled: bool = True):
+
+def is_local_only(tool_name: Any) -> bool:
+    """True when ``tool_name`` is known to send nothing off this computer (exact name)."""
+    return isinstance(tool_name, str) and tool_name in LOCAL_ONLY_TOOLS
+
+
+class UntrustedWriteGate:
+    """One turn's gate: set when an untrusted-source or private-read tool is dispatched."""
+
+    def __init__(self, enabled: bool = True, sandboxed: Callable[[], Any] = python_sandboxed):
         self.enabled = enabled
+        # Reason: asked at each decision, never cached; only the RT-11 rule reads it, since
+        # RT-3 refuses python_execute in every mode.
+        self._sandboxed = sandboxed
         self.tainted_by: str | None = None
+        self.private_read_by: str | None = None
+
+    def _sandbox_local(self, tool_name: Any) -> bool:
+        if not (isinstance(tool_name, str) and tool_name in SANDBOX_LOCAL_TOOLS):
+            return False
+        try:
+            return self._sandboxed() is True
+        except Exception:
+            return False
 
     def note_dispatch(self, tool_name: Any) -> None:
         """Record, before it runs, that ``tool_name`` is about to run in this turn."""
         if self.tainted_by is None and is_untrusted_source(tool_name):
             self.tainted_by = tool_name
+        if self.private_read_by is None and is_private_read(tool_name):
+            if not self._sandbox_local(tool_name):
+                self.private_read_by = _safe_name(tool_name)
 
     def block_reason(self, tool_name: Any) -> str | None:
         """The tool reply for a refused call, or None when ``tool_name`` may run."""
-        if not (self.enabled and self.tainted_by):
+        if not self.enabled:
             return None
-        if isinstance(tool_name, str) and tool_name in READ_ONLY_TOOLS:
+        # Reason: when both rules refuse a call, the RT-3 message wins so existing replies
+        # stay the same; the RT-11 message covers what RT-3 lets through (web_search).
+        tainted_ok = isinstance(tool_name, str) and tool_name in READ_ONLY_TOOLS
+        if self.tainted_by and not tainted_ok:
+            return WRITE_BLOCKED.format(name=_safe_name(tool_name))
+        if not self.private_read_by or is_local_only(tool_name):
             return None
-        return WRITE_BLOCKED.format(name=_safe_name(tool_name))
+        if self._sandbox_local(tool_name):
+            return None
+        known = isinstance(tool_name, str) and (
+            tool_name in TOOL_CLASSES or tool_name.startswith(BOTH_PREFIXES)
+        )
+        return (OUTBOUND_BLOCKED if known else UNKNOWN_BLOCKED).format(name=_safe_name(tool_name))
 
 
 def turn_gate(state: dict[str, Any]) -> UntrustedWriteGate:
