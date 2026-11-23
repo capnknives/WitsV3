@@ -72,6 +72,18 @@ def _normalize_scores(scores: list[float]) -> list[float]:
     return [(s - lo) / (hi - lo) for s in scores]
 
 
+def _is_degenerate(scores: list[float]) -> bool:
+    """True when min-max normalisation is meaningless (one score, or all scores tied)."""
+    return len(scores) <= 1 or max(scores) <= min(scores)
+
+
+def _term_coverage(query_terms: set[str], doc_tokens: list[str]) -> float:
+    """Fraction of distinct query terms present in the document (absolute, 0..1)."""
+    if not query_terms:
+        return 0.0
+    return len(query_terms & set(doc_tokens)) / len(query_terms)
+
+
 def fuse_hybrid_scores(
     segments: Sequence[Any],
     *,
@@ -85,9 +97,19 @@ def fuse_hybrid_scores(
     texts = [(getattr(seg.content, "text", None) or "") for seg in segments]
     bm25 = SimpleBM25(texts)
     lexical_raw = bm25.score_all(query)
-    lexical_norm = _normalize_scores(lexical_raw)
     vector_raw = [float(getattr(seg, "relevance_score", 0.0) or 0.0) for seg in segments]
-    vector_norm = _normalize_scores(vector_raw)
+    # Reason: min-max cannot rank a single candidate or an all-tied pool (it returns 0.0 for
+    # everything), which made min_relevance drop a clearly relevant lone chunk. In that case
+    # score each component on an absolute 0..1 scale so the same cutoff stays meaningful.
+    if _is_degenerate(lexical_raw):
+        query_terms = set(tokenize(query))
+        lexical_norm = [_term_coverage(query_terms, bm25.docs[i]) for i in range(len(segments))]
+    else:
+        lexical_norm = _normalize_scores(lexical_raw)
+    if _is_degenerate(vector_raw):
+        vector_norm = [min(max(v, 0.0), 1.0) for v in vector_raw]
+    else:
+        vector_norm = _normalize_scores(vector_raw)
 
     fused: list[tuple[Any, float, float, float]] = []
     for seg, vec, lex in zip(segments, vector_norm, lexical_norm, strict=True):
