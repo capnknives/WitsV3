@@ -136,12 +136,19 @@ def _force_subprocess_pytest_path(monkeypatch):
     )
 
 
+def _tmp_project(monkeypatch, tmp_path):
+    root = (tmp_path / "proj").resolve()
+    root.mkdir()
+    monkeypatch.setattr(sce, "PROJECT_ROOT", root)
+    return root
+
+
 @pytest.mark.asyncio
-async def test_apply_verified_edit_writes_and_reverts_in_project(monkeypatch):
-    """Use a real scratch file inside the project so resolve_within_project succeeds,
-    but stub run_pytest so the test doesn't depend on the real suite's runtime."""
-    scratch_rel = "tests/core/_scratch_safe_edit_target.txt"
-    scratch_abs = sce.PROJECT_ROOT / scratch_rel
+async def test_apply_verified_edit_writes_and_reverts_in_project(monkeypatch, tmp_path):
+    """Use a scratch file inside a tmp project root (outside tests/, which RT-12 refuses
+    without docker), and stub run_pytest so the test doesn't depend on the real suite."""
+    scratch_rel = "pkg/_scratch_safe_edit_target.txt"
+    scratch_abs = _tmp_project(monkeypatch, tmp_path) / scratch_rel
     assert not scratch_abs.exists(), "scratch fixture file should not pre-exist"
 
     async def fake_fail(*args, **kwargs):
@@ -160,9 +167,10 @@ async def test_apply_verified_edit_writes_and_reverts_in_project(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_apply_verified_edit_restores_original_bytes_on_failure(monkeypatch):
-    scratch_rel = "tests/core/_scratch_safe_edit_existing.txt"
-    scratch_abs = sce.PROJECT_ROOT / scratch_rel
+async def test_apply_verified_edit_restores_original_bytes_on_failure(monkeypatch, tmp_path):
+    scratch_rel = "pkg/_scratch_safe_edit_existing.txt"
+    scratch_abs = _tmp_project(monkeypatch, tmp_path) / scratch_rel
+    scratch_abs.parent.mkdir(parents=True)
     scratch_abs.write_text("original content", encoding="utf-8")
 
     async def fake_fail(*args, **kwargs):
@@ -181,9 +189,9 @@ async def test_apply_verified_edit_restores_original_bytes_on_failure(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_apply_verified_edit_writes_without_commit_on_success(monkeypatch):
-    scratch_rel = "tests/core/_scratch_safe_edit_success.txt"
-    scratch_abs = sce.PROJECT_ROOT / scratch_rel
+async def test_apply_verified_edit_writes_without_commit_on_success(monkeypatch, tmp_path):
+    scratch_rel = "pkg/_scratch_safe_edit_success.txt"
+    scratch_abs = _tmp_project(monkeypatch, tmp_path) / scratch_rel
 
     async def fake_pass(*args, **kwargs):
         return True, "1 passed"

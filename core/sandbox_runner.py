@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.guard_files import normalise_mode
 from core.safe_code_editor import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ def minimal_child_env(workdir: str, extra: dict[str, str] | None = None) -> dict
 def sandbox_mode(config: Any | None) -> str:
     security = getattr(config, "security", None) if config else None
     mode = getattr(security, "sandbox_mode", "off") if security else "off"
-    return str(mode or "off").lower()
+    return normalise_mode(mode) or "off"
 
 
 async def run_python_sandboxed(
@@ -198,12 +199,18 @@ async def run_pytest_sandboxed(
     *,
     config: Any | None = None,
     timeout: float = 120.0,
+    host_fallback: bool = True,
 ) -> tuple[bool, str]:
-    """Run pytest inside docker sandbox when sandbox_mode=docker; else delegate locally."""
+    """Run pytest inside docker sandbox when sandbox_mode=docker; else delegate locally.
+
+    With ``host_fallback=False`` a non-docker mode fails instead of running on the host.
+    """
     from core.safe_code_editor import run_pytest
 
-    mode = sandbox_mode(config)
+    mode = normalise_mode(sandbox_mode(config))
     if mode != "docker":
+        if not host_fallback:
+            return False, f"refused: sandbox_mode is {mode!r}, not docker; pytest not run"
         return await run_pytest(test_paths, timeout=timeout)
 
     from core.docker_sandbox import _docker_env, _docker_exe
