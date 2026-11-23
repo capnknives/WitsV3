@@ -105,6 +105,18 @@ def _tools(*calls: dict) -> LLMResponse:
     return LLMResponse(content="", tool_calls=list(calls))
 
 
+@pytest.fixture(autouse=True)
+def _classify_fakes(monkeypatch):
+    # Reason: RT-11 counts unclassified names as private reads, so the loop fakes are
+    # classed as local tools that read nothing; the gate itself is tested in tests/redteam.
+    import core.untrusted_content as uc
+
+    fakes = ("boom", "clock", "lookup", "sad")
+    for name in fakes:
+        monkeypatch.setitem(uc.TOOL_CLASSES, name, "neither")
+    monkeypatch.setattr(uc, "LOCAL_ONLY_TOOLS", uc.LOCAL_ONLY_TOOLS | set(fakes))
+
+
 def _make(replies: list[LLMResponse], **conversation) -> tuple:
     config = WitsV3Config()
     # Reason: these tests are about the loop, so every fake tool is sent directly.

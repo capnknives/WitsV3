@@ -14,6 +14,7 @@ from core.tool_registry import ToolRegistry
 from core.untrusted_content import (
     LOCAL_ONLY_TOOLS,
     PRIVATE_READ_TOOLS,
+    SANDBOX_LOCAL_TOOLS,
     TOOL_CLASSES,
     WRITE_BLOCKED,
     UntrustedWriteGate,
@@ -22,7 +23,8 @@ from core.untrusted_content import (
 
 
 def _after(*names: str) -> UntrustedWriteGate:
-    gate = UntrustedWriteGate(True)
+    # Reason: not docker, so these tests never depend on the checkout's config.yaml.
+    gate = UntrustedWriteGate(True, sandboxed=lambda: False)
     for name in names:
         gate.note_dispatch(name)
     return gate
@@ -63,11 +65,61 @@ def test_wrong_case_and_non_string_names_are_refused(name):
     assert _after("read_conversation_history").block_reason(name)
 
 
-@pytest.mark.parametrize("name", sorted(LOCAL_ONLY_TOOLS - {"read_file"}))
-def test_local_only_tools_still_run_after_a_conversation_read(name):
+_CODE_RUNNERS = ("python_execute", "run_test_suite", "apply_code_fix")
+
+
+@pytest.mark.parametrize("name", sorted(LOCAL_ONLY_TOOLS))
+def test_local_only_tools_that_run_no_code_still_run_after_a_conversation_read(name):
     # Reason: the private fact alone never refuses a write or local tool (RT-3 decides
     # writes, and read_conversation_history is no RT-3 source).
+    assert name not in _CODE_RUNNERS
     assert _after("read_conversation_history").block_reason(name) is None
+
+
+@pytest.mark.parametrize("mode", ["docker", "Docker", "subprocess", "off", "Docker "])
+@pytest.mark.parametrize("name", _CODE_RUNNERS)
+def test_code_running_tools_follow_the_sandbox_in_each_mode(name, mode):
+    live = SimpleNamespace(security=SimpleNamespace(sandbox_mode=mode))
+    gate = UntrustedWriteGate(True, sandboxed=lambda: python_sandboxed(live))
+    gate.note_dispatch("read_conversation_history")
+    # Reason: only python_execute has a network-less path, and only in docker mode;
+    # run_test_suite runs pytest on the host and run_pytest_sandboxed keeps the network.
+    local = name in SANDBOX_LOCAL_TOOLS and mode.lower() == "docker"
+    assert (gate.block_reason(name) is None) is local
+    runner = UntrustedWriteGate(True, sandboxed=lambda: python_sandboxed(live))
+    runner.note_dispatch(name)
+    assert (runner.private_read_by is None) is local
+
+
+def test_gate_reads_the_mode_at_each_decision():
+    live = {"mode": "docker"}
+    gate = UntrustedWriteGate(True, sandboxed=lambda: live["mode"] == "docker")
+    gate.note_dispatch("list_directory")
+    assert gate.block_reason("python_execute") is None
+    live["mode"] = "subprocess"
+    assert gate.block_reason("python_execute").startswith("Blocked:")
+
+
+def test_python_sandboxed_uses_load_config_like_the_tool(monkeypatch):
+    live = SimpleNamespace(security=SimpleNamespace(sandbox_mode="docker"))
+    monkeypatch.setattr("core.config.load_config", lambda *a, **k: live)
+    assert python_sandboxed() is True
+    live.security.sandbox_mode = "subprocess"
+    assert python_sandboxed() is False
+
+
+@pytest.mark.parametrize("name", ["unknown_tool", "Read_File", "mcp_x", 7, None, ["x"], ""])
+def test_unclassified_names_count_as_a_private_read(name):
+    gate = _after(name)
+    assert gate.private_read_by
+    assert gate.block_reason("web_search").startswith("Blocked:")
+
+
+@pytest.mark.parametrize("name", ["unknown_tool", "Web_Search", 7, None])
+def test_unknown_names_get_a_truthful_block_message(name):
+    reason = _after("read_conversation_history").block_reason(name)
+    assert reason.startswith("Blocked:") and "owner" in reason
+    assert "send text off" not in reason
 
 
 def test_rt3_message_wins_when_both_rules_refuse():
@@ -95,8 +147,8 @@ def test_setting_off_blocks_nothing():
 
 @pytest.mark.parametrize(
     "mode,expected",
-    [("docker", True), (" DOCKER\n", True), ("subprocess", False), ("off", False)]
-    + [(None, False), ("dockerish", False), (42, False)],
+    [("docker", True), ("DOCKER", True), (" DOCKER\n", False), ("Docker ", False)]
+    + [("subprocess", False), ("off", False), (None, False), ("dockerish", False), (42, False)],
 )
 def test_python_sandboxed_reads_the_mode(mode, expected):
     assert (
@@ -104,18 +156,18 @@ def test_python_sandboxed_reads_the_mode(mode, expected):
     )
 
 
-@pytest.mark.parametrize("config", [None, object(), SimpleNamespace(security=None)])
+@pytest.mark.parametrize("config", [object(), SimpleNamespace(security=None)])
 def test_python_sandboxed_fails_closed_without_a_mode(config):
     assert python_sandboxed(config) is False
 
 
 def test_python_sandboxed_gate_never_relaxes_rt3():
-    gate = UntrustedWriteGate(True, python_sandboxed=True)
+    gate = UntrustedWriteGate(True, sandboxed=lambda: True)
     gate.note_dispatch("web_search")
     assert gate.block_reason("python_execute") == WRITE_BLOCKED.format(name="python_execute")
 
 
 def test_python_sandboxed_needs_a_real_true():
-    gate = UntrustedWriteGate(True, python_sandboxed="yes")
+    gate = UntrustedWriteGate(True, sandboxed=lambda: "yes")
     gate.note_dispatch("list_directory")
     assert gate.block_reason("python_execute")

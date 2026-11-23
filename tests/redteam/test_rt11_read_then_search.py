@@ -77,8 +77,18 @@ class _Registry:
         return [kw for n, kw in self.executed if n == "web_search"]
 
 
+_LIVE: dict = {}
+
+
+@pytest.fixture(autouse=True)
+def _live_config(monkeypatch):
+    # Reason: the gate, like python_execute, reads the sandbox mode from load_config() at
+    # each decision, so the test config is what load_config() returns.
+    monkeypatch.setattr("core.config.load_config", lambda *a, **k: _LIVE["config"])
+
+
 def _make(replies, gate_on=True, real_tiers=False, sandbox="subprocess"):
-    config = WitsV3Config()
+    config = _LIVE["config"] = WitsV3Config()
     config.security.untrusted_write_gate = gate_on
     config.security.sandbox_mode = sandbox
     # Reason: real_tiers keeps the shipped always tier (with find_tools/use_tool), so the
@@ -334,7 +344,7 @@ async def _pair(first, second, sandbox):
     return llm, registry
 
 
-@pytest.mark.parametrize("sandbox", ["docker", "Docker "])
+@pytest.mark.parametrize("sandbox", ["docker", "Docker"])
 @pytest.mark.parametrize(
     "first,second",
     [(_LIST, _PY), (READS["read_conversation_history"], _PY), (_PY, _LEAK)],
@@ -346,7 +356,7 @@ async def test_docker_sandbox_python_is_local_only(first, second, sandbox):
     assert not any(m.startswith(_BLOCK) for m in _tool_messages(llm))
 
 
-@pytest.mark.parametrize("sandbox", ["subprocess", "off", "garbage", ""])
+@pytest.mark.parametrize("sandbox", ["subprocess", "off", "garbage", "", "Docker "])
 async def test_other_sandbox_modes_refuse_python_after_a_private_read(sandbox):
     llm, registry = await _pair(_LIST, _PY, sandbox)
     assert registry.names() == ["list_directory"]
@@ -364,3 +374,27 @@ async def test_docker_sandbox_keeps_the_rt3_rule_for_python():
     llm, registry = await _pair(READS["read_file"], _PY, "docker")
     assert registry.names() == ["read_file"]
     assert "untrusted external content" in _tool_messages(llm)[-1]
+
+
+async def test_mode_changed_mid_turn_refuses_python():
+    # Reason: the gate must agree with the tool at dispatch, not with the turn start.
+    orch, llm, registry = _make([_tools(_LIST), _tools(_PY), LLMResponse("ok")], sandbox="docker")
+    run = registry.execute_tool
+
+    async def flip(name, **kwargs):
+        _LIVE["config"].security.sandbox_mode = "subprocess"
+        return await run(name, **kwargs)
+
+    registry.execute_tool = flip
+    await _run(orch)
+    assert registry.names() == ["list_directory"]
+    assert "private local content" in _tool_messages(llm)[-1]
+
+
+async def test_docker_coding_turn_runs():
+    write = _call("write_file", {"file_path": "projects/a.py", "content": "print(1)"})
+    batch = _tools(_LIST, write, _PY)
+    orch, llm, registry = _make([batch, LLMResponse("ok")], sandbox="docker")
+    await _run(orch)
+    assert registry.names() == ["list_directory", "write_file", "python_execute"]
+    assert not any(m.startswith(_BLOCK) for m in _tool_messages(llm))

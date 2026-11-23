@@ -50,7 +50,6 @@ from core.untrusted_content import (
     UntrustedWriteGate,
     is_untrusted_source,
     mark_untrusted,
-    python_sandboxed,
     turn_gate,
     write_gate_enabled,
 )
@@ -149,9 +148,9 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             turn_id=turn.turn_id if turn is not None else None,
         )
         # Reason: per turn, like tool_context, so a read in one turn never gates the next.
-        react_state["untrusted_gate"] = UntrustedWriteGate(
-            write_gate_enabled(self.config), python_sandboxed(self.config)
-        )
+        # Reason: the gate asks python_sandboxed() at each decision, from load_config() as the
+        # python tool does, so it never trusts a turn-start snapshot of the sandbox mode.
+        react_state["untrusted_gate"] = UntrustedWriteGate(write_gate_enabled(self.config))
 
         chat_fn = getattr(self.llm_interface, "generate_chat", None)
         if not chat_fn:
