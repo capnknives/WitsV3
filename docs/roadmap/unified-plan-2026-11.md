@@ -8,7 +8,7 @@ status: "active"
 # WitsV3 Unified Execution Plan
 
 **Created:** November 21, 2026
-**Status:** Stage 1 gate passed on November 22, 2026. Stage 2 conversation core: C1 to C4 and folder access F1 to F5 are merged (through PR #80). The new loop is behind `conversation.front_door` and the old path is still the default. **Feature work is paused for a red-team pass**, see [`red-team-2026-11.md`](red-team-2026-11.md). Stage 0 still has open items (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
+**Status:** Stage 1 gate passed on November 22, 2026. Stage 2 conversation core: C1 to C4 and folder access F1 to F5 are merged (through PR #80). The new loop is behind `conversation.front_door` and the old path is still the default. The red-team pass is done for targets 1 to 7 (PRs #83 to #91, see [`red-team-2026-11.md`](red-team-2026-11.md)); target 8, the owner's held-out messages, is open. Stage 0 still has open items (0.1 to 0.4 done; 0.6 built and run on the small models; long runs on hold until the PC is cleaned)
 **Reviewed against:** `main` @ `86a0f80` (November 17, 2026)
 
 This plan sets the **order of work**. It folds three plans into one build:
@@ -302,10 +302,12 @@ or characters.
 
 **Order of work from here.**
 
-1. The red-team pass ([`red-team-2026-11.md`](red-team-2026-11.md)): each
-   target becomes a failing test first; fixes follow where a test fails.
-2. Decide from its results whether the write gate and the rule for untrusted
-   content (planned inside C7) move ahead of the coding skill.
+1. Done, except target 8: the red-team pass ([`red-team-2026-11.md`](red-team-2026-11.md)).
+   Golden re-run after the fixes: 56 of 61 pass all three runs, unchanged.
+2. Done in part: a first write gate and the untrusted-content rule shipped
+   with the pass (PR #88). The approval cards that let the owner confirm a
+   blocked write stay in C7. Next here: the held-out run (target 8) and a
+   real-model probe of the gate.
 3. C5a: fix the over-triggering, then merge.
 4. Writing quality: named characters and a setting from the outline step,
    distinct events per section, a note of what is already covered, and a

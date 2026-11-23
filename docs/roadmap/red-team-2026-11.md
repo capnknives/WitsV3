@@ -2,7 +2,7 @@
 title: "WitsV3 Red-Team Pass (November 2026)"
 created: "2026-11-22"
 last_updated: "2026-11-22"
-status: "open"
+status: "targets 1 to 7 closed; target 8 open"
 ---
 
 # Red-team pass, November 2026
@@ -74,6 +74,37 @@ Also to check while there, lower priority:
 - The sandbox starts with empty memory and short history. The real store is
   not empty.
 - Only `qwen3:8b` was measured. Package 0.6 (other models) is still on hold.
+
+## Result (November 22, 2026)
+
+Targets 1 to 7 each got a failing test first (PR #83, `tests/redteam/`), then
+a fix. All are merged and no xfail is left.
+
+| # | Real? | Fix |
+|---|-------|-----|
+| 1 | Yes | #87: the edit path refuses secrets, `.git`, `var/`, auto-loaded files, settings files and Windows alias spellings |
+| 2 | Yes in `off` and `subprocess`; docker was contained | #91: refused outside docker unless `security.python_execution_allow_unsandboxed`; harder container |
+| 3 | Yes (no gate existed) | #88: results marked untrusted; after one is read, only read-only tools run that turn |
+| 4 | Yes, five variants | #86: role and guest state are per turn (`agents/turn_context.py`) |
+| 5 | Yes in code, not live on the owner's PC | #84: with guests on, owner always needs the owner token |
+| 6 | Yes | #89: more names, `var/` closed by default, private-key sniff before indexing |
+| 7 | Yes for owner; a guest never stored | #90: only an explicit "remember that ..." stores, and only the fact |
+| 8 | Open | Waits for 30 messages written by the owner |
+
+Lower priority: `search_segments` type filter fixed for FAISS (#85); the
+Supabase and neural backends have the same weakness. 8.3 short names are
+refused by the pure decision; not tested through a real Windows resolve.
+
+Still open after the pass:
+
+- Real-model probe of the write gate (scripted model only so far).
+- The legacy json_react path is neither marked nor gated.
+- A turn can read a file and then put its contents in a `web_search` query.
+- Any role other than exactly "owner" should be treated as guest;
+  `web/server.py` maps an anonymous role to owner for the chat call.
+- `apply_code_fix` can still edit its own guard files, and with a sandbox
+  mode other than docker the host pytest run executes edited test files.
+- The reviewer nits listed in the bodies of PRs #86 to #89 and #91.
 
 ## After the pass
 

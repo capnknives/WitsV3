@@ -330,3 +330,26 @@ The five that fail every run:
 
 Not measured: the old path with the shorter tool descriptions it now shares;
 thinking on; another model; any message outside the set.
+
+## `main` after the red-team fixes, November 22, 2026
+
+`main` @ `a5764bd` (PRs #83 to #91 merged: per-turn role, edit-path refusals,
+untrusted-content marking and the same-turn write gate, wider never-list,
+stricter remember rule, python_execute refused outside docker). Same model,
+local settings and sandbox rules; 61 cases, three runs, new loop.
+
+| run | pass all three | mixed | fail all three |
+|---|---|---|---|
+| `main` @ `97d970b`, before the fixes | 56 | 0 | 5 |
+| `main` @ `a5764bd`, after the fixes | 56 | 1 | 4 |
+
+No case that passed before fails now. The same five cases are short of 3/3;
+`followup-yes-do-it` passed one run of three (0 of 3 before), which is noise,
+not a fix. Median times are within a few percent of the earlier run.
+
+What this does not show: no golden case reads web, document or file content
+and then writes in the same turn, so the write gate was never exercised by
+this run. Its evidence is the scripted tests in `tests/redteam/`. A golden
+case for "search, then save" (expected: asks the owner to confirm) is still
+to be written, and nothing has measured how `qwen3:8b` behaves when blocked.
+
