@@ -28,6 +28,7 @@ from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
 from core.roles import GUEST, is_owner, normalize_role
+from core.tool_context import ToolContext
 
 logger = logging.getLogger(__name__)
 
@@ -100,12 +101,44 @@ def call_turn(kwargs: dict[str, Any]) -> TurnContext:
         return bound
     if bound.user_role == GUEST and bound.skip_global_memory_store:
         return bound
-    # Reason: a guest from either source wins; the copy keeps the turn's other fields.
-    return replace(
-        bound,
+    # Reason: a guest from either source wins; the copy keeps the turn's other fields. Only
+    # an owner turn may pick the guest's profile; a non-owner turn keeps its own, so a
+    # nested call can never name a wider policy than its caller's.
+    profile = bound.guest_profile
+    if is_owner(bound.user_role):
+        profile = kwargs.get("guest_profile") or profile
+    return replace(bound, user_role=GUEST, skip_global_memory_store=True, guest_profile=profile)
+
+
+def guest_tool_context(
+    turn: TurnContext,
+    *,
+    session_id: str | None = None,
+    conversation_history: Any | None = None,
+    turn_id: str | None = None,
+) -> ToolContext | None:
+    """Guest ToolContext for a tool call in ``turn``, or None for an exact owner turn.
+
+    Args:
+        turn: The turn the tool call runs in.
+        session_id: Chat session id, or None.
+        conversation_history: The turn's ConversationHistory, or None.
+        turn_id: Turn metrics id, or None.
+
+    Returns:
+        None for an owner turn; otherwise a guest context whose ``read_role`` is the
+        turn's RBAC role (its policy read roots), never owner.
+    """
+    if is_owner(turn.user_role):
+        return None
+    from core.guest_access import resolve_effective_role
+
+    return ToolContext(
+        session_id=session_id,
         user_role=GUEST,
-        skip_global_memory_store=True,
-        guest_profile=kwargs.get("guest_profile") or bound.guest_profile,
+        conversation_history=conversation_history,
+        turn_id=turn_id,
+        read_role=resolve_effective_role(GUEST, turn.guest_profile),
     )
 
 

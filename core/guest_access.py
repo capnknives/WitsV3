@@ -224,7 +224,15 @@ def chat_storage_session_id(raw_session: str, guest: dict[str, Any] | None, role
         return raw_session
     # Reason: a non-owner role with no guest record must not share the owner's session
     # namespace; a one-off key keeps it isolated (and hidden from the owner's list).
-    return guest_session_key(f"unregistered-{uuid.uuid4().hex}", raw_session)
+    return guest_session_key(f"{_ONE_OFF}{uuid.uuid4().hex}", raw_session)
+
+
+_ONE_OFF = "unregistered-"
+
+
+def is_one_off_session_key(session_id: str) -> bool:
+    """True for the one-off key ``chat_storage_session_id`` gives an unregistered guest."""
+    return session_id.startswith(f"guest:{_ONE_OFF}")
 
 
 class GuestRegistry:

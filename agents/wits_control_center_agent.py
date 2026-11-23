@@ -384,7 +384,8 @@ User input: {user_input}
             yield self.stream_result(report)
             return
 
-        if routing_destination == "read_file_direct":
+        # Reason: RT-10, the classifier only routes owners here; fail closed regardless.
+        if turn_for(self).user_role == "owner" and routing_destination == "read_file_direct":
             file_path = intent_analysis.get("file_path", "")
             user_role = turn_for(self).user_role
             from core.filesystem_policy import configured_read_roots, resolve_allowed_read_path

@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.base_agent import BaseAgent
-from agents.turn_context import bind_turn_if_unbound, turn_for
+from agents.turn_context import bind_turn_if_unbound, guest_tool_context, turn_for
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
@@ -14,6 +14,7 @@ from core.playbooks import extract_export_basename, get_playbook
 from core.roles import is_owner
 from core.runtime_paths import exports_subpath
 from core.schemas import ConversationHistory, StreamData
+from core.tool_context import ToolContext, use_tool_context
 
 
 class PlaybookExecutor(BaseAgent):
@@ -57,6 +58,11 @@ class PlaybookExecutor(BaseAgent):
             return
 
         yield self.stream_thinking(f"Running playbook: {playbook_id}")
+        # Reason: RT-10, the registry drops user_role, so without this context a guest's
+        # read_file/list_directory/web_search ran with the tools' "owner" default.
+        guest_ctx = guest_tool_context(
+            turn_for(self), session_id=session_id, conversation_history=conversation_history
+        )
         last_result: Any = None
         export_path: str | None = None
         file_snippets: list[str] = []
@@ -82,15 +88,11 @@ class PlaybookExecutor(BaseAgent):
 
             yield self.stream_action(f"Playbook step: {tool_name}")
             try:
-                if not self.tool_registry:
-                    raise RuntimeError("Tool registry not available")
-                last_result = await self.tool_registry.execute_tool(tool_name, **args)
+                last_result = await self._execute(tool_name, guest_ctx, **args)
                 if tool_name == "read_conversation_history" and export_path:
                     content = self._format_history(conversation_history)
-                    write_result = await self.tool_registry.execute_tool(
-                        "write_file",
-                        file_path=export_path,
-                        content=content,
+                    write_result = await self._execute(
+                        "write_file", guest_ctx, file_path=export_path, content=content
                     )
                     last_result = write_result
                     break
@@ -112,6 +114,15 @@ class PlaybookExecutor(BaseAgent):
             last_result=last_result,
         )
         yield self.stream_result(message)
+
+    async def _execute(self, tool_name: str, guest_ctx: ToolContext | None, **args: Any) -> Any:
+        """Run one tool, inside ``guest_ctx`` when the turn is not the exact owner."""
+        if not self.tool_registry:
+            raise RuntimeError("Tool registry not available")
+        if guest_ctx is None:
+            return await self.tool_registry.execute_tool(tool_name, **args)
+        with use_tool_context(guest_ctx):
+            return await self.tool_registry.execute_tool(tool_name, **args)
 
     @staticmethod
     def _tools_refused_for_turn(spec: dict[str, Any]) -> set[str]:

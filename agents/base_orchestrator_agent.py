@@ -10,7 +10,12 @@ from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.orchestrator_tool_helpers import OrchestratorToolHelpersMixin
-from agents.turn_context import bind_turn_if_unbound, turn_for
+from agents.turn_context import (
+    TurnContext,
+    bind_turn_if_unbound,
+    guest_tool_context,
+    turn_for,
+)
 from core.config import WitsV3Config
 from core.json_llm_parser import build_json_repair_prompt
 from core.llm_interface import BaseLLMInterface
@@ -18,7 +23,7 @@ from core.memory_manager import MemoryManager
 from core.roles import GUEST, is_owner
 from core.runtime_paths import exports_subpath
 from core.schemas import ConversationHistory, StreamData
-from core.tool_context import ToolContext, use_tool_context
+from core.tool_context import ToolContext, current_tool_context, use_tool_context
 
 
 class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
@@ -145,7 +150,9 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
         # Reason: RT-10. @bind_turn_if_unbound always binds call_turn(kwargs) here: guest
         # when either this call's user_role or an enclosing turn is not exactly "owner".
         user_role = turn_for(self).user_role
-        guest_profile = kwargs.get("guest_profile") or {}
+        # Reason: the bound turn's profile, never this call's kwarg, so a nested call cannot
+        # name a wider policy than its caller's (call_turn picks it).
+        guest_profile = turn_for(self).guest_profile or {}
         guest_age_band = guest_profile.get("age_band") or "teen"
         if guest_profile.get("guest_id") and user_role == "guest":
             from core.guest_access import GuestRegistry
@@ -506,7 +513,10 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
 
         try:
             guest_ctx = self._legacy_guest_tool_context(state)
-            if guest_ctx is None:
+            current = current_tool_context()
+            # Reason: keep a guest context already set (native loop: it carries the session);
+            # replace an owner one, or none, when the turn is a guest.
+            if guest_ctx is None or (current is not None and not is_owner(current.user_role)):
                 return await self.tool_registry.execute_tool(tool_name, **tool_args)
             # Reason: RT-10. The registry drops user_role (no tool schema declares it), so
             # without a context a guest's read_file/list_directory ran with the tools'
@@ -519,28 +529,28 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                 return await handler(tool_name, e)
             raise
 
-    @staticmethod
-    def _legacy_guest_tool_context(state: dict[str, Any] | None) -> ToolContext | None:
-        """Guest ToolContext for a legacy-path tool call, or None for an owner turn.
+    def _legacy_guest_tool_context(self, state: dict[str, Any] | None) -> ToolContext | None:
+        """Guest ToolContext for a tool call outside the native loop, or None for owner.
 
         Args:
-            state: The ReAct state, or None (native path, which sets its own context).
+            state: The ReAct state, or None (e.g. native path, codebase intro).
 
         Returns:
-            None when ``state`` is None or its role is exactly "owner"; otherwise a guest
-            context whose ``read_role`` is the guest's RBAC role (its policy read roots).
+            None only when the bound turn and ``state`` (if any) are both exactly owner;
+            otherwise a guest context for the turn (its profile's policy read roots).
         """
-        if state is None or is_owner(state.get("user_role")):
-            return None
-        from core.guest_access import resolve_effective_role
-
+        turn = turn_for(self)
+        state = state or {}
+        if is_owner(turn.user_role):
+            if "user_role" not in state or is_owner(state.get("user_role")):
+                return None
+            # Reason: fail closed; a non-owner state in an unbound/owner turn is a guest.
+            turn = TurnContext(user_role=GUEST, guest_profile=state.get("guest_profile"))
         conversation = state.get("conversation_history")
-        return ToolContext(
+        return guest_tool_context(
+            turn,
             session_id=getattr(conversation, "session_id", None),
-            user_role=GUEST,
             conversation_history=conversation,
-            turn_id=None,
-            read_role=resolve_effective_role(GUEST, state.get("guest_profile")),
         )
 
     async def _emit_final_answer(

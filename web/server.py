@@ -32,6 +32,7 @@ from core.guest_access import (
     enrich_guest_payload,
     guest_access_enabled,
     guest_session_key,
+    is_one_off_session_key,
 )
 from core.guest_audit import GuestAuditLog
 from core.guest_user_profile import GuestUserProfileStore
@@ -281,9 +282,13 @@ def create_app(system) -> FastAPI:
         session_id = chat_storage_session_id(raw_session, guest, auth_role)
         client_session_id = raw_session
 
-        if session_id not in system.session_histories:
+        # Reason: a one-off key is never reused, so storing it would only grow memory/disk.
+        one_off = is_one_off_session_key(session_id)
+        if session_id not in system.session_histories and not one_off:
             system.session_histories[session_id] = ConversationHistory(session_id=session_id)
-        conversation = system.session_histories[session_id]
+        conversation = system.session_histories.get(session_id)
+        if conversation is None:
+            conversation = ConversationHistory(session_id=session_id)
         conversation.add_message("user", body.message)
         if not conversation.title or conversation.title == "New chat":
             conversation.title = _auto_session_title(body.message)
@@ -500,7 +505,8 @@ def create_app(system) -> FastAPI:
                 try:
                     from core.session_store import persist_session
 
-                    persist_session(conversation, system.config.runtime_paths.root)
+                    if not one_off:
+                        persist_session(conversation, system.config.runtime_paths.root)
                 except Exception as persist_err:
                     logger.warning("Session persist failed: %s", persist_err)
                 yield sse("done", {"final": final_text})
