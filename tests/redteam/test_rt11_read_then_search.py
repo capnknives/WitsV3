@@ -344,7 +344,7 @@ async def _pair(first, second, sandbox):
     return llm, registry
 
 
-@pytest.mark.parametrize("sandbox", ["docker", "Docker"])
+@pytest.mark.parametrize("sandbox", ["docker", "Docker", "Docker "])
 @pytest.mark.parametrize(
     "first,second",
     [(_LIST, _PY), (READS["read_conversation_history"], _PY), (_PY, _LEAK)],
@@ -356,7 +356,7 @@ async def test_docker_sandbox_python_is_local_only(first, second, sandbox):
     assert not any(m.startswith(_BLOCK) for m in _tool_messages(llm))
 
 
-@pytest.mark.parametrize("sandbox", ["subprocess", "off", "garbage", "", "Docker "])
+@pytest.mark.parametrize("sandbox", ["subprocess", "off", "garbage", ""])
 async def test_other_sandbox_modes_refuse_python_after_a_private_read(sandbox):
     llm, registry = await _pair(_LIST, _PY, sandbox)
     assert registry.names() == ["list_directory"]
@@ -398,3 +398,18 @@ async def test_docker_coding_turn_runs():
     await _run(orch)
     assert registry.names() == ["list_directory", "write_file", "python_execute"]
     assert not any(m.startswith(_BLOCK) for m in _tool_messages(llm))
+
+
+async def test_search_then_read_then_search_blocks_the_second_search():
+    orch, llm, registry = _make(
+        [
+            _tools(_call("web_search", {"query": "python release"})),
+            _tools(READS["read_file"]),
+            _tools(_LEAK),
+            LLMResponse("ok"),
+        ]
+    )
+    await _run(orch)
+    assert registry.names() == ["web_search", "read_file"]
+    reply = _tool_messages(llm)[-1]
+    assert reply.startswith(_BLOCK) and "private local content" in reply

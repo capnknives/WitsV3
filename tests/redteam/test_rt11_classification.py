@@ -84,7 +84,7 @@ def test_code_running_tools_follow_the_sandbox_in_each_mode(name, mode):
     gate.note_dispatch("read_conversation_history")
     # Reason: only python_execute has a network-less path, and only in docker mode;
     # run_test_suite runs pytest on the host and run_pytest_sandboxed keeps the network.
-    local = name in SANDBOX_LOCAL_TOOLS and mode.lower() == "docker"
+    local = name in SANDBOX_LOCAL_TOOLS and mode.strip().lower() == "docker"
     assert (gate.block_reason(name) is None) is local
     runner = UntrustedWriteGate(True, sandboxed=lambda: python_sandboxed(live))
     runner.note_dispatch(name)
@@ -147,7 +147,7 @@ def test_setting_off_blocks_nothing():
 
 @pytest.mark.parametrize(
     "mode,expected",
-    [("docker", True), ("DOCKER", True), (" DOCKER\n", False), ("Docker ", False)]
+    [("docker", True), ("DOCKER", True), (" DOCKER\n", True), ("Docker ", True)]
     + [("subprocess", False), ("off", False), (None, False), ("dockerish", False), (42, False)],
 )
 def test_python_sandboxed_reads_the_mode(mode, expected):
@@ -171,3 +171,27 @@ def test_python_sandboxed_needs_a_real_true():
     gate = UntrustedWriteGate(True, sandboxed=lambda: "yes")
     gate.note_dispatch("list_directory")
     assert gate.block_reason("python_execute")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mode", ["docker", "Docker", "Docker ", " DOCKER\n", "dockerish", "subprocess", "off", "", None]
+)
+async def test_gate_and_python_tool_agree_on_every_mode_spelling(mode, monkeypatch):
+    # Reason: with the opt-in off, the tool runs a snippet only when it decides it is in
+    # docker mode, so "it called the runner" is the tool's own decision.
+    import core.sandbox_runner as sr
+    from tools.python_execution_tool import PythonExecutionTool
+
+    live = SimpleNamespace(security=SimpleNamespace(sandbox_mode=mode))
+    monkeypatch.setattr("core.config.load_config", lambda *a, **k: live)
+    monkeypatch.setattr(sr, "unsandboxed_allowed", lambda config: False)
+    ran = []
+
+    async def fake_run(code, **kwargs):
+        ran.append(code)
+        return SimpleNamespace(success=True, output="", error=None, return_code=0)
+
+    monkeypatch.setattr(sr, "run_python_sandboxed", fake_run)
+    await PythonExecutionTool().execute(code="print(1)")
+    assert python_sandboxed() is bool(ran)

@@ -109,6 +109,8 @@ TOOL_CLASSES: dict[str, str] = {
 # Reason: an MCP server may read local data (a filesystem server) and may send its
 # arguments anywhere, so every ``mcp_*`` tool counts as both.
 BOTH_PREFIXES = ("mcp_",)
+# Reason: the tools classed as private readers by name; the gate uses is_private_read(),
+# which also counts unknown and mcp_* names. Kept for tests and readers of the table.
 PRIVATE_READ_TOOLS = frozenset(n for n, c in TOOL_CLASSES.items() if c in ("private", "both"))
 # Reason: code-running tools whose only network-less path is the docker sandbox
 # (core/sandbox_runner.py _run_docker_sandbox: --network=none, snippet-only mount).
