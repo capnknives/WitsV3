@@ -113,3 +113,39 @@ def test_shorten_reason():
     assert golden_failures.shorten_reason("a|b\nc") == "a/b c"
     long = golden_failures.shorten_reason("x" * 200)
     assert len(long) == 80 and long.endswith("...")
+
+
+def test_replies_written_for_pass_and_fail(tmp_path):
+    box = tmp_path / "box"
+    args = make_args(tmp_path, runs=1, sandbox=str(box), live=False)
+    asyncio.run(golden_run.run_cases(FakeControl(), cases(), args))
+    folder = box / "replies"
+    assert sorted(p.name for p in folder.iterdir()) == ["bad.run1.json", "good.run1.json"]
+    good = json.loads((folder / "good.run1.json").read_text(encoding="utf-8"))
+    bad = json.loads((folder / "bad.run1.json").read_text(encoding="utf-8"))
+    assert good["passed"] is True and bad["passed"] is False
+    assert good["reply"] == REPLY + "\nboom"
+    fail = json.loads((box / "failures/bad.run1.json").read_text(encoding="utf-8"))
+    assert "passed" not in fail
+    assert {k: v for k, v in bad.items() if k != "passed"} == fail
+    assert not (box / "failures/good.run1.json").exists()
+
+
+def test_replies_not_written_in_live_or_without_sandbox(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for kw in (dict(sandbox="", live=True), dict(sandbox=str(tmp_path / "box"), live=True)):
+        asyncio.run(golden_run.run_cases(FakeControl(), cases(), make_args(tmp_path, **kw)))
+    assert not list(tmp_path.rglob("replies"))
+
+
+def test_replies_cleared_at_start_and_unrelated_kept(tmp_path):
+    folder = tmp_path / "box" / "replies"
+    folder.mkdir(parents=True)
+    (folder / "old.run1.json").write_text("{}", encoding="utf-8")
+    (folder / "notes.txt").write_text("keep", encoding="utf-8")
+    args = make_args(tmp_path, runs=1, sandbox=str(tmp_path / "box"), live=False)
+    only_good = [GoldenCase(id="good", message="hello", tags=["chat"])]
+    asyncio.run(golden_run.run_cases(FakeControl(), only_good, args))
+    assert not (folder / "old.run1.json").exists()
+    assert (folder / "good.run1.json").exists()
+    assert (folder / "notes.txt").read_text(encoding="utf-8") == "keep"

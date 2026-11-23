@@ -368,9 +368,10 @@ async def run_cases(control_center, cases, args) -> int:
     header = "| case | pass | median first_result_ms | tools seen | unobserved | why failed |\n|---|---|---|---|---|---|\n"
     rows, failed_all = [], False
     # Reason: failure files hold reply text, so they exist in sandbox mode only.
-    folder = None
+    folder = replies = None
     if getattr(args, "sandbox", "") and not getattr(args, "live", False):
         folder = golden_failures.clear_failures(Path(args.sandbox))
+        replies = golden_failures.clear_replies(Path(args.sandbox))
     wrote = False
     for case in cases:
         results = []
@@ -389,21 +390,22 @@ async def run_cases(control_center, cases, args) -> int:
                 cap.setdefault("tools", [])
             if failures and not why:
                 why = golden_failures.shorten_reason(failures[0])
-            if folder is not None and not results[-1][0]:
-                golden_failures.write_record(
-                    folder,
-                    golden_failures.build_record(
-                        case.id,
-                        n,
-                        case.message,
-                        failures,
-                        cap["events"],
-                        cap.get("tools", []),
-                        cap.get("first_result_ms"),
-                        cap.get("eval_tokens"),
-                    ),
+            if folder is not None:
+                record = golden_failures.build_record(
+                    case.id,
+                    n,
+                    case.message,
+                    failures,
+                    cap["events"],
+                    cap.get("tools", []),
+                    cap.get("first_result_ms"),
+                    cap.get("eval_tokens"),
                 )
-                wrote = True
+                passed = bool(results[-1][0])
+                golden_failures.write_record(replies, golden_failures.reply_record(record, passed))
+                if not passed:
+                    golden_failures.write_record(folder, record)
+                    wrote = True
         passes = sum(r[0] for r in results)
         times = [r[1] for r in results if r[1] is not None]
         med = f"{statistics.median(times):.0f}" if times else "-"

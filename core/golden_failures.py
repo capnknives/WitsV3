@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 FAILURES_DIRNAME = "failures"
+REPLIES_DIRNAME = "replies"
 REASON_LIMIT = 80
 
 
@@ -53,9 +54,9 @@ def build_record(
     }
 
 
-def clear_failures(sandbox: Path) -> Path:
-    """Create DIR/failures and delete only *.run*.json files in it; return the folder."""
-    folder = sandbox / FAILURES_DIRNAME
+def clear_failures(sandbox: Path, dirname: str = FAILURES_DIRNAME) -> Path:
+    """Create DIR/<dirname> and delete only *.run*.json files in it; return the folder."""
+    folder = sandbox / dirname
     folder.mkdir(parents=True, exist_ok=True)
     for old in folder.glob("*.run*.json"):
         if old.is_file():
@@ -69,3 +70,13 @@ def write_record(folder: Path, record: dict[str, Any]) -> Path:
     path = folder / f"{record['case_id']}.run{record['run']}.json"
     path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
+
+
+def clear_replies(sandbox: Path) -> Path:
+    """Same as clear_failures, for DIR/replies (every run's reply, pass or fail)."""
+    return clear_failures(sandbox, REPLIES_DIRNAME)
+
+
+def reply_record(record: dict[str, Any], passed: bool) -> dict[str, Any]:
+    """A failure-shaped record plus the pass flag, for the replies folder."""
+    return {**record, "passed": passed}
