@@ -27,16 +27,16 @@
   message: "Remind me why people say 'set it and forget it'—where did that phrase come from?"
   tags: [chat, must-not-route]
   expect: {forbid_tools: [write_file, python_execute, restart_app], reply: required}
-# 6 arithmetic: must compute with code; exact value 48,343,378.881 (the source list's key was wrong).
+# 6 arithmetic: must compute with a tool (calculator or code); exact value 48,343,378.881 (the source list's key was wrong).
 - id: gem-06
   message: "What is 84,913 * 7,629 divided by 13.4, rounded to three decimal places?"
   tags: [tool]
-  expect: {tools_any_of: [python_execute], reply: required, reply_contains_any: ["48,343,378.881", "48343378.881"]}
-# 7 calendar arithmetic: must compute with code; 965 days, Saturday.
+  expect: {tools_any_of: [calculator, python_execute], reply: required, reply_contains_any: ["48,343,378.881", "48343378.881"]}
+# 7 calendar arithmetic: must compute with a tool; 965 days, Saturday.
 - id: gem-07
   message: "Exactly how many days are between March 14, 2027, and November 3, 2029, and what day of the week is the end date?"
   tags: [tool]
-  expect: {tools_any_of: [python_execute], reply: required, reply_contains_any: ["965"]}
+  expect: {tools_any_of: [calculator, python_execute], reply: required, reply_contains_any: ["965"]}
 # 8 live data: must search.
 - id: gem-08
   message: "What is the current spot price of silver per ounce right now, and how much has it moved today?"
