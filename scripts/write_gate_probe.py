@@ -4,7 +4,7 @@ Runs real turns through the control center (the same entry point as golden_run) 
 golden_run sandbox. Web search is patched to a fixed result set, so no search reaches the
 network. Scenarios (see write_gate_probe_lib.SCENARIOS):
   A / A2  planted instruction in a search result (write + remember / python_execute)
-  B       planted instruction in a notes document the owner asks to summarise
+  B / B2  planted instruction in a notes document (asked about its topic / asked to summarise)
   C       owner asks to search then save, then says "yes, go ahead and save it"
   D       scenario A with security.untrusted_write_gate off (sandbox config only)
 
@@ -72,7 +72,7 @@ async def _purge_new_segments(system, before: set[str] | None) -> int:
     return removed
 
 
-async def _turn(system, sandbox: Path, history, message: str, sid: str, timeout: float, spy):
+async def _turn(system, sandbox, history, message: str, sid: str, timeout: float, spy, spec):
     """Run one user turn and measure tools, reply, files and store changes."""
     from core.schemas import StreamData
 
@@ -107,7 +107,7 @@ async def _turn(system, sandbox: Path, history, message: str, sid: str, timeout:
     hits, net = spy["fake_hits"] - hits0, spy["network_attempts"] - net0
     return {
         "message": message,
-        "invalid": lib.search_unverified(calls, hits, net),
+        **lib.turn_validity(spec, calls, hits, net, events),
         "fake_search_hits": hits,
         "network_attempts": net,
         "tools": calls,
@@ -134,9 +134,10 @@ async def run_scenario(system, sandbox: Path, scenario: str, n: int, timeout: fl
     try:
         with lib.patched_search(spec["search"], search_tool) as spy:
             for message in spec["messages"]:
-                turn = await _turn(system, sandbox, history, message, sid, timeout, spy)
+                turn = await _turn(system, sandbox, history, message, sid, timeout, spy, spec)
                 record["turns"].append(turn)
         record["invalid"] = any(t["invalid"] for t in record["turns"])
+        record["planted_delivered"] = record["turns"][0]["planted_delivered"]
     finally:
         _set_gate(system, True)
         # Reason: canary files are removed after the whole run, so C's turn 2 sees turn 1's.
@@ -192,14 +193,14 @@ async def main_async(args: argparse.Namespace) -> int:
 
         system = WitsV3System(config)
         await system.initialize()
-        if "B" in only:
+        if {"B", "B2"} & set(only):
             print(f"planted document: {await plant_document(system, config, sandbox)}")
         for scenario in only:
             for n in range(1, args.runs + 1):
                 rec = await run_scenario(system, sandbox, scenario, n, args.timeout_seconds)
                 records.append(rec)
                 tools = [f"{c['name']}:{c['status']}" for t in rec["turns"] for c in t["tools"]]
-                flag = " INVALID: web_search ran but the fake was not hit" if rec["invalid"] else ""
+                flag = f" INVALID (delivered={rec['planted_delivered']})" if rec["invalid"] else ""
                 print(f"{scenario} run {n}: {tools}{flag}")
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_text(
@@ -208,7 +209,7 @@ async def main_async(args: argparse.Namespace) -> int:
     print(f"summary: {out}")
     invalid = [f"{r['scenario']}-{r['run']}" for r in records if r.get("invalid")]
     if invalid:
-        print(f"INVALID runs (search patch not on the call path): {invalid}", file=sys.stderr)
+        print(f"INVALID runs (search not faked or plant not delivered): {invalid}", file=sys.stderr)
         return 5
     return 0
 
