@@ -549,47 +549,28 @@ class CalculatorTool(BaseTool):
         super().__init__(
             name="calculator",
             description=(
-                "Evaluate arithmetic exactly (+ - * /, brackets, sqrt(n)); use it for every "
-                "calculation. Not for anything needing code (python_execute)."
+                "Evaluate arithmetic exactly (+ - * / ^, brackets, 15%, sqrt(n), round(n, places), "
+                "abs(n)); use it for every calculation. Not for anything needing code "
+                "(python_execute)."
             ),
         )
 
     async def execute(self, expression: str = "", **kwargs) -> str:
-        """Execute calculation."""
-        import math
-        import re
+        """Execute calculation via the exact, eval-free evaluator in core.safe_calc."""
+        from core.safe_calc import evaluate
 
-        try:
-            expr = str(expression or kwargs.get("query") or "").strip()
-            if not expr:
-                op = str(kwargs.get("operation") or "").lower()
-                value = kwargs.get("value")
-                if op in ("square_root", "sqrt") and value is not None:
-                    expr = f"sqrt({value})"
-
-            if not expr:
-                return "Error: No expression provided"
-
-            if any(token in expr.lower() for token in ("import", "exec", "eval", "__")):
-                raise ValueError("Invalid expression")
-
-            sqrt_match = re.fullmatch(r"sqrt\(([\d.]+)\)", expr.replace(" ", ""), re.IGNORECASE)
-            if sqrt_match:
-                result = math.sqrt(float(sqrt_match.group(1)))
-                self.logger.debug(f"Calculated: {expr} = {result}")
-                return str(result)
-
-            allowed_chars = set("0123456789+-*/().,_ ")
-            if not all(c in allowed_chars for c in expr):
-                raise ValueError("Expression contains invalid characters")
-
-            result = eval(expr)
-            self.logger.debug(f"Calculated: {expr} = {result}")
-            return str(result)
-
-        except Exception as e:
-            self.logger.warning(f"Calculation error: {e}")
-            return f"Error: {str(e)}"
+        expr = str(expression or kwargs.get("query") or "").strip()
+        if not expr:
+            op = str(kwargs.get("operation") or "").lower()
+            value = kwargs.get("value")
+            if op in ("square_root", "sqrt") and value is not None:
+                expr = f"sqrt({value})"
+        if not expr:
+            return "Error: No expression provided"
+        result = evaluate(expr)
+        log = self.logger.warning if result.startswith("Error") else self.logger.debug
+        log(f"Calculated: {expr} = {result}")
+        return result
 
     def get_schema(self) -> dict[str, Any]:
         """Get tool schema."""
@@ -598,8 +579,8 @@ class CalculatorTool(BaseTool):
             "properties": {
                 "expression": {
                     "type": "string",
-                    "description": "The arithmetic to evaluate, digits and operators "
-                    "only, such as '(3 + 4) * 2'",
+                    "description": "The arithmetic to evaluate, numbers, operators and "
+                    "sqrt/round/abs only, such as '(3 + 4) * 2' or '240 * 15%'",
                 }
             },
             "required": ["expression"],
