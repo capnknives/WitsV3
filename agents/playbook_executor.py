@@ -6,10 +6,12 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.base_agent import BaseAgent
+from agents.turn_context import bind_turn_if_unbound, turn_for
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
 from core.playbooks import extract_export_basename, get_playbook
+from core.roles import is_owner
 from core.runtime_paths import exports_subpath
 from core.schemas import ConversationHistory, StreamData
 
@@ -28,6 +30,9 @@ class PlaybookExecutor(BaseAgent):
         super().__init__(agent_name, config, llm_interface, memory_manager)
         self.tool_registry = tool_registry
 
+    # Reason: RT-10, always runs in a bound turn: the caller's, or one built from its
+    # user_role (none is a guest), with a guest from either source winning.
+    @bind_turn_if_unbound
     async def run(
         self,
         user_input: str,
@@ -39,6 +44,16 @@ class PlaybookExecutor(BaseAgent):
         spec = get_playbook(playbook_id)
         if not spec:
             yield self.stream_error(f"Unknown playbook: {playbook_id}")
+            return
+
+        refused = self._tools_refused_for_turn(spec)
+        if refused:
+            # Reason: RT-10, playbooks call tools without the orchestrator's preflight, so a
+            # non-owner turn must be held to its own allow-list here (save_conversation
+            # would otherwise run write_file with the tool's owner default).
+            yield self.stream_result(
+                f"Sorry, that isn't available for guest users ({', '.join(sorted(refused))})."
+            )
             return
 
         yield self.stream_thinking(f"Running playbook: {playbook_id}")
@@ -97,6 +112,27 @@ class PlaybookExecutor(BaseAgent):
             last_result=last_result,
         )
         yield self.stream_result(message)
+
+    @staticmethod
+    def _tools_refused_for_turn(spec: dict[str, Any]) -> set[str]:
+        """Playbook tools the bound turn may not use (none for the exact owner).
+
+        Args:
+            spec: The playbook spec.
+
+        Returns:
+            Tool names outside the non-owner turn's RBAC allow-list.
+        """
+        from core.guest_access import resolve_effective_role, tools_for_role
+
+        turn = turn_for(None)
+        if is_owner(turn.user_role):
+            return set()
+        allowed = tools_for_role(resolve_effective_role(turn.user_role, turn.guest_profile))
+        needed = {str(step.get("tool", "")) for step in spec.get("steps", [])}
+        if any(step.get("args_from") == "export_path" for step in spec.get("steps", [])):
+            needed.add("write_file")
+        return needed - set(allowed or ())
 
     async def _synthesize_message(
         self,

@@ -69,7 +69,10 @@ def test_require_auth_without_token_chat_is_owner(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     system = FakeSystem(tmp_path)
     system.config.web_ui.require_auth = True
-    # Reason: with no token configured resolve_auth returns role "owner" explicitly.
+    # Reason: documented local setup (web/guest_auth.py resolve_auth, "no token configured"
+    # branch; server.py auth middleware comment): with guests off and no WITSV3_WEB_TOKEN
+    # set, require_auth has no token to check, so resolve_auth returns role "owner"
+    # explicitly. Anyone who can reach the port is the owner; README says set a token.
     assert _chat_role(TestClient(create_app(system)), system) == "owner"
 
 

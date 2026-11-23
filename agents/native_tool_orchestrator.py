@@ -130,7 +130,8 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             "tool_total_failures": {},
             "lookup_search_done": False,
             "synthesis_guard_retries": 0,
-            # Reason: RT-10, the bound turn's normalised role, never the raw kwarg.
+            # Reason: RT-10, call_turn's role (bound by the decorator): guest when this call's
+            # user_role or an enclosing turn is not exactly "owner"; never the raw kwarg.
             "user_role": turn_for(self).user_role,
             "guest_profile": kwargs.get("guest_profile") or {},
             "guest_age_band": "teen",

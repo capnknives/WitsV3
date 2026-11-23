@@ -469,7 +469,8 @@ class RouteDecision:
 @dataclass
 class RoutingContext:
     message: str
-    user_role: str = "owner"
+    # Reason: RT-10, fail closed; the only production caller passes the bound turn's role.
+    user_role: str = "guest"
     doc_inventory: dict[str, int] = field(default_factory=dict)
     session_id: str | None = None
     active_specialized_agent: str | None = None

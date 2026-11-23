@@ -24,7 +24,7 @@ class FakeControlCenter:
             {
                 "user_input": user_input,
                 "session_id": session_id,
-                "user_role": kwargs.get("user_role", "owner"),
+                "user_role": kwargs.get("user_role"),
             }
         )
         yield StreamData(type="thinking", content="pondering", source="wcca")

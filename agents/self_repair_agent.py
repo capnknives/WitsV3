@@ -36,6 +36,7 @@ from core.safe_code_editor import (
 from core.schemas import ConversationHistory, StreamData
 
 from .base_agent import BaseAgent
+from .turn_context import bind_turn_if_unbound
 
 __all__ = [
     "SelfRepairAgent",
@@ -66,6 +67,9 @@ class SelfRepairAgent(BaseAgent):
             return None
         return self.tool_registry.get_tool(name)
 
+    # Reason: RT-10, always runs in a bound turn: the caller's, or one built from its
+    # user_role (none is a guest), with a guest from either source winning.
+    @bind_turn_if_unbound
     async def run(
         self,
         user_input: str,

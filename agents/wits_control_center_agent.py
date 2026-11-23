@@ -12,7 +12,7 @@ from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.remember_rule import extract_remember_fact
-from agents.turn_context import TurnContext, current_turn, run_in_turn, turn_for
+from agents.turn_context import TurnContext, current_turn, request_turn, run_in_turn, turn_for
 from agents.wcca_intent_mixin import WCCAIntentMixin
 from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 from core.config import WitsV3Config
@@ -148,7 +148,8 @@ class WitsControlCenterAgent(OrchestratorRoutingMixin, WCCAIntentMixin, BaseAgen
         **kwargs,
     ) -> AsyncGenerator[StreamData, None]:
         """Run one turn with its caller role bound per turn (RT-4), never on ``self``."""
-        turn = TurnContext.for_request(**kwargs)
+        # Reason: RT-10, a fresh turn per call, but never above a guest turn already bound.
+        turn = request_turn(kwargs)
         inner = self._run_turn(turn, user_input, conversation_history, session_id, **kwargs)
         async with contextlib.aclosing(run_in_turn(turn, inner)) as events:
             async for event in events:

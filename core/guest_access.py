@@ -105,11 +105,12 @@ def tools_for_role(role: str, config: Any | None = None) -> frozenset[str] | Non
     if isinstance(entry, dict):
         tools = entry.get("allowed_tools")
         if tools == ["*"] or tools == "*":
-            return None
+            # Reason: RT-10, None means every tool, which only the exact "owner" may get;
+            # a non-owner policy role naming "*" is capped to the guest allow-list.
+            return GUEST_ALLOWED_TOOLS
         if isinstance(tools, list):
             return frozenset(str(t) for t in tools)
-    if role_key == "guest":
-        return GUEST_ALLOWED_TOOLS
+    # Reason: a role the policy does not define gets the guest allow-list, never None.
     return GUEST_ALLOWED_TOOLS
 
 
@@ -204,6 +205,26 @@ def is_private_lan_ip(ip: str | None) -> bool:
 
 def guest_session_key(guest_id: str, session_id: str) -> str:
     return f"guest:{guest_id}:{session_id}"
+
+
+def chat_storage_session_id(raw_session: str, guest: dict[str, Any] | None, role: Any) -> str:
+    """Server-side history key for one /api/chat request (RT-10).
+
+    Args:
+        raw_session: The session id the client sent (or a new one).
+        guest: The validated guest payload, or None.
+        role: The request's role; only the exact "owner" may use an unprefixed key.
+
+    Returns:
+        The guest's own key; the raw id for the owner; otherwise a one-off guest key.
+    """
+    if guest and guest.get("guest_id"):
+        return guest_session_key(guest["guest_id"], raw_session)
+    if is_owner(role):
+        return raw_session
+    # Reason: a non-owner role with no guest record must not share the owner's session
+    # namespace; a one-off key keeps it isolated (and hidden from the owner's list).
+    return guest_session_key(f"unregistered-{uuid.uuid4().hex}", raw_session)
 
 
 class GuestRegistry:

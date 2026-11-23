@@ -8,9 +8,13 @@ so two turns stepped by hand from the same task never see each other's role.
 Outside a bound turn, ``turn_for`` returns an explicit OWNER default (logged at debug).
 That is deliberate: every guest-reachable entry (web/server.py /api/chat) goes through
 ``WitsControlCenterAgent.run()``, which binds a turn, and the orchestrators' ``run()``
-bind one from their own ``user_role`` kwarg when called directly (``bind_turn_if_unbound``).
-The only unbound callers are owner-local: run.py self-repair, BackgroundAgent jobs,
-scripts and tests. Shared agent attributes are never consulted.
+bind one from their own ``user_role`` kwarg (``bind_turn_if_unbound``; no role is a
+guest). The only unbound callers are owner-local: run.py self-repair, BackgroundAgent
+jobs, scripts and tests. Shared agent attributes are never consulted.
+
+RT-10: a guest from any source wins. ``call_turn`` gives an explicit ``user_role`` kwarg
+and the bound turn a veto each, so a nested call cannot lift a guest turn to owner and an
+explicit ``user_role="guest"`` inside an owner turn stays a guest.
 """
 
 from __future__ import annotations
@@ -20,10 +24,10 @@ import contextvars
 import functools
 import logging
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
-from core.roles import normalize_role
+from core.roles import GUEST, is_owner, normalize_role
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +81,50 @@ def turn_for(agent: Any) -> TurnContext:
     return TurnContext()
 
 
+def call_turn(kwargs: dict[str, Any]) -> TurnContext:
+    """The turn a call should run in, given its kwargs and the bound turn (RT-10).
+
+    Args:
+        kwargs: The call's kwargs; ``user_role``, when present, is the caller's role.
+
+    Returns:
+        The bound turn when every source is owner (or it is already a guest turn); a turn
+        built from ``kwargs`` when none is bound (no role there is a guest); otherwise a
+        guest copy of the bound turn.
+    """
+    bound = _CURRENT_TURN.get()
+    if bound is None:
+        return TurnContext.for_request(**kwargs)
+    explicit_guest = "user_role" in kwargs and not is_owner(kwargs["user_role"])
+    if is_owner(bound.user_role) and not explicit_guest:
+        return bound
+    if bound.user_role == GUEST and bound.skip_global_memory_store:
+        return bound
+    # Reason: a guest from either source wins; the copy keeps the turn's other fields.
+    return replace(
+        bound,
+        user_role=GUEST,
+        skip_global_memory_store=True,
+        guest_profile=kwargs.get("guest_profile") or bound.guest_profile,
+    )
+
+
+def request_turn(kwargs: dict[str, Any]) -> TurnContext:
+    """A fresh turn from ``kwargs`` that can never be more than the bound turn (RT-10).
+
+    Args:
+        kwargs: The request kwargs; ``user_role`` is the caller's role.
+
+    Returns:
+        ``TurnContext.for_request(**kwargs)``, as a guest when a non-owner turn is bound.
+    """
+    turn = TurnContext.for_request(**kwargs)
+    bound = _CURRENT_TURN.get()
+    if bound is not None and not is_owner(bound.user_role) and is_owner(turn.user_role):
+        return TurnContext.for_request(**{**kwargs, "user_role": GUEST})
+    return turn
+
+
 @contextlib.contextmanager
 def bind_turn(turn: TurnContext) -> Iterator[TurnContext]:
     """Bind ``turn`` for a plain (non-generator) await, e.g. scripts calling a helper."""
@@ -88,14 +136,15 @@ def bind_turn(turn: TurnContext) -> Iterator[TurnContext]:
 
 
 def bind_turn_if_unbound(method: Callable[..., AsyncGenerator[T, None]]):
-    """Decorate an agent's async-generator ``run``: inside a turn, pass through; called
-    directly, bind a turn built from its own kwargs (so ``user_role="guest"`` holds)."""
+    """Decorate an agent's async-generator ``run`` so it always runs in ``call_turn``:
+    the bound turn when it and the kwargs agree on owner, else a guest turn."""
 
     @functools.wraps(method)
     async def wrapper(self: Any, *args: Any, **kwargs: Any) -> AsyncIterator[T]:
         agen = method(self, *args, **kwargs)
-        if _CURRENT_TURN.get() is None:
-            agen = run_in_turn(TurnContext.for_request(**kwargs), agen)
+        turn = call_turn(kwargs)
+        if turn is not _CURRENT_TURN.get():
+            agen = run_in_turn(turn, agen)
         async with contextlib.aclosing(agen) as events:
             async for item in events:
                 yield item

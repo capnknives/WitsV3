@@ -17,6 +17,7 @@ from agents.orchestrator_observations import OrchestratorObservationsMixin
 from agents.orchestrator_preflight import OrchestratorPreflightMixin
 from agents.orchestrator_synthesis import OrchestratorSynthesisMixin
 from agents.routing_classifier import FILE_SAVE_SIGNALS
+from core.roles import normalize_role
 from core.runtime_paths import exports_subpath, upgrade_runtime_path
 from core.schemas import ConversationHistory, StreamData
 
@@ -238,16 +239,18 @@ class OrchestratorToolHelpersMixin(
         if tool_name == "calculator":
             args = self._normalize_calculator_args(args)
 
+        # Reason: RT-10, the turn's normalised role replaces any user_role the model sent
+        # and a missing state role is a guest (the tools themselves get it from context).
         if tool_name in (
             "guest_audit_summary",
             "guest_accounts_list",
             "guest_set_age_band",
             "guest_user_profile_summary",
         ):
-            args.setdefault("user_role", state.get("user_role", "owner"))
+            args["user_role"] = normalize_role(state.get("user_role"))
 
         if tool_name == "web_search":
-            args.setdefault("user_role", state.get("user_role", "owner"))
+            args["user_role"] = normalize_role(state.get("user_role"))
 
         return args
 

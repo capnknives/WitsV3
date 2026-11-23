@@ -15,8 +15,10 @@ from core.config import WitsV3Config
 from core.json_llm_parser import build_json_repair_prompt
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
+from core.roles import GUEST, is_owner
 from core.runtime_paths import exports_subpath
 from core.schemas import ConversationHistory, StreamData
+from core.tool_context import ToolContext, use_tool_context
 
 
 class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
@@ -140,8 +142,8 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                 self.memory_manager, conversation_history.session_id
             )
         doc_inventory = await self._get_document_inventory()
-        # Reason: RT-10. The bound turn (always set by @bind_turn_if_unbound) holds the
-        # normalised role; the raw kwarg could be "", "Owner" or missing.
+        # Reason: RT-10. @bind_turn_if_unbound always binds call_turn(kwargs) here: guest
+        # when either this call's user_role or an enclosing turn is not exactly "owner".
         user_role = turn_for(self).user_role
         guest_profile = kwargs.get("guest_profile") or {}
         guest_age_band = guest_profile.get("age_band") or "teen"
@@ -503,12 +505,43 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             raise Exception(f"Tool {tool_name} not found")
 
         try:
-            return await self.tool_registry.execute_tool(tool_name, **tool_args)
+            guest_ctx = self._legacy_guest_tool_context(state)
+            if guest_ctx is None:
+                return await self.tool_registry.execute_tool(tool_name, **tool_args)
+            # Reason: RT-10. The registry drops user_role (no tool schema declares it), so
+            # without a context a guest's read_file/list_directory ran with the tools'
+            # "owner" default; the context makes every role-aware tool see the guest.
+            with use_tool_context(guest_ctx):
+                return await self.tool_registry.execute_tool(tool_name, **tool_args)
         except Exception as e:
             handler = getattr(self, "_handle_tool_failure", None)
             if handler:
                 return await handler(tool_name, e)
             raise
+
+    @staticmethod
+    def _legacy_guest_tool_context(state: dict[str, Any] | None) -> ToolContext | None:
+        """Guest ToolContext for a legacy-path tool call, or None for an owner turn.
+
+        Args:
+            state: The ReAct state, or None (native path, which sets its own context).
+
+        Returns:
+            None when ``state`` is None or its role is exactly "owner"; otherwise a guest
+            context whose ``read_role`` is the guest's RBAC role (its policy read roots).
+        """
+        if state is None or is_owner(state.get("user_role")):
+            return None
+        from core.guest_access import resolve_effective_role
+
+        conversation = state.get("conversation_history")
+        return ToolContext(
+            session_id=getattr(conversation, "session_id", None),
+            user_role=GUEST,
+            conversation_history=conversation,
+            turn_id=None,
+            read_role=resolve_effective_role(GUEST, state.get("guest_profile")),
+        )
 
     async def _emit_final_answer(
         self, final_answer: str, state: dict[str, Any], session_id: str | None

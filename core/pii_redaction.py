@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from core.roles import is_owner
+from core.roles import GUEST, is_owner
 
 _DEFAULT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
@@ -32,7 +32,8 @@ def _compiled_patterns(config: Any | None) -> tuple[tuple[str, re.Pattern[str]],
     return tuple(compiled)
 
 
-def is_pii_redaction_enabled(config: Any | None, *, role: str = "owner") -> bool:
+def is_pii_redaction_enabled(config: Any | None, *, role: Any = GUEST) -> bool:
+    # Reason: RT-10, an omitted role is a guest (redacted), never the owner.
     security = getattr(config, "security", None) if config else None
     pii = getattr(security, "pii_redaction", None) if security else None
     if pii is None or not getattr(pii, "enabled", False):
@@ -54,19 +55,20 @@ def redact_pii(text: str, config: Any | None = None) -> str:
     return out
 
 
-def maybe_redact_for_storage(text: str, config: Any | None, *, role: str = "owner") -> str:
+def maybe_redact_for_storage(text: str, config: Any | None, *, role: Any = GUEST) -> str:
+    # Reason: RT-10, an omitted role is a guest (redacted), never the owner.
     security = getattr(config, "security", None) if config else None
     pii = getattr(security, "pii_redaction", None) if security else None
     if pii is None or not getattr(pii, "enabled", False):
         return text
     if not getattr(pii, "redact_before_store", True):
         return text
-    if role == "owner" and not getattr(pii, "redact_owner", False):
+    if is_owner(role) and not getattr(pii, "redact_owner", False):
         return text
     return redact_pii(text, config)
 
 
-def maybe_redact_for_guest(text: str, config: Any | None, *, role: str) -> str:
+def maybe_redact_for_guest(text: str, config: Any | None, *, role: Any) -> str:
     # Reason: RT-10, fail closed. Any non-owner role (unknown ones included) is redacted.
     if is_owner(role):
         return text

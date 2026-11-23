@@ -28,12 +28,15 @@ class ToolContext:
         user_role: Role of the person the turn is for; only "owner" counts as owner.
         conversation_history: The turn's ConversationHistory, or None.
         turn_id: Turn metrics id, or None.
+        read_role: For a non-owner turn, the RBAC role whose read roots apply (e.g.
+            "family_adult"); None means the plain guest roots.
     """
 
     session_id: str | None
     user_role: str
     conversation_history: Any | None
     turn_id: str | None
+    read_role: str | None = None
 
 
 # Reason: a ContextVar follows the task, so concurrent turns keep their own context and
@@ -78,6 +81,28 @@ def tool_user_role(argument: Any = "owner") -> Any:
     # Reason: fail closed; any value other than "owner" (including "" or an unknown role,
     # which some policies would read as owner) gets the guest treatment.
     return "owner" if ctx.user_role == "owner" else "guest"
+
+
+def tool_read_role(argument: Any = "owner") -> Any:
+    """Role whose read roots a file tool uses: the context's if set, else its argument.
+
+    Args:
+        argument: The ``user_role`` the tool was called with (no context set).
+
+    Returns:
+        With a context: "owner" only for an exact owner turn, else the context's non-owner
+        ``read_role`` or "guest". Without one, ``argument`` unchanged.
+    """
+    ctx = current_tool_context()
+    if ctx is None:
+        return argument
+    if ctx.user_role == "owner":
+        return "owner"
+    # Reason: RT-10, a family guest keeps its policy read roots but can never read as owner.
+    read_role = ctx.read_role
+    if isinstance(read_role, str) and read_role.strip() and read_role.strip().lower() != "owner":
+        return read_role
+    return "guest"
 
 
 def tool_conversation(argument: Any = None) -> Any:

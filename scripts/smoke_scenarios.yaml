@@ -170,6 +170,9 @@ scenarios:
 
   # RT-10: a turn role is "owner" or a guest; an RBAC name in the role slot is a guest,
   # so it takes the guest path (no direct file read) like route-downloads-guest-denied.
+  # Real family guests (role "guest" + an owner-set age band) never got read_file_direct
+  # (owner-only route); they keep their policy read_file/list_directory and read roots on
+  # the orchestrator path (tests/redteam/test_rt10c_guest_wins.py).
   - id: family-adult-downloads-guest-path
     tier: routing
     requires_live: false
