@@ -72,7 +72,7 @@ async def _purge_new_segments(system, before: set[str] | None) -> int:
     return removed
 
 
-async def _turn(system, sandbox, history, message: str, sid: str, timeout: float, spy, spec):
+async def _turn(system, sandbox, history, message, sid, timeout, spy, spec, tool_msgs):
     """Run one user turn and measure tools, reply, files and store changes."""
     from core.schemas import StreamData
 
@@ -80,6 +80,7 @@ async def _turn(system, sandbox, history, message: str, sid: str, timeout: float
     before = lib.scan_sandbox(sandbox, ignore)["stores"]
     history.add_message("user", message)
     hits0, net0 = spy["fake_hits"], spy["network_attempts"]
+    tool_msgs.clear()
     events: list[StreamData] = []
     start = time.perf_counter()
 
@@ -107,7 +108,8 @@ async def _turn(system, sandbox, history, message: str, sid: str, timeout: float
     hits, net = spy["fake_hits"] - hits0, spy["network_attempts"] - net0
     return {
         "message": message,
-        **lib.turn_validity(spec, calls, hits, net, events),
+        **lib.turn_validity(spec, calls, hits, net, tool_msgs),
+        "model_tool_messages": list(tool_msgs),
         "fake_search_hits": hits,
         "network_attempts": net,
         "tools": calls,
@@ -120,6 +122,15 @@ async def _turn(system, sandbox, history, message: str, sid: str, timeout: float
     }
 
 
+def _native_llm(system):
+    """The LLM interface the native loop calls, whose tool messages are captured."""
+    native = getattr(system.control_center, "native_orchestrator", None)
+    llm = getattr(native, "llm_interface", None)
+    if llm is None or not hasattr(llm, "generate_chat"):
+        raise RuntimeError("probe: native orchestrator has no generate_chat to observe")
+    return llm
+
+
 async def run_scenario(system, sandbox: Path, scenario: str, n: int, timeout: float) -> dict:
     """Run one scenario once in a fresh session; write DIR/probe/<scenario>-<n>.json."""
     from core.schemas import ConversationHistory
@@ -130,11 +141,17 @@ async def run_scenario(system, sandbox: Path, scenario: str, n: int, timeout: fl
     seg_before = await _segment_ids(system)
     record = {"scenario": scenario, "run": n, "gate": spec["gate"], "session": sid, "turns": []}
     search_tool = lib.find_search_tool(getattr(system, "tool_registry", None))
+    llm = _native_llm(system)
     _set_gate(system, spec["gate"])
     try:
-        with lib.patched_search(spec["search"], search_tool) as spy:
+        with (
+            lib.patched_search(spec["search"], search_tool) as spy,
+            lib.capture_tool_messages(llm) as tool_msgs,
+        ):
             for message in spec["messages"]:
-                turn = await _turn(system, sandbox, history, message, sid, timeout, spy, spec)
+                turn = await _turn(
+                    system, sandbox, history, message, sid, timeout, spy, spec, tool_msgs
+                )
                 record["turns"].append(turn)
         record["invalid"] = any(t["invalid"] for t in record["turns"])
         record["planted_delivered"] = record["turns"][0]["planted_delivered"]
@@ -162,7 +179,9 @@ async def plant_document(system, config, sandbox: Path) -> dict:
         (folder / lib.DOC_NAME).write_text(lib.DOC_TEXT, encoding="utf-8")
     try:
         result = await system.tool_registry.execute_tool("ingest_documents")
-        return {"ingested": isinstance(result, dict) and bool(result.get("success"))}
+        keys = ("files_scanned", "files_ingested", "files_unchanged", "chunks_added", "errors")
+        info = {k: result.get(k) for k in keys} if isinstance(result, dict) else {}
+        return {"ingested": isinstance(result, dict) and bool(result.get("success")), **info}
     except Exception as exc:  # recorded, not fatal: read_file still reaches the file
         return {"ingested": False, "error": str(exc)[:300]}
 
