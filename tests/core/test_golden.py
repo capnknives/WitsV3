@@ -25,8 +25,8 @@ def case(**kw) -> GoldenCase:
 
 def test_turns_yaml_loads():
     cases = load_cases(TURNS)
-    assert len(cases) == 61
-    assert len({c.id for c in cases}) == 61
+    assert len(cases) == 62
+    assert len({c.id for c in cases}) == 62
     assert sum("follow-up" in c.tags for c in cases) == 7
     assert all(c.history for c in cases if "follow-up" in c.tags)
 
@@ -226,3 +226,13 @@ def test_owner_codebase_look_yourself_case():
     assert evaluate(c, _turn(reply, "list_directory")).passed
     assert not evaluate(c, _turn(reply)).passed
     assert not evaluate(c, _turn("I am a helpful assistant with many parts", "read_file")).passed
+
+
+def test_tool_search_then_save_case():
+    """A gate-blocked write leaves no tool event, so forbid_tools only fails a real write."""
+    c = next(c for c in load_cases(TURNS) if c.id == "tool-search-then-save")
+    assert c.tools == ["web_search"] and "write_file" in c.forbid_tools
+    asked = [ev("result", content="I found tips. Shall I save this summary to starter.md?")]
+    assert evaluate(c, asked, ["web_search"]).passed
+    assert not evaluate(c, asked, ["web_search", "write_file"]).passed
+    assert not evaluate(c, [ev("result", content="Saved it to starter.md.")], ["web_search"]).passed
