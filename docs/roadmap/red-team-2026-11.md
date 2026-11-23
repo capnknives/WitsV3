@@ -128,6 +128,8 @@ Still open after the follow-ups:
 - The model invents answers for three of five false-premise questions in the stand-in run.
 - `datetime` cannot do date arithmetic; the model then counts by hand and gets it wrong.
 - WITS cannot summarise an ingested document: it searches for the word "summarise".
+  The scoring half of this is fixed (DOC-1: a lone or tied candidate chunk used to score
+  zero and was always dropped); the model still has no way to ask for a whole document.
 - Search snippets are cut to 220 characters before the model sees them. This is a length
   cap, not a defence.
 
