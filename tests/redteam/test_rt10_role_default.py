@@ -10,8 +10,8 @@ Today several mappings read "guest" as the only restricted role and everything e
 - agents/orchestrator_preflight.py: guest tool block only fires for ``== "guest"``
 - web/server.py: /api/chat maps any role outside (owner, guest) to owner
 
-Hole-proving tests are strict xfails asserting the CORRECT behaviour; variants that are
-already safe are plain passing pins.
+These were strict xfails until RT-10b normalised the role at every entry point
+(core/roles.normalize_role); variants that were already safe are plain pins.
 """
 
 import pytest
@@ -37,10 +37,6 @@ HOLE_TOOLS_FOR_ROLE = ["", None, "Owner", "owner ", "OWNER"]
 
 def _id(value):
     return repr(value)
-
-
-def _holes(values, reason):
-    return [pytest.param(v, marks=pytest.mark.xfail(strict=True, reason=reason)) for v in values]
 
 
 # ------------------------------------------------------------ pins: owner and guest
@@ -81,7 +77,7 @@ def test_tools_for_role_unknown_gets_guest_tools(role):
 
 @pytest.mark.parametrize(
     "role",
-    _holes(HOLE_TOOLS_FOR_ROLE, "RT-10: tools_for_role lower-cases/strips/defaults to all tools"),
+    HOLE_TOOLS_FOR_ROLE,
     ids=_id,
 )
 def test_tools_for_role_only_exact_owner_gets_all_tools(role):
@@ -90,7 +86,7 @@ def test_tools_for_role_only_exact_owner_gets_all_tools(role):
 
 @pytest.mark.parametrize(
     "role",
-    _holes(NOT_OWNER, "RT-10: resolve_effective_role returns owner for any non-guest role"),
+    NOT_OWNER,
     ids=_id,
 )
 def test_effective_role_is_not_owner(role):
@@ -102,7 +98,7 @@ def test_effective_role_is_not_owner(role):
 
 @pytest.mark.parametrize(
     "role",
-    _holes(NOT_OWNER, "RT-10: TurnContext only skips global memory for the literal guest"),
+    NOT_OWNER,
     ids=_id,
 )
 def test_turn_context_non_owner_is_guest(role):
@@ -116,7 +112,7 @@ def test_turn_context_non_owner_is_guest(role):
 
 @pytest.mark.parametrize(
     "role",
-    _holes(NOT_OWNER, 'RT-10: routing_classifier gates guests with `role != "guest"`'),
+    NOT_OWNER,
     ids=_id,
 )
 def test_classifier_denies_direct_file_read(role):
@@ -146,7 +142,7 @@ class _Preflight(OrchestratorPreflightMixin):
 
 @pytest.mark.parametrize(
     "role",
-    _holes(NOT_OWNER, "RT-10: preflight blocks owner-only tools only for the literal guest"),
+    NOT_OWNER,
     ids=_id,
 )
 def test_preflight_blocks_owner_tool(role):
@@ -196,7 +192,7 @@ async def test_guest_turn_does_not_remember(agent_and_memory):
 
 @pytest.mark.parametrize(
     "role",
-    _holes(NOT_OWNER, "RT-10: control center runs the remember rule for any non-guest role"),
+    NOT_OWNER,
     ids=_id,
 )
 async def test_non_owner_turn_does_not_write_global_memory(agent_and_memory, role):
@@ -238,10 +234,7 @@ def test_chat_route_guest_role_stays_guest(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(
     "role",
-    _holes(
-        ["anonymous", "", "Owner", "owner ", "admin", "OWNER", "totally-unknown"],
-        "RT-10: web/server.py maps any role outside (owner, guest) to owner for chat",
-    ),
+    ["anonymous", "", "Owner", "owner ", "admin", "OWNER", "totally-unknown"],
     ids=_id,
 )
 def test_chat_route_non_owner_role_is_not_passed_as_owner(tmp_path, monkeypatch, role):

@@ -119,7 +119,10 @@ async def test_select_agent_ignores_owner_statement():
 async def test_turn_does_not_store_intent_analysis():
     memory = _RecordingMemoryManager()
     wcca = _make_wcca(memory)
-    async for _ in wcca.run("what changed in the workspace today?", session_id="sess-mem"):
+    # Reason: RT-10, a turn with no role is a guest; this models an owner turn.
+    async for _ in wcca.run(
+        "what changed in the workspace today?", session_id="sess-mem", user_role="owner"
+    ):
         pass
     types = [s.type for s in memory.segments]
     assert "USER_INPUT" in types  # proves the recorder is wired to store_memory

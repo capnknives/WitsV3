@@ -7,6 +7,7 @@ from typing import Any
 from core.base_tool import BaseTool
 from core.guest_access import GuestRegistry
 from core.guest_user_profile import GuestUserProfileStore
+from core.roles import normalize_role
 from core.tool_context import tool_user_role
 
 
@@ -32,7 +33,7 @@ class GuestUserProfileSummaryTool(BaseTool):
         guest_id: str | None = None,
         **kwargs: Any,
     ) -> str:
-        if tool_user_role(kwargs.get("user_role", "owner")) == "guest":
+        if normalize_role(tool_user_role(kwargs.get("user_role", "owner"))) == "guest":
             return "guest_user_profile_summary is only available to the owner."
         return self.store.format_owner_summary(
             guest_id=guest_id,

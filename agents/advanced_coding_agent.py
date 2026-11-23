@@ -15,6 +15,7 @@ from agents.base_agent import BaseAgent
 from agents.coding_handlers import CodingHandlersMixin
 from agents.coding_models import CodeAnalysis, CodeProject
 from agents.coding_scaffolds import CodingScaffoldMixin
+from agents.turn_context import bind_turn_if_unbound
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
@@ -120,6 +121,9 @@ class AdvancedCodingAgent(CodingHandlersMixin, CodingScaffoldMixin, BaseAgent):
             allow_trivial=False,
         )
 
+    # Reason: RT-10, always runs in a bound turn: the caller's, or one built from its
+    # user_role (none is a guest), with a guest from either source winning.
+    @bind_turn_if_unbound
     async def run(
         self,
         user_input: str,

@@ -334,7 +334,10 @@ async def run_once(
             for turn_ in case.history:
                 history.add_message(turn_["role"], turn_["content"])
             history.add_message("user", case.message)
-        async for ev in control_center.run(case.message, conversation_history=history):
+        # Reason: RT-10, a missing role is a guest; golden cases are owner turns.
+        async for ev in control_center.run(
+            case.message, conversation_history=history, user_role="owner"
+        ):
             events.append(ev)
             if turn_metrics is not None:
                 turn_metrics.note_event(ev.type)

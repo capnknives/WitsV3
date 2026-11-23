@@ -1,13 +1,16 @@
 # agents/book_writing_handlers.py
 """Task handlers and helpers for BookWritingAgent."""
 
+import contextlib
 import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
 from agents.book_writing_helpers import BookWritingHelpersMixin
 from agents.book_writing_models import BookStructure, Chapter
+from agents.turn_context import guest_tool_context, turn_for
 from core.schemas import StreamData
+from core.tool_context import use_tool_context
 
 
 class BookWritingHandlersMixin(BookWritingHelpersMixin):
@@ -194,11 +197,14 @@ class BookWritingHandlersMixin(BookWritingHelpersMixin):
         research_results = []
         if self.tool_registry:
             try:
-                # Try to use web search tool
-                search_result = await self.tool_registry.execute_tool(
-                    "web_search",
-                    query=f"{topic} research facts statistics",
-                )
+                # Reason: RT-10, defence in depth; guests are routed away from this agent, but
+                # a guest turn must never search with the tool's owner default.
+                ctx = guest_tool_context(turn_for(self))
+                with use_tool_context(ctx) if ctx else contextlib.nullcontext():
+                    search_result = await self.tool_registry.execute_tool(
+                        "web_search",
+                        query=f"{topic} research facts statistics",
+                    )
                 research_results.append(search_result)
                 yield self.stream_observation("Gathered web research data")
             except Exception as e:

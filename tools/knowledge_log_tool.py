@@ -10,6 +10,7 @@ from typing import Any
 from core.base_tool import BaseTool
 from core.guest_user_profile import GuestUserProfileStore
 from core.knowledge_log import KnowledgeLogStore
+from core.roles import normalize_role
 from core.tool_context import tool_user_role
 
 
@@ -31,7 +32,7 @@ class KnowledgeLogSummaryTool(BaseTool):
         self.guest_store = GuestUserProfileStore()
 
     async def execute(self, **kwargs: Any) -> str:
-        if tool_user_role(kwargs.get("user_role", "owner")) == "guest":
+        if normalize_role(tool_user_role(kwargs.get("user_role", "owner"))) == "guest":
             return "knowledge_log_summary is only available to the owner."
         try:
             guest_summaries = self.guest_store.list_profile_summaries()
@@ -57,7 +58,7 @@ class KnowledgeLogAddFactTool(BaseTool):
         self.store = KnowledgeLogStore()
 
     async def execute(self, text: str = "", category: str = "project", **kwargs: Any) -> str:
-        if tool_user_role(kwargs.get("user_role", "owner")) == "guest":
+        if normalize_role(tool_user_role(kwargs.get("user_role", "owner"))) == "guest":
             return "knowledge_log_add_fact is only available to the owner."
         text = (text or "").strip()
         if not text:

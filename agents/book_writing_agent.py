@@ -22,6 +22,7 @@ from agents.book_writing_helpers import (
 from agents.book_writing_models import BookStructure, Chapter
 from agents.book_writing_worldbible import BookWritingWorldBibleMixin
 from agents.book_writing_writer import BookWritingWriterMixin
+from agents.turn_context import bind_turn_if_unbound
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
@@ -100,6 +101,9 @@ class BookWritingAgent(
 
         self.logger.info("Book Writing Agent initialized")
 
+    # Reason: RT-10, always runs in a bound turn: the caller's, or one built from its
+    # user_role (none is a guest), with a guest from either source winning.
+    @bind_turn_if_unbound
     async def run(
         self,
         user_input: str,

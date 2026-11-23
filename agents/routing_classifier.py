@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from core.roles import normalize_role
 from core.schemas import ConversationHistory
 
 RouteDestination = Literal[
@@ -468,7 +469,8 @@ class RouteDecision:
 @dataclass
 class RoutingContext:
     message: str
-    user_role: str = "owner"
+    # Reason: RT-10, fail closed; the only production caller passes the bound turn's role.
+    user_role: str = "guest"
     doc_inventory: dict[str, int] = field(default_factory=dict)
     session_id: str | None = None
     active_specialized_agent: str | None = None
@@ -868,7 +870,9 @@ def follow_up_routing_message(
 def classify_message(ctx: RoutingContext) -> RouteDecision:
     """Single ordered routing decision before the intent LLM."""
     message = ctx.message
-    role = ctx.user_role
+    # Reason: RT-10, fail closed. Public entry point: a raw role such as "" or "Owner"
+    # must not pass the `role != "guest"` gates below.
+    role = normalize_role(ctx.user_role)
 
     if role == "owner" and needs_guest_chat_history(message):
         return RouteDecision(

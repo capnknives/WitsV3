@@ -306,6 +306,8 @@ class WitsV3System:
             async for stream_data in self.self_repair_agent.run(
                 "Scan for recent errors and fix any that can be safely resolved.",
                 session_id=f"scheduled-self-repair-{uuid.uuid4().hex[:8]}",
+                # Reason: RT-10, a missing role is a guest; this local job is the owner.
+                user_role="owner",
             ):
                 if stream_data.type in ("result", "observation"):
                     results.append(f"[{stream_data.type}] {stream_data.content}")
@@ -483,7 +485,8 @@ class WitsV3System:
             response_parts = []
             async for stream_data in self.control_center.run(
                 user_input=test_query,
-                goal="Answer the question directly"
+                goal="Answer the question directly",
+                user_role="owner",  # Reason: RT-10, the local self-check runs as owner.
             ):
                 if stream_data.type in ["result", "error"]:
                     response_parts.append(stream_data.content)
@@ -543,7 +546,9 @@ class WitsV3System:
             async for stream_data in self.control_center.run(
                 user_input=user_input,
                 conversation_history=conversation,
-                session_id=session_id
+                session_id=session_id,
+                # Reason: RT-10, a missing role is a guest; the local CLI user is the owner.
+                user_role="owner",
             ):
                 note_event(stream_data.type)
                 tm_out = "error" if stream_data.type == "error" else tm_out

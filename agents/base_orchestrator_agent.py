@@ -10,13 +10,20 @@ from typing import Any
 
 from agents.base_agent import BaseAgent
 from agents.orchestrator_tool_helpers import OrchestratorToolHelpersMixin
-from agents.turn_context import bind_turn_if_unbound, turn_for
+from agents.turn_context import (
+    TurnContext,
+    bind_turn_if_unbound,
+    guest_tool_context,
+    turn_for,
+)
 from core.config import WitsV3Config
 from core.json_llm_parser import build_json_repair_prompt
 from core.llm_interface import BaseLLMInterface
 from core.memory_manager import MemoryManager
+from core.roles import GUEST, is_owner
 from core.runtime_paths import exports_subpath
 from core.schemas import ConversationHistory, StreamData
+from core.tool_context import ToolContext, current_tool_context, use_tool_context
 
 
 class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
@@ -140,9 +147,14 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
                 self.memory_manager, conversation_history.session_id
             )
         doc_inventory = await self._get_document_inventory()
-        guest_profile = kwargs.get("guest_profile") or {}
+        # Reason: RT-10. @bind_turn_if_unbound always binds call_turn(kwargs) here: guest
+        # when either this call's user_role or an enclosing turn is not exactly "owner".
+        user_role = turn_for(self).user_role
+        # Reason: the bound turn's profile, never this call's kwarg, so a nested call cannot
+        # name a wider policy than its caller's (call_turn picks it).
+        guest_profile = turn_for(self).guest_profile or {}
         guest_age_band = guest_profile.get("age_band") or "teen"
-        if guest_profile.get("guest_id") and kwargs.get("user_role") == "guest":
+        if guest_profile.get("guest_id") and user_role == "guest":
             from core.guest_access import GuestRegistry
 
             reg = GuestRegistry()
@@ -165,7 +177,7 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             "tool_total_failures": {},
             "lookup_search_done": False,
             "synthesis_guard_retries": 0,
-            "user_role": kwargs.get("user_role", "owner"),
+            "user_role": user_role,
             "guest_profile": guest_profile,
             "guest_age_band": guest_age_band,
             "guest_personalization_context": kwargs.get("guest_personalization_context", ""),
@@ -500,12 +512,46 @@ class BaseOrchestratorAgent(OrchestratorToolHelpersMixin, BaseAgent):
             raise Exception(f"Tool {tool_name} not found")
 
         try:
-            return await self.tool_registry.execute_tool(tool_name, **tool_args)
+            guest_ctx = self._legacy_guest_tool_context(state)
+            current = current_tool_context()
+            # Reason: keep a guest context already set (native loop: it carries the session);
+            # replace an owner one, or none, when the turn is a guest.
+            if guest_ctx is None or (current is not None and not is_owner(current.user_role)):
+                return await self.tool_registry.execute_tool(tool_name, **tool_args)
+            # Reason: RT-10. The registry drops user_role (no tool schema declares it), so
+            # without a context a guest's read_file/list_directory ran with the tools'
+            # "owner" default; the context makes every role-aware tool see the guest.
+            with use_tool_context(guest_ctx):
+                return await self.tool_registry.execute_tool(tool_name, **tool_args)
         except Exception as e:
             handler = getattr(self, "_handle_tool_failure", None)
             if handler:
                 return await handler(tool_name, e)
             raise
+
+    def _legacy_guest_tool_context(self, state: dict[str, Any] | None) -> ToolContext | None:
+        """Guest ToolContext for a tool call outside the native loop, or None for owner.
+
+        Args:
+            state: The ReAct state, or None (e.g. native path, codebase intro).
+
+        Returns:
+            None only when the bound turn and ``state`` (if any) are both exactly owner;
+            otherwise a guest context for the turn (its profile's policy read roots).
+        """
+        turn = turn_for(self)
+        state = state or {}
+        if is_owner(turn.user_role):
+            if "user_role" not in state or is_owner(state.get("user_role")):
+                return None
+            # Reason: fail closed; a non-owner state in an unbound/owner turn is a guest.
+            turn = TurnContext(user_role=GUEST, guest_profile=state.get("guest_profile"))
+        conversation = state.get("conversation_history")
+        return guest_tool_context(
+            turn,
+            session_id=getattr(conversation, "session_id", None),
+            conversation_history=conversation,
+        )
 
     async def _emit_final_answer(
         self, final_answer: str, state: dict[str, Any], session_id: str | None

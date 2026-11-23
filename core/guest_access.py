@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from core.roles import is_owner
 from core.runtime_paths import guest_profiles_path
 
 logger = logging.getLogger("WitsV3.GuestAccess")
@@ -50,26 +51,53 @@ def guest_tools_for_age_band(age_band: str, config: Any | None = None) -> frozen
 
 
 def resolve_effective_role(user_role: str, guest_profile: dict[str, Any] | None = None) -> str:
-    """Map session user_role + guest profile to RBAC role name."""
+    """Map session user_role + guest profile to RBAC role name.
+
+    Args:
+        user_role: The turn's role; only the exact string "owner" maps to owner.
+        guest_profile: The guest's profile, if any.
+
+    Returns:
+        "owner", or a non-owner RBAC role name.
+    """
     from core.guest_policy_loader import default_policy_role
 
-    if (user_role or "owner").lower() != "guest":
+    # Reason: RT-10, fail closed. Anything but the exact "owner" (None, "", "Owner",
+    # "anonymous", ...) takes the guest mapping instead of defaulting to owner.
+    if is_owner(user_role):
         return "owner"
     if guest_profile and guest_profile.get("rbac_role"):
-        return str(guest_profile["rbac_role"]).strip().lower()
+        rbac_role = str(guest_profile["rbac_role"]).strip().lower()
+        # Reason: a guest profile must never name its way into owner rights.
+        if rbac_role and rbac_role != "owner":
+            return rbac_role
     band = normalize_age_band((guest_profile or {}).get("age_band"))
     if band == "adult":
         return "family_adult"
     if band == "child":
         return "family_kid"
-    return default_policy_role()
+    default_role = default_policy_role()
+    # Reason: a mis-set policy default_role must not hand every guest owner rights.
+    return "guest" if default_role == "owner" else default_role
 
 
 def tools_for_role(role: str, config: Any | None = None) -> frozenset[str] | None:
-    """Return allowed tools for RBAC role; None means all tools (owner)."""
-    role_key = (role or "owner").strip().lower()
-    if role_key in ("owner", ""):
+    """Return allowed tools for RBAC role; None means all tools (owner).
+
+    Args:
+        role: RBAC role name; only the exact string "owner" gets all tools.
+        config: Unused; kept for call compatibility.
+
+    Returns:
+        The allowed tool names, or None for owner (all tools).
+    """
+    if is_owner(role):
         return None
+    # Reason: RT-10, fail closed. None, "" and owner look-alikes ("Owner", "owner ")
+    # get the guest allow-list rather than every tool.
+    role_key = role.strip().lower() if isinstance(role, str) else ""
+    if role_key in ("owner", ""):
+        return GUEST_ALLOWED_TOOLS
     from core.guest_policy_loader import policy_roles
 
     roles = policy_roles()
@@ -77,11 +105,12 @@ def tools_for_role(role: str, config: Any | None = None) -> frozenset[str] | Non
     if isinstance(entry, dict):
         tools = entry.get("allowed_tools")
         if tools == ["*"] or tools == "*":
-            return None
+            # Reason: RT-10, None means every tool, which only the exact "owner" may get;
+            # a non-owner policy role naming "*" is capped to the guest allow-list.
+            return GUEST_ALLOWED_TOOLS
         if isinstance(tools, list):
             return frozenset(str(t) for t in tools)
-    if role_key == "guest":
-        return GUEST_ALLOWED_TOOLS
+    # Reason: a role the policy does not define gets the guest allow-list, never None.
     return GUEST_ALLOWED_TOOLS
 
 
@@ -176,6 +205,34 @@ def is_private_lan_ip(ip: str | None) -> bool:
 
 def guest_session_key(guest_id: str, session_id: str) -> str:
     return f"guest:{guest_id}:{session_id}"
+
+
+def chat_storage_session_id(raw_session: str, guest: dict[str, Any] | None, role: Any) -> str:
+    """Server-side history key for one /api/chat request (RT-10).
+
+    Args:
+        raw_session: The session id the client sent (or a new one).
+        guest: The validated guest payload, or None.
+        role: The request's role; only the exact "owner" may use an unprefixed key.
+
+    Returns:
+        The guest's own key; the raw id for the owner; otherwise a one-off guest key.
+    """
+    if guest and guest.get("guest_id"):
+        return guest_session_key(guest["guest_id"], raw_session)
+    if is_owner(role):
+        return raw_session
+    # Reason: a non-owner role with no guest record must not share the owner's session
+    # namespace; a one-off key keeps it isolated (and hidden from the owner's list).
+    return guest_session_key(f"{_ONE_OFF}{uuid.uuid4().hex}", raw_session)
+
+
+_ONE_OFF = "unregistered-"
+
+
+def is_one_off_session_key(session_id: str) -> bool:
+    """True for the one-off key ``chat_storage_session_id`` gives an unregistered guest."""
+    return session_id.startswith(f"guest:{_ONE_OFF}")
 
 
 class GuestRegistry:

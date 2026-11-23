@@ -100,7 +100,8 @@ def _make(replies: list, registry=None):
 
 
 async def _run(orch, message: str = "do the thing") -> list:
-    return [e async for e in orch.run(message)]
+    # Reason: RT-10, a turn with no role is a guest; these tier tests model an owner turn.
+    return [e async for e in orch.run(message, user_role="owner")]
 
 
 def _replies(llm) -> list[str]:

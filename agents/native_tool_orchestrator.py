@@ -37,7 +37,7 @@ from agents.tool_tiers import (
     find_tools_reply,
     route_call,
 )
-from agents.turn_context import bind_turn_if_unbound
+from agents.turn_context import bind_turn_if_unbound, guest_tool_context, turn_for
 from core.config import WitsV3Config
 from core.llm_interface import BaseLLMInterface, LLMMessage
 from core.memory_manager import MemoryManager
@@ -130,8 +130,11 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
             "tool_total_failures": {},
             "lookup_search_done": False,
             "synthesis_guard_retries": 0,
-            "user_role": kwargs.get("user_role", "owner"),
-            "guest_profile": kwargs.get("guest_profile") or {},
+            # Reason: RT-10, call_turn's role (bound by the decorator): guest when this call's
+            # user_role or an enclosing turn is not exactly "owner"; never the raw kwarg.
+            "user_role": turn_for(self).user_role,
+            # Reason: the bound turn's profile, never the kwarg (see base orchestrator run).
+            "guest_profile": turn_for(self).guest_profile or {},
             "guest_age_band": "teen",
             "guest_personalization_context": kwargs.get("guest_personalization_context", ""),
             "preferred_tool": kwargs.get("preferred_tool", ""),
@@ -139,14 +142,15 @@ class NativeToolOrchestrator(BaseOrchestratorAgent):
         self._react_state_for_tools = react_state
         # Reason: kept in this turn's state, not on self, so concurrent turns on one
         # orchestrator never see each other's context.
-        react_state["tool_context"] = ToolContext(
+        turn_id = turn.turn_id if turn is not None else None
+        # Reason: RT-10, the shared guest context (with the guest's read_role) so this path
+        # and the legacy/playbook paths agree; an exact owner turn gets the owner context.
+        react_state["tool_context"] = guest_tool_context(
+            turn_for(self),
             session_id=session_id,
-            # Reason: the role exactly as the caller sent it; "owner" when absent only
-            # because the front door already sends every non-owner turn to the old path.
-            user_role=kwargs.get("user_role", "owner"),
             conversation_history=conversation_history,
-            turn_id=turn.turn_id if turn is not None else None,
-        )
+            turn_id=turn_id,
+        ) or ToolContext(session_id, "owner", conversation_history, turn_id)
         # Reason: per turn, like tool_context, so a read in one turn never gates the next.
         # Reason: the gate asks python_sandboxed() at each decision, from load_config() as the
         # python tool does, so it never trusts a turn-start snapshot of the sandbox mode.

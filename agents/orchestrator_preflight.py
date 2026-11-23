@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from agents.routing_classifier import needs_codebase_intro
+from core.roles import normalize_role
 from core.runtime_paths import exports_subpath
 
 
@@ -24,7 +25,7 @@ class OrchestratorPreflightMixin:
         )
 
         react_state = state or getattr(self, "_react_state_for_tools", None) or {}
-        user_role = react_state.get("user_role", "owner")
+        user_role = normalize_role(react_state.get("user_role"))
         guest_profile = react_state.get("guest_profile")
         effective = resolve_effective_role(user_role, guest_profile)
         role_tools = tools_for_role(effective, getattr(self, "config", None))
@@ -55,13 +56,16 @@ class OrchestratorPreflightMixin:
                     f"Blocked {tool_name}: offline mode is enabled — "
                     "web search and MCP tools are disabled."
                 )
-        if state.get("user_role") == "owner":
+        # Reason: RT-10, fail closed. The state can be built by any caller, so a missing or
+        # unrecognised role is a guest here rather than escaping the guest tool block.
+        role = normalize_role(state.get("user_role"))
+        if role == "owner":
             from core.injection_guard import check_tool_injection
 
             injection = check_tool_injection(tool_name, tool_args)
             if injection:
                 return injection
-        if state.get("user_role") == "guest" and tool_name not in self._guest_allowed_tools(state):
+        if role == "guest" and tool_name not in self._guest_allowed_tools(state):
             return (
                 f"Blocked {tool_name}: not available for guest users. "
                 f"Use web_search, math_operations, or datetime, or final_answer to respond."
@@ -69,9 +73,7 @@ class OrchestratorPreflightMixin:
         goal = state.get("goal", "")
         from agents.wcca_routing_mixin import OrchestratorRoutingMixin
 
-        if state.get(
-            "user_role"
-        ) == "owner" and OrchestratorRoutingMixin._needs_guest_profile_review(
+        if role == "owner" and OrchestratorRoutingMixin._needs_guest_profile_review(
             OrchestratorRoutingMixin(), goal
         ):
             if tool_name == "web_search":

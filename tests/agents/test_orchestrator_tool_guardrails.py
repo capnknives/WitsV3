@@ -22,6 +22,8 @@ def _state_with_docs():
         ),
         "tool_repeat_failures": {},
         "tool_total_failures": {},
+        # Reason: RT-10, a state with no role is a guest; these model an owner turn.
+        "user_role": "owner",
     }
 
 
@@ -123,6 +125,7 @@ def test_blocks_repeat_list_mcp_tools():
         ],
         "tool_repeat_failures": {},
         "tool_total_failures": {},
+        "user_role": "owner",
     }
     msg = h._preflight_tool_call("list_mcp_tools", {}, state)
     assert msg is not None
