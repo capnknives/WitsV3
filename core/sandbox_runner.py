@@ -34,6 +34,22 @@ UNSANDBOXED_REFUSAL = (
 _CHILD_ENV_KEYS = ("PATH", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR")
 _CHILD_ENV_LOCALE = ("LANG", "LC_ALL")
 
+# Reason: python_execute runs one short snippet, so small caps are enough.
+PYTHON_PIDS_LIMIT = 128
+PYTHON_MEMORY = "512m"
+PYTHON_TMPFS = "/tmp:rw,noexec,nosuid,size=64m"
+# Reason: the gate may run the whole suite (~2,500 tests). asyncio's default executor
+# alone can hold 32+ threads and tests spawn subprocesses (each thread counts as a pid),
+# so 512 leaves headroom while still stopping a fork bomb. tmpfs pages are charged to the
+# container's memory cgroup, so 2g covers the interpreter and imports plus a full /tmp.
+# /tmp holds cache_dir and basetemp (every tmp_path is kept for the run): 512m. noexec
+# stays: tests run scripts through the interpreter, never exec files from /tmp directly.
+PYTEST_PIDS_LIMIT = 512
+PYTEST_MEMORY = "2g"
+PYTEST_TMPFS = "/tmp:rw,noexec,nosuid,size=512m"
+# Reason: secrets and private data that test code must not read; ".env*" is enumerated.
+PYTEST_MASKED_NAMES = ("config.local.yaml", "var", ".git")
+
 
 def unsandboxed_allowed(config: Any | None) -> bool:
     """True only when the owner opted in to running code directly on the host."""
@@ -51,6 +67,52 @@ def minimal_child_env(workdir: str, extra: dict[str, str] | None = None) -> dict
         env[key] = workdir
     env.update(extra or {})
     return env
+
+
+def hardening_flags(*, pids: int, memory: str, tmpfs: str) -> list[str]:
+    """Docker flags shared by every sandbox container so the launches cannot drift."""
+    return [
+        "--network=none",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        f"--pids-limit={pids}",
+        f"--memory={memory}",
+        f"--memory-swap={memory}",
+        "--user=65534:65534",
+        "--read-only",
+        f"--tmpfs={tmpfs}",
+        "-e",
+        "HOME=/tmp",
+    ]
+
+
+def masked_paths(root: Path) -> list[Path]:
+    """Existing secret paths under root: every ``.env*`` entry plus PYTEST_MASKED_NAMES.
+
+    Reason: a mask over a missing path makes docker create it on some setups, so only
+    paths that exist now are returned; ``.env*`` is listed at launch, never hardcoded.
+    """
+    found = sorted(p for p in root.iterdir() if p.name.lower().startswith(".env"))
+    return found + [root / n for n in PYTEST_MASKED_NAMES if (root / n).exists()]
+
+
+def mask_mount_args(root: Path, tmp: str) -> list[str]:
+    """Mounts that hide masked_paths() under /workspace; must follow the project mount.
+
+    Directories get an empty read-only tmpfs; files get an empty read-only file created
+    in ``tmp`` (never in the project tree).
+    """
+    empty = Path(tmp) / "empty"
+    empty.write_bytes(b"")
+    os.chmod(empty, 0o444)
+    args: list[str] = []
+    for path in masked_paths(root):
+        dst = f"/workspace/{path.name}"
+        if path.is_dir():
+            args.append(f"--tmpfs={dst}:ro,noexec,nosuid")
+        else:
+            args += ["-v", f"{empty}:{dst}:ro"]
+    return args
 
 
 def sandbox_mode(config: Any | None) -> str:
@@ -142,17 +204,7 @@ async def _run_docker_sandbox(code: str, *, config: Any | None, timeout: float) 
             exe,
             "run",
             "--rm",
-            "--network=none",
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--pids-limit=128",
-            "--memory=512m",
-            "--memory-swap=512m",
-            "--user=65534:65534",
-            "--read-only",
-            "--tmpfs=/tmp:rw,noexec,nosuid,size=64m",
-            "-e",
-            "HOME=/tmp",
+            *hardening_flags(pids=PYTHON_PIDS_LIMIT, memory=PYTHON_MEMORY, tmpfs=PYTHON_TMPFS),
             "-v",
             f"{tmp}:/sandbox:ro",
             image,
@@ -232,28 +284,35 @@ async def run_pytest_sandboxed(
         "--tb=native",
         *(test_paths or []),
     ]
-    cmd = [
-        exe,
-        "run",
-        "--rm",
-        "-v",
-        f"{PROJECT_ROOT}:/workspace:ro",
-        "-w",
-        "/workspace",
-        image,
-        *args,
-    ]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        env=_docker_env(),
-    )
-    try:
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        return False, f"Docker pytest timed out after {timeout:.0f}s"
+    # Reason: masking mounts beat a filtered copy: no per-run copy of thousands of files,
+    # and docker orders mounts by depth, so the masks always land on top of /workspace.
+    with tempfile.TemporaryDirectory(
+        prefix="wits_pytest_masks_", ignore_cleanup_errors=True
+    ) as tmp:
+        cmd = [
+            exe,
+            "run",
+            "--rm",
+            *hardening_flags(pids=PYTEST_PIDS_LIMIT, memory=PYTEST_MEMORY, tmpfs=PYTEST_TMPFS),
+            "-v",
+            f"{PROJECT_ROOT}:/workspace:ro",
+            *mask_mount_args(Path(PROJECT_ROOT), tmp),
+            "-w",
+            "/workspace",
+            image,
+            *args,
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=_docker_env(),
+        )
+        try:
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return False, f"Docker pytest timed out after {timeout:.0f}s"
     output = stdout.decode(errors="replace")
     return (proc.returncode or 0) == 0, output[-4000:]
