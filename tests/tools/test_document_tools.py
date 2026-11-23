@@ -405,3 +405,16 @@ async def test_faiss_recent_filter_matches_type_attribute(any_backend_env):
     await memory.add_memory(type="OTHER", source="y", content_text="y")
     segs = await memory.get_recent_memory(limit=10, filter_dict={"type": "DOCUMENT_CHUNK"})
     assert [s.source for s in segs] == ["x"]
+
+
+@pytest.mark.asyncio
+async def test_search_single_small_file_returns_passage_with_and_without_filter(rag_env):
+    config, memory, ingest, search, docs_dir = rag_env
+    (docs_dir / "notes.md").write_text("Garden notes: plant tomatoes and basil in spring.")
+    await ingest.execute()
+
+    for kwargs in ({}, {"file_name": "notes.md"}):
+        result = await search.execute(query="garden notes tomatoes basil", **kwargs)
+        assert result["success"] is True
+        assert result["result_count"] == 1
+        assert result["results"][0]["file"] == "notes.md"
