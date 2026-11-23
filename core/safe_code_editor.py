@@ -26,6 +26,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.guard_files import guard_reason, host_test_reason
+
 logger = logging.getLogger("WitsV3.SafeCodeEditor")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -184,6 +186,9 @@ def resolve_writable_within_project(file_path: str) -> Path:
     except ValueError as err:
         raise PermissionError(f"Refusing to edit outside the project: {resolved}") from err
     _refuse_aliases(file_path, rel)
+    guard = guard_reason(file_path, rel)
+    if guard:
+        raise PermissionError(f"Refusing to edit {file_path!r}: {guard}")
     parts = [part.lower() for part in rel.parts]
     name = parts[-1] if parts else ""
     if not parts or is_never(resolved, "write"):
@@ -297,8 +302,18 @@ async def apply_verified_edit(
     agent use to touch source files — new project scaffolding, bug fixes,
     and self-edits to WITS's own code all go through the same guarantee.
     """
+    from core.config import load_config
+    from core.sandbox_runner import run_pytest_sandboxed, sandbox_mode
+
+    config = load_config()
+    mode = sandbox_mode(config)
     try:
         resolved = resolve_writable_within_project(file_path)
+        # Reason: outside docker the post-edit pytest runs on this computer, so an edited
+        # test file would be agent-written code executed unsandboxed (RT-12).
+        host_test = host_test_reason(file_path, resolved.relative_to(PROJECT_ROOT), mode)
+        if host_test:
+            raise PermissionError(f"Refusing to edit {file_path!r}: {host_test}")
     except PermissionError as e:
         return EditResult(success=False, file_path=file_path, message=str(e))
 
@@ -308,11 +323,7 @@ async def apply_verified_edit(
     resolved.parent.mkdir(parents=True, exist_ok=True)
     resolved.write_text(new_content, encoding="utf-8")
 
-    from core.config import load_config
-    from core.sandbox_runner import run_pytest_sandboxed, sandbox_mode
-
-    config = load_config()
-    if sandbox_mode(config) == "docker":
+    if mode == "docker":
         passed, test_output = await run_pytest_sandboxed(test_paths, config=config, timeout=timeout)
     else:
         passed, test_output = await run_pytest(test_paths, timeout=timeout)
