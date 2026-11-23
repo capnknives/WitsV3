@@ -76,7 +76,6 @@ async def _edit(rel, test_path="t.py"):
     )
 
 
-@pytest.mark.xfail(strict=True, reason="RT-12: guard files are ordinary source files to the editor")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rel", GUARD_FILES)
 async def test_guard_files_refused(fake_project, pytest_spy, rel):
@@ -87,7 +86,6 @@ async def test_guard_files_refused(fake_project, pytest_spy, rel):
     assert pytest_spy == []
 
 
-@pytest.mark.xfail(strict=True, reason="RT-12: refusal list matches exact lowercase names only")
 @pytest.mark.parametrize("spelling", SPELLINGS)
 def test_guard_file_spellings_refused_by_pure_decision(fake_project, spelling):
     # Pure decision level: no files created, so 8.3-looking names are judged by text.
@@ -109,7 +107,6 @@ def test_windows_alias_spellings_with_real_trailing_chars_already_refused(fake_p
 @pytest.mark.parametrize("mode", ["off", "subprocess"])
 @pytest.mark.parametrize("rel", ["tests/test_evil.py", "tests/helpers/util.py"])
 @pytest.mark.asyncio
-@pytest.mark.xfail(strict=True, reason="RT-12: host pytest runs the edited test code")
 async def test_edited_test_code_not_host_run_without_docker(
     fake_project, pytest_spy, monkeypatch, mode, rel
 ):
