@@ -95,19 +95,41 @@ Lower priority: `search_segments` type filter fixed for FAISS (#85); the
 Supabase and neural backends have the same weakness. 8.3 short names are
 refused by the pure decision; not tested through a real Windows resolve.
 
-Still open after the pass:
+Follow-up fixes after the pass (November 22, 2026):
 
-- Real-model probe of the write gate (scripted model only so far).
+| Item | PRs | State |
+|------|-----|-------|
+| RT-9 calculator: thousands commas, float artefacts, no power cap, `eval` | #93, #95 | Fixed: `core/safe_calc.py`, exact and bounded |
+| RT-10 any role other than exactly "owner" is a guest | #98, #101 | Fix in #101 |
+| RT-11 nothing outbound after a private local read in the same turn | #96, #100 | Fix in #100 |
+| RT-12 `apply_code_fix` cannot edit its own guard files; no test-file edits outside docker | #97, #99 | Fixed |
+| RT-3b real-model probe of the write gate | this PR | Run on `qwen3:8b`; see `docs/benchmarks/golden.md` |
+
+Still open after the follow-ups:
+
+- The planted-document probe scenario never delivered its text: a document question
+  did not find a just-indexed file, and the reply did not come through the native loop's
+  tool messages. Where document questions go with `front_door: native` is not traced yet.
 - The legacy json_react path is neither marked nor gated.
-- A turn can read a file and then put its contents in a `web_search` query.
-- Any role other than exactly "owner" should be treated as guest;
-  `web/server.py` maps an anonymous role to owner for the chat call.
-- `apply_code_fix` can still edit its own guard files, and with a sandbox
-  mode other than docker the host pytest run executes edited test files.
-- The reviewer nits listed in the bodies of PRs #86 to #89 and #91.
-- RT-9: `calculator` gives a wrong answer for numbers with thousands commas, float artefacts and no power cap (tests in PR #93, fix stacked on it).
+- `run_pytest_sandboxed` starts its container with network access and the whole project
+  mounted read-only, so test code run by `apply_code_fix` in docker mode can read project
+  files and reach the network. Until it is network-less, RT-11 refuses `apply_code_fix`
+  and `run_test_suite` after a private read in every mode.
+- Outside docker, a `test_*.py` created outside `tests/`, or any edited module that tests
+  import, still runs on the host after `apply_code_fix`.
+- With `require_auth` true, guests off and no owner token set, the server opens as owner.
+- RT-11 covers sequences only: a tool that both reads and sends, called first in a turn,
+  does both in one call.
+- Reviewer nits from #99, #100 and #101 (listed in the PR bodies); the nits in PRs #86 to
+  #89 and #91.
+- `maybe_flush_conversation_memory` decides guest from the guest record, not the role; two
+  per-session caches in the control center have no size limit; a family adult's downloads
+  roots include `WITSV3_READ_ROOTS` folders the owner's own check refuses.
 - The model invents answers for three of five false-premise questions in the stand-in run.
 - `datetime` cannot do date arithmetic; the model then counts by hand and gets it wrong.
+- WITS cannot summarise an ingested document: it searches for the word "summarise".
+- Search snippets are cut to 220 characters before the model sees them. This is a length
+  cap, not a defence.
 
 ## After the pass
 

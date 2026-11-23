@@ -306,8 +306,12 @@ or characters.
    Golden re-run after the fixes: 56 of 61 pass all three runs, unchanged.
 2. Done in part: a first write gate and the untrusted-content rule shipped
    with the pass (PR #88). The approval cards that let the owner confirm a
-   blocked write stay in C7. Next here: the held-out run (target 8) and a
-   real-model probe of the gate.
+   blocked write stay in C7. Two stand-in held-out sets were run (target 8
+   stays open until the owner writes his own). The real-model probe of the
+   gate ran on `qwen3:8b`: "search, then save" is blocked and confirmed on
+   the next message 3 of 3; planted instructions in search results were not
+   followed, gate on or off; the planted-document scenario is not tested yet.
+   Follow-up fixes RT-9 to RT-12 are in PRs #93 to #101.
 3. C5a: fix the over-triggering, then merge.
 4. Writing quality: named characters and a setting from the outline step,
    distinct events per section, a note of what is already covered, and a
