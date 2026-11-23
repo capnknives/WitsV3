@@ -89,7 +89,7 @@ a fix. All are merged and no xfail is left.
 | 5 | Yes in code, not live on the owner's PC | #84: with guests on, owner always needs the owner token |
 | 6 | Yes | #89: more names, `var/` closed by default, private-key sniff before indexing |
 | 7 | Yes for owner; a guest never stored | #90: only an explicit "remember that ..." stores, and only the fact |
-| 8 | Open | Waits for 30 messages written by the owner |
+| 8 | Open | Two stand-in sets run once on November 22 (26 of 30 and 20 of 23 by the checker; 16 of 23 on reading). The owner-written set is still to come. See `docs/benchmarks/golden.md` |
 
 Lower priority: `search_segments` type filter fixed for FAISS (#85); the
 Supabase and neural backends have the same weakness. 8.3 short names are
@@ -105,6 +105,9 @@ Still open after the pass:
 - `apply_code_fix` can still edit its own guard files, and with a sandbox
   mode other than docker the host pytest run executes edited test files.
 - The reviewer nits listed in the bodies of PRs #86 to #89 and #91.
+- RT-9: `calculator` gives a wrong answer for numbers with thousands commas, float artefacts and no power cap (tests in PR #93, fix stacked on it).
+- The model invents answers for three of five false-premise questions in the stand-in run.
+- `datetime` cannot do date arithmetic; the model then counts by hand and gets it wrong.
 
 ## After the pass
 
