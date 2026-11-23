@@ -72,13 +72,14 @@ async def _purge_new_segments(system, before: set[str] | None) -> int:
     return removed
 
 
-async def _turn(system, sandbox: Path, history, message: str, sid: str, timeout: float):
+async def _turn(system, sandbox: Path, history, message: str, sid: str, timeout: float, spy):
     """Run one user turn and measure tools, reply, files and store changes."""
     from core.schemas import StreamData
 
     ignore = {lib.DOC_NAME}
     before = lib.scan_sandbox(sandbox, ignore)["stores"]
     history.add_message("user", message)
+    hits0, net0 = spy["fake_hits"], spy["network_attempts"]
     events: list[StreamData] = []
     start = time.perf_counter()
 
@@ -102,9 +103,14 @@ async def _turn(system, sandbox: Path, history, message: str, sid: str, timeout:
     after = lib.scan_sandbox(sandbox, ignore)
     reply = lib.reply_text(events)
     history.add_message("assistant", reply or "(no reply)")
+    calls = lib.tool_calls(events)
+    hits, net = spy["fake_hits"] - hits0, spy["network_attempts"] - net0
     return {
         "message": message,
-        "tools": lib.tool_calls(events),
+        "invalid": lib.search_unverified(calls, hits, net),
+        "fake_search_hits": hits,
+        "network_attempts": net,
+        "tools": calls,
         "reply": reply,
         "files_written": after["files"],
         "memory_hits": lib.new_store_hits(before, after["stores"]),
@@ -123,12 +129,14 @@ async def run_scenario(system, sandbox: Path, scenario: str, n: int, timeout: fl
     history = ConversationHistory(session_id=sid)
     seg_before = await _segment_ids(system)
     record = {"scenario": scenario, "run": n, "gate": spec["gate"], "session": sid, "turns": []}
+    search_tool = lib.find_search_tool(getattr(system, "tool_registry", None))
     _set_gate(system, spec["gate"])
     try:
-        with lib.patched_search(spec["search"]):
+        with lib.patched_search(spec["search"], search_tool) as spy:
             for message in spec["messages"]:
-                turn = await _turn(system, sandbox, history, message, sid, timeout)
+                turn = await _turn(system, sandbox, history, message, sid, timeout, spy)
                 record["turns"].append(turn)
+        record["invalid"] = any(t["invalid"] for t in record["turns"])
     finally:
         _set_gate(system, True)
         # Reason: canary files are removed after the whole run, so C's turn 2 sees turn 1's.
@@ -191,12 +199,17 @@ async def main_async(args: argparse.Namespace) -> int:
                 rec = await run_scenario(system, sandbox, scenario, n, args.timeout_seconds)
                 records.append(rec)
                 tools = [f"{c['name']}:{c['status']}" for t in rec["turns"] for c in t["tools"]]
-                print(f"{scenario} run {n}: {tools}")
+                flag = " INVALID: web_search ran but the fake was not hit" if rec["invalid"] else ""
+                print(f"{scenario} run {n}: {tools}{flag}")
                 out.parent.mkdir(parents=True, exist_ok=True)
                 out.write_text(
                     lib.render_summary(records, time.strftime("%Y-%m-%d %H:%M")), "utf-8"
                 )
     print(f"summary: {out}")
+    invalid = [f"{r['scenario']}-{r['run']}" for r in records if r.get("invalid")]
+    if invalid:
+        print(f"INVALID runs (search patch not on the call path): {invalid}", file=sys.stderr)
+        return 5
     return 0
 
 

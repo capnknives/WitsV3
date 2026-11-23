@@ -98,32 +98,84 @@ def search_result(variant: str) -> dict[str, Any]:
     return {"success": True, "provider": "probe", "results": results}
 
 
-@contextlib.contextmanager
-def patched_search(variant: str) -> Iterator[None]:
-    """Replace WebSearchTool.execute on the class so no search reaches the network."""
-    from tools.web_search_tool import WebSearchTool
+# Reason: every method on the search tool that can open a connection; while the probe runs
+# each one raises, so a fake that is not on the call path fails loudly instead of searching.
+NETWORK_METHODS = (
+    "_session",
+    "_ddg_post",
+    "_search_tavily",
+    "_search_brave",
+    "_search_ddg_html",
+    "_search_ddg_lite",
+    "_search_ddg_instant",
+)
+PROBE_NET_ERROR = "probe: real network search attempted"
 
-    async def fake_execute(self, query: str = "", max_results: int = 5, **kwargs):
+
+def find_search_tool(registry: Any) -> Any:
+    """The web_search instance the registry actually calls."""
+    tool = registry.get_tool("web_search") if registry is not None else None
+    if tool is None:
+        raise RuntimeError("probe: no web_search tool in the registry")
+    return tool
+
+
+@contextlib.contextmanager
+def patched_search(variant: str, tool: Any) -> Iterator[dict[str, int]]:
+    """Replace ``execute`` and every network method on the registered instance.
+
+    Reason: the registry loads tool modules with spec_from_file_location and never puts
+    them in sys.modules, so its WebSearchTool class is not the one ``import`` gives; only
+    the instance it holds is certain to be on the call path.
+
+    Yields:
+        A spy: ``fake_hits`` (fake execute calls) and ``network_attempts``.
+    """
+    spy = {"fake_hits": 0, "network_attempts": 0}
+
+    async def fake_execute(query: str = "", max_results: int = 5, **kwargs):
+        spy["fake_hits"] += 1
         return search_result(variant)
 
-    original = WebSearchTool.execute
-    WebSearchTool.execute = fake_execute
+    def refuse(*args, **kwargs):
+        spy["network_attempts"] += 1
+        raise RuntimeError(PROBE_NET_ERROR)
+
+    names = ("execute", *NETWORK_METHODS)
+    saved = {n: tool.__dict__[n] for n in names if n in tool.__dict__}
+    tool.execute = fake_execute
+    for name in NETWORK_METHODS:
+        setattr(tool, name, refuse)
     try:
-        yield
+        yield spy
     finally:
-        WebSearchTool.execute = original
+        for name in names:
+            if name in saved:
+                setattr(tool, name, saved[name])
+            else:
+                tool.__dict__.pop(name, None)
+
+
+def search_unverified(calls: list[dict[str, str]], fake_hits: int, attempts: int) -> bool:
+    """True when web_search ran but the fake was not hit, or a real provider was tried."""
+    ran = any(c["name"] == "web_search" and c["status"] == "ran" for c in calls)
+    return attempts > 0 or (ran and fake_hits == 0)
 
 
 _BLOCKED_RE = re.compile(
     re.escape(WRITE_BLOCKED).replace(re.escape("{name}"), r"(?P<name>[A-Za-z0-9_.-]+)")
 )
 
+# Reason: other pre-flight refusals (e.g. read_file on an ingested document) use this form.
+_REFUSED_RE = re.compile(r"Blocked (?P<name>[A-Za-z0-9_.-]+):")
+
 
 def tool_calls(events: list[Any]) -> list[dict[str, str]]:
-    """Ordered calls: executed ones from tool_call events, gate-blocked ones from observations.
+    """Ordered calls: executed ones from tool_call events, refused ones from observations.
 
     A blocked call never reaches the registry, so it has no tool_call event; its only trace
-    is the observation carrying the WRITE_BLOCKED text.
+    is the observation carrying the WRITE_BLOCKED text ("blocked"). Other pre-flight
+    refusals ("Blocked <name>: ...") are kept as "refused".
     """
     calls: list[dict[str, str]] = []
     for ev in events:
@@ -132,8 +184,11 @@ def tool_calls(events: list[Any]) -> list[dict[str, str]]:
             calls.append({"name": str(meta["tool_name"]), "status": "ran"})
         elif ev.type == "observation":
             m = _BLOCKED_RE.search(ev.content or "")
+            other = _REFUSED_RE.match(ev.content or "")
             if m:
                 calls.append({"name": m.group("name"), "status": "blocked"})
+            elif other:
+                calls.append({"name": other.group("name"), "status": "refused"})
     return calls
 
 
@@ -225,6 +280,8 @@ def _row(label: str, turns: list[dict], scenario: str, note: str = "") -> str:
     ]
     med = f"{statistics.median(walls):.1f}" if walls else "-"
     errs = sum(1 for t in turns if "result" not in t.get("event_types", ["result"]))
+    bad = sum(1 for t in turns if t.get("invalid"))
+    note = "; ".join(x for x in (f"INVALID {bad} (search not faked)" if bad else "", note) if x)
     note = "; ".join(x for x in (note, f"no result (error/timeout) {errs}" if errs else "") if x)
     return f"| {label} | {len(turns)} | " + " | ".join(cols) + f" | {med} | {note or '-'} |"
 
@@ -257,7 +314,8 @@ def render_summary(records: list[dict], stamp: str) -> str:
             seq = ", ".join(f"{c['name']}({c['status']})" for c in t["tools"]) or "none"
             reply = " ".join(t["reply"].split())[:600]
             detail.append(
-                f"- **{r['scenario']} run {r['run']} turn {i}** tools: {seq}; files: "
+                f"- **{r['scenario']} run {r['run']} turn {i}**"
+                f"{' INVALID: search not faked' if t.get('invalid') else ''} tools: {seq}; files: "
                 f"{t['files_written'] or '-'}; store hits: {t['memory_hits'] or '-'}\n"
                 f"  > {reply or '(no reply)'}"
             )
