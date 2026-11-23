@@ -18,6 +18,15 @@ GUARD_FILES = frozenset(
     {
         "core/safe_code_editor.py",
         "core/path_access.py",
+        # Reason: config.py supplies the sandbox mode and the package __init__ files run on
+        # import of the edit pipeline, so an edit there could rebind the guards (RT-12).
+        "core/config.py",
+        "core/roles.py",
+        "core/__init__.py",
+        "core/workspace/__init__.py",
+        "agents/__init__.py",
+        "tools/__init__.py",
+        "web/__init__.py",
         "core/untrusted_content.py",
         "core/sandbox_runner.py",
         "core/docker_sandbox.py",
@@ -47,6 +56,18 @@ TEST_REFUSAL = (
 )
 
 _SHORT_NAME = re.compile(r"~\d")
+# Top-level folders holding guard files: a ``~digit`` short-name spelling anywhere below
+# them cannot be told apart from a guarded file (hashed names like ``SA1B2C~1.PY``).
+_SHORT_NAME_ROOTS = frozenset(g.split("/", 1)[0] for g in GUARD_FILES | GUARD_DIRS)
+
+
+def normalise_mode(mode: object) -> str:
+    """The one spelling of a sandbox mode: stripped and lowercased ("" when unset).
+
+    Reason: the refusal decision and the choice of pytest runner must read the same
+    value, and anything that is not exactly ``docker`` afterwards counts as host.
+    """
+    return str(mode or "").strip().lower()
 
 
 def _parts(text: str) -> tuple[str, ...]:
@@ -93,8 +114,18 @@ def _matches(parts: tuple[str, ...], guarded: str, *, prefix_only: bool) -> bool
     return all(_part_matches(p, g) for p, g in zip(parts[: len(want)], want, strict=True))
 
 
+def _short_name_under_guard_root(parts: tuple[str, ...]) -> bool:
+    return (
+        len(parts) > 1
+        and any(_SHORT_NAME.search(p) for p in parts)
+        and any(_part_matches(parts[0], root) for root in _SHORT_NAME_ROOTS)
+    )
+
+
 def is_guard_path(parts: tuple[str, ...]) -> bool:
     """True when normalised parts name a guard file or lie under a guarded directory."""
+    if _short_name_under_guard_root(parts):
+        return True
     return any(_matches(parts, g, prefix_only=False) for g in GUARD_FILES) or any(
         len(parts) > len(d.split("/")) and _matches(parts, d, prefix_only=True) for d in GUARD_DIRS
     )
@@ -112,6 +143,11 @@ def guard_reason(file_path: str, resolved_rel: Path) -> str | None:
     return None
 
 
+def is_test_target(file_path: str, resolved_rel: Path) -> bool:
+    """True when either spelling of the edit target lies under tests/."""
+    return any(is_test_path(p) for p in _candidates(file_path, resolved_rel))
+
+
 def host_test_reason(file_path: str, resolved_rel: Path, mode: str) -> str | None:
     """Return the test-file refusal when the post-edit pytest would run on the host.
 
@@ -120,8 +156,6 @@ def host_test_reason(file_path: str, resolved_rel: Path, mode: str) -> str | Non
         resolved_rel: The resolved path relative to the project root.
         mode: The sandbox mode from ``core.sandbox_runner.sandbox_mode``.
     """
-    if str(mode).lower() == "docker":
+    if normalise_mode(mode) == "docker":
         return None
-    if any(is_test_path(p) for p in _candidates(file_path, resolved_rel)):
-        return TEST_REFUSAL
-    return None
+    return TEST_REFUSAL if is_test_target(file_path, resolved_rel) else None
