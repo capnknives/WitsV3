@@ -4,7 +4,7 @@ Text from the web, ingested documents, files or MCP servers can carry instructio
 the native path such text reaches the model inside an envelope that says it is data,
 and once an untrusted-source tool has been dispatched in a turn, only the read-only
 tools in ``READ_ONLY_TOOLS`` may run for the rest of that turn. Once a private local read
-has run (RT-11), outbound tools are refused for the rest of that turn too. The owner
+has run (RT-11), only tools in ``LOCAL_ONLY_TOOLS`` may run for the rest of that turn. The owner
 confirms in a new message, which starts a new turn.
 
 The gate state is one ``UntrustedWriteGate`` per turn, made in
@@ -52,25 +52,66 @@ WRITE_BLOCKED = (
     "Tell the owner what you would do and ask them to confirm in their next message."
 )
 
-# Reason: RT-11. Tools that read the owner's private local content. A separate fact from
-# the untrusted taint above: it only refuses outbound tools, never writes, so adding
-# read_conversation_history here changes nothing for write tools. list_directory shows
-# names only and is left out. ``mcp_*`` results are not counted as private: they come
-# from outside servers, and they already taint the turn for writes.
-PRIVATE_READ_TOOLS = frozenset(
-    {"read_file", "document_search", "search_archival_memory", "read_conversation_history"}
-)
-
-# Reason: tools that send model-chosen text off this computer. web_search sends its query;
-# search_mcp_tools sends its query to the MCP registry; any ``mcp_*`` tool may send its
-# arguments to a remote server. ask_claude is left out because every request already
-# waits for the owner's approval in the web UI before anything is sent.
-OUTBOUND_TOOLS = frozenset({"web_search", "search_mcp_tools"})
-OUTBOUND_PREFIXES = ("mcp_",)
+# Reason: RT-11. Every registered tool, classified from what its code does (a test fails
+# when a registered tool is missing). "private" returns the owner's local data (files,
+# logs, memory, conversation, knowledge log, guest/audit data, test or code output);
+# "outbound" sends model-chosen text to a network service; "both"; "neither". The model
+# itself already sees every result, so a call to the local LLM is not outbound.
+# - list_directory: file names can be private ("divorce-lawyer.pdf"), and the cost of
+#   counting it is one confirmation, so it is a private read.
+# - python_execute: only docker mode enforces --network=none and mounts nothing but the
+#   snippet (core/sandbox_runner.py); subprocess and off modes can open any host file,
+#   and their "no network" is only an env var nothing reads, so it is both.
+# - ask_claude sends its prompt to Anthropic; it is also owner-approval only.
+# - enhanced_reasoning draws on neural-web memory, so it is a private read.
+# Setting the private fact never refuses a write by itself: write tools are "neither"
+# here and stay governed by the RT-3 rule above.
+TOOL_CLASSES: dict[str, str] = {
+    "read_file": "private",
+    "list_directory": "private",
+    "document_search": "private",
+    "ingest_documents": "private",
+    "search_archival_memory": "private",
+    "read_conversation_history": "private",
+    "analyze_conversation": "private",
+    "diagnose_log_errors": "private",
+    "run_test_suite": "private",
+    "apply_code_fix": "private",
+    "knowledge_log_summary": "private",
+    "guest_accounts_list": "private",
+    "guest_audit_summary": "private",
+    "guest_user_profile_summary": "private",
+    "enhanced_reasoning": "private",
+    "neural_web_visualize": "private",
+    "python_execute": "both",
+    "web_search": "outbound",
+    "search_mcp_tools": "outbound",
+    "ask_claude": "outbound",
+    "write_file": "neither",
+    "knowledge_log_add_fact": "neither",
+    "promote_to_core_memory": "neither",
+    "guest_set_age_band": "neither",
+    "request_folder_access": "neither",
+    "list_mcp_tools": "neither",
+    "network_control": "neither",
+    "restart_app": "neither",
+    "neural_web_nlp_extract": "neither",
+    "datetime": "neither",
+    "calculator": "neither",
+    "math_operations": "neither",
+    "think": "neither",
+}
+# Reason: an MCP server may read local data (a filesystem server) and may send its
+# arguments anywhere, so every ``mcp_*`` tool counts as both.
+BOTH_PREFIXES = ("mcp_",)
+PRIVATE_READ_TOOLS = frozenset(n for n, c in TOOL_CLASSES.items() if c in ("private", "both"))
+# Reason: fail closed. After a private read only these may run; ``mcp_*``, outbound,
+# unknown, wrong-case and non-string names are all refused.
+LOCAL_ONLY_TOOLS = frozenset(n for n, c in TOOL_CLASSES.items() if c in ("private", "neither"))
 
 OUTBOUND_BLOCKED = (
     "Blocked: this turn read private local content, so '{name}' was not run, because it "
-    "would send text off this computer. Tell the owner what you wanted to look up and ask "
+    "would send text off this computer. Tell the owner what you wanted to do and ask "
     "them to confirm in their next message."
 )
 
@@ -109,15 +150,15 @@ def write_gate_enabled(config: Any) -> bool:
 
 
 def is_private_read(tool_name: Any) -> bool:
-    """True when ``tool_name`` reads the owner's private local content."""
-    return isinstance(tool_name, str) and tool_name in PRIVATE_READ_TOOLS
-
-
-def is_outbound(tool_name: Any) -> bool:
-    """True when ``tool_name`` sends model-chosen text to the network."""
+    """True when ``tool_name`` returns the owner's private local data."""
     if not isinstance(tool_name, str):
         return False
-    return tool_name in OUTBOUND_TOOLS or tool_name.startswith(OUTBOUND_PREFIXES)
+    return tool_name in PRIVATE_READ_TOOLS or tool_name.startswith(BOTH_PREFIXES)
+
+
+def is_local_only(tool_name: Any) -> bool:
+    """True when ``tool_name`` is known to send nothing off this computer (exact name)."""
+    return isinstance(tool_name, str) and tool_name in LOCAL_ONLY_TOOLS
 
 
 class UntrustedWriteGate:
@@ -139,13 +180,14 @@ class UntrustedWriteGate:
         """The tool reply for a refused call, or None when ``tool_name`` may run."""
         if not self.enabled:
             return None
-        if self.private_read_by and is_outbound(tool_name):
+        # Reason: when both rules refuse a call, the RT-3 message wins so existing replies
+        # stay the same; the RT-11 message covers what RT-3 lets through (web_search).
+        tainted_ok = isinstance(tool_name, str) and tool_name in READ_ONLY_TOOLS
+        if self.tainted_by and not tainted_ok:
+            return WRITE_BLOCKED.format(name=_safe_name(tool_name))
+        if self.private_read_by and not is_local_only(tool_name):
             return OUTBOUND_BLOCKED.format(name=_safe_name(tool_name))
-        if not self.tainted_by:
-            return None
-        if isinstance(tool_name, str) and tool_name in READ_ONLY_TOOLS:
-            return None
-        return WRITE_BLOCKED.format(name=_safe_name(tool_name))
+        return None
 
 
 def turn_gate(state: dict[str, Any]) -> UntrustedWriteGate:
