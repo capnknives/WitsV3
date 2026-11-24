@@ -1,3 +1,0 @@
-# Redirect
-
-Canonical agent rules: [`.cursor/rules/*.mdc`](.cursor/rules/) — see [`.cursorrules`](.cursorrules).

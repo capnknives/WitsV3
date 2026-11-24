@@ -1,31 +1,31 @@
 # WitsV3
 
+[![CI](https://github.com/capnknives/WitsV3/actions/workflows/ci.yml/badge.svg)](https://github.com/capnknives/WitsV3/actions/workflows/ci.yml)
+
 A local-first LLM orchestration system. Talk to it in a browser (or the CLI); it plans with a ReAct loop, calls real tools, remembers context, and can edit its own code safely when asked.
 
 **Primary interface:** Web UI (`python run_web.py`) — desktop and phone (PWA).  
 **LLM backend:** [Ollama](https://ollama.com) on your machine.  
 **Status:** Actively maintained personal assistant stack — not a hosted SaaS product.
 
-**Local folders on this PC:** personal runtime = `WitsV3`, Cursor agent = `WitsV3-cursor`, Claude agent = `WitsV3-claude` — see [`WORKTREES.md`](WORKTREES.md).
-
 ---
 
-## Current status (2026-07-09)
+## Current status (2026-11-23)
 
 | Area | State |
 |------|--------|
-| Test suite | **677 passed, 2 skipped** — `pytest tests/ -q --no-cov` |
-| Release branch | **`main`** @ audit remediation + Next 10 batch (see roadmap) |
+| Test suite | **2539 passed, 3 skipped** in CI on 2026-11-23 — `pytest tests/ -q --no-cov` |
+| Release branch | **`main`** |
 | Models (default) | `qwen3:8b` (general + routing), `qwen2.5-coder:7b` (coding), `nomic-embed-text` (embeddings) |
 | GPU target | Configured models fit in ~8 GB VRAM when fully on-GPU |
-| Built-in tools | **28** auto-discovered by default (`neural_web*` gated unless `memory_manager.backend: neural`) |
+| Built-in tools | **31** tool classes in `tools/`, auto-discovered (`neural_web*` ones load only when `memory_manager.backend: neural`) |
 | Agents | Control center → orchestrator + book / coding / self-repair specialists |
 | Safe code edits | Verified-edit pipeline: write → pytest → commit, or revert to original bytes |
 | Guest / family testers | Opt-in LAN access via `/join` (invite code; no owner token) — see below |
-| CI | GitHub Actions on Python 3.10 / 3.11 (`.github/workflows/ci.yml`) |
+| CI | GitHub Actions: tests on Python 3.10 and 3.13, plus ruff and black (`.github/workflows/ci.yml`) |
 | Secrets | Gitignored `.env` only — never in `config.yaml` |
 
-**Recently shipped (July 2026):** … **Phase 2** operator UX (MCP health, tool metrics, offline mode), **Phase 3a** FAISS memory, **Next 10 batch** (verbose export, patch self-repair, auto facts, injection guard, orchestrator helper splits).
+**Shipped in July 2026:** operator views (MCP health, tool metrics, offline mode), FAISS memory, verbose export, patch-based self-repair, automatic fact capture and a prompt-injection guard. Later work is logged in the roadmap below.
 
 **What's next:** the modernization roadmap — daily-affairs features, an MCP server so outside agents (Claude and others) can use WITS, and a harness runner so WITS can delegate to them. See [`docs/roadmap/modernization-2026-11.md`](docs/roadmap/modernization-2026-11.md).
 
@@ -130,7 +130,7 @@ Let someone on your LAN (e.g. a nephew) chat **without** your owner token:
 
 Guests get chat-only UI, a filtered tool allowlist (no file write / self-repair / MCP / settings), and a remembered identity per browser/device. Owner manages testers on **`/settings`** (age band, profile view, revoke, merge duplicates). Content blocklists live in **`config/guest_policy.yaml`**. Full design: [`docs/roadmap/guest-tester-access-2026-07.md`](docs/roadmap/guest-tester-access-2026-07.md).
 
-**Owner file access:** The owner can read/list files under the project and **`D:\Downloads`** (configure extra roots via `security.filesystem_read_roots` in `config.yaml` or `WITSV3_READ_ROOTS`). Guests and `family_kid` / `viewer` roles are restricted to project-only reads.
+**Owner file access:** The owner can read/list files under the project and the folders listed in `security.filesystem_read_roots` (set in `config.yaml` or `WITSV3_READ_ROOTS`; the default includes `D:\Downloads`, so change it for your machine). Guests and `family_kid` / `viewer` roles are restricted to project-only reads.
 
 Other entry points:
 
@@ -239,9 +239,9 @@ WitsControlCenterAgent  ── intent, routing, conversation
 WitsV3/
 ├── agents/           # Control center, orchestrator, specialists
 ├── core/             # Config, LLM, memory, safe_code_editor, schemas
-├── tools/            # Auto-discovered tools (26 built-in)
+├── tools/            # Auto-discovered tools (31 classes)
 ├── web/              # FastAPI + SSE UI
-├── tests/            # Pytest suite (~406 collected)
+├── tests/            # Pytest suite (about 2,500 tests)
 ├── var/              # Runtime data (memory, documents, exports, logs, workspace, cache)
 ├── docs/             # Architecture, roadmap, historical notes
 ├── config.yaml       # Main config
@@ -263,7 +263,6 @@ WitsV3/
 | [`docs/roadmap/suggested-features-2026-07.md`](docs/roadmap/suggested-features-2026-07.md) | **What's next** (canonical) |
 | [`docs/roadmap/revival-2026-07.md`](docs/roadmap/revival-2026-07.md) | July 2026 shipped work log |
 | [`docs/README.md`](docs/README.md) | Index of all planning docs |
-| [`TASK.md`](TASK.md) / [`PLANNING.md`](PLANNING.md) | Redirects to the docs above |
 | [`docs/archive/historical-docs/SYNTHETIC_BRAIN.md`](docs/archive/historical-docs/SYNTHETIC_BRAIN.md) | Historical “synthetic brain” initiative (not current product) |
 | [`DOCKER_INSTRUCTIONS.md`](DOCKER_INSTRUCTIONS.md) | Parked background-agent container notes |
 
