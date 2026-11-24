@@ -1,3 +1,0 @@
-# Redirect
-
-See [`CLAUDE.md`](CLAUDE.md) and [`.cursor/rules/`](.cursor/rules/).

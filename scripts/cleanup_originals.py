@@ -24,7 +24,6 @@ FILE_MAPPING = {
 # Files to ignore during cleanup
 IGNORE_FILES = [
     "README.md",  # Keep main README
-    ".cursorrules.md"  # System file
 ]
 
 def cleanup_files():
